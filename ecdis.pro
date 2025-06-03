@@ -36,9 +36,10 @@ HEADERS += mainwindow.h ecwidget.h pickwindow.h ais.h \
     SettingsManager.h \
     aivdoencoder.h \
     editwaypointdialog.h \
+    guardzone.h \
+    guardzonemanager.h \
     iplugininterface.h \
     logger.h \
-    guardzonecheckdialog.h \
     guardzonecheckdialog.h \
     moosdb.h \
     nmeadecoder.h \
@@ -51,6 +52,7 @@ SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     SettingsManager.cpp \
     aivdoencoder.cpp \
     editwaypointdialog.cpp \
+    guardzonemanager.cpp \
     logger.cpp \
     moosdb.cpp \
     nmeadecoder.cpp \

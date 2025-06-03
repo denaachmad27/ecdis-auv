@@ -22,6 +22,8 @@
 #endif
 
 #include "moosdb.h"
+#include "guardzone.h"
+class GuardZoneManager; // Forward declaration
 
 extern QString bottomBarText;
 
@@ -124,8 +126,14 @@ public:
       GUARD_ZONE_SECTOR
   };
 
+  enum FeedbackType {
+      FEEDBACK_SUCCESS,
+      FEEDBACK_WARNING,
+      FEEDBACK_ERROR,
+      FEEDBACK_INFO
+  };
+
   void setGuardZoneAttachedToShip(bool attached);
-  double calculatePixelsFromNauticalMiles(double nauticalMiles);
   void generateTargetsTowardsGuardZone(int count);
 
   enum SimulationScenario {
@@ -133,6 +141,19 @@ public:
       SCENARIO_MOVING_GUARDZONE = 2
   };
 
+  QList<GuardZone>& getGuardZones() { return guardZones; }
+  int getNextGuardZoneId() { return nextGuardZoneId++; }
+  void saveGuardZones();
+  void loadGuardZones();
+
+  // Method yang diperlukan oleh GuardZoneManager
+  double calculatePixelsFromNauticalMiles(double nauticalMiles);
+
+  // Method untuk start edit dari luar (menu, dll)
+  void startEditGuardZone(int guardZoneId);
+
+  void showVisualFeedback(const QString& message, FeedbackType type);
+  void playFeedbackSound(FeedbackType type);
 
   // End Guardzone
 
@@ -377,6 +398,8 @@ protected:
 
   virtual void wheelEvent  (QWheelEvent*);
 
+  virtual void keyPressEvent(QKeyEvent*);
+
   virtual void searchOk (EcCoordinate, EcCoordinate);
 
   //virtual void keyPressEvent( QKeyEvent *e );
@@ -407,6 +430,7 @@ protected:
   void createCircularGuardZone(EcCoordinate lat, EcCoordinate lon, double radius);
   void createPolygonGuardZone();
   void highlightDangersInGuardZone();
+  virtual void mouseReleaseEvent(QMouseEvent *e) override;
 
   // Fungsi untuk simulasi AIS
   void drawSimulatedTargets();
@@ -487,17 +511,35 @@ private:
 
   // GuardZone variables
   EcFeature currentGuardZone;  // Handle untuk guardzone saat ini
-  GuardZoneShape guardZoneShape; // Bentuk guardzone
   int guardZoneWarningLevel;   // Level peringatan
-  QVector<QPointF> guardZonePoints; // Titik-titik untuk mode polygon
-  bool guardZoneActive;        // Status aktif guardzone
-  bool creatingGuardZone;
   QPointF guardZoneCenter;  // Titik pusat untuk mode lingkaran
   double pixelsPerNauticalMile;  // Rasio pixel per nautical mile
-  double guardZoneCenterLat, guardZoneCenterLon;  // Koordinat pusat guardzone
-  bool guardZoneAttachedToShip;  // Apakah GuardZone melekat pada kapal
-  double guardZoneRadius;        // Radius dalam mil laut
-  QVector<double> guardZoneLatLons;  // Titik-titik polygon dalam koordinat geografis (lat1, lon1, lat2, lon2, ...)
+
+  GuardZoneManager* guardZoneManager;
+  QList<GuardZone> guardZones;
+  int nextGuardZoneId;
+
+  // Create GuardZone variables - TAMBAHKAN INI DI PRIVATE
+  bool creatingGuardZone;
+  GuardZoneShape newGuardZoneShape;
+  QVector<QPointF> guardZonePoints;
+  QPoint currentMousePos;
+
+  QString feedbackMessage;
+  FeedbackType feedbackType;
+  QTimer feedbackTimer;
+  int flashOpacity;
+
+  // Legacy GuardZone variables (untuk kompatibilitas) - TAMBAHKAN INI DI PRIVATE
+  bool guardZoneActive;
+  GuardZoneShape guardZoneShape;
+  bool guardZoneAttachedToShip;
+  double guardZoneCenterLat, guardZoneCenterLon;
+  double guardZoneRadius;
+  QVector<double> guardZoneLatLons;
+
+  // Methods untuk feedback - TAMBAHKAN INI DI PRIVATE
+  void drawFeedbackOverlay(QPainter& painter);
 
   // End Guardzone
 

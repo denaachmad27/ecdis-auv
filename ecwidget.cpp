@@ -19,6 +19,7 @@
 
 // Guardzone
 #include "guardzonecheckdialog.h"
+#include "guardzonemanager.h"
 
 int EcWidget::minScale = 100;
 int EcWidget::maxScale = 50000000;
@@ -84,6 +85,39 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   guardZoneActive = false;
   creatingGuardZone = false;
   guardZoneAttachedToShip = false;
+  newGuardZoneShape = GUARD_ZONE_CIRCLE;
+
+  guardZoneManager = new GuardZoneManager(this);
+  connect(guardZoneManager, &GuardZoneManager::editModeChanged,
+          [this](bool isEditing) {
+              qDebug() << "GuardZone edit mode changed:" << isEditing;
+              update();
+          });
+
+  connect(guardZoneManager, &GuardZoneManager::guardZoneModified,
+          [this](int guardZoneId) {
+              qDebug() << "GuardZone modified:" << guardZoneId;
+              update();
+          });
+
+  connect(guardZoneManager, &GuardZoneManager::statusMessage,
+          this, &EcWidget::statusMessage);
+
+  // Initialize guardzone ID counter jika belum ada
+  if (nextGuardZoneId == 0) {
+      nextGuardZoneId = 1;
+  }
+
+  // Initialize feedback system
+  feedbackMessage = "";
+  feedbackType = FEEDBACK_INFO;
+  flashOpacity = 0;
+
+  // Connect timer untuk auto-hide feedback
+  connect(&feedbackTimer, &QTimer::timeout, [this]() {
+      feedbackMessage.clear();
+      update();
+  });
 
   // Inisialisasi variabel simulasi
   simulationTimer = nullptr;
@@ -920,6 +954,13 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
 {
     setFocus();
 
+    // ========== HANDLING EDIT GUARDZONE MODE VIA MANAGER ==========
+        if (guardZoneManager && guardZoneManager->isEditingGuardZone()) {
+        if (guardZoneManager->handleMousePress(e)) {
+            return; // Event handled by manager
+        }
+    }
+
     // DrawZone
     if (creatingGuardZone) {
         if (e->button() == Qt::LeftButton) {
@@ -1073,8 +1114,15 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
             }
         }
     }
-    else if (e->button() == Qt::RightButton)
-    {
+    else if (e->button() == Qt::RightButton && !creatingGuardZone) {
+        if (guardZoneManager) {
+            int clickedGuardZoneId = guardZoneManager->getGuardZoneAtPosition(e->x(), e->y());
+            if (clickedGuardZoneId != -1) {
+                guardZoneManager->showGuardZoneContextMenu(e->pos(), clickedGuardZoneId);
+                return;
+            }
+        }
+
         activeFunction = PAN;
         pickX = e->x();
         pickY = e->y();
@@ -1088,6 +1136,14 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
 
 void EcWidget::mouseMoveEvent(QMouseEvent *e)
 {
+
+    // Handle edit guardzone via manager - TAMBAHKAN INI DI AWAL
+    if (guardZoneManager && guardZoneManager->isEditingGuardZone()) {
+        if (guardZoneManager->handleMouseMove(e)) {
+            return; // Event handled by manager
+        }
+    }
+
   EcCoordinate lat, lon;
   if (XyToLatLon(e->x(), e->y(), lat, lon))
   {
@@ -1096,6 +1152,26 @@ void EcWidget::mouseMoveEvent(QMouseEvent *e)
 }
 
 /*---------------------------------------------------------------------------*/
+
+
+void EcWidget::mouseReleaseEvent(QMouseEvent *e)
+{
+    if (guardZoneManager && guardZoneManager->isEditingGuardZone()) {
+        if (guardZoneManager->handleMouseRelease(e)) {
+            return; // Event handled by manager
+        }
+    }
+
+    // Handle edit guardzone via manager - TAMBAHKAN INI
+    if (guardZoneManager && guardZoneManager->isEditingGuardZone()) {
+        if (guardZoneManager->handleMouseRelease(e)) {
+            return; // Event handled by manager
+        }
+    }
+
+    QWidget::mouseReleaseEvent(e);
+}
+
 
 void EcWidget::wheelEvent  (QWheelEvent *e)
 {
@@ -3494,59 +3570,307 @@ void EcWidget::checkGuardZone()
 
 void EcWidget::drawGuardZone()
 {
-    if (!guardZoneActive)
-        return;
-
-    // Digambar dengan menggunakan QPainter pada widget
     QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing, true);
 
-    // Set pen untuk outline
-    QPen pen(Qt::red);
-    pen.setWidth(2);
-    pen.setStyle(Qt::DashLine);
-    painter.setPen(pen);
+    // 1. Gambar guardzone yang sudah ada (dari guardZones list)
+    for (const GuardZone &gz : guardZones) {
+        if (!gz.active) continue;
 
-    // Set brush untuk fill
-    QBrush brush(QColor(255, 0, 0, 50)); // Semi-transparan
-    painter.setBrush(brush);
+        // Tentukan apakah guardzone ini sedang diedit
+        bool isBeingEdited = (guardZoneManager && guardZoneManager->isEditingGuardZone() &&
+                              gz.id == guardZoneManager->getEditingGuardZoneId());
 
-    // Jika mode pembuatan, gambar titik-titik
+        // Set pen dan brush berdasarkan guardzone
+        QPen pen(gz.color);
+        pen.setWidth(isBeingEdited ? 4 : 2);
+        if (isBeingEdited) {
+            pen.setStyle(Qt::DashLine);
+        }
+        painter.setPen(pen);
+
+        QColor fillColor = gz.color;
+        fillColor.setAlpha(isBeingEdited ? 80 : 50);
+        painter.setBrush(QBrush(fillColor));
+
+        if (gz.shape == GUARD_ZONE_CIRCLE) {
+            double lat = gz.centerLat;
+            double lon = gz.centerLon;
+
+            if (gz.attachedToShip) {
+                lat = ownShip.lat;
+                lon = ownShip.lon;
+            }
+
+            int centerX, centerY;
+            if (LatLonToXy(lat, lon, centerX, centerY)) {
+                double radiusInPixels = calculatePixelsFromNauticalMiles(gz.radius);
+                painter.drawEllipse(QPoint(centerX, centerY),
+                                    static_cast<int>(radiusInPixels),
+                                    static_cast<int>(radiusInPixels));
+            }
+        }
+        else if (gz.shape == GUARD_ZONE_POLYGON && gz.latLons.size() >= 6) {
+            QPolygon poly;
+            for (int i = 0; i < gz.latLons.size(); i += 2) {
+                int x, y;
+                if (LatLonToXy(gz.latLons[i], gz.latLons[i+1], x, y)) {
+                    poly.append(QPoint(x, y));
+                }
+            }
+
+            if (poly.size() >= 3) {
+                painter.drawPolygon(poly);
+            }
+        }
+    }
+
+    // 2. Gambar guardzone legacy (untuk kompatibilitas dengan kode yang sudah ada)
+    if (guardZoneActive) {
+        // Set pen untuk outline
+        QPen pen(Qt::red);
+        pen.setWidth(2);
+        pen.setStyle(Qt::DashLine);
+        painter.setPen(pen);
+
+        // Set brush untuk fill
+        QBrush brush(QColor(255, 0, 0, 50)); // Semi-transparan
+        painter.setBrush(brush);
+
+        // Jika mode pembuatan, gambar titik-titik
+        if (creatingGuardZone) {
+            // KODE EXISTING UNTUK MODE PEMBUATAN - tidak perlu diubah
+            if (newGuardZoneShape == GUARD_ZONE_CIRCLE) {
+                // Preview circle code (dari kode sebelumnya)
+                if (guardZonePoints.isEmpty()) {
+                    painter.setPen(QPen(Qt::red, 2));
+                    painter.setFont(QFont("Arial", 12, QFont::Bold));
+                    painter.drawText(10, height() - 50, tr("Click to set center of circle"));
+                }
+                else if (guardZonePoints.size() == 1) {
+                    QPointF center = guardZonePoints.first();
+                    QPointF mousePos = currentMousePos;
+
+                    double dx = mousePos.x() - center.x();
+                    double dy = mousePos.y() - center.y();
+                    double radiusPixels = sqrt(dx*dx + dy*dy);
+
+                    QRectF circleRect(center.x() - radiusPixels,
+                                      center.y() - radiusPixels,
+                                      radiusPixels * 2,
+                                      radiusPixels * 2);
+
+                    painter.setPen(QPen(Qt::red, 2, Qt::DashLine));
+                    painter.setBrush(QBrush(QColor(255, 0, 0, 50)));
+                    painter.drawEllipse(circleRect);
+
+                    painter.setPen(QPen(Qt::red, 3));
+                    painter.setBrush(QBrush(Qt::red));
+                    painter.drawEllipse(center, 8, 8);
+
+                    painter.setPen(QPen(Qt::yellow, 2, Qt::DotLine));
+                    painter.drawLine(center, mousePos);
+
+                    painter.setPen(QPen(Qt::yellow, 2));
+                    painter.setBrush(QBrush(QColor(255, 255, 0, 150)));
+                    painter.drawEllipse(mousePos, 6, 6);
+
+                    // Info radius
+                    double centerLat, centerLon, mouseLat, mouseLon;
+                    if (XyToLatLon(center.x(), center.y(), centerLat, centerLon) &&
+                        XyToLatLon(mousePos.x(), mousePos.y(), mouseLat, mouseLon)) {
+
+                        double distNM, bearing;
+                        EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
+                                                               centerLat, centerLon,
+                                                               mouseLat, mouseLon,
+                                                               &distNM, &bearing);
+
+                        painter.setPen(QPen(Qt::black, 1));
+                        painter.setBrush(QBrush(QColor(255, 255, 255, 200)));
+
+                        QString radiusText = tr("Radius: %1 NM").arg(distNM, 0, 'f', 2);
+                        QRect textRect = painter.fontMetrics().boundingRect(radiusText);
+                        textRect.moveTopLeft(mousePos.toPoint() + QPoint(10, -25));
+                        textRect.adjust(-5, -2, 5, 2);
+
+                        painter.drawRect(textRect);
+
+                        painter.setPen(QPen(Qt::black, 2));
+                        painter.setFont(QFont("Arial", 10, QFont::Bold));
+                        painter.drawText(textRect, Qt::AlignCenter, radiusText);
+                    }
+                }
+            }
+            else if (newGuardZoneShape == GUARD_ZONE_POLYGON) {
+                // Preview polygon code (dari kode sebelumnya)
+                if (guardZonePoints.isEmpty()) {
+                    painter.setPen(QPen(Qt::red, 2));
+                    painter.setFont(QFont("Arial", 12, QFont::Bold));
+                    painter.drawText(10, height() - 50, tr("Click to add first point"));
+                }
+                else {
+                    // Garis-garis yang sudah ada
+                    if (guardZonePoints.size() >= 2) {
+                        painter.setPen(QPen(Qt::red, 3, Qt::SolidLine));
+                        for (int i = 0; i < guardZonePoints.size() - 1; ++i) {
+                            painter.drawLine(guardZonePoints[i], guardZonePoints[i+1]);
+                        }
+                    }
+
+                    // Garis preview ke mouse
+                    if (guardZonePoints.size() >= 1) {
+                        painter.setPen(QPen(Qt::yellow, 2, Qt::DotLine));
+                        painter.drawLine(guardZonePoints.last(), currentMousePos);
+                    }
+
+                    // Garis penutup preview
+                    if (guardZonePoints.size() >= 3) {
+                        painter.setPen(QPen(Qt::blue, 2, Qt::DashLine));
+                        painter.drawLine(guardZonePoints.first(), currentMousePos);
+                    }
+
+                    // Area preview
+                    if (guardZonePoints.size() >= 3) {
+                        QPolygon previewPoly;
+                        for (const QPointF &point : guardZonePoints) {
+                            previewPoly.append(point.toPoint());
+                        }
+                        previewPoly.append(currentMousePos);
+
+                        painter.setPen(QPen(Qt::red, 1, Qt::DashLine));
+                        painter.setBrush(QBrush(QColor(255, 0, 0, 40)));
+                        painter.drawPolygon(previewPoly);
+                    }
+
+                    // Titik-titik dengan nomor
+                    painter.setPen(QPen(Qt::red, 2));
+                    painter.setBrush(QBrush(Qt::red));
+                    for (int i = 0; i < guardZonePoints.size(); ++i) {
+                        const QPointF &point = guardZonePoints[i];
+
+                        painter.drawEllipse(point, 8, 8);
+
+                        painter.setPen(QPen(Qt::white, 2));
+                        painter.setFont(QFont("Arial", 8, QFont::Bold));
+                        painter.drawText(point.toPoint() + QPoint(-4, 3), QString::number(i + 1));
+
+                        painter.setPen(QPen(Qt::red, 2));
+                        painter.setBrush(QBrush(Qt::red));
+                    }
+
+                    // Titik preview di mouse
+                    painter.setPen(QPen(Qt::yellow, 2));
+                    painter.setBrush(QBrush(QColor(255, 255, 0, 150)));
+                    painter.drawEllipse(currentMousePos, 6, 6);
+                }
+            }
+        }
+        else if (guardZoneShape == GUARD_ZONE_CIRCLE) {
+            // Jika guardzone terikat pada kapal, update posisi pusat
+            if (guardZoneAttachedToShip) {
+                guardZoneCenterLat = ownShip.lat;
+                guardZoneCenterLon = ownShip.lon;
+            }
+
+            // Konversi dari koordinat geografis ke koordinat layar
+            int centerX, centerY;
+            if (LatLonToXy(guardZoneCenterLat, guardZoneCenterLon, centerX, centerY)) {
+                // Hitung radius dalam pixel berdasarkan skala saat ini
+                double radiusInPixels = calculatePixelsFromNauticalMiles(guardZoneRadius);
+
+                // Gambar lingkaran
+                painter.drawEllipse(QPoint(centerX, centerY),
+                                    static_cast<int>(radiusInPixels),
+                                    static_cast<int>(radiusInPixels));
+            }
+        }
+        else if (guardZoneShape == GUARD_ZONE_POLYGON && guardZoneLatLons.size() >= 6) { // Minimal 3 titik (6 koordinat)
+            // Konversi titik-titik polygon geografis ke koordinat layar
+            QPolygon poly;
+            for (int i = 0; i < guardZoneLatLons.size(); i += 2) {
+                int x, y;
+                if (LatLonToXy(guardZoneLatLons[i], guardZoneLatLons[i+1], x, y)) {
+                    poly.append(QPoint(x, y));
+                }
+            }
+
+            // Jika polygon valid, gambar
+            if (poly.size() >= 3) {
+                painter.drawPolygon(poly);
+            }
+        }
+    }
+
+    // 3. Edit mode overlay via manager
+    if (guardZoneManager && guardZoneManager->isEditingGuardZone()) {
+        guardZoneManager->drawEditOverlay(painter);
+    }
+
+    // 4. Preview creation instructions (jika diperlukan)
     if (creatingGuardZone) {
-        // (kode yang sudah ada untuk mode pembuatan - tidak perlu diubah)
-    }
-    else if (guardZoneShape == GUARD_ZONE_CIRCLE) {
-        // Jika guardzone terikat pada kapal, update posisi pusat
-        if (guardZoneAttachedToShip) {
-            guardZoneCenterLat = ownShip.lat;
-            guardZoneCenterLon = ownShip.lon;
-        }
+        QRect createInstructionRect(10, height() - 120, 550, 110);
 
-        // Konversi dari koordinat geografis ke koordinat layar
-        int centerX, centerY;
-        if (LatLonToXy(guardZoneCenterLat, guardZoneCenterLon, centerX, centerY)) {
-            // Hitung radius dalam pixel berdasarkan skala saat ini
-            double radiusInPixels = calculatePixelsFromNauticalMiles(guardZoneRadius);
+        QLinearGradient gradient(createInstructionRect.topLeft(), createInstructionRect.bottomLeft());
+        gradient.setColorAt(0, QColor(0, 100, 200, 220));
+        gradient.setColorAt(1, QColor(0, 150, 255, 180));
+        painter.fillRect(createInstructionRect, gradient);
 
-            // Gambar lingkaran
-            painter.drawEllipse(QPoint(centerX, centerY),
-                                static_cast<int>(radiusInPixels),
-                                static_cast<int>(radiusInPixels));
+        painter.setPen(QPen(Qt::white, 2));
+        painter.drawRect(createInstructionRect);
+
+        painter.setFont(QFont("Arial", 11, QFont::Bold));
+        QString createTitle;
+        if (newGuardZoneShape == GUARD_ZONE_CIRCLE) {
+            createTitle = tr("🛡️ CREATING CIRCULAR GUARDZONE");
+        } else {
+            createTitle = tr("🛡️ CREATING POLYGON GUARDZONE");
         }
-    }
-    else if (guardZoneShape == GUARD_ZONE_POLYGON && guardZoneLatLons.size() >= 6) { // Minimal 3 titik (6 koordinat)
-        // Konversi titik-titik polygon geografis ke koordinat layar
-        QPolygon poly;
-        for (int i = 0; i < guardZoneLatLons.size(); i += 2) {
-            int x, y;
-            if (LatLonToXy(guardZoneLatLons[i], guardZoneLatLons[i+1], x, y)) {
-                poly.append(QPoint(x, y));
+        painter.drawText(createInstructionRect.adjusted(10, 8, -10, -80), Qt::AlignTop | Qt::AlignCenter, createTitle);
+
+        painter.setFont(QFont("Arial", 9));
+        QString stepInstructions;
+
+        if (newGuardZoneShape == GUARD_ZONE_CIRCLE) {
+            if (guardZonePoints.isEmpty()) {
+                stepInstructions = tr("STEP 1/2: Click anywhere on map to set CENTER point of guard zone");
+            } else if (guardZonePoints.size() == 1) {
+                stepInstructions = tr("STEP 2/2: Move cursor to desired radius and click to FINISH\n"
+                                      "• Yellow line shows current radius\n"
+                                      "• Radius info displayed near cursor");
+            }
+        } else {
+            if (guardZonePoints.isEmpty()) {
+                stepInstructions = tr("STEP 1/∞: Click to place FIRST point of polygon guard zone");
+            } else if (guardZonePoints.size() == 1) {
+                stepInstructions = tr("STEP 2/∞: Click to place SECOND point\n"
+                                      "• Yellow line shows next edge");
+            } else if (guardZonePoints.size() == 2) {
+                stepInstructions = tr("STEP 3/∞: Click to place THIRD point\n"
+                                      "• Blue line shows closing edge preview\n"
+                                      "• Right-click when satisfied (minimum 3 points)");
+            } else {
+                stepInstructions = tr("STEP %1/∞: Click to add more points OR right-click to FINISH\n"
+                                      "• Red area shows current polygon shape\n"
+                                      "• Minimum 3 points required").arg(guardZonePoints.size() + 1);
             }
         }
 
-        // Jika polygon valid, gambar
-        if (poly.size() >= 3) {
-            painter.drawPolygon(poly);
+        painter.drawText(createInstructionRect.adjusted(15, 30, -15, -10), Qt::AlignTop | Qt::AlignLeft, stepInstructions);
+
+        // Progress indicator for circle
+        if (newGuardZoneShape == GUARD_ZONE_CIRCLE) {
+            painter.setPen(QPen(Qt::yellow, 3));
+            int progressWidth = 100;
+            int progress = guardZonePoints.size() * (progressWidth / 2);
+            painter.drawRect(createInstructionRect.right() - 120, createInstructionRect.bottom() - 25, progressWidth, 10);
+            painter.fillRect(createInstructionRect.right() - 120, createInstructionRect.bottom() - 25, progress, 10, Qt::yellow);
         }
+    }
+
+    // 5. Draw feedback overlay (jika ada)
+    if (feedbackTimer.isActive()) {
+        drawFeedbackOverlay(painter);
     }
 
     painter.end();
@@ -4299,5 +4623,172 @@ void EcWidget::updateOwnShipPosition()
     lastSimulationTime = currentTime;
 }
 
+// Tambahkan di akhir file ecwidget.cpp (sebelum baris terakhir):
 
+void EcWidget::startEditGuardZone(int guardZoneId)
+{
+    if (guardZoneManager) {
+        guardZoneManager->startEditGuardZone(guardZoneId);
+    }
+}
+
+// Tambahkan di akhir file ecwidget.cpp:
+
+void EcWidget::showVisualFeedback(const QString& message, FeedbackType type)
+{
+    // Store feedback message dan type untuk ditampilkan
+    feedbackMessage = message;
+    feedbackType = type;
+    feedbackTimer.start(2500); // Tampilkan selama 2.5 detik
+
+    // Visual flash effect berdasarkan type
+    flashOpacity = 255;
+
+    // Sequence flash animation
+    QTimer::singleShot(50, [this]() {
+        flashOpacity = 200;
+        update();
+    });
+    QTimer::singleShot(100, [this]() {
+        flashOpacity = 150;
+        update();
+    });
+    QTimer::singleShot(150, [this]() {
+        flashOpacity = 100;
+        update();
+    });
+    QTimer::singleShot(200, [this]() {
+        flashOpacity = 50;
+        update();
+    });
+    QTimer::singleShot(250, [this]() {
+        flashOpacity = 0;
+        update();
+    });
+
+    qDebug() << "[FEEDBACK]" << message << "- Type:" << type;
+    update();
+}
+
+void EcWidget::playFeedbackSound(FeedbackType type)
+{
+    // Simple feedback dengan QApplication::beep()
+    switch (type) {
+    case FEEDBACK_SUCCESS:
+        QApplication::beep();
+        break;
+    case FEEDBACK_ERROR:
+        QApplication::beep();
+        QTimer::singleShot(200, []() { QApplication::beep(); });
+        break;
+    case FEEDBACK_WARNING:
+        QApplication::beep();
+        QTimer::singleShot(150, []() { QApplication::beep(); });
+        QTimer::singleShot(300, []() { QApplication::beep(); });
+        break;
+    case FEEDBACK_INFO:
+        // Info - no sound, just visual
+        break;
+    }
+}
+
+void EcWidget::drawFeedbackOverlay(QPainter& painter)
+{
+    // Flash effect overlay
+    if (flashOpacity > 0) {
+        QColor flashColor;
+        switch (feedbackType) {
+        case FEEDBACK_SUCCESS:
+            flashColor = QColor(0, 255, 0, flashOpacity / 4);
+            break;
+        case FEEDBACK_WARNING:
+            flashColor = QColor(255, 165, 0, flashOpacity / 4);
+            break;
+        case FEEDBACK_ERROR:
+            flashColor = QColor(255, 0, 0, flashOpacity / 4);
+            break;
+        case FEEDBACK_INFO:
+            flashColor = QColor(0, 150, 255, flashOpacity / 4);
+            break;
+        }
+        painter.fillRect(rect(), flashColor);
+    }
+
+    // Feedback message popup
+    if (feedbackTimer.isActive() && !feedbackMessage.isEmpty()) {
+        QRect messageRect(width() - 380, 20, 360, 100);
+
+        QColor bgColor;
+        QColor borderColor;
+        QString icon;
+
+        switch (feedbackType) {
+        case FEEDBACK_SUCCESS:
+            bgColor = QColor(34, 139, 34, 240);
+            borderColor = QColor(0, 100, 0);
+            icon = "✓";
+            break;
+        case FEEDBACK_WARNING:
+            bgColor = QColor(255, 140, 0, 240);
+            borderColor = QColor(200, 100, 0);
+            icon = "⚠";
+            break;
+        case FEEDBACK_ERROR:
+            bgColor = QColor(178, 34, 34, 240);
+            borderColor = QColor(150, 0, 0);
+            icon = "✗";
+            break;
+        case FEEDBACK_INFO:
+            bgColor = QColor(70, 130, 180, 240);
+            borderColor = QColor(0, 80, 150);
+            icon = "ℹ";
+            break;
+        }
+
+        // Shadow effect
+        QRect shadowRect = messageRect.adjusted(3, 3, 3, 3);
+        painter.fillRect(shadowRect, QColor(0, 0, 0, 100));
+
+        // Main background
+        painter.fillRect(messageRect, bgColor);
+        painter.setPen(QPen(borderColor, 3));
+        painter.drawRect(messageRect);
+
+        // Icon
+        painter.setPen(QPen(Qt::white, 2));
+        painter.setFont(QFont("Arial", 20, QFont::Bold));
+        painter.drawText(messageRect.adjusted(15, 15, -320, -60), Qt::AlignLeft | Qt::AlignTop, icon);
+
+        // Message text
+        painter.setFont(QFont("Arial", 9, QFont::Bold));
+        painter.setPen(QPen(Qt::white, 1));
+        painter.drawText(messageRect.adjusted(50, 20, -15, -15),
+                         Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap,
+                         feedbackMessage);
+
+        // Progress bar
+        int totalTime = 2500;
+        int timeLeft = feedbackTimer.remainingTime();
+        int progressWidth = messageRect.width() - 20;
+        int currentProgress = (timeLeft * progressWidth) / totalTime;
+
+        painter.setPen(QPen(Qt::white, 1));
+        painter.drawRect(messageRect.left() + 10, messageRect.bottom() - 15, progressWidth, 5);
+        painter.fillRect(messageRect.left() + 10, messageRect.bottom() - 15, currentProgress, 5, Qt::white);
+    }
+
+}
+
+void EcWidget::keyPressEvent(QKeyEvent *e)
+{
+    // Handle key press for GuardZone editing
+    if (guardZoneManager && guardZoneManager->isEditingGuardZone()) {
+        if (guardZoneManager->handleKeyPress(e)) {
+            return; // Event handled by guard zone manager
+        }
+    }
+
+    // Default key handling
+    QWidget::keyPressEvent(e);
+}
 
