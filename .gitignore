@@ -1,2 +1,97 @@
-/build
-ecdis.pro.user
+# Qt Creator files
+*.pro.user
+*.pro.user.*
+.qtc_clangd/
+*.autosave
+
+# Build directories
+build*/
+debug/
+release/
+Debug/
+Release/
+
+# Object files
+*.o
+*.obj
+
+# Qt MOC files
+moc_*.cpp
+moc_*.h
+*.moc
+
+# Qt RCC files
+qrc_*.cpp
+
+# Qt UIC files
+ui_*.h
+
+# Makefiles
+Makefile*
+!Makefile.am
+
+# Qt Temporary files
+*.tmp
+
+# Windows specific
+*.exe
+*.dll
+*.lib
+*.exp
+*.pdb
+*.ilk
+
+# Visual Studio Code
+.vscode/
+
+# Temporary files
+*~
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Qt Creator workspace files
+*.user.*
+
+# Compiler-specific
+*.vcxproj*
+*.sln
+*.suo
+
+# Application specific (if any)
+*.log
+log*.txt
+*.dat
+
+# Qt Linguist
+*.qm
+
+# CMake (if used)
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+*.cmake
+
+# Ninja build files
+.ninja_deps
+.ninja_log
+build.ninja
+rules.ninja
+
+# CLion
+.idea/
+
+# Qt Quick Compiler generated files
+*_qmlcache.qrc
+
+# Qt translation files
+*.ts
+
+# Backup files
+*.bak
+*.backup
+/debug
+/debug
+.qmake.stash
+/.qtc_clangd
