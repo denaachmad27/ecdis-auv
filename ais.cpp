@@ -1,0 +1,571 @@
+
+#include "ais.h"
+#include "IAisDvrPlugin.h"
+#include "PluginManager.h"
+
+Ais::Ais( EcWidget *parent, EcView *view, EcDictInfo *dict, 
+         EcCoordinate ownShipLat, EcCoordinate ownShipLon,
+         double oSpd, double oCrs, 
+         double warnDist, double warnCPA, int warnTCPA,
+         const QString &aisLib, int timeOut, 
+         Bool internalGPS, Bool *symbolize, const QString &strErrLogAis )
+{
+  _wParent = parent;
+  _view = view;
+  _dictInfo = dict;
+  _ownShipLat = ownShipLat;
+  _ownShipLon = ownShipLon;
+  _dSpeed = oSpd;
+  _dCourse = oCrs;
+  _dWarnDist = warnDist;
+  _dWarnCPA = warnCPA;
+  _iWarnTCPA = warnTCPA;
+  _iTimeOut = timeOut;
+  _bInternalGPS = internalGPS;
+  _bSymbolize = *symbolize;
+  _sAisLib = aisLib;
+  _errLog = new QFile( strErrLogAis );
+  _transponder = NULL;
+  _fAisFile = new QFile( "" );
+  _bReadFromFile = False;
+  _bReadFromVariable = False;
+  _bReadFromServer = False;
+
+  _errLog->open(QIODevice::WriteOnly);
+  if( createTransponderObject() == False )
+  {
+    addLogFileEntry( QString( "createTransponderObject() failed!" ) );
+  }
+
+  _tcpSocket = new QTcpSocket;
+  connect( _tcpSocket, SIGNAL( readyRead() ), this, SLOT( slotReadAISServerData() ) );
+  connect( _tcpSocket, SIGNAL( error( QAbstractSocket::SocketError ) ), this, SLOT( slotShowTCPError( QAbstractSocket::SocketError ) ) );
+  //connect( _tcpSocket, SIGNAL( hostFound() ), this, SLOT( slotHostFound() ) );      // TEST
+  //connect( _tcpSocket, SIGNAL( connected() ), this, SLOT( slotConnected() ) );      // TEST
+
+}
+
+Ais::~Ais()
+{
+  if( _transponder != NULL && _tcpSocket->state() == 0 )
+  {
+    if( EcAISDeleteTransponder( &_transponder ) == False )
+    {
+      addLogFileEntry( QString( "Error in ~Ais(): EcAISDeleteTransponder() failed!" ) );
+    }
+  }
+
+  if( _tcpSocket && _tcpSocket->state() == 0 )
+  {
+    delete _tcpSocket;
+  }
+
+  if( _errLog )
+  {
+    delete _errLog;
+  }
+
+  if( _fAisFile )
+  {
+    delete _fAisFile;
+  }
+}
+
+void Ais::setOwnShipPos(EcCoordinate lat, EcCoordinate lon)
+{
+  _ownShipLat = lat;
+  _ownShipLon = lon;
+}
+
+void Ais::getOwnShipPos(EcCoordinate & lat, EcCoordinate & lon) const
+{
+  lat = _ownShipLat;
+  lon = _ownShipLon;
+}
+
+
+// Close AIs file.
+//////////////////
+void Ais::closeAisFile()
+{
+  if( _fAisFile->isOpen() == true )
+  {
+    _fAisFile->close();
+  }
+}
+
+// Close Error logfile.
+///////////////////////
+void Ais::closeErrLogFile()
+{
+  if( _errLog->isOpen() == true )
+  {
+    _errLog->close();
+  }
+}
+
+void Ais::closeSocketConnection()
+{
+  _tcpSocket->abort();
+
+  if( _tcpSocket->state() != 0 )
+  {
+    // If connected to AIS server, try to disconnect.
+    _tcpSocket->disconnectFromHost();        
+    if( _tcpSocket->waitForDisconnected( 5000 ) == false )
+    {
+      addLogFileEntry( QString( "Error in closeSocketConnection(): Could not disconnect from server." ) );
+    }
+  }
+  if( disconnect( _tcpSocket, 0, this, 0 ) == False )
+  {
+    addLogFileEntry( QString( "Error in ~Ais(): : disconnect failed!" ) );
+  }
+}
+
+// CALLBACK for updating AIS targets.
+/////////////////////////////////////
+void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
+{
+  EcCoordinate ownShipLat = 0, ownShipLon = 0;
+  double dist = 0, bear = 0;
+  double lat = ( (double) ti->latitude  / 10000.0 ) / 60.0;
+  double lon = ( (double) ti->longitude / 10000.0 ) / 60.0;
+  _myAis->getOwnShipPos(ownShipLat, ownShipLon);
+  EcCalculateRhumblineDistanceAndBearing( EC_GEO_DATUM_WGS84, lat, lon, ownShipLat, ownShipLon, &dist, &bear);
+
+  // Process only targets which are further away than 48 nm or no own ship position exists yet
+  if( dist < 48 || (ownShipLat == 0 && ownShipLon == 0))
+  {
+    // Filter the ais targets which shall be displayed
+    // Some transponders do not send the official numbers in case of invalid positions
+    if( ti->ownShip == False && 
+        abs(ti->latitude) < 90 * 60 * 10000 && 
+        abs(ti->longitude) < 180 * 60 * 10000 && 
+        ti->navStatus != eNavS_baseStation)
+    {
+      EcAISTrackingStatus aisTrkStatus = EcAISCalcTargetTrackingStatus( ti, ownShipLat, ownShipLon, _dSpeed, _dCourse, _dWarnDist, _dWarnCPA, _iWarnTCPA, _iTimeOut );
+      EcFeature feat = EcAISFindTargetObject( _cid, _dictInfo, ti );
+
+      // if there is no feature yet create one
+      if( !ECOK( feat ) && aisTrkStatus != aisLost )
+      {
+        if( EcAISCreateTargetObject( _cid, _dictInfo, ti, &feat ) )
+        {
+          // Set default activation status to sleeping
+          EcAISSetTargetActivationStatus( feat, _dictInfo, aisSleeping, NULL );
+          _bSymbolize = True;
+        }
+        else
+        {
+          addLogFileEntry( QString( "EcAISCreateTargetObject() failed! New target object could not be created." ) );
+        }
+      }
+
+      // Set the status of the ais target to active if it is located within a certain distance
+      if( dist < 4 )
+        EcAISSetTargetActivationStatus( feat, _dictInfo, aisActivated, NULL );
+
+      // Set the tracking status of the ais target feature
+      EcAISSetTargetTrackingStatus( feat, _dictInfo, aisTrkStatus, NULL );
+
+      // Set the remaining attributes of the ais target feature
+      EcAISSetTargetObjectData( feat, _dictInfo, ti, &_bSymbolize );
+    }
+    else
+    {
+      // For simulation purposes we take the actual ship position of the own ship from transponder. 
+      // In reality the own ship handling and display is NOT implemented within the AIS handling.
+      if( ( ti->ownShip == True ) &&
+            abs(ti->latitude) < 90 * 60 * 10000 && 
+            abs(ti->longitude) < 180 * 60 * 10000)
+      {
+        if( ti->ownShip == True )
+        {
+          _oLat = ((double)ti->latitude / 10000) / 60;
+          _oLon = ((double)ti->longitude / 10000) / 60;
+
+          // Update feature object of own ship.
+          double deltaLat = _oLat - ownShipLat;
+          double deltaLon = _oLon - ownShipLon;
+          EcEasyMoveObject( _featureOwnShip, deltaLat, deltaLon );
+          ownShipLat = _oLat;
+          ownShipLon = _oLon;
+          _myAis->setOwnShipPos(ownShipLat, ownShipLon);
+        }
+      }
+    } // if( ti->ownShip == False ...
+  } // if (dist ...
+
+  // The callback informs the application to refresh the chart display with AIS target by sending an event.
+  /////////////////////////////////////////////////////////////////////////////////////////////////////////
+  _myAis->emitSignal( ownShipLat, ownShipLon );
+}
+
+void Ais::emitSignal( double lat, double lon )
+{
+  emit signalRefreshChartDisplay( lat, lon );
+}
+
+void Ais::stopAnimation()
+{
+  _bReadFromFile = False;
+  _bReadFromVariable = False;
+  _bReadFromServer = False;
+
+  closeErrLogFile();
+  closeAisFile();
+  closeSocketConnection();
+}
+
+// Create transponder object.
+/////////////////////////////
+Bool Ais::createTransponderObject()
+{
+  // Init static ais instance.
+  ////////////////////////////
+  _myAis = this;
+
+  if( EcAISNewTransponder( &_transponder, _sAisLib.toLatin1(), _bInternalGPS ? eGPSt_internalGPS : eGPSt_externalGPS ) == False )
+  {
+    if( _transponder )
+    {
+      EcAISDeleteTransponder( &_transponder );
+      _transponder = NULL;
+    }
+
+    addLogFileEntry( QString( "EcAISNewTransponder() failed! Could not create new transponder object." ) );
+    return False;
+  }
+
+  // Set AIS callback.
+  EcAISSetTargetUpdateCallBack( _transponder, AISTargetUpdateCallback );
+  return True;
+}
+
+// Read AIS logfile.
+////////////////////
+void Ais::readAISLogfile( const QString &logFile )
+{
+  _bReadFromFile = True;
+  _bReadFromVariable = False;
+  _bReadFromServer = False;
+
+  //closeAisFile();
+  closeSocketConnection();
+
+  //QFile fAisFile( logFile );
+  _fAisFile->setFileName( logFile );
+  if( _fAisFile->exists() == False )
+  {
+    addLogFileEntry( QString( "Error in readAISLogfile(): AIS logfile doesn't exist." ) );
+    return;
+  }   
+
+  if( _fAisFile->open( QIODevice::ReadOnly | QIODevice::Text ) == False )
+  {
+    addLogFileEntry( QString( "Error in readAISLogfile(): Could not open AIS logfile: %1." ).arg( logFile ) );
+    return;
+  }
+
+  if( !_transponder )
+  {
+    addLogFileEntry( QString( "Error in readAISLogfile(): Transponder object is not initialized!" ) );
+    return;
+  }
+
+  if( _bReadFromFile == False )
+  {
+    addLogFileEntry( QString( "Error in readAISLogfile(): Read from AIS logfile permitted!" ) );
+    return;
+  }
+
+  // Read AIS logfile line by line and add each line to the AIS transponder object by calling EcAISAddTransponderOutput.
+  // EcAISAddTransponderOutput calls the callback AISTargetUpdateCallback for each line read from the logfile.
+  int iLineNo = 1;
+  QTextStream in( _fAisFile );
+  while( in.atEnd() == False )
+  {
+    if( _bReadFromFile == False )
+    {
+      break;
+    }
+
+    if( _transponder == NULL )
+    {
+      break;
+    }
+
+    QString sLine = in.readLine();
+    sLine = sLine.append( "\r\n" );
+
+    nmeaText->append(in.readLine());
+
+    // RECORD NMEA
+    IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
+
+    if (dvr && dvr->isRecording()) {
+        dvr->recordRawNmea(sLine);
+    }
+
+    //qDebug() << sLine;
+
+    if( EcAISAddTransponderOutput( _transponder, (unsigned char*)sLine.toStdString().c_str(), sLine.count() ) == False )
+    {
+      addLogFileEntry( QString( "Error in readAISLogfile(): EcAISAddTransponderOutput() failed in input line %1" ).arg( iLineNo ) );
+      break;
+    }
+
+    iLineNo++;
+  }
+}
+
+// Read AIS variable.
+////////////////////
+void Ais::readAISVariable( const QStringList &dataLines )
+{
+    _bReadFromFile = False;
+    _bReadFromVariable = True;
+    _bReadFromServer = False;
+
+    if( !_transponder )
+    {
+        addLogFileEntry( QString( "Error in readAISVariable(): Transponder object is not initialized!" ) );
+        return;
+    }
+
+    if( _bReadFromVariable == False )
+    {
+        addLogFileEntry( QString( "Error in readAISVariable(): Read from AIS variable permitted!" ) );
+        return;
+    }
+
+    // Read AIS logfile line by line and add each line to the AIS transponder object by calling EcAISAddTransponderOutput.
+    // EcAISAddTransponderOutput calls the callback AISTargetUpdateCallback for each line read from the logfile.
+    int iLineNo = 1;
+    // for( const QString &sLine : dataLines )
+    foreach (const QString &sLine, dataLines)
+    {
+        if( _bReadFromVariable == False )
+        {
+            break;
+        }
+
+        if( _transponder == NULL )
+        {
+            break;
+        }
+
+        QString line = sLine + "\r\n";
+        nmeaText->append(sLine);
+
+        if( EcAISAddTransponderOutput( _transponder, (unsigned char*)line.toStdString().c_str(), line.count() ) == False )
+        {
+            addLogFileEntry( QString( "Error in readAISLogfile(): EcAISAddTransponderOutput() failed in input line %1" ).arg( iLineNo ) );
+            break;
+        }
+
+        iLineNo++;
+    }
+
+    stopAnimation();
+}
+
+// Connect to AIS server.
+/////////////////////////
+void Ais::connectToAISServer( const QString& strHost, int iPort )
+{
+  _iLineCnt = 0;
+  _uiBlockSize = 0;
+  _tcpSocket->abort();
+
+  _bReadFromFile = False;
+  _bReadFromServer = True;
+
+  closeAisFile();
+  closeSocketConnection();
+
+  if( strHost.isEmpty() || iPort <= 0 )
+  {
+    addLogFileEntry( QString( "Error in connectToAISServer(): Invalid host or port." ) );
+    return;
+  }
+
+  connect( _tcpSocket, SIGNAL( readyRead() ), this, SLOT( slotReadAISServerData() ) );
+  connect( _tcpSocket, SIGNAL( error( QAbstractSocket::SocketError ) ), this, SLOT( slotShowTCPError( QAbstractSocket::SocketError ) ) );
+
+  // Try to connect to AIS server. Wait up to 5 sec. for server connection.
+  _tcpSocket->connectToHost( strHost, iPort );
+  if( !_tcpSocket->waitForConnected( 2000 ) )
+  {
+    QString strErr = QString( "Error in connectToAISServer(): Could not connect to host %1 and port %2." ).arg( strHost ).arg( iPort );
+    QAbstractSocket::SocketError sError = _tcpSocket->error();
+    slotShowTCPError( sError );
+    addLogFileEntry( strErr );
+  }
+}
+
+// Read AIS data from AIS server via TCP.
+/////////////////////////////////////////
+void Ais::slotReadAISServerData()
+{
+  if( _bReadFromServer == False )
+  {
+    return;
+  }
+
+  if( _transponder == NULL )
+  {
+    addLogFileEntry( QString( "Error in slotReadAISServerData(): Transponder not initialized!" ) );
+    return;
+  }
+
+  QString strNextData;
+  QDataStream in( _tcpSocket );
+  in.setVersion( QDataStream::Qt_4_0 );
+
+  if( _uiBlockSize == 0 )
+  {
+    if( _tcpSocket->bytesAvailable() < (int)sizeof( quint16 ) )
+    {
+      addLogFileEntry( QString( "Error in slotReadAISServerData(): No data available!" ) );
+      return;
+    }
+
+    in >> _uiBlockSize;
+  }
+
+  if( _uiBlockSize > 0 )
+  {
+    QByteArray baData = _tcpSocket->readLine( _uiBlockSize );
+    strNextData = QString( baData ).append( "\r\n" );
+
+    if( strNextData.isEmpty() == False )
+    {
+      //_bCanBeDeleted = False;
+
+      // Add AIS data to transponder.
+      if( EcAISAddTransponderOutput( _transponder, (unsigned char*)strNextData.toStdString().c_str(), strNextData.count() ) == False )
+      {
+        addLogFileEntry( QString( "Error in slotReadAISServerData(): EcAISAddTransponderOutput() failed!" ) );
+      }
+
+      //_bCanBeDeleted = True;
+
+      _iLineCnt++;        // limit data from AIS server to a specific number of lines.
+    }
+  }
+
+  // Close connection to AIS server after reading of max. no. of lines.
+  if( ( strNextData == _strCurrentData ) ||
+    ( _iLineCnt == 1000 ) )       
+  {
+    // Close socket connection.
+    _tcpSocket->disconnectFromHost();
+  }
+
+  _strCurrentData = strNextData;    
+}
+
+////////////////////////   TEST   /////////////////////
+//void Ais::slotHostFound()
+//{
+//    QMessageBox::information( 0, "TEST", "Host found." );
+//}
+//
+//void Ais::slotConnected()
+//{
+//    QMessageBox::information( 0, "TEST", "Connected to host." );
+//}
+/////////////////////////////////////////////////////////
+
+// Return connection errors for AIS Server.
+///////////////////////////////////////////
+void Ais::slotShowTCPError( QAbstractSocket::SocketError socketError )
+{
+  QString strMsg = "";
+
+    switch( socketError )
+    {
+        case QAbstractSocket::RemoteHostClosedError:
+        {
+            break;
+        }
+        case QAbstractSocket::HostNotFoundError:
+        {
+            strMsg = strMsg.append( tr( "The host was not found.\nPlease check the host name and port settings." ) );
+            QMessageBox::warning( 0, tr( "AIS Example" ), strMsg );
+            break;
+        }
+        case QAbstractSocket::ConnectionRefusedError:
+        {
+            strMsg = strMsg.append( tr( "The connection was refused by the peer.\nMake sure the AIS server is running,\nand check that the host name and port settings are correct." ) );
+            QMessageBox::warning( 0, tr( "AIS Example" ), strMsg );
+            break;
+        }
+        default:
+        {
+            strMsg = strMsg.append( tr( "The following error occurred: %1." ).arg( _tcpSocket->errorString() ) );
+            QMessageBox::warning( 0, tr( "AIS Example" ), strMsg );
+        }
+    }
+}
+
+
+// Set AIS cell.
+////////////////
+void Ais::setAISCell( EcCellId cid )
+{
+  _cid = cid;
+
+  EcCoordinate coorList[2] = {0,0};
+  EcPrimitive primitive;
+  // create the own ship feature
+  // this is usually not done with the AIS transponder but independently with other positioning sensors
+  _featureOwnShip = EcObjectCreate(_cid, _dictInfo, "ownshp", EC_OS_DELETABLE, "", '|', coorList, 1, EC_P_PRIM, &primitive);
+}
+
+// Return AIS cell.
+///////////////////
+EcCellId Ais::getAISCell()
+{
+  return _cid;
+}
+
+// Add entry to AIS logfile.
+////////////////////////////
+void Ais::addLogFileEntry( const QString &str )
+{
+  if( !_errLog )
+  {
+    return;
+  }
+
+  if( _errLog->exists() == False )
+  {
+    return;
+  }
+
+  if( _errLog->isOpen() == False )
+  {
+    if( _errLog->open( QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append ) == False )
+    {
+      return;
+    }
+  }
+
+  QTextStream out( _errLog );
+  out << str << "\n";
+  _errLog->close();
+}
+
+void Ais::deleteObject()
+{
+    EcObjectDelete(_featureOwnShip);
+}
+
+void Ais::setOwnShipNull()
+{
+    _myAis->setOwnShipPos(0,0);
+}
+//////////////// AIS MOOSDB ??

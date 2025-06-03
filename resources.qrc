@@ -1,0 +1,12 @@
+<RCC>
+    <qresource prefix="/">
+        <file>images/ais.png</file>
+        <file>images/connect.png</file>
+        <file>images/disconnect.png</file>
+        <file>images/import.png</file>
+        <file>images/rotate-left.png</file>
+        <file>images/rotate-right.png</file>
+        <file>images/zoom-in.png</file>
+        <file>images/zoom-out.png</file>
+    </qresource>
+</RCC>
