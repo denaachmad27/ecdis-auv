@@ -18,6 +18,8 @@
 #include <QInputDialog>
 
 // Guardzone
+#include "IAisDvrPlugin.h"
+#include "PluginManager.h"
 #include "guardzonecheckdialog.h"
 #include "guardzonemanager.h"
 
@@ -1799,6 +1801,13 @@ QString EcWidget::StartReadAISSubscribe ()
 
                 _aisObj->readAISVariable(nmeaData);
 
+                // RECORD NMEA
+                IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
+
+                if (dvr && dvr->isRecording()) {
+                    dvr->recordRawNmea(aivdo);
+                }
+
             } else {
                 qDebug().noquote() << "Received JSON:\n" << QJsonDocument(jsonData).toJson(QJsonDocument::Indented);
             }
@@ -2156,6 +2165,13 @@ void EcWidget::processAISDataHybrid(QTcpSocket* socket, EcWidget *ecchart) {
             QStringList nmeaData;
             nmeaData << aivdo;
             _aisObj->readAISVariable(nmeaData);
+
+            // RECORD NMEA
+            IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
+
+            if (dvr && dvr->isRecording()) {
+                dvr->recordRawNmea(aivdo);
+            }
 
             QList<EcFeature> pickedFeatureList;
             GetPickedFeaturesSubs(pickedFeatureList, lat, lon);
