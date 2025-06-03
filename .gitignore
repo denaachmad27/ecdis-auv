@@ -95,3 +95,6 @@ rules.ninja
 /debug
 .qmake.stash
 /.qtc_clangd
+InstallationPass.txt
+object_script.ecdis.Debug
+object_script.ecdis.Release
