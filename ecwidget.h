@@ -150,6 +150,17 @@ public:
   void playFeedbackSound(FeedbackType type);
   void debugPreviewState();
 
+  // Helper methods untuk GuardZone Panel
+  GuardZoneManager* getGuardZoneManager() { return guardZoneManager; }
+  void emitGuardZoneModified() { emit guardZoneModified(); }
+  void emitGuardZoneDeleted() { emit guardZoneDeleted(); }
+  void emitGuardZoneSignals(const QString& action, int guardZoneId);
+
+  bool validateGuardZoneSystem();
+  bool isGuardZoneInViewport(const GuardZone& gz, const QRect& viewport);
+  void drawGuardZoneLabel(QPainter& painter, const GuardZone& gz, const QPoint& position);
+  void drawGuardZoneCreationPreview(QPainter& painter);
+
   // End Guardzone
 
 
@@ -373,6 +384,11 @@ signals:
 
   // GuardZone Signals
   void statusMessage(const QString &message);
+
+  // GuardZone signals untuk panel
+  void guardZoneCreated();
+  void guardZoneModified();
+  void guardZoneDeleted();
 
 private slots:
   void slotUpdateAISTargets( Bool bSymbolize );

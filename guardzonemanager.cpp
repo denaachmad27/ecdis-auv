@@ -688,26 +688,29 @@ void GuardZoneManager::deleteGuardZone(int guardZoneId)
                 QMessageBox::No);
 
             if (reply == QMessageBox::Yes) {
-                // Hapus dari list
-                guardZones.removeAt(i);
-
-                // Clear any edit state jika guardzone yang dihapus sedang diedit
+                // Clear edit state jika sedang diedit
                 if (editingGuardZone && editingGuardZoneId == guardZoneId) {
                     finishEditGuardZone();
                 }
 
-                // Update status guardzone system
+                // Hapus dari list
+                guardZones.removeAt(i);
+
+                // Update system status
                 if (guardZones.isEmpty()) {
                     ecWidget->enableGuardZone(false);
                 } else {
                     ecWidget->enableGuardZone(true);
                 }
 
-                // Save dan force update
+                // PERBAIKAN: Proper sequence - Save → Signal → Update
                 ecWidget->saveGuardZones();
+
+                // Emit melalui EcWidget untuk konsistensi
+                ecWidget->emitGuardZoneDeleted();
+
                 ecWidget->update();
                 QApplication::processEvents();
-                ecWidget->update();
 
                 emit statusMessage(tr("GuardZone '%1' deleted").arg(name));
             }
@@ -889,7 +892,16 @@ void GuardZoneManager::finishDragHandle()
     draggedHandleIndex = -1;
     currentEditMode = EDIT_NONE;
 
+    // PERBAIKAN: Save dan emit signal hanya sekali di sini
+    if (ecWidget) {
+        ecWidget->saveGuardZones();
+        // Emit signal melalui EcWidget untuk konsistensi
+        ecWidget->emitGuardZoneModified();
+    }
+
     emit statusMessage(tr("GuardZone modified. Drag handles to continue editing."));
+
+    // PERBAIKAN: Emit manager signal terakhir (tidak bentrok)
     emit guardZoneModified(editingGuardZoneId);
 }
 
@@ -906,6 +918,9 @@ void GuardZoneManager::updateCircleCenter(double newLat, double newLon)
             break;
         }
     }
+
+    // PERBAIKAN: Jangan emit signal setiap kali drag, hanya saat selesai
+    // Signal akan di-emit di finishDragHandle()
 }
 
 void GuardZoneManager::updateCircleRadius(double newLat, double newLon)
@@ -916,21 +931,21 @@ void GuardZoneManager::updateCircleRadius(double newLat, double newLon)
 
     for (GuardZone& gz : guardZones) {
         if (gz.id == editingGuardZoneId && gz.shape == GUARD_ZONE_CIRCLE) {
-            // Calculate new radius from center to new position
             double distance, bearing;
             EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
                                                    gz.centerLat, gz.centerLon,
                                                    newLat, newLon,
                                                    &distance, &bearing);
 
-            // Set minimum radius
             if (distance < 0.01) distance = 0.01;
-            if (distance > 100) distance = 100; // Maximum 100 NM
+            if (distance > 100) distance = 100;
 
             gz.radius = distance;
             break;
         }
     }
+
+    // PERBAIKAN: Jangan emit signal setiap kali drag
 }
 
 void GuardZoneManager::updatePolygonVertex(int vertexIndex, double newLat, double newLon)
@@ -951,6 +966,8 @@ void GuardZoneManager::updatePolygonVertex(int vertexIndex, double newLat, doubl
             break;
         }
     }
+
+    // PERBAIKAN: Jangan emit signal setiap kali drag
 }
 
 
@@ -1133,34 +1150,31 @@ void GuardZoneManager::addVertexToPolygon(int edgeIndex, const QPoint& pos)
 
     for (GuardZone& gz : guardZones) {
         if (gz.id == editingGuardZoneId && gz.shape == GUARD_ZONE_POLYGON) {
-            // Convert screen position to lat/lon
             double newLat, newLon;
             if (ecWidget->XyToLatLon(pos.x(), pos.y(), newLat, newLon)) {
-                // Insert new vertex after the clicked edge
-                int insertIndex = (edgeIndex + 1) * 2; // Convert to latLons index
+                int insertIndex = (edgeIndex + 1) * 2;
 
                 if (insertIndex <= gz.latLons.size()) {
                     gz.latLons.insert(insertIndex, newLat);
                     gz.latLons.insert(insertIndex + 1, newLon);
 
-                    // Update edit handles
+                    // Update handles
                     updateEditHandles();
 
-                    // Save changes
+                    // PERBAIKAN: Save dan emit signal secara controlled
                     ecWidget->saveGuardZones();
-
-                    // Force redraw
                     ecWidget->update();
 
-                    int vertexNumber = (edgeIndex + 1) + 1; // +1 because it's after the edge
+                    int vertexNumber = (edgeIndex + 1) + 1;
                     emit statusMessage(tr("New vertex added at position %1 (Total: %2 vertices)")
                                            .arg(vertexNumber)
                                            .arg(gz.latLons.size() / 2));
+
+                    // PERBAIKAN: Emit hanya manager signal, bukan EcWidget signal
                     emit guardZoneModified(editingGuardZoneId);
 
                     qDebug() << "Added vertex to polygon at edge" << edgeIndex
-                             << "New vertex count:" << (gz.latLons.size() / 2)
-                             << "at position" << newLat << newLon;
+                             << "New vertex count:" << (gz.latLons.size() / 2);
                 }
             }
             break;
@@ -1246,6 +1260,8 @@ void GuardZoneManager::removeVertexFromPolygon(int handleIndex)
                                        .arg(handle.vertexIndex + 1)
                                        .arg(gz.latLons.size() / 2));
                 emit guardZoneModified(editingGuardZoneId);
+
+                ecWidget->emitGuardZoneModified();
 
                 qDebug() << "Removed vertex" << handle.vertexIndex
                          << "at position" << removedLat << removedLon

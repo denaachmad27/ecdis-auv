@@ -8,6 +8,7 @@
 #include "IAisDvrPlugin.h"
 #include "ecwidget.h"
 #include "moosdb.h"
+#include "guardzonepanel.h"
 
 #include <QPluginLoader>
 
@@ -248,6 +249,11 @@ protected slots:
     void onCheckGuardZone();
     void onAttachGuardZoneToShip(bool attached);
 
+    // GuardZone Panel slots
+    void onGuardZoneSelected(int guardZoneId);
+    void onGuardZoneEditRequested(int guardZoneId);
+    void onGuardZoneVisibilityChanged(int guardZoneId, bool visible);
+
     // Simulasi
     void onStartSimulation();
     void onStopSimulation();
@@ -256,6 +262,9 @@ protected slots:
     // DVR PLUGIN
     void startAisRecord();
     void stopAisRecord();
+
+    void showSystemStatistics();
+    void createTestGuardZones();
 
 protected:
     void DrawChart();
@@ -283,6 +292,12 @@ protected:
     QAction* stopAisRecAction;
 
     IAisDvrPlugin* aisDvr;
+
+private:
+    GuardZonePanel* guardZonePanel;
+    QDockWidget* guardZoneDock;
+    void setupGuardZonePanel();
+    void setupTestingMenu();
 };
 
 #endif // _mainwindow_h_

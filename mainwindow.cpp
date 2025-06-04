@@ -193,6 +193,24 @@ void MainWindow::createActions()
 
     // QAction *aboutQtAct = helpMenu->addAction(tr("About &Qt"), qApp, &QApplication::aboutQt);
     // aboutQtAct->setStatusTip(tr("Show the Qt library's About box"));
+
+    // ========== GUARDZONE PANEL SHORTCUTS ==========
+    QAction* toggleGuardZonePanelAction = new QAction(tr("Toggle GuardZone Panel"), this);
+    toggleGuardZonePanelAction->setShortcut(QKeySequence("Ctrl+G"));
+    connect(toggleGuardZonePanelAction, &QAction::triggered, [this]() {
+        if (guardZoneDock) {
+            guardZoneDock->setVisible(!guardZoneDock->isVisible());
+        }
+    });
+    addAction(toggleGuardZonePanelAction);
+
+    // Add to view menu if it exists
+    QMenu* viewMenu = menuBar()->findChild<QMenu*>("&Sidebar");
+    if (viewMenu) {
+        viewMenu->addSeparator();
+        viewMenu->addAction(toggleGuardZonePanelAction);
+    }
+    // ==============================================
 }
 
 void MainWindow::loadPlugin()
@@ -673,6 +691,13 @@ MainWindow::MainWindow(QWidget *parent)
   // SIDEBAR
   createDockWindows();
   createActions();
+
+  // GuardZone
+  // ========== INITIALIZE GUARDZONE PANEL POINTERS ==========
+  guardZonePanel = nullptr;
+  guardZoneDock = nullptr;
+  // ========================================================
+
   
   // Waypoint
   QMenu *waypointMenu = menuBar()->addMenu("&Waypoint");
@@ -740,6 +765,13 @@ MainWindow::MainWindow(QWidget *parent)
     // EcS63CreateUserPermit(hwid, mkey, mid, &userpermit);
 
     // qDebug() << userpermit;
+  setupGuardZonePanel();
+  setupTestingMenu();
+
+#ifdef _DEBUG
+      // Testing menu hanya untuk debug build
+      setupTestingMenu();
+#endif
 }
 
 /*---------------------------------------------------------------------------*/
@@ -757,6 +789,18 @@ MainWindow::~MainWindow()
   if (aisDvr && aisDvr->isRecording()) {
       aisDvr->stopRecording();
   }
+
+  // ========== CLEANUP GUARDZONE PANEL ==========
+  if (guardZonePanel) {
+      delete guardZonePanel;
+      guardZonePanel = nullptr;
+  }
+
+  if (guardZoneDock) {
+      delete guardZoneDock;
+      guardZoneDock = nullptr;
+  }
+  // ============================================
 }
 
 void MainWindow::onReload()
@@ -1491,5 +1535,367 @@ void MainWindow::onAutoCheckGuardZone(bool checked)
 {
     if (ecchart) {
         ecchart->setAutoCheckGuardZone(checked);
+    }
+}
+
+// ========== SETUP GUARDZONE PANEL ==========
+void MainWindow::setupGuardZonePanel()
+{
+    if (!ecchart) {
+        qDebug() << "Cannot setup GuardZone panel: ecchart is null";
+        return;
+    }
+
+    try {
+        // Create GuardZone panel
+        guardZonePanel = new GuardZonePanel(ecchart, ecchart->getGuardZoneManager(), this);
+
+        // Create dock widget
+        guardZoneDock = new QDockWidget(tr("GuardZone Manager"), this);
+        guardZoneDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+        guardZoneDock->setWidget(guardZonePanel);
+
+        // Add to right dock area
+        addDockWidget(Qt::RightDockWidgetArea, guardZoneDock);
+
+        // Add to view menu
+        QList<QAction*> actions = menuBar()->actions();
+        for (QAction* action : actions) {
+            if (action->menu() && action->menu()->title() == tr("&Sidebar")) {
+                action->menu()->addAction(guardZoneDock->toggleViewAction());
+                break;
+            }
+        }
+
+        // Signal connections dengan error handling
+        connect(ecchart, &EcWidget::guardZoneCreated,
+                guardZonePanel, &GuardZonePanel::onGuardZoneCreated,
+                Qt::QueuedConnection);
+
+        connect(ecchart, &EcWidget::guardZoneDeleted,
+                guardZonePanel, &GuardZonePanel::onGuardZoneDeleted,
+                Qt::QueuedConnection);
+
+        connect(ecchart, &EcWidget::guardZoneModified,
+                guardZonePanel, &GuardZonePanel::onGuardZoneModified,
+                Qt::QueuedConnection);
+
+        connect(guardZonePanel, &GuardZonePanel::guardZoneSelected,
+                this, &MainWindow::onGuardZoneSelected,
+                Qt::QueuedConnection);
+
+        connect(guardZonePanel, &GuardZonePanel::guardZoneEditRequested,
+                this, &MainWindow::onGuardZoneEditRequested,
+                Qt::QueuedConnection);
+
+        connect(guardZonePanel, &GuardZonePanel::guardZoneVisibilityChanged,
+                this, &MainWindow::onGuardZoneVisibilityChanged,
+                Qt::QueuedConnection);
+
+        // TAMBAHAN: Connect new signals
+        connect(guardZonePanel, &GuardZonePanel::validationCompleted,
+                [this](bool success) {
+                    if (!success) {
+                        statusBar()->showMessage(tr("GuardZone panel validation found issues"), 3000);
+                    }
+                });
+
+        // Delayed initial refresh
+        QTimer::singleShot(100, [this]() {
+            try {
+                if (guardZonePanel) {
+                    guardZonePanel->refreshGuardZoneList();
+                    qDebug() << "GuardZone panel initial refresh completed successfully";
+
+                    // Validate after refresh - sekarang menggunakan public method
+                    QTimer::singleShot(200, [this]() {
+                        if (guardZonePanel) {
+                            guardZonePanel->validatePanelState();  // Sekarang public
+                        }
+                    });
+                }
+            } catch (const std::exception& e) {
+                qDebug() << "Error during panel initialization:" << e.what();
+                if (guardZonePanel) {
+                    guardZonePanel->recoverFromError();  // Sekarang public
+                }
+            }
+        });
+
+        qDebug() << "GuardZone panel setup completed successfully";
+
+    } catch (const std::exception& e) {
+        qDebug() << "Critical error setting up GuardZone panel:" << e.what();
+        QMessageBox::critical(this, tr("Setup Error"),
+                              tr("Failed to setup GuardZone panel: %1").arg(e.what()));
+    } catch (...) {
+        qDebug() << "Unknown critical error setting up GuardZone panel";
+        QMessageBox::critical(this, tr("Setup Error"),
+                              tr("Unknown error occurred while setting up GuardZone panel"));
+    }
+}
+
+// ========== GUARDZONE PANEL HANDLERS ==========
+
+void MainWindow::onGuardZoneSelected(int guardZoneId)
+{
+    qDebug() << "GuardZone selected from panel:" << guardZoneId;
+
+    // Center map on selected guardzone
+    if (ecchart) {
+        QList<GuardZone>& guardZones = ecchart->getGuardZones();
+
+        for (const GuardZone& gz : guardZones) {
+            if (gz.id == guardZoneId) {
+                if (gz.shape == GUARD_ZONE_CIRCLE) {
+                    ecchart->SetCenter(gz.centerLat, gz.centerLon);
+                } else if (gz.shape == GUARD_ZONE_POLYGON && gz.latLons.size() >= 6) {
+                    // Calculate center
+                    double centerLat = 0, centerLon = 0;
+                    int numPoints = gz.latLons.size() / 2;
+
+                    for (int i = 0; i < gz.latLons.size(); i += 2) {
+                        centerLat += gz.latLons[i];
+                        centerLon += gz.latLons[i + 1];
+                    }
+
+                    centerLat /= numPoints;
+                    centerLon /= numPoints;
+
+                    ecchart->SetCenter(centerLat, centerLon);
+                }
+
+                ecchart->Draw();
+                break;
+            }
+        }
+    }
+}
+
+void MainWindow::onGuardZoneEditRequested(int guardZoneId)
+{
+    qDebug() << "Edit requested for GuardZone:" << guardZoneId;
+
+    if (ecchart) {
+        ecchart->startEditGuardZone(guardZoneId);
+    }
+}
+
+void MainWindow::onGuardZoneVisibilityChanged(int guardZoneId, bool visible)
+{
+    qDebug() << "GuardZone" << guardZoneId << "visibility changed to:" << visible;
+
+    // Update status bar or show notification
+    QString status = visible ? tr("enabled") : tr("disabled");
+    statusBar()->showMessage(tr("GuardZone %1 %2").arg(guardZoneId).arg(status), 2000);
+}
+
+void MainWindow::setupTestingMenu()
+{
+    // TAMBAHAN: Debug menu untuk testing
+    QMenu *debugMenu = menuBar()->addMenu("&Debug");
+
+    debugMenu->addAction("Validate GuardZone System", [this]() {
+        if (ecchart) {
+            bool isValid = ecchart->validateGuardZoneSystem();
+            QString message = isValid ?
+                                  tr("✓ GuardZone system validation passed") :
+                                  tr("✗ GuardZone system validation failed - check debug output");
+
+            QMessageBox::information(this, tr("System Validation"), message);
+        }
+    });
+
+    debugMenu->addAction("Refresh GuardZone Panel", [this]() {
+        if (guardZonePanel) {
+            guardZonePanel->refreshGuardZoneList();
+            statusBar()->showMessage(tr("GuardZone panel refreshed"), 2000);
+        }
+    });
+
+    debugMenu->addAction("Force Save GuardZones", [this]() {
+        if (ecchart) {
+            ecchart->saveGuardZones();
+            statusBar()->showMessage(tr("GuardZones saved"), 2000);
+        }
+    });
+
+    debugMenu->addAction("Show System Statistics", [this]() {
+        showSystemStatistics();
+    });
+
+    debugMenu->addSeparator();
+
+    debugMenu->addAction("Create Test GuardZones", [this]() {
+        createTestGuardZones();
+    });
+
+    debugMenu->addAction("Clear All GuardZones", [this]() {
+        if (ecchart) {
+            QMessageBox::StandardButton reply = QMessageBox::question(
+                this, tr("Clear All GuardZones"),
+                tr("Are you sure you want to delete ALL GuardZones?\nThis action cannot be undone."),
+                QMessageBox::Yes | QMessageBox::No,
+                QMessageBox::No);
+
+            if (reply == QMessageBox::Yes) {
+                ecchart->getGuardZones().clear();
+                ecchart->enableGuardZone(false);
+                ecchart->saveGuardZones();
+                ecchart->update();
+
+                if (guardZonePanel) {
+                    guardZonePanel->refreshGuardZoneList();
+                }
+
+                QMessageBox::information(this, tr("Cleared"), tr("All GuardZones have been deleted."));
+            }
+        }
+    });
+}
+
+// 2. TAMBAHAN: System statistics display
+void MainWindow::showSystemStatistics()
+{
+    if (!ecchart) return;
+
+    QList<GuardZone>& guardZones = ecchart->getGuardZones();
+
+    QString stats;
+    stats += tr("=== ECDIS GuardZone System Statistics ===\n\n");
+
+    // Basic counts
+    int total = guardZones.size();
+    int active = std::count_if(guardZones.begin(), guardZones.end(),
+                               [](const GuardZone& gz) { return gz.active; });
+    int inactive = total - active;
+    int circles = std::count_if(guardZones.begin(), guardZones.end(),
+                                [](const GuardZone& gz) { return gz.shape == GUARD_ZONE_CIRCLE; });
+    int polygons = total - circles;
+    int attachedToShip = std::count_if(guardZones.begin(), guardZones.end(),
+                                       [](const GuardZone& gz) { return gz.attachedToShip; });
+
+    stats += tr("Total GuardZones: %1\n").arg(total);
+    stats += tr("Active: %1 | Inactive: %2\n").arg(active).arg(inactive);
+    stats += tr("Circles: %1 | Polygons: %2\n").arg(circles).arg(polygons);
+    stats += tr("Attached to Ship: %1\n\n").arg(attachedToShip);
+
+    // System state
+    stats += tr("System State:\n");
+    stats += tr("- GuardZone System Active: %1\n").arg(ecchart->isGuardZoneActive() ? "Yes" : "No");
+    stats += tr("- Next GuardZone ID: %1\n").arg(ecchart->getNextGuardZoneId());
+    // PERBAIKAN: Gunakan public method
+    stats += tr("- Panel Items: %1\n\n").arg(guardZonePanel ? guardZonePanel->getGuardZoneListCount() : 0);
+
+    // Performance info
+    stats += tr("Memory Usage:\n");
+    stats += tr("- GuardZone Objects: %1 x ~200 bytes = ~%2 KB\n")
+                 .arg(total).arg((total * 200) / 1024.0, 0, 'f', 1);
+
+    // File info
+    QString filePath = ecchart->getGuardZoneFilePath();
+    QFileInfo fileInfo(filePath);
+    if (fileInfo.exists()) {
+        stats += tr("- Save File: %1 (%2 KB)\n")
+        .arg(fileInfo.fileName())
+            .arg(fileInfo.size() / 1024.0, 0, 'f', 1);
+        stats += tr("- Last Modified: %1\n").arg(fileInfo.lastModified().toString());
+    } else {
+        stats += tr("- Save File: Not found\n");
+    }
+
+    // Validation
+    bool isValid = ecchart->validateGuardZoneSystem();
+    stats += tr("\nSystem Validation: %1\n").arg(isValid ? "✓ PASSED" : "✗ FAILED");
+
+    QMessageBox msgBox(this);
+    msgBox.setWindowTitle(tr("GuardZone System Statistics"));
+    msgBox.setText(stats);
+    msgBox.setTextFormat(Qt::PlainText);
+    msgBox.setStandardButtons(QMessageBox::Ok);
+    msgBox.exec();
+}
+
+// 3. TAMBAHAN: Create test guardzones untuk testing
+void MainWindow::createTestGuardZones()
+{
+    if (!ecchart) return;
+
+    QMessageBox::StandardButton reply = QMessageBox::question(
+        this, tr("Create Test GuardZones"),
+        tr("This will create 3 test GuardZones for testing purposes.\nContinue?"),
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::Yes);
+
+    if (reply != QMessageBox::Yes) return;
+
+    try {
+        // Test Circle 1 - Active
+        GuardZone testCircle1;
+        testCircle1.id = ecchart->getNextGuardZoneId();
+        testCircle1.name = "Test Circle 1 (Active)";
+        testCircle1.shape = GUARD_ZONE_CIRCLE;
+        testCircle1.active = true;
+        testCircle1.attachedToShip = false;
+        testCircle1.color = Qt::red;
+        testCircle1.centerLat = -7.18551;
+        testCircle1.centerLon = 112.78012;
+        testCircle1.radius = 1.0;
+
+        // Test Circle 2 - Inactive
+        GuardZone testCircle2;
+        testCircle2.id = ecchart->getNextGuardZoneId();
+        testCircle2.name = "Test Circle 2 (Inactive)";
+        testCircle2.shape = GUARD_ZONE_CIRCLE;
+        testCircle2.active = false;
+        testCircle2.attachedToShip = false;
+        testCircle2.color = Qt::blue;
+        testCircle2.centerLat = -7.19551;
+        testCircle2.centerLon = 112.79012;
+        testCircle2.radius = 0.5;
+
+        // Test Polygon - Active, Attached to Ship
+        GuardZone testPolygon;
+        testPolygon.id = ecchart->getNextGuardZoneId();
+        testPolygon.name = "Test Polygon (Ship Attached)";
+        testPolygon.shape = GUARD_ZONE_POLYGON;
+        testPolygon.active = true;
+        testPolygon.attachedToShip = true;
+        testPolygon.color = Qt::green;
+        testPolygon.latLons = {
+            -7.17551, 112.77012,  // Point 1
+            -7.17551, 112.78012,  // Point 2
+            -7.18551, 112.78012,  // Point 3
+            -7.18551, 112.77012   // Point 4
+        };
+
+        // Add to system
+        QList<GuardZone>& guardZones = ecchart->getGuardZones();
+        guardZones.append(testCircle1);
+        guardZones.append(testCircle2);
+        guardZones.append(testPolygon);
+
+        // Enable system and save
+        ecchart->enableGuardZone(true);
+        ecchart->saveGuardZones();
+        ecchart->update();
+
+        // Refresh panel
+        if (guardZonePanel) {
+            guardZonePanel->refreshGuardZoneList();
+        }
+
+        QMessageBox::information(this, tr("Test GuardZones Created"),
+                                 tr("Successfully created 3 test GuardZones:\n"
+                                    "- Circle 1 (Active)\n"
+                                    "- Circle 2 (Inactive)\n"
+                                    "- Polygon (Active, Ship Attached)"));
+
+    } catch (const std::exception& e) {
+        QMessageBox::critical(this, tr("Error"),
+                              tr("Failed to create test GuardZones: %1").arg(e.what()));
+    } catch (...) {
+        QMessageBox::critical(this, tr("Error"),
+                              tr("Unknown error occurred while creating test GuardZones"));
     }
 }
