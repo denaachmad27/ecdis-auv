@@ -120,12 +120,6 @@ public:
 
   // Guardzone
 
-  enum GuardZoneShape {
-      GUARD_ZONE_CIRCLE,
-      GUARD_ZONE_POLYGON,
-      GUARD_ZONE_SECTOR
-  };
-
   enum FeedbackType {
       FEEDBACK_SUCCESS,
       FEEDBACK_WARNING,
@@ -154,6 +148,7 @@ public:
 
   void showVisualFeedback(const QString& message, FeedbackType type);
   void playFeedbackSound(FeedbackType type);
+  void debugPreviewState();
 
   // End Guardzone
 
@@ -313,10 +308,11 @@ public:
   // GuardZone
   void enableGuardZone(bool enable);
   bool isGuardZoneActive() const { return guardZoneActive; }
-  void startCreateGuardZone(GuardZoneShape shape);
+  void startCreateGuardZone(::GuardZoneShape shape);
   void finishCreateGuardZone();
   void cancelCreateGuardZone();
   void checkGuardZone();
+  QString getGuardZoneFilePath() const;
 
   // Simulasi AIS
   void startAISTargetSimulation();
@@ -519,9 +515,9 @@ private:
   QList<GuardZone> guardZones;
   int nextGuardZoneId;
 
-  // Create GuardZone variables - TAMBAHKAN INI DI PRIVATE
+  // Create GuardZone variables
   bool creatingGuardZone;
-  GuardZoneShape newGuardZoneShape;
+  ::GuardZoneShape newGuardZoneShape;
   QVector<QPointF> guardZonePoints;
   QPoint currentMousePos;
 
@@ -530,16 +526,19 @@ private:
   QTimer feedbackTimer;
   int flashOpacity;
 
-  // Legacy GuardZone variables (untuk kompatibilitas) - TAMBAHKAN INI DI PRIVATE
+  // Legacy GuardZone variables (untuk kompatibilitas)
   bool guardZoneActive;
-  GuardZoneShape guardZoneShape;
+  ::GuardZoneShape guardZoneShape;
   bool guardZoneAttachedToShip;
   double guardZoneCenterLat, guardZoneCenterLon;
   double guardZoneRadius;
   QVector<double> guardZoneLatLons;
 
-  // Methods untuk feedback - TAMBAHKAN INI DI PRIVATE
+  // Methods untuk feedback
   void drawFeedbackOverlay(QPainter& painter);
+
+  void createCircularGuardZoneNew(double centerLat, double centerLon, double radiusNM);
+  void createPolygonGuardZoneNew();
 
   // End Guardzone
 

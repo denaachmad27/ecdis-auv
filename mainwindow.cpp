@@ -11,6 +11,7 @@
 #include "SettingsDialog.h"
 #include "SettingsManager.h"
 #include "PluginManager.h"
+#include "guardzone.h"
 
 QTextEdit *informationText;
 
@@ -1439,7 +1440,7 @@ void MainWindow::onEnableGuardZone(bool enabled)
 void MainWindow::onCreateCircularGuardZone()
 {
     if (ecchart) {
-        ecchart->startCreateGuardZone(EcWidget::GUARD_ZONE_CIRCLE);
+        ecchart->startCreateGuardZone(GUARD_ZONE_CIRCLE);
         statusBar()->showMessage("Click to set center of circular guard zone, then click again to set radius");
     }
 }
@@ -1447,7 +1448,7 @@ void MainWindow::onCreateCircularGuardZone()
 void MainWindow::onCreatePolygonGuardZone()
 {
     if (ecchart) {
-        ecchart->startCreateGuardZone(EcWidget::GUARD_ZONE_POLYGON);
+        ecchart->startCreateGuardZone(GUARD_ZONE_POLYGON);
         statusBar()->showMessage("Click to add points to guard zone. Right-click when finished.");
     }
 }
