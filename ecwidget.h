@@ -23,6 +23,22 @@
 
 #include "moosdb.h"
 #include "guardzone.h"
+
+struct AISTargetData {
+    QString mmsi;
+    double lat;
+    double lon;
+    double cog;         // Course over ground
+    double sog;         // Speed over ground
+    double cpa;         // Closest Point of Approach (nautical miles)
+    double tcpa;        // Time to CPA (minutes)
+    bool isDangerous;   // Apakah target berbahaya
+    QDateTime lastUpdate;
+};
+
+class AlertSystem;
+struct AlertData;
+
 class GuardZoneManager; // Forward declaration
 
 extern QString bottomBarText;
@@ -162,6 +178,37 @@ public:
   void drawGuardZoneCreationPreview(QPainter& painter);
 
   // End Guardzone
+
+  // Alert System methods
+  AlertSystem* getAlertSystem() { return alertSystem; }
+  void initializeAlertSystem();
+
+  // Alert integration with existing systems
+  void checkAlertConditions();
+  void triggerNavigationAlert(const QString& message, int priority);
+  void triggerNavigationAlert(const QString& message);  // Overload untuk default
+
+  void triggerDepthAlert(double currentDepth, double threshold, bool isShallow = true);
+  void triggerGuardZoneAlert(int guardZoneId, const QString& details);
+
+  struct NavShipStruct
+  {
+      double lat;
+      double lon;
+      double depth;        // TAMBAHKAN ini jika belum ada
+      double heading;
+      double heading_og;
+      double speed;
+      double speed_og;
+      double yaw;
+      double z;
+  };
+
+  // CPA - TCPA
+  // TAMBAHAN BARU - CPA/TCPA Methods
+  void updateCPADisplay();
+  void checkCPAAlerts();
+  QList<AISTargetData> getCurrentTargets();
 
 
   class Exception
@@ -390,9 +437,20 @@ signals:
   void guardZoneModified();
   void guardZoneDeleted();
 
+  // Alert system signals
+  void alertTriggered(const AlertData& alert);
+  void criticalAlertTriggered(const AlertData& alert);
+  void alertSystemStatusChanged(bool enabled);
+
 private slots:
   void slotUpdateAISTargets( Bool bSymbolize );
   void slotRefreshChartDisplay( double lat, double lon );
+
+  // Alert Systems
+  void onAlertTriggered(const AlertData& alert);
+  void onCriticalAlert(const AlertData& alert);
+  void onAlertSystemStatusChanged(bool enabled);
+  void performPeriodicAlertChecks();
 
 protected:
   // Drawing functions
@@ -558,6 +616,24 @@ private:
 
   // End Guardzone
 
+  // Alert System
+  AlertSystem* alertSystem;
+
+  // Alert monitoring variables
+  bool alertMonitoringEnabled;
+  QTimer* alertCheckTimer;
+  double lastDepthReading;
+  QDateTime lastAlertCheck;
+
+  // Alert thresholds and settings
+  double depthAlertThreshold;
+  double proximityAlertThreshold;
+  bool autoDepthMonitoring;
+  bool autoProximityMonitoring;
+
+  NavShipStruct navShip;
+  NavShipStruct mapShip;
+
   // Variabel simulasi AIS
   struct SimulatedAISTarget {
       double lat;
@@ -590,6 +666,17 @@ private:
   std::atomic<bool> stopThreadMAP;
 
   // LOOPING IF DATA NOT UPDATE
+
+  // TAMBAHAN BARU - CPA/TCPA Variables
+  QList<AISTargetData> aisTargets;
+  QTimer* cpaUpdateTimer;
+  bool showCPAInfo;
+
+  // TAMBAHAN BARU - CPA/TCPA Drawing Methods
+  void drawCPAInfo(QPainter& painter);
+  void drawCPAInfoBox(QPainter& painter, int x, int y, const AISTargetData& target);
+  void drawTargetHeading(QPainter& painter, int x, int y, const AISTargetData& target);
+
 
 
 }; // EcWidget

@@ -35,6 +35,7 @@ HEADERS += mainwindow.h ecwidget.h pickwindow.h ais.h \
     SettingsDialog.h \
     SettingsManager.h \
     aivdoencoder.h \
+    alertmanager.h \
     editwaypointdialog.h \
     guardzone.h \
     guardzonemanager.h \
@@ -45,7 +46,8 @@ HEADERS += mainwindow.h ecwidget.h pickwindow.h ais.h \
     moosdb.h \
     nmeadecoder.h \
     searchwindow.h \
-
+    alertsystem.h \
+    alertpanel.h \
 
 SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     PluginManager.cpp \
@@ -59,6 +61,8 @@ SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     moosdb.cpp \
     nmeadecoder.cpp \
     searchwindow.cpp \
+    alertsystem.cpp \
+    alertpanel.cpp \
 
 RESOURCES += \
     resources.qrc

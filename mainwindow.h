@@ -9,6 +9,8 @@
 #include "ecwidget.h"
 #include "moosdb.h"
 #include "guardzonepanel.h"
+#include "alertpanel.h"
+#include "alertsystem.h"
 
 #include <QPluginLoader>
 
@@ -298,6 +300,20 @@ private:
     QDockWidget* guardZoneDock;
     void setupGuardZonePanel();
     void setupTestingMenu();
+
+    // Alert Panel
+    AlertPanel* alertPanel;
+    QDockWidget* alertDock;
+    void setupAlertPanel();
+
+    // Alert handling methods
+    void onAlertTriggered(const AlertData& alert);
+    void onCriticalAlertTriggered(const AlertData& alert);
+    void onAlertSelected(int alertId);
+    void onAlertSystemStatusChanged(bool enabled);
+
+    // Alert testing methods
+    void testAlertWorkflow();
 };
 
 #endif // _mainwindow_h_

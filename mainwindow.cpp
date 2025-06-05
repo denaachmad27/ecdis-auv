@@ -12,6 +12,8 @@
 #include "SettingsManager.h"
 #include "PluginManager.h"
 #include "guardzone.h"
+#include "alertpanel.h"
+#include "alertsystem.h"
 
 QTextEdit *informationText;
 
@@ -698,6 +700,11 @@ MainWindow::MainWindow(QWidget *parent)
   guardZoneDock = nullptr;
   // ========================================================
 
+  // ========== INITIALIZE ALERT PANEL POINTERS ==========
+  alertPanel = nullptr;
+  alertDock = nullptr;
+  // ===================================================
+
   
   // Waypoint
   QMenu *waypointMenu = menuBar()->addMenu("&Waypoint");
@@ -766,6 +773,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     // qDebug() << userpermit;
   setupGuardZonePanel();
+  setupAlertPanel();
   setupTestingMenu();
 
 #ifdef _DEBUG
@@ -801,6 +809,18 @@ MainWindow::~MainWindow()
       guardZoneDock = nullptr;
   }
   // ============================================
+
+  // ========== CLEANUP ALERT PANEL ==========
+  if (alertPanel) {
+      delete alertPanel;
+      alertPanel = nullptr;
+  }
+
+  if (alertDock) {
+      delete alertDock;
+      alertDock = nullptr;
+  }
+  // ========================================
 }
 
 void MainWindow::onReload()
@@ -1752,6 +1772,215 @@ void MainWindow::setupTestingMenu()
             }
         }
     });
+
+    // ========== ALERT SYSTEM TESTING ==========
+    debugMenu->addSeparator();
+    debugMenu->addAction("🔊 Test Low Priority Alert", [this]() {
+        if (ecchart) {
+            ecchart->triggerNavigationAlert("Test low priority navigation alert", 1);
+        }
+    });
+
+    debugMenu->addAction("🟡 Test Medium Priority Alert", [this]() {
+        if (ecchart) {
+            ecchart->triggerNavigationAlert("Test medium priority navigation alert", 2);
+        }
+    });
+
+    debugMenu->addAction("🟠 Test High Priority Alert", [this]() {
+        if (ecchart) {
+            ecchart->triggerNavigationAlert("Test high priority navigation alert", 3);
+        }
+    });
+
+    debugMenu->addAction("🚨 Test Critical Alert", [this]() {
+        if (ecchart) {
+            ecchart->triggerNavigationAlert("CRITICAL: Test critical priority alert", 4);
+        }
+    });
+
+    debugMenu->addSeparator();
+
+    debugMenu->addAction("💧 Test Depth Alert", [this]() {
+        if (ecchart) {
+            // Simulate shallow water alert
+            ecchart->triggerDepthAlert(3.5, 5.0, true); // current: 3.5m, threshold: 5.0m, shallow: true
+        }
+    });
+
+    debugMenu->addAction("⚠️ Test GuardZone Alert", [this]() {
+        if (ecchart) {
+            ecchart->triggerGuardZoneAlert(1, "AIS target detected within GuardZone boundaries");
+        }
+    });
+
+    debugMenu->addSeparator();
+
+    debugMenu->addAction("📊 Show Alert Statistics", [this]() {
+        if (alertPanel) {
+            alertPanel->showAlertStatistics();
+        } else {
+            QMessageBox::information(this, "Alert Statistics", "Alert Panel not available");
+        }
+    });
+
+    debugMenu->addAction("🔄 Refresh Alert Panel", [this]() {
+        if (alertPanel) {
+            alertPanel->refreshAlertList();
+            statusBar()->showMessage("Alert panel refreshed", 2000);
+        }
+    });
+
+    debugMenu->addAction("✅ Test Alert Acknowledge/Resolve", [this]() {
+        testAlertWorkflow();
+    });
+
+    // ==========================================
+
+    debugMenu->addAction("🔄 Force Refresh Alert Panel", [this]() {
+        if (alertPanel) {
+            qDebug() << "[MAIN] Forcing alert panel refresh...";
+            alertPanel->refreshAlertList();
+
+            // Also check AlertSystem directly
+            if (ecchart) {
+                AlertSystem* alertSystem = ecchart->getAlertSystem();
+                if (alertSystem) {
+                    QList<AlertData> alerts = alertSystem->getActiveAlerts();
+                    qDebug() << "[MAIN] AlertSystem has" << alerts.size() << "active alerts";
+                    for (const AlertData& alert : alerts) {
+                        qDebug() << "[MAIN] Alert:" << alert.id << alert.title;
+                    }
+                }
+            }
+        }
+    });
+
+    debugMenu->addAction("📝 Create Test Alert Directly", [this]() {
+        if (alertPanel && ecchart) {
+            AlertSystem* alertSystem = ecchart->getAlertSystem();
+            if (alertSystem) {
+                // Create alert directly using AlertSystem
+                int alertId = alertSystem->triggerAlert(
+                    ALERT_NAVIGATION_WARNING,
+                    PRIORITY_HIGH,
+                    "Direct Test Alert",
+                    "This alert was created directly via AlertSystem",
+                    "Direct_Test",
+                    -7.18551, 112.78012
+                    );
+
+                qDebug() << "[MAIN] Created direct test alert with ID:" << alertId;
+
+                // Force refresh panel
+                QTimer::singleShot(100, [this]() {
+                    if (alertPanel) {
+                        alertPanel->refreshAlertList();
+                    }
+                });
+            }
+        }
+    });
+
+    debugMenu->addAction("➕ Manual Add Alert to Panel", [this]() {
+        if (!alertPanel) {
+            QMessageBox::warning(this, "Error", "Alert Panel not available");
+            return;
+        }
+
+        try {
+            qDebug() << "[MAIN] Creating manual alert...";
+
+            // PERBAIKAN: Gunakan AlertSystem untuk create alert, bukan manual
+            if (ecchart) {
+                AlertSystem* alertSystem = ecchart->getAlertSystem();
+                if (alertSystem) {
+                    qDebug() << "[MAIN] Using AlertSystem to create alert...";
+
+                    int alertId = alertSystem->triggerAlert(
+                        ALERT_USER_DEFINED,        // Safe enum value
+                        PRIORITY_MEDIUM,           // Safe enum value
+                        "Manual Panel Test",       // Simple string
+                        "Testing panel display",   // Simple string
+                        "Manual_Test",             // Simple string
+                        0.0, 0.0                   // Safe coordinates
+                        );
+
+                    qDebug() << "[MAIN] AlertSystem created alert ID:" << alertId;
+
+                    // Force refresh after small delay
+                    QTimer::singleShot(200, [this]() {
+                        if (alertPanel) {
+                            alertPanel->refreshAlertList();
+                        }
+                    });
+
+                    if (alertId > 0) {
+                        QMessageBox::information(this, "Success",
+                                                 QString("Alert created with ID: %1").arg(alertId));
+                    } else {
+                        QMessageBox::warning(this, "Failed", "Failed to create alert");
+                    }
+
+                } else {
+                    QMessageBox::warning(this, "Error", "AlertSystem not available");
+                }
+            } else {
+                QMessageBox::warning(this, "Error", "EcWidget not available");
+            }
+
+        } catch (const std::exception& e) {
+            qDebug() << "[MAIN] Exception in manual add alert:" << e.what();
+            QMessageBox::critical(this, "Crash Prevented",
+                                  QString("Error: %1").arg(e.what()));
+        } catch (...) {
+            qDebug() << "[MAIN] Unknown exception in manual add alert";
+            QMessageBox::critical(this, "Crash Prevented", "Unknown error occurred");
+        }
+    });
+
+    debugMenu->addAction("🔍 Debug Alert System State", [this]() {
+        QString debug;
+
+        if (ecchart) {
+            AlertSystem* alertSystem = ecchart->getAlertSystem();
+            if (alertSystem) {
+                QList<AlertData> alerts = alertSystem->getActiveAlerts();
+                debug += QString("AlertSystem active alerts: %1\n").arg(alerts.size());
+
+                for (const AlertData& alert : alerts) {
+                    debug += QString("- ID %1: %2\n").arg(alert.id).arg(alert.title);
+                }
+            } else {
+                debug += "AlertSystem: NULL\n";
+            }
+        } else {
+            debug += "EcWidget: NULL\n";
+        }
+
+        if (alertPanel) {
+            debug += QString("AlertPanel active count: %1\n").arg(alertPanel->getActiveAlertCount());
+            debug += QString("AlertPanel total count: %1\n").arg(alertPanel->getTotalAlertCount());
+        } else {
+            debug += "AlertPanel: NULL\n";
+        }
+
+        QMessageBox::information(this, "Debug State", debug);
+    });
+
+    debugMenu->addAction("🛡️ Safe Panel Test", [this]() {
+        if (alertPanel) {
+            // Test basic panel functionality
+            alertPanel->updateAlertCounts();
+            alertPanel->refreshAlertList();
+
+            QString status = QString("Panel is working!\nActive count: %1\nTotal count: %2")
+                                 .arg(alertPanel->getActiveAlertCount())
+                                 .arg(alertPanel->getTotalAlertCount());
+
+            QMessageBox::information(this, "Safe Test", status);
+        }
+    });
 }
 
 // 2. TAMBAHAN: System statistics display
@@ -1897,5 +2126,328 @@ void MainWindow::createTestGuardZones()
     } catch (...) {
         QMessageBox::critical(this, tr("Error"),
                               tr("Unknown error occurred while creating test GuardZones"));
+    }
+}
+
+void MainWindow::setupAlertPanel()
+{
+    qDebug() << "[MAIN] Starting setupAlertPanel()";
+
+    if (!ecchart) {
+        qDebug() << "[MAIN] Cannot setup Alert panel: ecchart is null";
+        return;
+    }
+
+    // PERBAIKAN: Cek AlertSystem lebih detail
+    AlertSystem* alertSystem = ecchart->getAlertSystem();
+    qDebug() << "[MAIN] EcWidget AlertSystem pointer:" << alertSystem;
+
+    if (!alertSystem) {
+        qDebug() << "[MAIN] AlertSystem is null! Attempting to reinitialize...";
+
+        // Try to reinitialize AlertSystem
+        QTimer::singleShot(100, [this]() {
+            if (ecchart) {
+                ecchart->initializeAlertSystem();
+
+                // Retry setup after reinitialize
+                QTimer::singleShot(500, [this]() {
+                    AlertSystem* retrySystem = ecchart->getAlertSystem();
+                    if (retrySystem && alertPanel) {
+                        qDebug() << "[MAIN] Reconnecting AlertSystem to panel...";
+
+                        // Update panel's AlertSystem pointer
+                        alertPanel->setAlertSystem(retrySystem);
+
+                        // Manual signal connections
+                        connect(retrySystem, &AlertSystem::alertTriggered,
+                                this, [this](const AlertData& alert) {
+                                    qDebug() << "[MAIN] Forwarding alert to panel:" << alert.title;
+                                    if (alertPanel) {
+                                        alertPanel->onAlertTriggered(alert);
+                                    }
+                                }, Qt::QueuedConnection);
+
+                        connect(retrySystem, &AlertSystem::systemStatusChanged,
+                                this, [this](bool enabled) {
+                                    qDebug() << "[MAIN] System status changed:" << enabled;
+                                    if (alertPanel) {
+                                        alertPanel->onAlertSystemStatusChanged(enabled);
+                                    }
+                                }, Qt::QueuedConnection);
+                    }
+                });
+            }
+        });
+    }
+
+    try {
+        qDebug() << "[MAIN] Creating Alert panel...";
+
+        // Create Alert panel (even with null AlertSystem for UI testing)
+        alertPanel = new AlertPanel(ecchart, alertSystem, this);
+
+        qDebug() << "[MAIN] Creating alert dock widget...";
+
+        // Create dock widget
+        alertDock = new QDockWidget(tr("Alert Manager"), this);
+        alertDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+        alertDock->setWidget(alertPanel);
+
+        // PERBAIKAN: Force show dock
+        alertDock->setVisible(true);
+        alertDock->show();
+
+        qDebug() << "[MAIN] Adding dock to main window...";
+
+        // Add to left dock area (berbeda dengan GuardZone yang di kanan)
+        addDockWidget(Qt::LeftDockWidgetArea, alertDock);
+
+        qDebug() << "[MAIN] Alert dock added successfully";
+
+        // Add to view menu
+        QMenu* viewMenu = nullptr;
+        QList<QAction*> actions = menuBar()->actions();
+        for (QAction* action : actions) {
+            if (action->menu() && action->menu()->title() == tr("&Sidebar")) {
+                viewMenu = action->menu();
+                break;
+            }
+        }
+
+        if (viewMenu) {
+            viewMenu->addAction(alertDock->toggleViewAction());
+            qDebug() << "[MAIN] Alert panel added to view menu";
+        } else {
+            qDebug() << "[MAIN] Warning: Sidebar menu not found";
+        }
+
+        // Signal connections dengan error handling
+        if (alertSystem) {
+            qDebug() << "[MAIN] Setting up signal connections with AlertSystem...";
+
+            bool conn1 = connect(ecchart, &EcWidget::alertTriggered,
+                                 this, &MainWindow::onAlertTriggered,
+                                 Qt::QueuedConnection);
+
+            bool conn2 = connect(ecchart, &EcWidget::criticalAlertTriggered,
+                                 this, &MainWindow::onCriticalAlertTriggered,
+                                 Qt::QueuedConnection);
+
+            bool conn3 = connect(ecchart, &EcWidget::alertSystemStatusChanged,
+                                 this, &MainWindow::onAlertSystemStatusChanged,
+                                 Qt::QueuedConnection);
+
+            qDebug() << "[MAIN] EcWidget signal connections:" << conn1 << conn2 << conn3;
+
+            // TAMBAHAN: Direct AlertSystem connections ke AlertPanel
+            bool conn4 = connect(alertSystem, &AlertSystem::alertTriggered,
+                                 alertPanel, &AlertPanel::onAlertTriggered,
+                                 Qt::QueuedConnection);
+
+            bool conn5 = connect(alertSystem, &AlertSystem::systemStatusChanged,
+                                 alertPanel, &AlertPanel::onAlertSystemStatusChanged,
+                                 Qt::QueuedConnection);
+
+            qDebug() << "[MAIN] Direct AlertSystem→Panel connections:" << conn4 << conn5;
+
+        } else {
+            qDebug() << "[MAIN] AlertSystem is null - limited signal connections";
+
+            // Still connect EcWidget signals if available
+            connect(ecchart, &EcWidget::alertTriggered,
+                    this, &MainWindow::onAlertTriggered,
+                    Qt::QueuedConnection);
+
+            connect(ecchart, &EcWidget::criticalAlertTriggered,
+                    this, &MainWindow::onCriticalAlertTriggered,
+                    Qt::QueuedConnection);
+
+            connect(ecchart, &EcWidget::alertSystemStatusChanged,
+                    this, &MainWindow::onAlertSystemStatusChanged,
+                    Qt::QueuedConnection);
+        }
+
+        // AlertPanel specific connections
+        if (alertPanel) {
+            bool conn6 = connect(alertPanel, &AlertPanel::alertSelected,
+                                 this, &MainWindow::onAlertSelected,
+                                 Qt::QueuedConnection);
+
+            bool conn7 = connect(alertPanel, &AlertPanel::alertDetailsRequested,
+                                 [this](int alertId) {
+                                     qDebug() << "Alert details requested for ID:" << alertId;
+                                     statusBar()->showMessage(tr("Alert details: ID %1").arg(alertId), 3000);
+                                 });
+
+            bool conn8 = connect(alertPanel, &AlertPanel::errorOccurred,
+                                 [this](const QString& error) {
+                                     qWarning() << "Alert Panel Error:" << error;
+                                     statusBar()->showMessage(tr("Alert Panel Error: %1").arg(error), 5000);
+                                 });
+
+            qDebug() << "[MAIN] AlertPanel signal connections:" << conn6 << conn7 << conn8;
+        }
+
+        // Delayed initial refresh
+        QTimer::singleShot(200, [this]() {
+            if (alertPanel) {
+                qDebug() << "[MAIN] Performing delayed initial refresh...";
+                alertPanel->refreshAlertList();
+                qDebug() << "[MAIN] Alert panel initial refresh completed";
+
+                // Validation after refresh
+                QTimer::singleShot(300, [this]() {
+                    if (alertPanel) {
+                        bool valid = alertPanel->validatePanelState();
+                        qDebug() << "[MAIN] Panel validation result:" << valid;
+
+                        if (!valid) {
+                            qWarning() << "[MAIN] Panel validation failed - attempting recovery";
+                            alertPanel->recoverFromError();
+                        }
+                    }
+                });
+            }
+        });
+
+        qDebug() << "[MAIN] Alert panel setup completed successfully";
+
+    } catch (const std::exception& e) {
+        qDebug() << "[MAIN] Critical error setting up Alert panel:" << e.what();
+        QMessageBox::critical(this, tr("Setup Error"),
+                              tr("Failed to setup Alert panel: %1").arg(e.what()));
+
+        // Cleanup on error
+        if (alertPanel) {
+            delete alertPanel;
+            alertPanel = nullptr;
+        }
+
+        if (alertDock) {
+            delete alertDock;
+            alertDock = nullptr;
+        }
+
+    } catch (...) {
+        qDebug() << "[MAIN] Unknown critical error setting up Alert panel";
+        QMessageBox::critical(this, tr("Setup Error"),
+                              tr("Unknown error occurred while setting up Alert panel"));
+
+        // Cleanup on error
+        if (alertPanel) {
+            delete alertPanel;
+            alertPanel = nullptr;
+        }
+
+        if (alertDock) {
+            delete alertDock;
+            alertDock = nullptr;
+        }
+    }
+}
+
+// Tambahkan alert handling methods:
+void MainWindow::onAlertTriggered(const AlertData& alert)
+{
+    qDebug() << "MainWindow: Alert triggered -" << alert.title;
+
+    // Update status bar
+    QString statusMsg = QString("ALERT: %1 - %2").arg(alert.title, alert.message);
+    statusBar()->showMessage(statusMsg, 10000); // Show for 10 seconds
+
+    // Show alert dock if hidden and alert is high priority
+    if (alert.priority >= PRIORITY_HIGH && alertDock && !alertDock->isVisible()) {
+        alertDock->show();
+        alertDock->raise();
+    }
+
+    // Flash application if critical
+    if (alert.priority == PRIORITY_CRITICAL) {
+        QApplication::alert(this, 3000); // Flash for 3 seconds
+    }
+}
+
+void MainWindow::onCriticalAlertTriggered(const AlertData& alert)
+{
+    qWarning() << "MainWindow: CRITICAL ALERT -" << alert.title;
+
+    // Force show alert panel
+    if (alertDock) {
+        alertDock->show();
+        alertDock->raise();
+        alertDock->activateWindow();
+    }
+
+    // Flash window more prominently
+    QApplication::alert(this, 5000);
+
+    // Update status bar with critical styling
+    statusBar()->setStyleSheet("QStatusBar { background-color: red; color: white; font-weight: bold; }");
+    statusBar()->showMessage(QString("🚨 CRITICAL ALERT: %1").arg(alert.title), 15000);
+
+    // Reset status bar style after delay
+    QTimer::singleShot(15000, [this]() {
+        statusBar()->setStyleSheet("");
+    });
+}
+
+void MainWindow::onAlertSelected(int alertId)
+{
+    qDebug() << "MainWindow: Alert selected -" << alertId;
+    statusBar()->showMessage(tr("Alert %1 selected").arg(alertId), 2000);
+}
+
+void MainWindow::onAlertSystemStatusChanged(bool enabled)
+{
+    qDebug() << "MainWindow: Alert system status changed -" << enabled;
+
+    QString status = enabled ? "enabled" : "disabled";
+    statusBar()->showMessage(tr("Alert system %1").arg(status), 3000);
+}
+
+void MainWindow::testAlertWorkflow()
+{
+    if (!ecchart) {
+        QMessageBox::warning(this, "Test", "EcWidget not available");
+        return;
+    }
+
+    AlertSystem* alertSystem = ecchart->getAlertSystem();
+    if (!alertSystem) {
+        QMessageBox::warning(this, "Test", "Alert System not available");
+        return;
+    }
+
+    // Create test alert
+    int alertId = alertSystem->triggerAlert(
+        ALERT_NAVIGATION_WARNING,
+        PRIORITY_MEDIUM,
+        "Test Workflow Alert",
+        "This alert will be acknowledged and then resolved automatically",
+        "Testing_System",
+        0.0, 0.0
+        );
+
+    if (alertId > 0) {
+        // Show message and auto-acknowledge after 3 seconds
+        QMessageBox::information(this, "Test Workflow",
+                                 QString("Created alert ID %1.\nWill auto-acknowledge in 3 seconds, then resolve in 6 seconds.").arg(alertId));
+
+        // Auto acknowledge after 3 seconds
+        QTimer::singleShot(3000, [this, alertSystem, alertId]() {
+            bool success = alertSystem->acknowledgeAlert(alertId);
+            if (success) {
+                statusBar()->showMessage(QString("Alert %1 acknowledged").arg(alertId), 3000);
+
+                // Auto resolve after additional 3 seconds
+                QTimer::singleShot(3000, [this, alertSystem, alertId]() {
+                    bool resolved = alertSystem->resolveAlert(alertId);
+                    if (resolved) {
+                        statusBar()->showMessage(QString("Alert %1 resolved").arg(alertId), 3000);
+                    }
+                });
+            }
+        });
     }
 }
