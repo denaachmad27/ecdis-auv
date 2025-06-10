@@ -204,13 +204,6 @@ public:
       double z;
   };
 
-  // CPA - TCPA
-  // TAMBAHAN BARU - CPA/TCPA Methods
-  void updateCPADisplay();
-  void checkCPAAlerts();
-  QList<AISTargetData> getCurrentTargets();
-
-
   class Exception
   {
     QStringList msgs;
@@ -666,18 +659,6 @@ private:
   std::atomic<bool> stopThreadMAP;
 
   // LOOPING IF DATA NOT UPDATE
-
-  // TAMBAHAN BARU - CPA/TCPA Variables
-  QList<AISTargetData> aisTargets;
-  QTimer* cpaUpdateTimer;
-  bool showCPAInfo;
-
-  // TAMBAHAN BARU - CPA/TCPA Drawing Methods
-  void drawCPAInfo(QPainter& painter);
-  void drawCPAInfoBox(QPainter& painter, int x, int y, const AISTargetData& target);
-  void drawTargetHeading(QPainter& painter, int x, int y, const AISTargetData& target);
-
-
 
 }; // EcWidget
 
