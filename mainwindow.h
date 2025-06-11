@@ -14,6 +14,10 @@
 
 #include <QPluginLoader>
 
+#include "cpatcpacalculator.h"
+#include "cpatcpasettings.h"
+#include <QTimer>
+
 // forward declerations
 class PickWindow;
 class SearchWindow;
@@ -295,6 +299,13 @@ protected:
 
     IAisDvrPlugin* aisDvr;
 
+private slots:
+    // CPA/TCPA slots
+    void onCPASettings();
+    void onShowCPATargets(bool enabled);
+    void onShowTCPAInfo(bool enabled);
+    void onCPATCPAAlarms(bool enabled);
+
 private:
     GuardZonePanel* guardZonePanel;
     QDockWidget* guardZoneDock;
@@ -314,6 +325,17 @@ private:
 
     // Alert testing methods
     void testAlertWorkflow();
+
+    // CPA/TCPA related members
+    CPATCPACalculator* m_cpaCalculator;
+    QTimer* m_cpaUpdateTimer;
+
+    // Helper methods untuk CPA/TCPA
+    void updateCPATCPAForAllTargets();
+    void checkCPATCPAAlarms();
+    void logCPATCPAInfo(const QString& mmsi, const CPATCPAResult& result);
+    void processTestTarget(const VesselState& ownShip);
+    void processAISTarget(const VesselState& ownShip, const AISTargetData& target);
 };
 
 #endif // _mainwindow_h_

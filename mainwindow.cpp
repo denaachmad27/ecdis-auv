@@ -14,6 +14,9 @@
 #include "guardzone.h"
 #include "alertpanel.h"
 #include "alertsystem.h"
+#include "cpatcpasettingsdialog.h"
+#include <QMessageBox>
+#include "cpatcpasettings.h"
 
 QTextEdit *informationText;
 
@@ -760,6 +763,32 @@ MainWindow::MainWindow(QWidget *parent)
   startAisRecAction->setEnabled(true);
   stopAisRecAction->setEnabled(false);
 
+  // CPA/TCPA menu
+  QMenu *cpaMenu = menuBar()->addMenu("&CPA/TCPA");
+
+  // Sub menu untuk CPA/TCPA
+  QAction *cpaSettingsAction = cpaMenu->addAction("CPA/TCPA Settings");
+  connect(cpaSettingsAction, SIGNAL(triggered()), this, SLOT(onCPASettings()));
+
+  cpaMenu->addSeparator();
+
+  QAction *showCPATargetsAction = cpaMenu->addAction("Show CPA Targets");
+  showCPATargetsAction->setCheckable(true);
+  showCPATargetsAction->setChecked(false);
+  connect(showCPATargetsAction, SIGNAL(triggered(bool)), this, SLOT(onShowCPATargets(bool)));
+
+  QAction *showTCPAInfoAction = cpaMenu->addAction("Show TCPA Info");
+  showTCPAInfoAction->setCheckable(true);
+  showTCPAInfoAction->setChecked(false);
+  connect(showTCPAInfoAction, SIGNAL(triggered(bool)), this, SLOT(onShowTCPAInfo(bool)));
+
+  cpaMenu->addSeparator();
+
+  QAction *cpaTcpaAlarmsAction = cpaMenu->addAction("Enable CPA/TCPA Alarms");
+  cpaTcpaAlarmsAction->setCheckable(true);
+  cpaTcpaAlarmsAction->setChecked(true);
+  connect(cpaTcpaAlarmsAction, SIGNAL(triggered(bool)), this, SLOT(onCPATCPAAlarms(bool)));
+
   // Load Plugin
   // loadPluginAis();
 
@@ -775,6 +804,27 @@ MainWindow::MainWindow(QWidget *parent)
   setupGuardZonePanel();
   setupAlertPanel();
   setupTestingMenu();
+
+  // Initialize CPA/TCPA calculator
+  m_cpaCalculator = new CPATCPACalculator(this);
+
+  // Setup CPA/TCPA update timer
+  m_cpaUpdateTimer = new QTimer(this);
+  connect(m_cpaUpdateTimer, &QTimer::timeout, this, &MainWindow::updateCPATCPAForAllTargets);
+
+  // Connect to settings changes
+  connect(&CPATCPASettings::instance(), &CPATCPASettings::settingsChanged, this, [this]() {
+      int interval = CPATCPASettings::instance().getAlarmUpdateInterval() * 1000; // Convert to ms
+      m_cpaUpdateTimer->setInterval(interval);
+      qDebug() << "CPA/TCPA update interval changed to:" << interval << "ms";
+  });
+
+  // Start timer with current settings
+  int interval = CPATCPASettings::instance().getAlarmUpdateInterval() * 1000;
+  m_cpaUpdateTimer->setInterval(interval);
+  m_cpaUpdateTimer->start();
+
+  qDebug() << "CPA/TCPA system initialized with update interval:" << interval << "ms";
 
 #ifdef _DEBUG
       // Testing menu hanya untuk debug build
@@ -821,6 +871,10 @@ MainWindow::~MainWindow()
       alertDock = nullptr;
   }
   // ========================================
+
+  if (m_cpaUpdateTimer) {
+      m_cpaUpdateTimer->stop();
+  }
 }
 
 void MainWindow::onReload()
@@ -2449,5 +2503,247 @@ void MainWindow::testAlertWorkflow()
                 });
             }
         });
+    }
+}
+
+// Placeholder implementations untuk CPA/TCPA
+void MainWindow::onCPASettings()
+{
+    qDebug() << "Opening CPA/TCPA Settings dialog...";
+
+    CPATCPASettingsDialog dialog(this);
+
+    // Load current settings
+    CPATCPASettings& settings = CPATCPASettings::instance();
+    dialog.setCPAThreshold(settings.getCPAThreshold());
+    dialog.setTCPAThreshold(settings.getTCPAThreshold());
+    dialog.setCPAAlarmEnabled(settings.isCPAAlarmEnabled());
+    dialog.setTCPAAlarmEnabled(settings.isTCPAAlarmEnabled());
+    dialog.setVisualAlarmEnabled(settings.isVisualAlarmEnabled());
+    dialog.setAudioAlarmEnabled(settings.isAudioAlarmEnabled());
+    dialog.setAlarmUpdateInterval(settings.getAlarmUpdateInterval());
+
+    if (dialog.exec() == QDialog::Accepted) {
+        // Save new settings
+        settings.setCPAThreshold(dialog.getCPAThreshold());
+        settings.setTCPAThreshold(dialog.getTCPAThreshold());
+        settings.setCPAAlarmEnabled(dialog.isCPAAlarmEnabled());
+        settings.setTCPAAlarmEnabled(dialog.isTCPAAlarmEnabled());
+        settings.setVisualAlarmEnabled(dialog.isVisualAlarmEnabled());
+        settings.setAudioAlarmEnabled(dialog.isAudioAlarmEnabled());
+        settings.setAlarmUpdateInterval(dialog.getAlarmUpdateInterval());
+        settings.saveSettings();
+
+        qDebug() << "CPA/TCPA settings updated and saved";
+    }
+}
+
+void MainWindow::onShowCPATargets(bool enabled)
+{
+    qDebug() << "Show CPA Targets:" << enabled;
+
+    if (enabled) {
+        addTextToBar("CPA Target display enabled");
+        // TODO: Implement visual display of CPA targets on chart
+    } else {
+        addTextToBar("CPA Target display disabled");
+    }
+}
+
+void MainWindow::onShowTCPAInfo(bool enabled)
+{
+    qDebug() << "Show TCPA Info:" << enabled;
+
+    if (enabled) {
+        addTextToBar("TCPA Information display enabled");
+        // TODO: Implement TCPA info display
+        updateCPATCPAForAllTargets(); // Force update to show current info
+    } else {
+        addTextToBar("TCPA Information display disabled");
+    }
+}
+
+void MainWindow::onCPATCPAAlarms(bool enabled)
+{
+    qDebug() << "CPA/TCPA Alarms:" << enabled;
+
+    if (enabled) {
+        addTextToBar("CPA/TCPA Alarms enabled");
+        m_cpaUpdateTimer->start();
+    } else {
+        addTextToBar("CPA/TCPA Alarms disabled");
+        m_cpaUpdateTimer->stop();
+    }
+}
+
+void MainWindow::updateCPATCPAForAllTargets()
+{
+    VesselState ownShip;
+    ownShip.lat = 29.4037;
+    ownShip.lon = -94.7497;
+    ownShip.cog = 90.0;
+    ownShip.sog = 5.0;
+    ownShip.timestamp = QDateTime::currentDateTime();
+
+    qDebug() << "Own ship position:" << ownShip.lat << ownShip.lon;
+
+    // Update AIS targets list first
+    if (ecchart && ecchart->hasAISData()) {
+        ecchart->updateAISTargetsList();  // Refresh data
+
+        QList<AISTargetData> targets = ecchart->getAISTargets();
+        qDebug() << "AIS data available, target count:" << targets.size();
+
+        if (targets.isEmpty()) {
+            qDebug() << "No AIS targets found, using test target";
+            processTestTarget(ownShip);
+        } else {
+            qDebug() << "Processing" << targets.size() << "AIS targets from file data";
+            // Process real AIS targets
+            for (const auto& target : targets) {
+                processAISTarget(ownShip, target);
+            }
+        }
+    } else {
+        qDebug() << "No AIS data available, using test target";
+        processTestTarget(ownShip);
+    }
+
+    checkCPATCPAAlarms();
+}
+
+void MainWindow::checkCPATCPAAlarms()
+{
+    CPATCPASettings& settings = CPATCPASettings::instance();
+
+    if (!settings.isCPAAlarmEnabled() && !settings.isTCPAAlarmEnabled()) {
+        return;
+    }
+
+    // Count dangerous targets
+    int dangerousTargets = 0;
+
+    /*
+    for (const auto& target : aisTargets) { // Sesuaikan dengan struktur data Anda
+        if (target.isDangerous && target.cpaCalculationValid) {
+            dangerousTargets++;
+        }
+    }
+    */
+
+    // Update status bar atau log dengan informasi alarm
+    if (dangerousTargets > 0) {
+        QString alarmText = QString("CPA/TCPA ALARM: %1 dangerous target(s)").arg(dangerousTargets);
+
+        if (settings.isVisualAlarmEnabled()) {
+            // Update status bar atau tampilkan visual alarm
+            statusBar()->showMessage(alarmText, 5000);
+        }
+
+        // Log alarm
+        addTextToBar(alarmText);
+        qDebug() << alarmText;
+    }
+}
+
+void MainWindow::logCPATCPAInfo(const QString& mmsi, const CPATCPAResult& result)
+{
+    QString logText = QString("MMSI %1: CPA=%.2f NM, TCPA=%.1f min, Range=%.2f NM, Bearing=%.0f°")
+                          .arg(mmsi)
+                          .arg(result.cpa)
+                          .arg(result.tcpa)
+                          .arg(result.currentRange)
+                          .arg(result.relativeBearing);
+
+    addTextToBar(logText);
+    qDebug() << "CPA/TCPA Info:" << logText;
+}
+
+void MainWindow::processTestTarget(const VesselState& ownShip)
+{
+    // Test target yang sudah berhasil
+    VesselState testTarget;
+    testTarget.lat = 29.41;
+    testTarget.lon = -94.73;
+    testTarget.cog = 270.0;
+    testTarget.sog = 8.0;
+    testTarget.timestamp = QDateTime::currentDateTime();
+
+    // Calculate CPA/TCPA
+    CPATCPAResult result = m_cpaCalculator->calculateCPATCPA(ownShip, testTarget);
+
+    if (result.isValid) {
+        QString logText = QString("TEST TARGET: CPA=%.2f NM, TCPA=%.1f min, Range=%.2f NM")
+        .arg(result.cpa)
+            .arg(result.tcpa)
+            .arg(result.currentRange);
+
+        addTextToBar(logText);
+
+        // Check if dangerous
+        CPATCPASettings& settings = CPATCPASettings::instance();
+        bool isDangerous = false;
+
+        if (settings.isCPAAlarmEnabled() && result.cpa < settings.getCPAThreshold()) {
+            isDangerous = true;
+        }
+
+        if (settings.isTCPAAlarmEnabled() && result.tcpa > 0 && result.tcpa < settings.getTCPAThreshold()) {
+            isDangerous = true;
+        }
+
+        if (isDangerous) {
+            QString alarmText = "⚠️ CPA/TCPA ALARM: Test target is dangerous!";
+            addTextToBar(alarmText);
+            statusBar()->showMessage(alarmText, 5000);
+        }
+    }
+}
+
+void MainWindow::processAISTarget(const VesselState& ownShip, const AISTargetData& target)
+{
+    // Convert AISTargetData ke VesselState
+    VesselState targetVessel;
+    targetVessel.lat = target.lat;
+    targetVessel.lon = target.lon;
+    targetVessel.cog = target.cog;
+    targetVessel.sog = target.sog;
+    targetVessel.timestamp = target.lastUpdate;
+
+    // Calculate CPA/TCPA
+    CPATCPAResult result = m_cpaCalculator->calculateCPATCPA(ownShip, targetVessel);
+
+    if (result.isValid) {
+        QString logText = QString("AIS TARGET %1: CPA=%.2f NM, TCPA=%.1f min, Range=%.2f NM")
+        .arg(target.mmsi)
+            .arg(result.cpa)
+            .arg(result.tcpa)
+            .arg(result.currentRange);
+
+        addTextToBar(logText);
+        qDebug() << "CPA/TCPA Result for MMSI" << target.mmsi << ":" << logText;
+
+        // Check if dangerous
+        CPATCPASettings& settings = CPATCPASettings::instance();
+        bool isDangerous = false;
+
+        if (settings.isCPAAlarmEnabled() && result.cpa < settings.getCPAThreshold()) {
+            isDangerous = true;
+        }
+
+        if (settings.isTCPAAlarmEnabled() && result.tcpa > 0 && result.tcpa < settings.getTCPAThreshold()) {
+            isDangerous = true;
+        }
+
+        if (isDangerous) {
+            QString alarmText = QString("⚠️ CPA/TCPA ALARM: AIS Target %1 is dangerous! CPA=%.2f NM, TCPA=%.1f min")
+                                    .arg(target.mmsi)
+                                    .arg(result.cpa)
+                                    .arg(result.tcpa);
+            addTextToBar(alarmText);
+            statusBar()->showMessage(alarmText, 8000);
+        }
+    } else {
+        qDebug() << "CPA/TCPA calculation invalid for MMSI" << target.mmsi;
     }
 }

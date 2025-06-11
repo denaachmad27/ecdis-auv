@@ -5958,3 +5958,84 @@ void EcWidget::performPeriodicAlertChecks()
         lastDepthReading = navShip.depth;
     }
 }
+
+bool EcWidget::hasAISData() const
+{
+    return (_aisObj != nullptr);
+}
+
+QList<AISTargetData> EcWidget::getAISTargets() const
+{
+    aisTargetsMutex.lock();
+    QList<AISTargetData> result = currentAISTargets;
+    aisTargetsMutex.unlock();
+    return result;
+}
+
+int EcWidget::getAISTargetCount() const
+{
+    aisTargetsMutex.lock();
+    int count = currentAISTargets.size();
+    aisTargetsMutex.unlock();
+    return count;
+}
+
+void EcWidget::updateAISTargetsList()
+{
+    aisTargetsMutex.lock();
+    currentAISTargets.clear();
+
+    if (!_aisObj) {
+        aisTargetsMutex.unlock();
+        return;
+    }
+
+    // Simulasi data dari file BolivarToTexasCity.dat
+    AISTargetData target1;
+    target1.mmsi = "367123456";
+    target1.lat = 29.3989;
+    target1.lon = -94.7853;
+    target1.cog = 45.0;
+    target1.sog = 12.5;
+    target1.lastUpdate = QDateTime::currentDateTime();
+    currentAISTargets.append(target1);
+
+    AISTargetData target2;
+    target2.mmsi = "367789012";
+    target2.lat = 29.4156;
+    target2.lon = -94.7234;
+    target2.cog = 225.0;
+    target2.sog = 8.2;
+    target2.lastUpdate = QDateTime::currentDateTime();
+    currentAISTargets.append(target2);
+
+    AISTargetData target3;
+    target3.mmsi = "367654321";
+    target3.lat = 29.3845;
+    target3.lon = -94.8123;
+    target3.cog = 90.0;
+    target3.sog = 6.8;
+    target3.lastUpdate = QDateTime::currentDateTime();
+    currentAISTargets.append(target3);
+
+    qDebug() << "Updated AIS targets list with" << currentAISTargets.size() << "targets";
+    aisTargetsMutex.unlock();
+}
+
+void EcWidget::addOrUpdateAISTarget(const AISTargetData& target)
+{
+    aisTargetsMutex.lock();
+
+    // Update existing or add new
+    for (int i = 0; i < currentAISTargets.size(); ++i) {
+        if (currentAISTargets[i].mmsi == target.mmsi) {
+            currentAISTargets[i] = target;
+            aisTargetsMutex.unlock();
+            return;
+        }
+    }
+
+    // Add new target
+    currentAISTargets.append(target);
+    aisTargetsMutex.unlock();
+}

@@ -36,6 +36,9 @@ HEADERS += mainwindow.h ecwidget.h pickwindow.h ais.h \
     SettingsManager.h \
     aivdoencoder.h \
     alertmanager.h \
+    cpatcpacalculator.h \
+    cpatcpasettings.h \
+    cpatcpasettingsdialog.h \
     editwaypointdialog.h \
     guardzone.h \
     guardzonemanager.h \
@@ -54,6 +57,9 @@ SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     SettingsDialog.cpp \
     SettingsManager.cpp \
     aivdoencoder.cpp \
+    cpatcpacalculator.cpp \
+    cpatcpasettings.cpp \
+    cpatcpasettingsdialog.cpp \
     editwaypointdialog.cpp \
     guardzonemanager.cpp \
     guardzonepanel.cpp \

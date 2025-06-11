@@ -7,6 +7,8 @@
 
 #include <QTimer>
 #include <QDateTime>
+#include <QMutex>
+#include <QMutexLocker>
 
 // SevenCs Kernel EC2007
 #ifdef _WIN32
@@ -34,6 +36,11 @@ struct AISTargetData {
     double tcpa;        // Time to CPA (minutes)
     bool isDangerous;   // Apakah target berbahaya
     QDateTime lastUpdate;
+
+    double currentRange;    // Current distance in NM
+    double relativeBearing; // Relative bearing
+    bool cpaCalculationValid; // Whether CPA calculation is valid
+    QDateTime cpaCalculatedAt; // When CPA was last calculated
 };
 
 class AlertSystem;
@@ -408,6 +415,15 @@ public:
 
   void jsonExample();
 
+  // Method untuk akses AIS data dari luar
+  bool hasAISData() const;
+  QList<AISTargetData> getAISTargets() const;
+  int getAISTargetCount() const;
+
+public slots:
+  void updateAISTargetsList();
+  void addOrUpdateAISTarget(const AISTargetData& target);
+
 signals:
   // Drawing signals
   void mouseMove(EcCoordinate, EcCoordinate);
@@ -657,8 +673,10 @@ private:
   QThread* threadAISMAP;
   QTcpSocket* socketAISMAP;
   std::atomic<bool> stopThreadMAP;
-
-  // LOOPING IF DATA NOT UPDATE
+  
+  // AIS targets storage
+  QList<AISTargetData> currentAISTargets;
+  mutable QMutex aisTargetsMutex;
 
 }; // EcWidget
 
