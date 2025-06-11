@@ -805,16 +805,16 @@ MainWindow::MainWindow(QWidget *parent)
   setupAlertPanel();
   setupTestingMenu();
 
-  // Initialize CPA/TCPA calculator
+  // Initialize CPA/TCPA system
   m_cpaCalculator = new CPATCPACalculator(this);
-
-  // Setup CPA/TCPA update timer
   m_cpaUpdateTimer = new QTimer(this);
-  connect(m_cpaUpdateTimer, &QTimer::timeout, this, &MainWindow::updateCPATCPAForAllTargets);
+  connect(m_cpaUpdateTimer, SIGNAL(timeout()), this, SLOT(updateCPATCPAForAllTargets()));
+  // Setup CPA/TCPA Panel
+  setupCPATCPAPanel();
 
   // Connect to settings changes
   connect(&CPATCPASettings::instance(), &CPATCPASettings::settingsChanged, this, [this]() {
-      int interval = CPATCPASettings::instance().getAlarmUpdateInterval() * 1000; // Convert to ms
+      int interval = CPATCPASettings::instance().getAlarmUpdateInterval() * 1000;
       m_cpaUpdateTimer->setInterval(interval);
       qDebug() << "CPA/TCPA update interval changed to:" << interval << "ms";
   });
@@ -2542,9 +2542,12 @@ void MainWindow::onShowCPATargets(bool enabled)
 {
     qDebug() << "Show CPA Targets:" << enabled;
 
+    if (m_cpatcpaDock) {
+        m_cpatcpaDock->setVisible(enabled);
+    }
+
     if (enabled) {
         addTextToBar("CPA Target display enabled");
-        // TODO: Implement visual display of CPA targets on chart
     } else {
         addTextToBar("CPA Target display disabled");
     }
@@ -2554,10 +2557,9 @@ void MainWindow::onShowTCPAInfo(bool enabled)
 {
     qDebug() << "Show TCPA Info:" << enabled;
 
-    if (enabled) {
+    if (m_cpatcpaPanel && enabled) {
+        m_cpatcpaPanel->refreshData();
         addTextToBar("TCPA Information display enabled");
-        // TODO: Implement TCPA info display
-        updateCPATCPAForAllTargets(); // Force update to show current info
     } else {
         addTextToBar("TCPA Information display disabled");
     }
@@ -2570,6 +2572,9 @@ void MainWindow::onCPATCPAAlarms(bool enabled)
     if (enabled) {
         addTextToBar("CPA/TCPA Alarms enabled");
         m_cpaUpdateTimer->start();
+        if (m_cpatcpaDock) {
+            m_cpatcpaDock->setVisible(true);
+        }
     } else {
         addTextToBar("CPA/TCPA Alarms disabled");
         m_cpaUpdateTimer->stop();
@@ -2746,4 +2751,50 @@ void MainWindow::processAISTarget(const VesselState& ownShip, const AISTargetDat
     } else {
         qDebug() << "CPA/TCPA calculation invalid for MMSI" << target.mmsi;
     }
+}
+
+void MainWindow::setupCPATCPAPanel()
+{
+    // Create CPA/TCPA panel
+    m_cpatcpaPanel = new CPATCPAPanel();
+    m_cpatcpaPanel->setEcWidget(ecchart);
+
+    // Create dock widget untuk panel
+    m_cpatcpaDock = new QDockWidget(tr("CPA/TCPA Monitor"), this);
+    m_cpatcpaDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    m_cpatcpaDock->setWidget(m_cpatcpaPanel);
+
+    // Add dock to main window
+    addDockWidget(Qt::RightDockWidgetArea, m_cpatcpaDock);
+
+    // Add toggle action to View menu
+    QMenu* viewMenu = menuBar()->findChild<QMenu*>();
+    if (!viewMenu) {
+        // Jika belum ada view menu, cari menu yang ada
+        QList<QMenu*> menus = menuBar()->findChildren<QMenu*>();
+        for (QMenu* menu : menus) {
+            if (menu->title().contains("View") || menu->title().contains("&View")) {
+                viewMenu = menu;
+                break;
+            }
+        }
+    }
+
+    // Jika masih belum ada, buat menu view baru
+    if (!viewMenu) {
+        viewMenu = menuBar()->addMenu("&View");
+    }
+
+    // Add toggle action ke menu
+    if (viewMenu) {
+        viewMenu->addSeparator();
+        QAction* toggleCPATCPAAction = m_cpatcpaDock->toggleViewAction();
+        toggleCPATCPAAction->setText("CPA/TCPA Monitor");
+        viewMenu->addAction(toggleCPATCPAAction);
+    }
+
+    // Set initial visibility
+    m_cpatcpaDock->setVisible(true);
+
+    qDebug() << "CPA/TCPA panel setup completed";
 }

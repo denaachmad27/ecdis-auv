@@ -37,6 +37,7 @@ HEADERS += mainwindow.h ecwidget.h pickwindow.h ais.h \
     aivdoencoder.h \
     alertmanager.h \
     cpatcpacalculator.h \
+    cpatcpapanel.h \
     cpatcpasettings.h \
     cpatcpasettingsdialog.h \
     editwaypointdialog.h \
@@ -58,6 +59,7 @@ SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     SettingsManager.cpp \
     aivdoencoder.cpp \
     cpatcpacalculator.cpp \
+    cpatcpapanel.cpp \
     cpatcpasettings.cpp \
     cpatcpasettingsdialog.cpp \
     editwaypointdialog.cpp \

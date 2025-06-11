@@ -17,6 +17,7 @@
 #include "cpatcpacalculator.h"
 #include "cpatcpasettings.h"
 #include <QTimer>
+#include "cpatcpapanel.h"
 
 // forward declerations
 class PickWindow;
@@ -336,6 +337,13 @@ private:
     void logCPATCPAInfo(const QString& mmsi, const CPATCPAResult& result);
     void processTestTarget(const VesselState& ownShip);
     void processAISTarget(const VesselState& ownShip, const AISTargetData& target);
+
+    // CPA/TCPA Panel
+    CPATCPAPanel* m_cpatcpaPanel;
+    QDockWidget* m_cpatcpaDock;
+
+    // Helper methods untuk CPA/TCPA
+    void setupCPATCPAPanel();
 };
 
 #endif // _mainwindow_h_
