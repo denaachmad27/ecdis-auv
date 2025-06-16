@@ -257,6 +257,9 @@ protected slots:
     void startAisRecord();
     void stopAisRecord();
 
+    // NMEA DECODE
+    void nmeaDecode();
+
 protected:
     void DrawChart();
 

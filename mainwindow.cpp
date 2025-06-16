@@ -11,6 +11,7 @@
 #include "SettingsDialog.h"
 #include "SettingsManager.h"
 #include "PluginManager.h"
+#include "aisdecoder.h"
 
 QTextEdit *informationText;
 
@@ -245,6 +246,22 @@ void MainWindow::stopAisRecord(){
         startAisRecAction->setEnabled(true);
         stopAisRecAction->setEnabled(false);
     }
+}
+
+void MainWindow::nmeaDecode(){
+    //QString nmea = "!AIVDM,1,1,,B,17ldJpP0007aA>ctPKjrS@:f05A@,0*07";
+    QString nmea = "!AIVDM,1,1,,A,17ldGv0P007aCeUtPW4KIwvd0@=S,0*62";
+
+    qDebug() << "NMEA: " << nmea;
+    qDebug() << "MMSI: " << AisDecoder::decodeAisOption(nmea, "mmsi", "!AIVDM");
+    qDebug() << "Latitude: " << AisDecoder::decodeAisOption(nmea, "latitude", "!AIVDM");
+    qDebug() << "Longitude: " << AisDecoder::decodeAisOption(nmea, "longitude", "!AIVDM");
+    qDebug() << "SOG: " << AisDecoder::decodeAisOption(nmea, "sog", "!AIVDM");
+    qDebug() << "COG: " << AisDecoder::decodeAisOption(nmea, "cog", "!AIVDM");
+    qDebug() << "Nav Status: " << AisDecoder::decodeAisOption(nmea, "navStatus", "!AIVDM");
+    qDebug() << "Message Type: " << AisDecoder::decodeAisOption(nmea, "messageType", "!AIVDM");
+    qDebug() << "Pos Accuracy: " << AisDecoder::decodeAisOption(nmea, "posAccuracy", "!AIVDM");
+    qDebug() << "Heading: " << AisDecoder::decodeAisOption(nmea, "heading", "!AIVDM");
 }
 
 void MainWindow::onNmeaReceived(const QString& line) {
@@ -647,6 +664,15 @@ MainWindow::MainWindow(QWidget *parent)
   greyAction->setCheckable(true);
   connect(greyAction, SIGNAL(toggled(bool)), this, SLOT(onGreyMode(bool)));
 
+  // MOOSDB
+  QMenu *moosMenu = menuBar()->addMenu("&MOOSDB");
+  moosMenu->addAction("Restart Connection", this, SLOT(subscribeMOOSDB()) );
+  moosMenu->addAction("Stop Connection", this, SLOT(stopSubscribeMOOSDB()) );
+
+  // SIDEBAR
+  createDockWindows();
+  createActions();
+
   // AIS
   QMenu *aisMenu = menuBar()->addMenu("&AIS");
   aisMenu->addAction( tr( "Run AIS" ), this, SLOT( runAis() ) );
@@ -655,23 +681,9 @@ MainWindow::MainWindow(QWidget *parent)
   aisMenu->addAction( tr( "Stop Load AIS Variable" ), this, SLOT( slotStopLoadAisVariable() ) );
   aisMenu->addAction( tr( "Connect to AIS Server" ), this, SLOT( slotConnectToAisServer() ) );
 
-  // MOOSDB
-  QMenu *moosMenu = menuBar()->addMenu("&MOOSDB");
-  moosMenu->addAction("Restart Connection", this, SLOT(subscribeMOOSDB()) );
-  //moosMenu->addAction("Subscribe MAP_INFO", this, SLOT(subscribeMOOSDBMAP()) );
-  moosMenu->addAction("Stop Connection", this, SLOT(stopSubscribeMOOSDB()) );
-  //moosMenu->addAction("Start Publish", this, SLOT(publishMOOSDB()) );
-  //moosMenu->addAction("Stop Publish", this, SLOT(stopPublishMOOSDB()) );
-
-  // moosMenu->addAction("Target AIS", this, SLOT(jsonExample()) );
-
   // SETTINGS MANAGER
   QMenu *settingMenu = menuBar()->addMenu("&Settings");
   settingMenu->addAction("Setting Manager", this, SLOT(openSettingsDialog()) );
-
-  // SIDEBAR
-  createDockWindows();
-  createActions();
   
   // Waypoint
   QMenu *waypointMenu = menuBar()->addMenu("&Waypoint");
@@ -727,11 +739,17 @@ MainWindow::MainWindow(QWidget *parent)
   startAisRecAction->setEnabled(true);
   stopAisRecAction->setEnabled(false);
 
+  // Debug Purpose
+  QMenu *debugMenu = menuBar()->addMenu("&Debug");
+
+  debugMenu->addAction("NMEA Decode", this, SLOT(nmeaDecode()));
+
+  ///====================== IGNORE =============================
   // Load Plugin
   // loadPluginAis();
 
     // char *userpermit = nullptr;
-    // unsigned char* hwid = (unsigned char*)"8BA3-E363-1982-4EDB-257C-C";
+    // unsigned char* hwid = (unsigned char*)"95C7-DAC8-182A-403D-257C-C";
     // //unsigned char* hwid = (unsigned char*)"6B4A-4473-2387-B940-5A7C-A";
     // unsigned char* mid = (unsigned char*)"BF";
     // unsigned char* mkey = (unsigned char*)"82115";

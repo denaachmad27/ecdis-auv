@@ -31,6 +31,7 @@ MOOSShip navShip = {
 };
 
 QString aivdo;
+QString nmea;
 
 // Thread Subscribe from MOOSDB
 QString serverThreadMOOSSubscribe() {

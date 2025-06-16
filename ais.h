@@ -63,6 +63,9 @@ public:
     Bool createTransponderObject();
     void readAISLogfile( const QString& );
     void readAISVariable( const QStringList& );
+
+    void extractNMEA(QString nmea);
+
     void connectToAISServer( const QString&, int port );
     EcCellId getAISCell();
     void setAISCell( EcCellId cid );

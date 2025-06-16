@@ -331,6 +331,7 @@ public:
   void processAISData(QTcpSocket* socket);
   void processAISDataHybrid(QTcpSocket* socket, EcWidget *ecchart);
   void stopAISSubscribeThread();
+  // QString ownShipAutoFill();
 
   // MAP INFO
   void startAISSubscribeThreadMAP(EcWidget *ecchart);

@@ -24,10 +24,9 @@ class PickWindow : public QDialog
     Q_OBJECT
 
 public:
-
-  PickWindow(QWidget *parent, EcDictInfo *dict, EcDENC *dc);
-
-	void fill(QList<EcFeature> & pickFeatureList);
+    PickWindow(QWidget *parent, EcDictInfo *dict, EcDENC *dc);
+    void fill(QList<EcFeature> & pickFeatureList);
+    QString ownShipAutoFill();
     QJsonObject fillJson(QList<EcFeature> & pickFeatureList);
     QJsonObject fillJsonSubs(QList<EcFeature> & pickFeatureList);
 

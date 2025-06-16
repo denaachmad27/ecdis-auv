@@ -250,6 +250,141 @@ void PickWindow::fill(QList<EcFeature> & pickFeatureList)
   }
 }
 
+// QString PickWindow::ownShipAutoFill(QList<EcFeature> & pickFeatureList)
+// {
+//     EcFeature        feature;
+//     EcClassToken     featToken;
+//     char             featName[1024];
+//     QString          row = "";
+//     QString          text = "";
+//     QString          ais = "";
+//     QString          ownship = "";
+
+//     QList<EcFeature>::Iterator iT;
+//     for (iT=pickFeatureList.begin(); iT!=pickFeatureList.end(); ++iT)
+//     {
+//         feature = (*iT);
+
+//         // Get the six character long feature token
+//         EcFeatureGetClass(feature, dictInfo, featToken, sizeof(featToken));
+
+//         // Translate the token to a human readable name
+//         if (EcDictionaryTranslateObjectToken(dictInfo, featToken, featName, sizeof(featName)) != EC_DICT_OK)
+//             strcpy(featName,"unknown");
+
+//         row = QString("<br><b>%1 (%2)</b><br>").arg(QString(featName)).arg(QString(featToken));
+//         text.append(row);
+
+//         if (QString(featToken) == "ownshp"){
+//             ownship.append(row);
+//             ownship.append("<table width='100%' cellspacing='0' cellpadding='2'>");
+//         }
+
+//         if (featToken == QString("ownshp")){
+//             if (navShip.lat != 0){
+//                 row = QString("<tr><td>LAT</td><td><b>%1 °</b></td></tr>").arg(navShip.lat);
+//                 text.append(row);
+//                 ownship.append(row);
+//             }
+//             if (navShip.lon != 0){
+//                 row = QString("<tr><td>LONG</td><td><b>%1 °</b></td></tr>").arg(navShip.lon);
+//                 text.append(row);
+//                 ownship.append(row);
+//             }
+//             if (navShip.depth != 0){
+//                 row = QString("<tr><td>DEP</td><td><b>%1 m</b></td></tr>").arg(navShip.depth);
+//                 text.append(row);
+//                 ownship.append(row);
+//             }
+//             if (navShip.heading != 0){
+//                 row = QString("<tr><td>HEAD</td><td><b>%1 °</b></td></tr>").arg(navShip.heading);
+//                 text.append(row);
+//                 ownship.append(row);
+//             }
+//             if (navShip.heading_og != 0){
+//                 row = QString("<tr><td>HOG</td><td><b>%1 °</b></td></tr>").arg(navShip.heading_og);
+//                 text.append(row);
+//                 ownship.append(row);
+//             }
+//             if (navShip.speed != 0){
+//                 row = QString("<tr><td>SPEED</td><td><b>%1 knots</b></td></tr>").arg(navShip.speed);
+//                 text.append(row);
+//                 ownship.append(row);
+//             }
+//             if (navShip.speed_og != 0){
+//                 row = QString("<tr><td>SOG</td><td><b>%1 knots</b></td></tr>").arg(navShip.speed_og);
+//                 text.append(row);
+//                 ownship.append(row);
+//             }
+//             if (navShip.z != 0){
+//                 row = QString("<tr><td>Z</td><td><b>%1 m</b></td></tr>").arg(navShip.z);
+//                 text.append(row);
+//                 ownship.append(row);
+//             }
+//         }
+
+//         return ownship;
+//     }
+
+//     return "";
+// }
+
+QString PickWindow::ownShipAutoFill()
+{
+    QString          row = "";
+    QString          text = "";
+    QString          ownship = "";
+
+    row = QString("<br><b>OWNSHIP</b><br>");
+    text.append(row);
+
+    ownship.append(row);
+    ownship.append("<table width='100%' cellspacing='0' cellpadding='2'>");
+
+    if (navShip.lat != 0){
+        row = QString("<tr><td>LAT</td><td><b>%1 °</b></td></tr>").arg(navShip.lat);
+        text.append(row);
+        ownship.append(row);
+    }
+    if (navShip.lon != 0){
+        row = QString("<tr><td>LONG</td><td><b>%1 °</b></td></tr>").arg(navShip.lon);
+        text.append(row);
+        ownship.append(row);
+    }
+    if (navShip.depth != 0){
+        row = QString("<tr><td>DEP</td><td><b>%1 m</b></td></tr>").arg(navShip.depth);
+        text.append(row);
+        ownship.append(row);
+    }
+    if (navShip.heading != 0){
+        row = QString("<tr><td>HEAD</td><td><b>%1 °</b></td></tr>").arg(navShip.heading);
+        text.append(row);
+        ownship.append(row);
+    }
+    if (navShip.heading_og != 0){
+        row = QString("<tr><td>HOG</td><td><b>%1 °</b></td></tr>").arg(navShip.heading_og);
+        text.append(row);
+        ownship.append(row);
+    }
+    if (navShip.speed != 0){
+        row = QString("<tr><td>SPEED</td><td><b>%1 knots</b></td></tr>").arg(navShip.speed);
+        text.append(row);
+        ownship.append(row);
+    }
+    if (navShip.speed_og != 0){
+        row = QString("<tr><td>SOG</td><td><b>%1 knots</b></td></tr>").arg(navShip.speed_og);
+        text.append(row);
+        ownship.append(row);
+    }
+    if (navShip.z != 0){
+        row = QString("<tr><td>Z</td><td><b>%1 m</b></td></tr>").arg(navShip.z);
+        text.append(row);
+        ownship.append(row);
+    }
+
+    return ownship;
+}
+
 QJsonObject PickWindow::fillJson(QList<EcFeature> &pickFeatureList)
 {
     EcFeature        feature;

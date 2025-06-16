@@ -2,6 +2,8 @@
 #include "ais.h"
 #include "IAisDvrPlugin.h"
 #include "PluginManager.h"
+#include "aisdecoder.h"
+#include "pickwindow.h";
 
 Ais::Ais( EcWidget *parent, EcView *view, EcDictInfo *dict, 
          EcCoordinate ownShipLat, EcCoordinate ownShipLon,
@@ -280,6 +282,11 @@ void Ais::readAISLogfile( const QString &logFile )
     return;
   }
 
+  // NULL DECLARATION
+  EcDENC *denc = nullptr;
+  EcDictInfo *dictInfo = nullptr;
+  QWidget *parentWidget = nullptr;
+
   // Read AIS logfile line by line and add each line to the AIS transponder object by calling EcAISAddTransponderOutput.
   // EcAISAddTransponderOutput calls the callback AISTargetUpdateCallback for each line read from the logfile.
   int iLineNo = 1;
@@ -301,6 +308,13 @@ void Ais::readAISLogfile( const QString &logFile )
 
     nmeaText->append(in.readLine());
 
+    extractNMEA(in.readLine());
+
+    PickWindow *pickWindow = new PickWindow(parentWidget, dictInfo, denc);
+    if (navShip.lat != 0){
+        ownShipText->setHtml(pickWindow->ownShipAutoFill());
+    }
+
     // RECORD NMEA
     IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
 
@@ -318,6 +332,13 @@ void Ais::readAISLogfile( const QString &logFile )
 
     iLineNo++;
   }
+}
+
+void Ais::extractNMEA(QString nmea){
+    navShip.heading = AisDecoder::decodeAisOption(nmea, "heading", "!AIVDO");
+    navShip.lat = AisDecoder::decodeAisOption(nmea, "latitude", "!AIVDO");
+    navShip.lon = AisDecoder::decodeAisOption(nmea, "longitude", "!AIVDO");
+    navShip.speed_og = AisDecoder::decodeAisOption(nmea, "sog", "!AIVDO");
 }
 
 // Read AIS variable.

@@ -34,6 +34,7 @@ HEADERS += mainwindow.h ecwidget.h pickwindow.h ais.h \
     SettingsData.h \
     SettingsDialog.h \
     SettingsManager.h \
+    aisdecoder.h \
     aivdoencoder.h \
     editwaypointdialog.h \
     iplugininterface.h \
@@ -49,6 +50,7 @@ SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     PluginManager.cpp \
     SettingsDialog.cpp \
     SettingsManager.cpp \
+    aisdecoder.cpp \
     aivdoencoder.cpp \
     editwaypointdialog.cpp \
     logger.cpp \

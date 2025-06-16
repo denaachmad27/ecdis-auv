@@ -2068,6 +2068,9 @@ void EcWidget::processAISDataHybrid(QTcpSocket* socket, EcWidget *ecchart) {
         }
     }
 
+    // RECORD NMEA
+    IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
+
     if (jsonData.contains("NAV_LAT") && jsonData.contains("NAV_LONG")) {
         QJsonValue latValue = jsonData["NAV_LAT"];
         QJsonValue lonValue = jsonData["NAV_LONG"];
@@ -2083,24 +2086,21 @@ void EcWidget::processAISDataHybrid(QTcpSocket* socket, EcWidget *ecchart) {
 
         double lat = navShip.lat;
         double lon = navShip.lon;
-        QMetaObject::invokeMethod(this, [this, lat, lon]() {
+        QMetaObject::invokeMethod(this, [this, lat, lon, dvr]() {
             aivdo = AIVDOEncoder::encodeAIVDO(0, lat, lon, 0, 0);
 
             QStringList nmeaData;
             nmeaData << aivdo;
             _aisObj->readAISVariable(nmeaData);
 
-            // RECORD NMEA
-            IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
-
-            if (dvr && dvr->isRecording()) {
+            if (dvr && dvr->isRecording() && !nmeaData.isEmpty()) {
                 dvr->recordRawNmea(aivdo);
             }
 
             QList<EcFeature> pickedFeatureList;
             GetPickedFeaturesSubs(pickedFeatureList, lat, lon);
 
-            PickWindow *pickWindow = new PickWindow(this, dictInfo, denc);;
+            PickWindow *pickWindow = new PickWindow(this, dictInfo, denc);
             QJsonObject navInfo;
 
             navInfo = pickWindow->fillJsonSubs(pickedFeatureList);
@@ -2132,8 +2132,31 @@ void EcWidget::processAISDataHybrid(QTcpSocket* socket, EcWidget *ecchart) {
             }
 
             sendSocket->deleteLater();
+
+            // OWNSHIP PANEL
+            ownShipText->setHtml(pickWindow->ownShipAutoFill());
         }, Qt::QueuedConnection);
     }
+
+    if (jsonData.contains("WAIS_NMEA")) {
+        QJsonValue aisValue = jsonData["WAIS_NMEA"];
+
+        QString ais = jsonData["WAIS_NMEA"].toString();
+
+        QMetaObject::invokeMethod(this, [this, ais, dvr]() {
+            nmea = ais;
+
+            QStringList nmeaData;
+            nmeaData << nmea;
+
+            if (dvr && dvr->isRecording() && !ais.isEmpty()) {
+                dvr->recordRawNmea(nmea);
+            }
+
+            _aisObj->readAISVariable(nmeaData);
+        }, Qt::QueuedConnection);
+    }
+
 
     // BIKIN IF DI SINI UNTUK MENAMPILKAN DATA SUBS SISANYA
     if (jsonData.contains("NAV_DEPTH")) {
@@ -2201,10 +2224,9 @@ void EcWidget::processAISDataHybrid(QTcpSocket* socket, EcWidget *ecchart) {
 
 }
 
-
 void EcWidget::stopAISSubscribeThread() {
     if (threadAIS) {
-        qDebug() << "[INFO] Stopping AIS subscription thread.";
+        qDebug() << "Stopping AIS subscription thread.";
         stopThread = true;
 
         // Jalankan abort() langsung dari threadAIS
@@ -2218,7 +2240,7 @@ void EcWidget::stopAISSubscribeThread() {
 
         threadAIS->quit();
         if (!threadAIS->wait(3000)) {
-            qDebug() << "[WARN] Thread did not quit in time, terminating.";
+            qWarning() << "Thread did not quit in time, terminating.";
             threadAIS->terminate();
             threadAIS->wait();
         }
@@ -2226,6 +2248,8 @@ void EcWidget::stopAISSubscribeThread() {
         threadAIS = nullptr;
         _aisObj->deleteObject();
         _aisObj->setOwnShipNull();
+
+        ownShipText->setHtml("");
     }
 }
 
@@ -2264,7 +2288,7 @@ void EcWidget::startAISSubscribeThreadMAP(EcWidget *ecchart) {
     });
 
     QObject::connect(threadAISMAP, &QThread::finished, []() {
-        qDebug() << "[INFO] AIS subscription thread finished.";
+        qDebug() << "AIS subscription thread finished.";
     });
 
     threadAISMAP->start();

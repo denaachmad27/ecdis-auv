@@ -64,6 +64,7 @@ extern MOOSShip mapShip;
 extern MOOSShip navShip;
 
 extern QString aivdo;
+extern QString nmea;
 
 extern QTextEdit *nmeaText;
 extern QTextEdit *aisText;
