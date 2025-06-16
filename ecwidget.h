@@ -7,6 +7,8 @@
 
 #include <QTimer>
 #include <QDateTime>
+#include <QMutex>
+#include <QMutexLocker>
 
 // SevenCs Kernel EC2007
 #ifdef _WIN32
@@ -22,6 +24,29 @@
 #endif
 
 #include "moosdb.h"
+#include "guardzone.h"
+
+struct AISTargetData {
+    QString mmsi;
+    double lat;
+    double lon;
+    double cog;         // Course over ground
+    double sog;         // Speed over ground
+    double cpa;         // Closest Point of Approach (nautical miles)
+    double tcpa;        // Time to CPA (minutes)
+    bool isDangerous;   // Apakah target berbahaya
+    QDateTime lastUpdate;
+
+    double currentRange;    // Current distance in NM
+    double relativeBearing; // Relative bearing
+    bool cpaCalculationValid; // Whether CPA calculation is valid
+    QDateTime cpaCalculatedAt; // When CPA was last calculated
+};
+
+class AlertSystem;
+struct AlertData;
+
+class GuardZoneManager; // Forward declaration
 
 extern QString bottomBarText;
 
@@ -118,14 +143,14 @@ public:
 
   // Guardzone
 
-  enum GuardZoneShape {
-      GUARD_ZONE_CIRCLE,
-      GUARD_ZONE_POLYGON,
-      GUARD_ZONE_SECTOR
+  enum FeedbackType {
+      FEEDBACK_SUCCESS,
+      FEEDBACK_WARNING,
+      FEEDBACK_ERROR,
+      FEEDBACK_INFO
   };
 
   void setGuardZoneAttachedToShip(bool attached);
-  double calculatePixelsFromNauticalMiles(double nauticalMiles);
   void generateTargetsTowardsGuardZone(int count);
 
   enum SimulationScenario {
@@ -133,9 +158,58 @@ public:
       SCENARIO_MOVING_GUARDZONE = 2
   };
 
+  QList<GuardZone>& getGuardZones() { return guardZones; }
+  int getNextGuardZoneId() { return nextGuardZoneId++; }
+  void saveGuardZones();
+  void loadGuardZones();
+
+  // Method yang diperlukan oleh GuardZoneManager
+  double calculatePixelsFromNauticalMiles(double nauticalMiles);
+
+  // Method untuk start edit dari luar (menu, dll)
+  void startEditGuardZone(int guardZoneId);
+
+  void showVisualFeedback(const QString& message, FeedbackType type);
+  void playFeedbackSound(FeedbackType type);
+  void debugPreviewState();
+
+  // Helper methods untuk GuardZone Panel
+  GuardZoneManager* getGuardZoneManager() { return guardZoneManager; }
+  void emitGuardZoneModified() { emit guardZoneModified(); }
+  void emitGuardZoneDeleted() { emit guardZoneDeleted(); }
+  void emitGuardZoneSignals(const QString& action, int guardZoneId);
+
+  bool validateGuardZoneSystem();
+  bool isGuardZoneInViewport(const GuardZone& gz, const QRect& viewport);
+  void drawGuardZoneLabel(QPainter& painter, const GuardZone& gz, const QPoint& position);
+  void drawGuardZoneCreationPreview(QPainter& painter);
 
   // End Guardzone
 
+  // Alert System methods
+  AlertSystem* getAlertSystem() { return alertSystem; }
+  void initializeAlertSystem();
+
+  // Alert integration with existing systems
+  void checkAlertConditions();
+  void triggerNavigationAlert(const QString& message, int priority);
+  void triggerNavigationAlert(const QString& message);  // Overload untuk default
+
+  void triggerDepthAlert(double currentDepth, double threshold, bool isShallow = true);
+  void triggerGuardZoneAlert(int guardZoneId, const QString& details);
+
+  struct NavShipStruct
+  {
+      double lat;
+      double lon;
+      double depth;        // TAMBAHKAN ini jika belum ada
+      double heading;
+      double heading_og;
+      double speed;
+      double speed_og;
+      double yaw;
+      double z;
+  };
 
   class Exception
   {
@@ -292,10 +366,11 @@ public:
   // GuardZone
   void enableGuardZone(bool enable);
   bool isGuardZoneActive() const { return guardZoneActive; }
-  void startCreateGuardZone(GuardZoneShape shape);
+  void startCreateGuardZone(::GuardZoneShape shape);
   void finishCreateGuardZone();
   void cancelCreateGuardZone();
   void checkGuardZone();
+  QString getGuardZoneFilePath() const;
 
   // Simulasi AIS
   void startAISTargetSimulation();
@@ -341,6 +416,15 @@ public:
 
   void jsonExample();
 
+  // Method untuk akses AIS data dari luar
+  bool hasAISData() const;
+  QList<AISTargetData> getAISTargets() const;
+  int getAISTargetCount() const;
+
+public slots:
+  void updateAISTargetsList();
+  void addOrUpdateAISTarget(const AISTargetData& target);
+
 signals:
   // Drawing signals
   void mouseMove(EcCoordinate, EcCoordinate);
@@ -358,9 +442,25 @@ signals:
   // GuardZone Signals
   void statusMessage(const QString &message);
 
+  // GuardZone signals untuk panel
+  void guardZoneCreated();
+  void guardZoneModified();
+  void guardZoneDeleted();
+
+  // Alert system signals
+  void alertTriggered(const AlertData& alert);
+  void criticalAlertTriggered(const AlertData& alert);
+  void alertSystemStatusChanged(bool enabled);
+
 private slots:
   void slotUpdateAISTargets( Bool bSymbolize );
   void slotRefreshChartDisplay( double lat, double lon );
+
+  // Alert Systems
+  void onAlertTriggered(const AlertData& alert);
+  void onCriticalAlert(const AlertData& alert);
+  void onAlertSystemStatusChanged(bool enabled);
+  void performPeriodicAlertChecks();
 
 protected:
   // Drawing functions
@@ -377,6 +477,8 @@ protected:
   virtual void mouseMoveEvent(QMouseEvent*);
 
   virtual void wheelEvent  (QWheelEvent*);
+
+  virtual void keyPressEvent(QKeyEvent*);
 
   virtual void searchOk (EcCoordinate, EcCoordinate);
 
@@ -408,6 +510,7 @@ protected:
   void createCircularGuardZone(EcCoordinate lat, EcCoordinate lon, double radius);
   void createPolygonGuardZone();
   void highlightDangersInGuardZone();
+  virtual void mouseReleaseEvent(QMouseEvent *e) override;
 
   // Fungsi untuk simulasi AIS
   void drawSimulatedTargets();
@@ -488,19 +591,58 @@ private:
 
   // GuardZone variables
   EcFeature currentGuardZone;  // Handle untuk guardzone saat ini
-  GuardZoneShape guardZoneShape; // Bentuk guardzone
   int guardZoneWarningLevel;   // Level peringatan
-  QVector<QPointF> guardZonePoints; // Titik-titik untuk mode polygon
-  bool guardZoneActive;        // Status aktif guardzone
-  bool creatingGuardZone;
   QPointF guardZoneCenter;  // Titik pusat untuk mode lingkaran
   double pixelsPerNauticalMile;  // Rasio pixel per nautical mile
-  double guardZoneCenterLat, guardZoneCenterLon;  // Koordinat pusat guardzone
-  bool guardZoneAttachedToShip;  // Apakah GuardZone melekat pada kapal
-  double guardZoneRadius;        // Radius dalam mil laut
-  QVector<double> guardZoneLatLons;  // Titik-titik polygon dalam koordinat geografis (lat1, lon1, lat2, lon2, ...)
+
+  GuardZoneManager* guardZoneManager;
+  QList<GuardZone> guardZones;
+  int nextGuardZoneId;
+
+  // Create GuardZone variables
+  bool creatingGuardZone;
+  ::GuardZoneShape newGuardZoneShape;
+  QVector<QPointF> guardZonePoints;
+  QPoint currentMousePos;
+
+  QString feedbackMessage;
+  FeedbackType feedbackType;
+  QTimer feedbackTimer;
+  int flashOpacity;
+
+  // Legacy GuardZone variables (untuk kompatibilitas)
+  bool guardZoneActive;
+  ::GuardZoneShape guardZoneShape;
+  bool guardZoneAttachedToShip;
+  double guardZoneCenterLat, guardZoneCenterLon;
+  double guardZoneRadius;
+  QVector<double> guardZoneLatLons;
+
+  // Methods untuk feedback
+  void drawFeedbackOverlay(QPainter& painter);
+
+  void createCircularGuardZoneNew(double centerLat, double centerLon, double radiusNM);
+  void createPolygonGuardZoneNew();
 
   // End Guardzone
+
+  // Alert System
+  AlertSystem* alertSystem;
+
+  // Alert monitoring variables
+  bool alertMonitoringEnabled;
+  QTimer* alertCheckTimer;
+  double lastDepthReading;
+  QDateTime lastAlertCheck;
+
+  // Alert thresholds and settings
+  double depthAlertThreshold;
+  double proximityAlertThreshold;
+  bool autoDepthMonitoring;
+  bool autoProximityMonitoring;
+
+  NavShipStruct navShip;
+  NavShipStruct mapShip;
 
   // Variabel simulasi AIS
   struct SimulatedAISTarget {
@@ -532,9 +674,10 @@ private:
   QThread* threadAISMAP;
   QTcpSocket* socketAISMAP;
   std::atomic<bool> stopThreadMAP;
-
-  // LOOPING IF DATA NOT UPDATE
-
+  
+  // AIS targets storage
+  QList<AISTargetData> currentAISTargets;
+  mutable QMutex aisTargetsMutex;
 
 }; // EcWidget
 

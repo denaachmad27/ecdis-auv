@@ -12,6 +12,12 @@
 #include "SettingsManager.h"
 #include "PluginManager.h"
 #include "aisdecoder.h"
+#include "guardzone.h"
+#include "alertpanel.h"
+#include "alertsystem.h"
+#include "cpatcpasettingsdialog.h"
+#include <QMessageBox>
+#include "cpatcpasettings.h"
 
 QTextEdit *informationText;
 
@@ -193,6 +199,24 @@ void MainWindow::createActions()
 
     // QAction *aboutQtAct = helpMenu->addAction(tr("About &Qt"), qApp, &QApplication::aboutQt);
     // aboutQtAct->setStatusTip(tr("Show the Qt library's About box"));
+
+    // ========== GUARDZONE PANEL SHORTCUTS ==========
+    QAction* toggleGuardZonePanelAction = new QAction(tr("Toggle GuardZone Panel"), this);
+    toggleGuardZonePanelAction->setShortcut(QKeySequence("Ctrl+G"));
+    connect(toggleGuardZonePanelAction, &QAction::triggered, [this]() {
+        if (guardZoneDock) {
+            guardZoneDock->setVisible(!guardZoneDock->isVisible());
+        }
+    });
+    addAction(toggleGuardZonePanelAction);
+
+    // Add to view menu if it exists
+    QMenu* viewMenu = menuBar()->findChild<QMenu*>("&Sidebar");
+    if (viewMenu) {
+        viewMenu->addSeparator();
+        viewMenu->addAction(toggleGuardZonePanelAction);
+    }
+    // ==============================================
 }
 
 void MainWindow::loadPlugin()
@@ -684,6 +708,22 @@ MainWindow::MainWindow(QWidget *parent)
   // SETTINGS MANAGER
   QMenu *settingMenu = menuBar()->addMenu("&Settings");
   settingMenu->addAction("Setting Manager", this, SLOT(openSettingsDialog()) );
+
+  // SIDEBAR
+  createDockWindows();
+  createActions();
+
+  // GuardZone
+  // ========== INITIALIZE GUARDZONE PANEL POINTERS ==========
+  guardZonePanel = nullptr;
+  guardZoneDock = nullptr;
+  // ========================================================
+
+  // ========== INITIALIZE ALERT PANEL POINTERS ==========
+  alertPanel = nullptr;
+  alertDock = nullptr;
+  // ===================================================
+
   
   // Waypoint
   QMenu *waypointMenu = menuBar()->addMenu("&Waypoint");
@@ -745,6 +785,32 @@ MainWindow::MainWindow(QWidget *parent)
   debugMenu->addAction("NMEA Decode", this, SLOT(nmeaDecode()));
 
   ///====================== IGNORE =============================
+  // CPA/TCPA menu
+  QMenu *cpaMenu = menuBar()->addMenu("&CPA/TCPA");
+
+  // Sub menu untuk CPA/TCPA
+  QAction *cpaSettingsAction = cpaMenu->addAction("CPA/TCPA Settings");
+  connect(cpaSettingsAction, SIGNAL(triggered()), this, SLOT(onCPASettings()));
+
+  cpaMenu->addSeparator();
+
+  QAction *showCPATargetsAction = cpaMenu->addAction("Show CPA Targets");
+  showCPATargetsAction->setCheckable(true);
+  showCPATargetsAction->setChecked(false);
+  connect(showCPATargetsAction, SIGNAL(triggered(bool)), this, SLOT(onShowCPATargets(bool)));
+
+  QAction *showTCPAInfoAction = cpaMenu->addAction("Show TCPA Info");
+  showTCPAInfoAction->setCheckable(true);
+  showTCPAInfoAction->setChecked(false);
+  connect(showTCPAInfoAction, SIGNAL(triggered(bool)), this, SLOT(onShowTCPAInfo(bool)));
+
+  cpaMenu->addSeparator();
+
+  QAction *cpaTcpaAlarmsAction = cpaMenu->addAction("Enable CPA/TCPA Alarms");
+  cpaTcpaAlarmsAction->setCheckable(true);
+  cpaTcpaAlarmsAction->setChecked(true);
+  connect(cpaTcpaAlarmsAction, SIGNAL(triggered(bool)), this, SLOT(onCPATCPAAlarms(bool)));
+
   // Load Plugin
   // loadPluginAis();
 
@@ -757,6 +823,35 @@ MainWindow::MainWindow(QWidget *parent)
     // EcS63CreateUserPermit(hwid, mkey, mid, &userpermit);
 
     // qDebug() << userpermit;
+  setupGuardZonePanel();
+  setupAlertPanel();
+  setupTestingMenu();
+
+  // Initialize CPA/TCPA system
+  m_cpaCalculator = new CPATCPACalculator(this);
+  m_cpaUpdateTimer = new QTimer(this);
+  connect(m_cpaUpdateTimer, SIGNAL(timeout()), this, SLOT(updateCPATCPAForAllTargets()));
+  // Setup CPA/TCPA Panel
+  setupCPATCPAPanel();
+
+  // Connect to settings changes
+  connect(&CPATCPASettings::instance(), &CPATCPASettings::settingsChanged, this, [this]() {
+      int interval = CPATCPASettings::instance().getAlarmUpdateInterval() * 1000;
+      m_cpaUpdateTimer->setInterval(interval);
+      qDebug() << "CPA/TCPA update interval changed to:" << interval << "ms";
+  });
+
+  // Start timer with current settings
+  int interval = CPATCPASettings::instance().getAlarmUpdateInterval() * 1000;
+  m_cpaUpdateTimer->setInterval(interval);
+  m_cpaUpdateTimer->start();
+
+  qDebug() << "CPA/TCPA system initialized with update interval:" << interval << "ms";
+
+#ifdef _DEBUG
+      // Testing menu hanya untuk debug build
+      setupTestingMenu();
+#endif
 }
 
 /*---------------------------------------------------------------------------*/
@@ -773,6 +868,34 @@ MainWindow::~MainWindow()
 
   if (aisDvr && aisDvr->isRecording()) {
       aisDvr->stopRecording();
+  }
+
+  // ========== CLEANUP GUARDZONE PANEL ==========
+  if (guardZonePanel) {
+      delete guardZonePanel;
+      guardZonePanel = nullptr;
+  }
+
+  if (guardZoneDock) {
+      delete guardZoneDock;
+      guardZoneDock = nullptr;
+  }
+  // ============================================
+
+  // ========== CLEANUP ALERT PANEL ==========
+  if (alertPanel) {
+      delete alertPanel;
+      alertPanel = nullptr;
+  }
+
+  if (alertDock) {
+      delete alertDock;
+      alertDock = nullptr;
+  }
+  // ========================================
+
+  if (m_cpaUpdateTimer) {
+      m_cpaUpdateTimer->stop();
   }
 }
 
@@ -1457,7 +1580,7 @@ void MainWindow::onEnableGuardZone(bool enabled)
 void MainWindow::onCreateCircularGuardZone()
 {
     if (ecchart) {
-        ecchart->startCreateGuardZone(EcWidget::GUARD_ZONE_CIRCLE);
+        ecchart->startCreateGuardZone(GUARD_ZONE_CIRCLE);
         statusBar()->showMessage("Click to set center of circular guard zone, then click again to set radius");
     }
 }
@@ -1465,7 +1588,7 @@ void MainWindow::onCreateCircularGuardZone()
 void MainWindow::onCreatePolygonGuardZone()
 {
     if (ecchart) {
-        ecchart->startCreateGuardZone(EcWidget::GUARD_ZONE_POLYGON);
+        ecchart->startCreateGuardZone(GUARD_ZONE_POLYGON);
         statusBar()->showMessage("Click to add points to guard zone. Right-click when finished.");
     }
 }
@@ -1509,4 +1632,1191 @@ void MainWindow::onAutoCheckGuardZone(bool checked)
     if (ecchart) {
         ecchart->setAutoCheckGuardZone(checked);
     }
+}
+
+// ========== SETUP GUARDZONE PANEL ==========
+void MainWindow::setupGuardZonePanel()
+{
+    if (!ecchart) {
+        qDebug() << "Cannot setup GuardZone panel: ecchart is null";
+        return;
+    }
+
+    try {
+        // Create GuardZone panel
+        guardZonePanel = new GuardZonePanel(ecchart, ecchart->getGuardZoneManager(), this);
+
+        // Create dock widget
+        guardZoneDock = new QDockWidget(tr("GuardZone Manager"), this);
+        guardZoneDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+        guardZoneDock->setWidget(guardZonePanel);
+
+        // Add to right dock area
+        addDockWidget(Qt::RightDockWidgetArea, guardZoneDock);
+
+        // Add to view menu
+        QList<QAction*> actions = menuBar()->actions();
+        for (QAction* action : actions) {
+            if (action->menu() && action->menu()->title() == tr("&Sidebar")) {
+                action->menu()->addAction(guardZoneDock->toggleViewAction());
+                break;
+            }
+        }
+
+        // Signal connections dengan error handling
+        connect(ecchart, &EcWidget::guardZoneCreated,
+                guardZonePanel, &GuardZonePanel::onGuardZoneCreated,
+                Qt::QueuedConnection);
+
+        connect(ecchart, &EcWidget::guardZoneDeleted,
+                guardZonePanel, &GuardZonePanel::onGuardZoneDeleted,
+                Qt::QueuedConnection);
+
+        connect(ecchart, &EcWidget::guardZoneModified,
+                guardZonePanel, &GuardZonePanel::onGuardZoneModified,
+                Qt::QueuedConnection);
+
+        connect(guardZonePanel, &GuardZonePanel::guardZoneSelected,
+                this, &MainWindow::onGuardZoneSelected,
+                Qt::QueuedConnection);
+
+        connect(guardZonePanel, &GuardZonePanel::guardZoneEditRequested,
+                this, &MainWindow::onGuardZoneEditRequested,
+                Qt::QueuedConnection);
+
+        connect(guardZonePanel, &GuardZonePanel::guardZoneVisibilityChanged,
+                this, &MainWindow::onGuardZoneVisibilityChanged,
+                Qt::QueuedConnection);
+
+        // TAMBAHAN: Connect new signals
+        connect(guardZonePanel, &GuardZonePanel::validationCompleted,
+                [this](bool success) {
+                    if (!success) {
+                        statusBar()->showMessage(tr("GuardZone panel validation found issues"), 3000);
+                    }
+                });
+
+        // Delayed initial refresh
+        QTimer::singleShot(100, [this]() {
+            try {
+                if (guardZonePanel) {
+                    guardZonePanel->refreshGuardZoneList();
+                    qDebug() << "GuardZone panel initial refresh completed successfully";
+
+                    // Validate after refresh - sekarang menggunakan public method
+                    QTimer::singleShot(200, [this]() {
+                        if (guardZonePanel) {
+                            guardZonePanel->validatePanelState();  // Sekarang public
+                        }
+                    });
+                }
+            } catch (const std::exception& e) {
+                qDebug() << "Error during panel initialization:" << e.what();
+                if (guardZonePanel) {
+                    guardZonePanel->recoverFromError();  // Sekarang public
+                }
+            }
+        });
+
+        qDebug() << "GuardZone panel setup completed successfully";
+
+    } catch (const std::exception& e) {
+        qDebug() << "Critical error setting up GuardZone panel:" << e.what();
+        QMessageBox::critical(this, tr("Setup Error"),
+                              tr("Failed to setup GuardZone panel: %1").arg(e.what()));
+    } catch (...) {
+        qDebug() << "Unknown critical error setting up GuardZone panel";
+        QMessageBox::critical(this, tr("Setup Error"),
+                              tr("Unknown error occurred while setting up GuardZone panel"));
+    }
+}
+
+// ========== GUARDZONE PANEL HANDLERS ==========
+
+void MainWindow::onGuardZoneSelected(int guardZoneId)
+{
+    qDebug() << "GuardZone selected from panel:" << guardZoneId;
+
+    // Center map on selected guardzone
+    if (ecchart) {
+        QList<GuardZone>& guardZones = ecchart->getGuardZones();
+
+        for (const GuardZone& gz : guardZones) {
+            if (gz.id == guardZoneId) {
+                if (gz.shape == GUARD_ZONE_CIRCLE) {
+                    ecchart->SetCenter(gz.centerLat, gz.centerLon);
+                } else if (gz.shape == GUARD_ZONE_POLYGON && gz.latLons.size() >= 6) {
+                    // Calculate center
+                    double centerLat = 0, centerLon = 0;
+                    int numPoints = gz.latLons.size() / 2;
+
+                    for (int i = 0; i < gz.latLons.size(); i += 2) {
+                        centerLat += gz.latLons[i];
+                        centerLon += gz.latLons[i + 1];
+                    }
+
+                    centerLat /= numPoints;
+                    centerLon /= numPoints;
+
+                    ecchart->SetCenter(centerLat, centerLon);
+                }
+
+                ecchart->Draw();
+                break;
+            }
+        }
+    }
+}
+
+void MainWindow::onGuardZoneEditRequested(int guardZoneId)
+{
+    qDebug() << "Edit requested for GuardZone:" << guardZoneId;
+
+    if (ecchart) {
+        ecchart->startEditGuardZone(guardZoneId);
+    }
+}
+
+void MainWindow::onGuardZoneVisibilityChanged(int guardZoneId, bool visible)
+{
+    qDebug() << "GuardZone" << guardZoneId << "visibility changed to:" << visible;
+
+    // Update status bar or show notification
+    QString status = visible ? tr("enabled") : tr("disabled");
+    statusBar()->showMessage(tr("GuardZone %1 %2").arg(guardZoneId).arg(status), 2000);
+}
+
+void MainWindow::setupTestingMenu()
+{
+    // TAMBAHAN: Debug menu untuk testing
+    QMenu *debugMenu = menuBar()->addMenu("&Debug");
+
+    debugMenu->addAction("Validate GuardZone System", [this]() {
+        if (ecchart) {
+            bool isValid = ecchart->validateGuardZoneSystem();
+            QString message = isValid ?
+                                  tr("✓ GuardZone system validation passed") :
+                                  tr("✗ GuardZone system validation failed - check debug output");
+
+            QMessageBox::information(this, tr("System Validation"), message);
+        }
+    });
+
+    debugMenu->addAction("Refresh GuardZone Panel", [this]() {
+        if (guardZonePanel) {
+            guardZonePanel->refreshGuardZoneList();
+            statusBar()->showMessage(tr("GuardZone panel refreshed"), 2000);
+        }
+    });
+
+    debugMenu->addAction("Force Save GuardZones", [this]() {
+        if (ecchart) {
+            ecchart->saveGuardZones();
+            statusBar()->showMessage(tr("GuardZones saved"), 2000);
+        }
+    });
+
+    debugMenu->addAction("Show System Statistics", [this]() {
+        showSystemStatistics();
+    });
+
+    debugMenu->addSeparator();
+
+    debugMenu->addAction("Create Test GuardZones", [this]() {
+        createTestGuardZones();
+    });
+
+    debugMenu->addAction("Clear All GuardZones", [this]() {
+        if (ecchart) {
+            QMessageBox::StandardButton reply = QMessageBox::question(
+                this, tr("Clear All GuardZones"),
+                tr("Are you sure you want to delete ALL GuardZones?\nThis action cannot be undone."),
+                QMessageBox::Yes | QMessageBox::No,
+                QMessageBox::No);
+
+            if (reply == QMessageBox::Yes) {
+                ecchart->getGuardZones().clear();
+                ecchart->enableGuardZone(false);
+                ecchart->saveGuardZones();
+                ecchart->update();
+
+                if (guardZonePanel) {
+                    guardZonePanel->refreshGuardZoneList();
+                }
+
+                QMessageBox::information(this, tr("Cleared"), tr("All GuardZones have been deleted."));
+            }
+        }
+    });
+
+    // ========== ALERT SYSTEM TESTING ==========
+    debugMenu->addSeparator();
+    debugMenu->addAction("🔊 Test Low Priority Alert", [this]() {
+        if (ecchart) {
+            ecchart->triggerNavigationAlert("Test low priority navigation alert", 1);
+        }
+    });
+
+    debugMenu->addAction("🟡 Test Medium Priority Alert", [this]() {
+        if (ecchart) {
+            ecchart->triggerNavigationAlert("Test medium priority navigation alert", 2);
+        }
+    });
+
+    debugMenu->addAction("🟠 Test High Priority Alert", [this]() {
+        if (ecchart) {
+            ecchart->triggerNavigationAlert("Test high priority navigation alert", 3);
+        }
+    });
+
+    debugMenu->addAction("🚨 Test Critical Alert", [this]() {
+        if (ecchart) {
+            ecchart->triggerNavigationAlert("CRITICAL: Test critical priority alert", 4);
+        }
+    });
+
+    debugMenu->addSeparator();
+
+    debugMenu->addAction("💧 Test Depth Alert", [this]() {
+        if (ecchart) {
+            // Simulate shallow water alert
+            ecchart->triggerDepthAlert(3.5, 5.0, true); // current: 3.5m, threshold: 5.0m, shallow: true
+        }
+    });
+
+    debugMenu->addAction("⚠️ Test GuardZone Alert", [this]() {
+        if (ecchart) {
+            ecchart->triggerGuardZoneAlert(1, "AIS target detected within GuardZone boundaries");
+        }
+    });
+
+    debugMenu->addSeparator();
+
+    debugMenu->addAction("📊 Show Alert Statistics", [this]() {
+        if (alertPanel) {
+            alertPanel->showAlertStatistics();
+        } else {
+            QMessageBox::information(this, "Alert Statistics", "Alert Panel not available");
+        }
+    });
+
+    debugMenu->addAction("🔄 Refresh Alert Panel", [this]() {
+        if (alertPanel) {
+            alertPanel->refreshAlertList();
+            statusBar()->showMessage("Alert panel refreshed", 2000);
+        }
+    });
+
+    debugMenu->addAction("✅ Test Alert Acknowledge/Resolve", [this]() {
+        testAlertWorkflow();
+    });
+
+    // ==========================================
+
+    debugMenu->addAction("🔄 Force Refresh Alert Panel", [this]() {
+        if (alertPanel) {
+            qDebug() << "[MAIN] Forcing alert panel refresh...";
+            alertPanel->refreshAlertList();
+
+            // Also check AlertSystem directly
+            if (ecchart) {
+                AlertSystem* alertSystem = ecchart->getAlertSystem();
+                if (alertSystem) {
+                    QList<AlertData> alerts = alertSystem->getActiveAlerts();
+                    qDebug() << "[MAIN] AlertSystem has" << alerts.size() << "active alerts";
+                    for (const AlertData& alert : alerts) {
+                        qDebug() << "[MAIN] Alert:" << alert.id << alert.title;
+                    }
+                }
+            }
+        }
+    });
+
+    debugMenu->addAction("📝 Create Test Alert Directly", [this]() {
+        if (alertPanel && ecchart) {
+            AlertSystem* alertSystem = ecchart->getAlertSystem();
+            if (alertSystem) {
+                // Create alert directly using AlertSystem
+                int alertId = alertSystem->triggerAlert(
+                    ALERT_NAVIGATION_WARNING,
+                    PRIORITY_HIGH,
+                    "Direct Test Alert",
+                    "This alert was created directly via AlertSystem",
+                    "Direct_Test",
+                    -7.18551, 112.78012
+                    );
+
+                qDebug() << "[MAIN] Created direct test alert with ID:" << alertId;
+
+                // Force refresh panel
+                QTimer::singleShot(100, [this]() {
+                    if (alertPanel) {
+                        alertPanel->refreshAlertList();
+                    }
+                });
+            }
+        }
+    });
+
+    debugMenu->addAction("➕ Manual Add Alert to Panel", [this]() {
+        if (!alertPanel) {
+            QMessageBox::warning(this, "Error", "Alert Panel not available");
+            return;
+        }
+
+        try {
+            qDebug() << "[MAIN] Creating manual alert...";
+
+            // PERBAIKAN: Gunakan AlertSystem untuk create alert, bukan manual
+            if (ecchart) {
+                AlertSystem* alertSystem = ecchart->getAlertSystem();
+                if (alertSystem) {
+                    qDebug() << "[MAIN] Using AlertSystem to create alert...";
+
+                    int alertId = alertSystem->triggerAlert(
+                        ALERT_USER_DEFINED,        // Safe enum value
+                        PRIORITY_MEDIUM,           // Safe enum value
+                        "Manual Panel Test",       // Simple string
+                        "Testing panel display",   // Simple string
+                        "Manual_Test",             // Simple string
+                        0.0, 0.0                   // Safe coordinates
+                        );
+
+                    qDebug() << "[MAIN] AlertSystem created alert ID:" << alertId;
+
+                    // Force refresh after small delay
+                    QTimer::singleShot(200, [this]() {
+                        if (alertPanel) {
+                            alertPanel->refreshAlertList();
+                        }
+                    });
+
+                    if (alertId > 0) {
+                        QMessageBox::information(this, "Success",
+                                                 QString("Alert created with ID: %1").arg(alertId));
+                    } else {
+                        QMessageBox::warning(this, "Failed", "Failed to create alert");
+                    }
+
+                } else {
+                    QMessageBox::warning(this, "Error", "AlertSystem not available");
+                }
+            } else {
+                QMessageBox::warning(this, "Error", "EcWidget not available");
+            }
+
+        } catch (const std::exception& e) {
+            qDebug() << "[MAIN] Exception in manual add alert:" << e.what();
+            QMessageBox::critical(this, "Crash Prevented",
+                                  QString("Error: %1").arg(e.what()));
+        } catch (...) {
+            qDebug() << "[MAIN] Unknown exception in manual add alert";
+            QMessageBox::critical(this, "Crash Prevented", "Unknown error occurred");
+        }
+    });
+
+    debugMenu->addAction("🔍 Debug Alert System State", [this]() {
+        QString debug;
+
+        if (ecchart) {
+            AlertSystem* alertSystem = ecchart->getAlertSystem();
+            if (alertSystem) {
+                QList<AlertData> alerts = alertSystem->getActiveAlerts();
+                debug += QString("AlertSystem active alerts: %1\n").arg(alerts.size());
+
+                for (const AlertData& alert : alerts) {
+                    debug += QString("- ID %1: %2\n").arg(alert.id).arg(alert.title);
+                }
+            } else {
+                debug += "AlertSystem: NULL\n";
+            }
+        } else {
+            debug += "EcWidget: NULL\n";
+        }
+
+        if (alertPanel) {
+            debug += QString("AlertPanel active count: %1\n").arg(alertPanel->getActiveAlertCount());
+            debug += QString("AlertPanel total count: %1\n").arg(alertPanel->getTotalAlertCount());
+        } else {
+            debug += "AlertPanel: NULL\n";
+        }
+
+        QMessageBox::information(this, "Debug State", debug);
+    });
+
+    debugMenu->addAction("🛡️ Safe Panel Test", [this]() {
+        if (alertPanel) {
+            // Test basic panel functionality
+            alertPanel->updateAlertCounts();
+            alertPanel->refreshAlertList();
+
+            QString status = QString("Panel is working!\nActive count: %1\nTotal count: %2")
+                                 .arg(alertPanel->getActiveAlertCount())
+                                 .arg(alertPanel->getTotalAlertCount());
+
+            QMessageBox::information(this, "Safe Test", status);
+        }
+    });
+}
+
+// 2. TAMBAHAN: System statistics display
+void MainWindow::showSystemStatistics()
+{
+    if (!ecchart) return;
+
+    QList<GuardZone>& guardZones = ecchart->getGuardZones();
+
+    QString stats;
+    stats += tr("=== ECDIS GuardZone System Statistics ===\n\n");
+
+    // Basic counts
+    int total = guardZones.size();
+    int active = std::count_if(guardZones.begin(), guardZones.end(),
+                               [](const GuardZone& gz) { return gz.active; });
+    int inactive = total - active;
+    int circles = std::count_if(guardZones.begin(), guardZones.end(),
+                                [](const GuardZone& gz) { return gz.shape == GUARD_ZONE_CIRCLE; });
+    int polygons = total - circles;
+    int attachedToShip = std::count_if(guardZones.begin(), guardZones.end(),
+                                       [](const GuardZone& gz) { return gz.attachedToShip; });
+
+    stats += tr("Total GuardZones: %1\n").arg(total);
+    stats += tr("Active: %1 | Inactive: %2\n").arg(active).arg(inactive);
+    stats += tr("Circles: %1 | Polygons: %2\n").arg(circles).arg(polygons);
+    stats += tr("Attached to Ship: %1\n\n").arg(attachedToShip);
+
+    // System state
+    stats += tr("System State:\n");
+    stats += tr("- GuardZone System Active: %1\n").arg(ecchart->isGuardZoneActive() ? "Yes" : "No");
+    stats += tr("- Next GuardZone ID: %1\n").arg(ecchart->getNextGuardZoneId());
+    // PERBAIKAN: Gunakan public method
+    stats += tr("- Panel Items: %1\n\n").arg(guardZonePanel ? guardZonePanel->getGuardZoneListCount() : 0);
+
+    // Performance info
+    stats += tr("Memory Usage:\n");
+    stats += tr("- GuardZone Objects: %1 x ~200 bytes = ~%2 KB\n")
+                 .arg(total).arg((total * 200) / 1024.0, 0, 'f', 1);
+
+    // File info
+    QString filePath = ecchart->getGuardZoneFilePath();
+    QFileInfo fileInfo(filePath);
+    if (fileInfo.exists()) {
+        stats += tr("- Save File: %1 (%2 KB)\n")
+        .arg(fileInfo.fileName())
+            .arg(fileInfo.size() / 1024.0, 0, 'f', 1);
+        stats += tr("- Last Modified: %1\n").arg(fileInfo.lastModified().toString());
+    } else {
+        stats += tr("- Save File: Not found\n");
+    }
+
+    // Validation
+    bool isValid = ecchart->validateGuardZoneSystem();
+    stats += tr("\nSystem Validation: %1\n").arg(isValid ? "✓ PASSED" : "✗ FAILED");
+
+    QMessageBox msgBox(this);
+    msgBox.setWindowTitle(tr("GuardZone System Statistics"));
+    msgBox.setText(stats);
+    msgBox.setTextFormat(Qt::PlainText);
+    msgBox.setStandardButtons(QMessageBox::Ok);
+    msgBox.exec();
+}
+
+// 3. TAMBAHAN: Create test guardzones untuk testing
+void MainWindow::createTestGuardZones()
+{
+    if (!ecchart) return;
+
+    QMessageBox::StandardButton reply = QMessageBox::question(
+        this, tr("Create Test GuardZones"),
+        tr("This will create 3 test GuardZones for testing purposes.\nContinue?"),
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::Yes);
+
+    if (reply != QMessageBox::Yes) return;
+
+    try {
+        // Test Circle 1 - Active
+        GuardZone testCircle1;
+        testCircle1.id = ecchart->getNextGuardZoneId();
+        testCircle1.name = "Test Circle 1 (Active)";
+        testCircle1.shape = GUARD_ZONE_CIRCLE;
+        testCircle1.active = true;
+        testCircle1.attachedToShip = false;
+        testCircle1.color = Qt::red;
+        testCircle1.centerLat = -7.18551;
+        testCircle1.centerLon = 112.78012;
+        testCircle1.radius = 1.0;
+
+        // Test Circle 2 - Inactive
+        GuardZone testCircle2;
+        testCircle2.id = ecchart->getNextGuardZoneId();
+        testCircle2.name = "Test Circle 2 (Inactive)";
+        testCircle2.shape = GUARD_ZONE_CIRCLE;
+        testCircle2.active = false;
+        testCircle2.attachedToShip = false;
+        testCircle2.color = Qt::blue;
+        testCircle2.centerLat = -7.19551;
+        testCircle2.centerLon = 112.79012;
+        testCircle2.radius = 0.5;
+
+        // Test Polygon - Active, Attached to Ship
+        GuardZone testPolygon;
+        testPolygon.id = ecchart->getNextGuardZoneId();
+        testPolygon.name = "Test Polygon (Ship Attached)";
+        testPolygon.shape = GUARD_ZONE_POLYGON;
+        testPolygon.active = true;
+        testPolygon.attachedToShip = true;
+        testPolygon.color = Qt::green;
+        testPolygon.latLons = {
+            -7.17551, 112.77012,  // Point 1
+            -7.17551, 112.78012,  // Point 2
+            -7.18551, 112.78012,  // Point 3
+            -7.18551, 112.77012   // Point 4
+        };
+
+        // Add to system
+        QList<GuardZone>& guardZones = ecchart->getGuardZones();
+        guardZones.append(testCircle1);
+        guardZones.append(testCircle2);
+        guardZones.append(testPolygon);
+
+        // Enable system and save
+        ecchart->enableGuardZone(true);
+        ecchart->saveGuardZones();
+        ecchart->update();
+
+        // Refresh panel
+        if (guardZonePanel) {
+            guardZonePanel->refreshGuardZoneList();
+        }
+
+        QMessageBox::information(this, tr("Test GuardZones Created"),
+                                 tr("Successfully created 3 test GuardZones:\n"
+                                    "- Circle 1 (Active)\n"
+                                    "- Circle 2 (Inactive)\n"
+                                    "- Polygon (Active, Ship Attached)"));
+
+    } catch (const std::exception& e) {
+        QMessageBox::critical(this, tr("Error"),
+                              tr("Failed to create test GuardZones: %1").arg(e.what()));
+    } catch (...) {
+        QMessageBox::critical(this, tr("Error"),
+                              tr("Unknown error occurred while creating test GuardZones"));
+    }
+}
+
+void MainWindow::setupAlertPanel()
+{
+    qDebug() << "[MAIN] Starting setupAlertPanel()";
+
+    if (!ecchart) {
+        qDebug() << "[MAIN] Cannot setup Alert panel: ecchart is null";
+        return;
+    }
+
+    // PERBAIKAN: Cek AlertSystem lebih detail
+    AlertSystem* alertSystem = ecchart->getAlertSystem();
+    qDebug() << "[MAIN] EcWidget AlertSystem pointer:" << alertSystem;
+
+    if (!alertSystem) {
+        qDebug() << "[MAIN] AlertSystem is null! Attempting to reinitialize...";
+
+        // Try to reinitialize AlertSystem
+        QTimer::singleShot(100, [this]() {
+            if (ecchart) {
+                ecchart->initializeAlertSystem();
+
+                // Retry setup after reinitialize
+                QTimer::singleShot(500, [this]() {
+                    AlertSystem* retrySystem = ecchart->getAlertSystem();
+                    if (retrySystem && alertPanel) {
+                        qDebug() << "[MAIN] Reconnecting AlertSystem to panel...";
+
+                        // Update panel's AlertSystem pointer
+                        alertPanel->setAlertSystem(retrySystem);
+
+                        // Manual signal connections
+                        connect(retrySystem, &AlertSystem::alertTriggered,
+                                this, [this](const AlertData& alert) {
+                                    qDebug() << "[MAIN] Forwarding alert to panel:" << alert.title;
+                                    if (alertPanel) {
+                                        alertPanel->onAlertTriggered(alert);
+                                    }
+                                }, Qt::QueuedConnection);
+
+                        connect(retrySystem, &AlertSystem::systemStatusChanged,
+                                this, [this](bool enabled) {
+                                    qDebug() << "[MAIN] System status changed:" << enabled;
+                                    if (alertPanel) {
+                                        alertPanel->onAlertSystemStatusChanged(enabled);
+                                    }
+                                }, Qt::QueuedConnection);
+                    }
+                });
+            }
+        });
+    }
+
+    try {
+        qDebug() << "[MAIN] Creating Alert panel...";
+
+        // Create Alert panel (even with null AlertSystem for UI testing)
+        alertPanel = new AlertPanel(ecchart, alertSystem, this);
+
+        qDebug() << "[MAIN] Creating alert dock widget...";
+
+        // Create dock widget
+        alertDock = new QDockWidget(tr("Alert Manager"), this);
+        alertDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+        alertDock->setWidget(alertPanel);
+
+        // PERBAIKAN: Force show dock
+        alertDock->setVisible(true);
+        alertDock->show();
+
+        qDebug() << "[MAIN] Adding dock to main window...";
+
+        // Add to left dock area (berbeda dengan GuardZone yang di kanan)
+        addDockWidget(Qt::LeftDockWidgetArea, alertDock);
+
+        qDebug() << "[MAIN] Alert dock added successfully";
+
+        // Add to view menu
+        QMenu* viewMenu = nullptr;
+        QList<QAction*> actions = menuBar()->actions();
+        for (QAction* action : actions) {
+            if (action->menu() && action->menu()->title() == tr("&Sidebar")) {
+                viewMenu = action->menu();
+                break;
+            }
+        }
+
+        if (viewMenu) {
+            viewMenu->addAction(alertDock->toggleViewAction());
+            qDebug() << "[MAIN] Alert panel added to view menu";
+        } else {
+            qDebug() << "[MAIN] Warning: Sidebar menu not found";
+        }
+
+        // Signal connections dengan error handling
+        if (alertSystem) {
+            qDebug() << "[MAIN] Setting up signal connections with AlertSystem...";
+
+            bool conn1 = connect(ecchart, &EcWidget::alertTriggered,
+                                 this, &MainWindow::onAlertTriggered,
+                                 Qt::QueuedConnection);
+
+            bool conn2 = connect(ecchart, &EcWidget::criticalAlertTriggered,
+                                 this, &MainWindow::onCriticalAlertTriggered,
+                                 Qt::QueuedConnection);
+
+            bool conn3 = connect(ecchart, &EcWidget::alertSystemStatusChanged,
+                                 this, &MainWindow::onAlertSystemStatusChanged,
+                                 Qt::QueuedConnection);
+
+            qDebug() << "[MAIN] EcWidget signal connections:" << conn1 << conn2 << conn3;
+
+            // TAMBAHAN: Direct AlertSystem connections ke AlertPanel
+            bool conn4 = connect(alertSystem, &AlertSystem::alertTriggered,
+                                 alertPanel, &AlertPanel::onAlertTriggered,
+                                 Qt::QueuedConnection);
+
+            bool conn5 = connect(alertSystem, &AlertSystem::systemStatusChanged,
+                                 alertPanel, &AlertPanel::onAlertSystemStatusChanged,
+                                 Qt::QueuedConnection);
+
+            qDebug() << "[MAIN] Direct AlertSystem→Panel connections:" << conn4 << conn5;
+
+        } else {
+            qDebug() << "[MAIN] AlertSystem is null - limited signal connections";
+
+            // Still connect EcWidget signals if available
+            connect(ecchart, &EcWidget::alertTriggered,
+                    this, &MainWindow::onAlertTriggered,
+                    Qt::QueuedConnection);
+
+            connect(ecchart, &EcWidget::criticalAlertTriggered,
+                    this, &MainWindow::onCriticalAlertTriggered,
+                    Qt::QueuedConnection);
+
+            connect(ecchart, &EcWidget::alertSystemStatusChanged,
+                    this, &MainWindow::onAlertSystemStatusChanged,
+                    Qt::QueuedConnection);
+        }
+
+        // AlertPanel specific connections
+        if (alertPanel) {
+            bool conn6 = connect(alertPanel, &AlertPanel::alertSelected,
+                                 this, &MainWindow::onAlertSelected,
+                                 Qt::QueuedConnection);
+
+            bool conn7 = connect(alertPanel, &AlertPanel::alertDetailsRequested,
+                                 [this](int alertId) {
+                                     qDebug() << "Alert details requested for ID:" << alertId;
+                                     statusBar()->showMessage(tr("Alert details: ID %1").arg(alertId), 3000);
+                                 });
+
+            bool conn8 = connect(alertPanel, &AlertPanel::errorOccurred,
+                                 [this](const QString& error) {
+                                     qWarning() << "Alert Panel Error:" << error;
+                                     statusBar()->showMessage(tr("Alert Panel Error: %1").arg(error), 5000);
+                                 });
+
+            qDebug() << "[MAIN] AlertPanel signal connections:" << conn6 << conn7 << conn8;
+        }
+
+        // Delayed initial refresh
+        QTimer::singleShot(200, [this]() {
+            if (alertPanel) {
+                qDebug() << "[MAIN] Performing delayed initial refresh...";
+                alertPanel->refreshAlertList();
+                qDebug() << "[MAIN] Alert panel initial refresh completed";
+
+                // Validation after refresh
+                QTimer::singleShot(300, [this]() {
+                    if (alertPanel) {
+                        bool valid = alertPanel->validatePanelState();
+                        qDebug() << "[MAIN] Panel validation result:" << valid;
+
+                        if (!valid) {
+                            qWarning() << "[MAIN] Panel validation failed - attempting recovery";
+                            alertPanel->recoverFromError();
+                        }
+                    }
+                });
+            }
+        });
+
+        qDebug() << "[MAIN] Alert panel setup completed successfully";
+
+    } catch (const std::exception& e) {
+        qDebug() << "[MAIN] Critical error setting up Alert panel:" << e.what();
+        QMessageBox::critical(this, tr("Setup Error"),
+                              tr("Failed to setup Alert panel: %1").arg(e.what()));
+
+        // Cleanup on error
+        if (alertPanel) {
+            delete alertPanel;
+            alertPanel = nullptr;
+        }
+
+        if (alertDock) {
+            delete alertDock;
+            alertDock = nullptr;
+        }
+
+    } catch (...) {
+        qDebug() << "[MAIN] Unknown critical error setting up Alert panel";
+        QMessageBox::critical(this, tr("Setup Error"),
+                              tr("Unknown error occurred while setting up Alert panel"));
+
+        // Cleanup on error
+        if (alertPanel) {
+            delete alertPanel;
+            alertPanel = nullptr;
+        }
+
+        if (alertDock) {
+            delete alertDock;
+            alertDock = nullptr;
+        }
+    }
+}
+
+// Tambahkan alert handling methods:
+void MainWindow::onAlertTriggered(const AlertData& alert)
+{
+    qDebug() << "MainWindow: Alert triggered -" << alert.title;
+
+    // Update status bar
+    QString statusMsg = QString("ALERT: %1 - %2").arg(alert.title, alert.message);
+    statusBar()->showMessage(statusMsg, 10000); // Show for 10 seconds
+
+    // Show alert dock if hidden and alert is high priority
+    if (alert.priority >= PRIORITY_HIGH && alertDock && !alertDock->isVisible()) {
+        alertDock->show();
+        alertDock->raise();
+    }
+
+    // Flash application if critical
+    if (alert.priority == PRIORITY_CRITICAL) {
+        QApplication::alert(this, 3000); // Flash for 3 seconds
+    }
+}
+
+void MainWindow::onCriticalAlertTriggered(const AlertData& alert)
+{
+    qWarning() << "MainWindow: CRITICAL ALERT -" << alert.title;
+
+    // Force show alert panel
+    if (alertDock) {
+        alertDock->show();
+        alertDock->raise();
+        alertDock->activateWindow();
+    }
+
+    // Flash window more prominently
+    QApplication::alert(this, 5000);
+
+    // Update status bar with critical styling
+    statusBar()->setStyleSheet("QStatusBar { background-color: red; color: white; font-weight: bold; }");
+    statusBar()->showMessage(QString("🚨 CRITICAL ALERT: %1").arg(alert.title), 15000);
+
+    // Reset status bar style after delay
+    QTimer::singleShot(15000, [this]() {
+        statusBar()->setStyleSheet("");
+    });
+}
+
+void MainWindow::onAlertSelected(int alertId)
+{
+    qDebug() << "MainWindow: Alert selected -" << alertId;
+    statusBar()->showMessage(tr("Alert %1 selected").arg(alertId), 2000);
+}
+
+void MainWindow::onAlertSystemStatusChanged(bool enabled)
+{
+    qDebug() << "MainWindow: Alert system status changed -" << enabled;
+
+    QString status = enabled ? "enabled" : "disabled";
+    statusBar()->showMessage(tr("Alert system %1").arg(status), 3000);
+}
+
+void MainWindow::testAlertWorkflow()
+{
+    if (!ecchart) {
+        QMessageBox::warning(this, "Test", "EcWidget not available");
+        return;
+    }
+
+    AlertSystem* alertSystem = ecchart->getAlertSystem();
+    if (!alertSystem) {
+        QMessageBox::warning(this, "Test", "Alert System not available");
+        return;
+    }
+
+    // Create test alert
+    int alertId = alertSystem->triggerAlert(
+        ALERT_NAVIGATION_WARNING,
+        PRIORITY_MEDIUM,
+        "Test Workflow Alert",
+        "This alert will be acknowledged and then resolved automatically",
+        "Testing_System",
+        0.0, 0.0
+        );
+
+    if (alertId > 0) {
+        // Show message and auto-acknowledge after 3 seconds
+        QMessageBox::information(this, "Test Workflow",
+                                 QString("Created alert ID %1.\nWill auto-acknowledge in 3 seconds, then resolve in 6 seconds.").arg(alertId));
+
+        // Auto acknowledge after 3 seconds
+        QTimer::singleShot(3000, [this, alertSystem, alertId]() {
+            bool success = alertSystem->acknowledgeAlert(alertId);
+            if (success) {
+                statusBar()->showMessage(QString("Alert %1 acknowledged").arg(alertId), 3000);
+
+                // Auto resolve after additional 3 seconds
+                QTimer::singleShot(3000, [this, alertSystem, alertId]() {
+                    bool resolved = alertSystem->resolveAlert(alertId);
+                    if (resolved) {
+                        statusBar()->showMessage(QString("Alert %1 resolved").arg(alertId), 3000);
+                    }
+                });
+            }
+        });
+    }
+}
+
+// Placeholder implementations untuk CPA/TCPA
+void MainWindow::onCPASettings()
+{
+    qDebug() << "Opening CPA/TCPA Settings dialog...";
+
+    CPATCPASettingsDialog dialog(this);
+
+    // Load current settings
+    CPATCPASettings& settings = CPATCPASettings::instance();
+    dialog.setCPAThreshold(settings.getCPAThreshold());
+    dialog.setTCPAThreshold(settings.getTCPAThreshold());
+    dialog.setCPAAlarmEnabled(settings.isCPAAlarmEnabled());
+    dialog.setTCPAAlarmEnabled(settings.isTCPAAlarmEnabled());
+    dialog.setVisualAlarmEnabled(settings.isVisualAlarmEnabled());
+    dialog.setAudioAlarmEnabled(settings.isAudioAlarmEnabled());
+    dialog.setAlarmUpdateInterval(settings.getAlarmUpdateInterval());
+
+    if (dialog.exec() == QDialog::Accepted) {
+        // Save new settings
+        settings.setCPAThreshold(dialog.getCPAThreshold());
+        settings.setTCPAThreshold(dialog.getTCPAThreshold());
+        settings.setCPAAlarmEnabled(dialog.isCPAAlarmEnabled());
+        settings.setTCPAAlarmEnabled(dialog.isTCPAAlarmEnabled());
+        settings.setVisualAlarmEnabled(dialog.isVisualAlarmEnabled());
+        settings.setAudioAlarmEnabled(dialog.isAudioAlarmEnabled());
+        settings.setAlarmUpdateInterval(dialog.getAlarmUpdateInterval());
+        settings.saveSettings();
+
+        qDebug() << "CPA/TCPA settings updated and saved";
+    }
+}
+
+void MainWindow::onShowCPATargets(bool enabled)
+{
+    qDebug() << "Show CPA Targets:" << enabled;
+
+    if (m_cpatcpaDock) {
+        m_cpatcpaDock->setVisible(enabled);
+    }
+
+    if (enabled) {
+        addTextToBar("CPA Target display enabled");
+    } else {
+        addTextToBar("CPA Target display disabled");
+    }
+}
+
+void MainWindow::onShowTCPAInfo(bool enabled)
+{
+    qDebug() << "Show TCPA Info:" << enabled;
+
+    if (m_cpatcpaPanel && enabled) {
+        m_cpatcpaPanel->refreshData();
+        addTextToBar("TCPA Information display enabled");
+    } else {
+        addTextToBar("TCPA Information display disabled");
+    }
+}
+
+void MainWindow::onCPATCPAAlarms(bool enabled)
+{
+    qDebug() << "CPA/TCPA Alarms:" << enabled;
+
+    if (enabled) {
+        addTextToBar("CPA/TCPA Alarms enabled");
+        m_cpaUpdateTimer->start();
+        if (m_cpatcpaDock) {
+            m_cpatcpaDock->setVisible(true);
+        }
+    } else {
+        addTextToBar("CPA/TCPA Alarms disabled");
+        m_cpaUpdateTimer->stop();
+    }
+}
+
+void MainWindow::updateCPATCPAForAllTargets()
+{
+    VesselState ownShip;
+    ownShip.lat = 29.4037;
+    ownShip.lon = -94.7497;
+    ownShip.cog = 90.0;
+    ownShip.sog = 5.0;
+    ownShip.timestamp = QDateTime::currentDateTime();
+
+    qDebug() << "Own ship position:" << ownShip.lat << ownShip.lon;
+
+    // Update AIS targets list first
+    if (ecchart && ecchart->hasAISData()) {
+        ecchart->updateAISTargetsList();  // Refresh data
+
+        QList<AISTargetData> targets = ecchart->getAISTargets();
+        qDebug() << "AIS data available, target count:" << targets.size();
+
+        if (targets.isEmpty()) {
+            qDebug() << "No AIS targets found, using test target";
+            processTestTarget(ownShip);
+        } else {
+            qDebug() << "Processing" << targets.size() << "AIS targets from file data";
+            // Process real AIS targets
+            for (const auto& target : targets) {
+                processAISTarget(ownShip, target);
+            }
+        }
+    } else {
+        qDebug() << "No AIS data available, using test target";
+        processTestTarget(ownShip);
+    }
+
+    checkCPATCPAAlarms();
+}
+
+void MainWindow::checkCPATCPAAlarms()
+{
+    CPATCPASettings& settings = CPATCPASettings::instance();
+
+    if (!settings.isCPAAlarmEnabled() && !settings.isTCPAAlarmEnabled()) {
+        return;
+    }
+
+    // Count dangerous targets
+    int dangerousTargets = 0;
+
+    /*
+    for (const auto& target : aisTargets) { // Sesuaikan dengan struktur data Anda
+        if (target.isDangerous && target.cpaCalculationValid) {
+            dangerousTargets++;
+        }
+    }
+    */
+
+    // Update status bar atau log dengan informasi alarm
+    if (dangerousTargets > 0) {
+        QString alarmText = QString("CPA/TCPA ALARM: %1 dangerous target(s)").arg(dangerousTargets);
+
+        if (settings.isVisualAlarmEnabled()) {
+            // Update status bar atau tampilkan visual alarm
+            statusBar()->showMessage(alarmText, 5000);
+        }
+
+        // Log alarm
+        addTextToBar(alarmText);
+        qDebug() << alarmText;
+    }
+}
+
+void MainWindow::logCPATCPAInfo(const QString& mmsi, const CPATCPAResult& result)
+{
+    QString logText = QString("MMSI %1: CPA=%.2f NM, TCPA=%.1f min, Range=%.2f NM, Bearing=%.0f°")
+                          .arg(mmsi)
+                          .arg(result.cpa)
+                          .arg(result.tcpa)
+                          .arg(result.currentRange)
+                          .arg(result.relativeBearing);
+
+    addTextToBar(logText);
+    qDebug() << "CPA/TCPA Info:" << logText;
+}
+
+void MainWindow::processTestTarget(const VesselState& ownShip)
+{
+    // Test target yang sudah berhasil
+    VesselState testTarget;
+    testTarget.lat = 29.41;
+    testTarget.lon = -94.73;
+    testTarget.cog = 270.0;
+    testTarget.sog = 8.0;
+    testTarget.timestamp = QDateTime::currentDateTime();
+
+    // Calculate CPA/TCPA
+    CPATCPAResult result = m_cpaCalculator->calculateCPATCPA(ownShip, testTarget);
+
+    if (result.isValid) {
+        QString logText = QString("TEST TARGET: CPA=%.2f NM, TCPA=%.1f min, Range=%.2f NM")
+        .arg(result.cpa)
+            .arg(result.tcpa)
+            .arg(result.currentRange);
+
+        addTextToBar(logText);
+
+        // Check if dangerous
+        CPATCPASettings& settings = CPATCPASettings::instance();
+        bool isDangerous = false;
+
+        if (settings.isCPAAlarmEnabled() && result.cpa < settings.getCPAThreshold()) {
+            isDangerous = true;
+        }
+
+        if (settings.isTCPAAlarmEnabled() && result.tcpa > 0 && result.tcpa < settings.getTCPAThreshold()) {
+            isDangerous = true;
+        }
+
+        if (isDangerous) {
+            QString alarmText = "⚠️ CPA/TCPA ALARM: Test target is dangerous!";
+            addTextToBar(alarmText);
+            statusBar()->showMessage(alarmText, 5000);
+        }
+    }
+}
+
+void MainWindow::processAISTarget(const VesselState& ownShip, const AISTargetData& target)
+{
+    // Convert AISTargetData ke VesselState
+    VesselState targetVessel;
+    targetVessel.lat = target.lat;
+    targetVessel.lon = target.lon;
+    targetVessel.cog = target.cog;
+    targetVessel.sog = target.sog;
+    targetVessel.timestamp = target.lastUpdate;
+
+    // Calculate CPA/TCPA
+    CPATCPAResult result = m_cpaCalculator->calculateCPATCPA(ownShip, targetVessel);
+
+    if (result.isValid) {
+        QString logText = QString("AIS TARGET %1: CPA=%.2f NM, TCPA=%.1f min, Range=%.2f NM")
+        .arg(target.mmsi)
+            .arg(result.cpa)
+            .arg(result.tcpa)
+            .arg(result.currentRange);
+
+        addTextToBar(logText);
+        qDebug() << "CPA/TCPA Result for MMSI" << target.mmsi << ":" << logText;
+
+        // Check if dangerous
+        CPATCPASettings& settings = CPATCPASettings::instance();
+        bool isDangerous = false;
+
+        if (settings.isCPAAlarmEnabled() && result.cpa < settings.getCPAThreshold()) {
+            isDangerous = true;
+        }
+
+        if (settings.isTCPAAlarmEnabled() && result.tcpa > 0 && result.tcpa < settings.getTCPAThreshold()) {
+            isDangerous = true;
+        }
+
+        if (isDangerous) {
+            QString alarmText = QString("⚠️ CPA/TCPA ALARM: AIS Target %1 is dangerous! CPA=%.2f NM, TCPA=%.1f min")
+                                    .arg(target.mmsi)
+                                    .arg(result.cpa)
+                                    .arg(result.tcpa);
+            addTextToBar(alarmText);
+            statusBar()->showMessage(alarmText, 8000);
+        }
+    } else {
+        qDebug() << "CPA/TCPA calculation invalid for MMSI" << target.mmsi;
+    }
+}
+
+void MainWindow::setupCPATCPAPanel()
+{
+    // Create CPA/TCPA panel
+    m_cpatcpaPanel = new CPATCPAPanel();
+    m_cpatcpaPanel->setEcWidget(ecchart);
+
+    // Create dock widget untuk panel
+    m_cpatcpaDock = new QDockWidget(tr("CPA/TCPA Monitor"), this);
+    m_cpatcpaDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    m_cpatcpaDock->setWidget(m_cpatcpaPanel);
+
+    // Add dock to main window
+    addDockWidget(Qt::RightDockWidgetArea, m_cpatcpaDock);
+
+    // Add toggle action to View menu
+    QMenu* viewMenu = menuBar()->findChild<QMenu*>();
+    if (!viewMenu) {
+        // Jika belum ada view menu, cari menu yang ada
+        QList<QMenu*> menus = menuBar()->findChildren<QMenu*>();
+        for (QMenu* menu : menus) {
+            if (menu->title().contains("View") || menu->title().contains("&View")) {
+                viewMenu = menu;
+                break;
+            }
+        }
+    }
+
+    // Jika masih belum ada, buat menu view baru
+    if (!viewMenu) {
+        viewMenu = menuBar()->addMenu("&View");
+    }
+
+    // Add toggle action ke menu
+    if (viewMenu) {
+        viewMenu->addSeparator();
+        QAction* toggleCPATCPAAction = m_cpatcpaDock->toggleViewAction();
+        toggleCPATCPAAction->setText("CPA/TCPA Monitor");
+        viewMenu->addAction(toggleCPATCPAAction);
+    }
+
+    // Set initial visibility
+    m_cpatcpaDock->setVisible(true);
+
+    qDebug() << "CPA/TCPA panel setup completed";
 }

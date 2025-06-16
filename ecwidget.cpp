@@ -6,6 +6,7 @@
 #endif
 
 #include "ecwidget.h"
+#include "alertsystem.h"
 #include "ais.h"
 #include "pickwindow.h"
 
@@ -21,6 +22,8 @@
 #include "IAisDvrPlugin.h"
 #include "PluginManager.h"
 #include "guardzonecheckdialog.h"
+#include "guardzonemanager.h"
+#include <QtMath>
 
 int EcWidget::minScale = 100;
 int EcWidget::maxScale = 50000000;
@@ -86,6 +89,67 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   guardZoneActive = false;
   creatingGuardZone = false;
   guardZoneAttachedToShip = false;
+  newGuardZoneShape = GUARD_ZONE_CIRCLE;
+
+  guardZoneManager = new GuardZoneManager(this);
+  connect(guardZoneManager, &GuardZoneManager::editModeChanged,
+          [this](bool isEditing) {
+              qDebug() << "GuardZone edit mode changed:" << isEditing;
+              update();
+          });
+
+  connect(guardZoneManager, &GuardZoneManager::guardZoneModified,
+          [this](int guardZoneId) {
+              qDebug() << "GuardZone modified:" << guardZoneId;
+              update();
+          });
+
+  connect(guardZoneManager, &GuardZoneManager::statusMessage,
+          this, &EcWidget::statusMessage);
+
+  // Initialize guardzone ID counter jika belum ada
+  if (nextGuardZoneId == 0) {
+      nextGuardZoneId = 1;
+  }
+
+  // Initialize feedback system
+  feedbackMessage = "";
+  feedbackType = FEEDBACK_INFO;
+  flashOpacity = 0;
+
+  // Connect timer untuk auto-hide feedback
+  connect(&feedbackTimer, &QTimer::timeout, [this]() {
+      feedbackMessage.clear();
+      update();
+  });
+
+  // Initialize Alert System
+  alertSystem = nullptr;
+  alertMonitoringEnabled = true;
+  lastDepthReading = 0.0;
+  depthAlertThreshold = 5.0;  // 5 meters
+  proximityAlertThreshold = 0.5;  // 0.5 nautical miles
+  autoDepthMonitoring = true;
+  autoProximityMonitoring = true;
+
+  // Initialize alert check timer
+  alertCheckTimer = new QTimer(this);
+  connect(alertCheckTimer, &QTimer::timeout, this, &EcWidget::performPeriodicAlertChecks);
+  alertCheckTimer->start(10000); // Check every 10 seconds
+
+  // Initialize alert system (delayed to ensure EcWidget is fully constructed)
+  QTimer::singleShot(100, this, &EcWidget::initializeAlertSystem);
+
+  // PERBAIKAN: Initialize AlertSystem SEBELUM other setup
+  qDebug() << "[ECWIDGET] About to initialize Alert System...";
+  initializeAlertSystem();
+
+  // Verify AlertSystem initialization
+  if (alertSystem) {
+      qDebug() << "[ECWIDGET] ✓ AlertSystem initialized successfully at:" << alertSystem;
+  } else {
+      qCritical() << "[ECWIDGET] ✗ AlertSystem initialization FAILED!";
+  }
 
   // Inisialisasi variabel simulasi
   simulationTimer = nullptr;
@@ -97,6 +161,19 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   ownShipSimCourse = 0.0;
   ownShipSimSpeed = 0.0;
   currentScenario = SCENARIO_STATIC_GUARDZONE;
+
+  creatingGuardZone = false;
+  newGuardZoneShape = GUARD_ZONE_CIRCLE;
+  guardZonePoints.clear();
+  currentMousePos = QPoint(0, 0);
+
+  // Initialize next guardzone ID if not already done
+  if (nextGuardZoneId == 0) {
+      nextGuardZoneId = 1;
+  }
+
+  // Clear any existing guardzone list untuk start fresh
+  guardZones.clear();
 
   // Inisialisasi random seed untuk simulasi
   qsrand(QTime::currentTime().msec());
@@ -169,6 +246,7 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
 
   // Waypoint
   loadWaypoints(); // Muat waypoint dari file JSON
+  loadGuardZones();
 
   // Inisialisasi variabel GuardZone
   currentGuardZone = EcFeature{nullptr, 0}; // Inisialisasi dengan objek null
@@ -184,8 +262,8 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   guardZoneRadius = 0.5;                    // Default radius 0.5 mil laut
   guardZoneWarningLevel = EC_WARNING_LEVEL; // Default level peringatan
   guardZoneActive = false;                  // Default tidak aktif
-  creatingGuardZone = false;                // Default tidak dalam mode pembuatan
   guardZoneAttachedToShip = false;          // Default tidak terikat ke kapal
+
 }
 
 /*---------------------------------------------------------------------------*/
@@ -205,6 +283,18 @@ EcWidget::~EcWidget ()
         ownShipTimer->stop();
         delete ownShipTimer;
         ownShipTimer = nullptr;
+    }
+
+    // Cleanup Alert System
+    if (alertSystem) {
+        delete alertSystem;
+        alertSystem = nullptr;
+    }
+
+    if (alertCheckTimer) {
+        alertCheckTimer->stop();
+        delete alertCheckTimer;
+        alertCheckTimer = nullptr;
     }
 
   // Release AIS object.  
@@ -763,6 +853,12 @@ void EcWidget::Draw()
     // Tidak perlu memanggil drawGuardZone() di sini,
     // karena akan dipanggil secara otomatis di paintEvent
 
+    // ========== REFRESH GUARDZONE HANDLE POSITIONS ==========
+        if (guardZoneManager && guardZoneManager->isEditingGuardZone()) {
+        guardZoneManager->refreshHandlePositions();
+    }
+    // ======================================================
+
     update();
 }
 /*---------------------------------------------------------------------------*/
@@ -922,83 +1018,110 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
 {
     setFocus();
 
-    // DrawZone
+    // ========== HANDLING EDIT GUARDZONE MODE VIA MANAGER ==========
+    if (guardZoneManager && guardZoneManager->isEditingGuardZone()) {
+        if (guardZoneManager->handleMousePress(e)) {
+            return; // Event handled by manager
+        }
+    }
+
+    // ========== GUARDZONE CREATION MODE ==========
     if (creatingGuardZone) {
         if (e->button() == Qt::LeftButton) {
-            // Tambahkan titik ke guardzone
             EcCoordinate lat, lon;
             if (XyToLatLon(e->x(), e->y(), lat, lon)) {
-                if (guardZoneShape == GUARD_ZONE_CIRCLE && guardZonePoints.isEmpty()) {
-                    // Untuk mode lingkaran, titik pertama adalah pusat
-                    guardZonePoints.append(QPointF(e->x(), e->y()));
-                    emit statusMessage(tr("Click again to set radius"));
+
+                if (newGuardZoneShape == ::GUARD_ZONE_CIRCLE) {
+                    if (guardZonePoints.isEmpty()) {
+                        // Titik pertama - set center
+                        guardZonePoints.append(QPointF(e->x(), e->y()));
+                        qDebug() << "Circle center set at:" << e->x() << e->y();
+                        emit statusMessage(tr("Center set. Now click to set radius."));
+                    }
+                    else if (guardZonePoints.size() == 1) {
+                        // Titik kedua - calculate radius dan create circle
+                        QPointF center = guardZonePoints.first();
+
+                        // Convert center ke lat/lon
+                        EcCoordinate centerLat, centerLon;
+                        if (XyToLatLon(center.x(), center.y(), centerLat, centerLon)) {
+
+                            // Calculate distance dalam nautical miles
+                            double distNM, bearing;
+                            EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
+                                                                   centerLat, centerLon,
+                                                                   lat, lon,
+                                                                   &distNM, &bearing);
+
+                            qDebug() << "Creating circle with radius:" << distNM << "NM";
+
+                            // Create the guardzone
+                            createCircularGuardZoneNew(centerLat, centerLon, distNM);
+
+                            // Finish creation
+                            finishCreateGuardZone();
+                        }
+                    }
                 }
-                else if (guardZoneShape == GUARD_ZONE_CIRCLE && guardZonePoints.size() == 1) {
-                    // Titik kedua untuk menentukan radius
-                    QPointF center = guardZonePoints.first();
-                    double dx = e->x() - center.x();
-                    double dy = e->y() - center.y();
-                    double distance = sqrt(dx*dx + dy*dy);
-
-                    // Konversi ke mil laut
-                    EcCoordinate centerLat, centerLon, pointLat, pointLon;
-                    XyToLatLon(center.x(), center.y(), centerLat, centerLon);
-                    XyToLatLon(e->x(), e->y(), pointLat, pointLon);
-
-                    double distNM;
-                    double bearing;
-                    EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84, centerLat, centerLon, pointLat, pointLon, &distNM, &bearing);
-
-                    createCircularGuardZone(centerLat, centerLon, distNM);
-                    finishCreateGuardZone();
-                }
-                else if (guardZoneShape == GUARD_ZONE_POLYGON) {
-                    // Tambahkan titik ke polygon
+                else if (newGuardZoneShape == ::GUARD_ZONE_POLYGON) {
+                    // Add point to polygon
                     guardZonePoints.append(QPointF(e->x(), e->y()));
-                    update();
+                    qDebug() << "Polygon point added:" << e->x() << e->y() << "Total points:" << guardZonePoints.size();
+
+                    if (guardZonePoints.size() == 1) {
+                        emit statusMessage(tr("First point added. Continue clicking to add more points."));
+                    } else {
+                        emit statusMessage(tr("Point %1 added. Right-click to finish (minimum 3 points).").arg(guardZonePoints.size()));
+                    }
+
+                    update(); // Redraw untuk show preview
                 }
             }
         }
         else if (e->button() == Qt::RightButton) {
-            // Selesaikan pembuatan guardzone
-            finishCreateGuardZone();
+            // Right click - finish creation atau cancel
+            if (newGuardZoneShape == ::GUARD_ZONE_POLYGON && guardZonePoints.size() >= 3) {
+                // Finish polygon creation
+                createPolygonGuardZoneNew();
+                finishCreateGuardZone();
+            } else {
+                // Cancel creation
+                cancelCreateGuardZone();
+            }
         }
-        return;
+        return; // Don't process further jika dalam creation mode
     }
-    // End DrawZone
+    // ========== END GUARDZONE CREATION MODE ==========
 
+    // ========== EXISTING WAYPOINT AND OTHER LOGIC (unchanged) ==========
     if (e->button() == Qt::LeftButton)
     {
         EcCoordinate lat, lon;
         if (XyToLatLon(e->x(), e->y(), lat, lon))
         {
-
             if (activeFunction == MOVE_WAYP)
             {
                 moveWaypointAt(e->x(), e->y());
-                return; // Jangan set activeFunction = PAN langsung, moveWaypointAt akan handle sendiri
-            }
-
-            else if (activeFunction == EDIT_WAYP)
-            {
-                editWaypointAt(e->x(), e->y());   // 🔥 Ini yang harus ada!
                 return;
             }
-
+            else if (activeFunction == EDIT_WAYP)
+            {
+                editWaypointAt(e->x(), e->y());
+                return;
+            }
             else if (activeFunction == REMOVE_WAYP)
             {
                 removeWaypointAt(e->x(), e->y());
                 activeFunction = PAN;
-                emit waypointCreated(); // Update title dan status bar
-                return; // 🔥 Penting: jangan lanjut ke Create Waypoint kalau remove
+                emit waypointCreated();
+                return;
             }
-
             else if (activeFunction == CREATE_WAYP)
             {
+                // Waypoint creation logic (unchanged)
                 double range = GetRange(currentScale);
                 double pickRadius = 0.03 * range;
 
-                // FORCE create new UDO cell, selalu buat baru
                 if (udoCid == EC_NOCELLID)
                 {
                     if (!resetWaypointCell()) {
@@ -1006,11 +1129,9 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
                         activeFunction = PAN;
                         return;
                     }
-
                 }
                 else
                 {
-                    // ❗Tambahan untuk memaksa recreate cell lama❗
                     EcChartUnAssignCellFromView(view, udoCid);
                     EcCellUnmap(udoCid);
                     udoCid = EC_NOCELLID;
@@ -1022,61 +1143,47 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
                     }
                 }
 
-                qDebug() << "[DEBUG] Try to add waypoint with:";
-                qDebug() << "udoCid =" << udoCid;
-                qDebug() << "lat =" << lat;
-                qDebug() << "lon =" << lon;
-                qDebug() << "dictInfo =" << (dictInfo != nullptr);
-                qDebug() << "pickRadius =" << pickRadius;
+                activeFunction = PAN;
+                setWindowTitle("ECDIS AUV");
 
+                Draw();
+                drawOverlayCell();
+                drawWaypointMarker(lat, lon);
+                emit waypointCreated();
 
-                // Setelah dipastikan udoCid proper, baru add waypoint
-                if (!ECOK(wp1))
-                {
-                    qDebug() << "[DEBUG] EcRouteAddWaypoint failed.";
-                    QMessageBox::warning(this, tr("Error"), tr("Waypoint could not be created"));
-                }
-                else
-                {
-                    qDebug() << "[DEBUG] EcRouteAddWaypoint success.";
+                QList<EcFeature> pickedList;
+                GetPickedFeaturesSubs(pickedList, lat, lon);
+                PickWindow *pw = new PickWindow(this, dictInfo, denc);
+                pw->fill(pickedList);
+                pw->exec();
 
-                    activeFunction = PAN;
-                    setWindowTitle("ECDIS AUV"); // Kembalikan window title ke normal
-
-                    Draw();              // Redraw dasar
-                    drawOverlayCell();   // Redraw overlay
-
-                    // GAMBAR manual Waypoint!
-                    drawWaypointMarker(lat, lon);
-                    emit waypointCreated();
-
-                    // 🎯 Tampilkan Pick Report setelah buat waypoint
-                    QList<EcFeature> pickedList;
-                    GetPickedFeaturesSubs(pickedList, lat, lon);
-                    PickWindow *pw = new PickWindow(this, dictInfo, denc);
-                    pw->fill(pickedList);
-                    pw->exec();
-
-                    update();            // Update tampilan
-                }
-
-
-
+                update();
 
                 activeFunction = PAN;
                 emit projection();
                 emit scale(currentScale);
             }
-
             else
             {
+                // Normal pan/click
                 SetCenter(lat, lon);
                 Draw();
             }
         }
     }
-    else if (e->button() == Qt::RightButton)
-    {
+    else if (e->button() == Qt::RightButton && !creatingGuardZone) {
+
+        // Check if right-clicked on a guardzone
+        if (guardZoneManager) {
+            int clickedGuardZoneId = guardZoneManager->getGuardZoneAtPosition(e->x(), e->y());
+
+            if (clickedGuardZoneId != -1) {
+                guardZoneManager->showGuardZoneContextMenu(e->pos(), clickedGuardZoneId);
+                return; // Return early - jangan lanjut ke normal right click
+            }
+        }
+
+        // Normal right click behavior (existing)
         activeFunction = PAN;
         pickX = e->x();
         pickY = e->y();
@@ -1090,14 +1197,64 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
 
 void EcWidget::mouseMoveEvent(QMouseEvent *e)
 {
-  EcCoordinate lat, lon;
-  if (XyToLatLon(e->x(), e->y(), lat, lon))
-  {
-    emit mouseMove(lat, lon);
-  }   
+    // Handle edit guardzone via manager first
+    if (guardZoneManager && guardZoneManager->isEditingGuardZone()) {
+        if (guardZoneManager->handleMouseMove(e)) {
+            return; // Event handled by manager
+        }
+    }
+
+    // ========== PERBAIKAN: OPTIMIZED CREATION MODE TRACKING ==========
+    if (creatingGuardZone) {
+        // Update current mouse position
+        currentMousePos = e->pos();
+
+        // Validate position is within widget bounds
+        if (rect().contains(currentMousePos)) {
+            // ========== THROTTLING UPDATE ==========
+            static QTime lastUpdateTime;
+            QTime currentTime = QTime::currentTime();
+
+            // Only update if enough time has passed (16ms = ~60 FPS)
+            if (!lastUpdateTime.isValid() || lastUpdateTime.msecsTo(currentTime) >= 16) {
+                update();
+                lastUpdateTime = currentTime;
+            }
+            // =====================================
+        }
+
+        return; // Don't process normal mouse move during creation
+    }
+    // ==============================================================
+
+    // Normal mouse move processing
+    EcCoordinate lat, lon;
+    if (XyToLatLon(e->x(), e->y(), lat, lon)) {
+        emit mouseMove(lat, lon);
+    }
 }
 
 /*---------------------------------------------------------------------------*/
+
+
+void EcWidget::mouseReleaseEvent(QMouseEvent *e)
+{
+    if (guardZoneManager && guardZoneManager->isEditingGuardZone()) {
+        if (guardZoneManager->handleMouseRelease(e)) {
+            return; // Event handled by manager
+        }
+    }
+
+    // Handle edit guardzone via manager - TAMBAHKAN INI
+    if (guardZoneManager && guardZoneManager->isEditingGuardZone()) {
+        if (guardZoneManager->handleMouseRelease(e)) {
+            return; // Event handled by manager
+        }
+    }
+
+    QWidget::mouseReleaseEvent(e);
+}
+
 
 void EcWidget::wheelEvent  (QWheelEvent *e)
 {
@@ -1703,7 +1860,7 @@ QString EcWidget::StartReadAISSubscribe ()
 
             // Pastikan JSON memiliki key yang benar
             if (jsonData.contains("NAV_LAT") && jsonData.contains("NAV_LONG")) {
-                navShip.lat = jsonData["NAV_LAT"].toDouble();
+
                 navShip.lon = jsonData["NAV_LONG"].toDouble();
 
 
@@ -1722,8 +1879,6 @@ QString EcWidget::StartReadAISSubscribe ()
 
                 QStringList nmeaData;
                 nmeaData << aivdo;
-
-                _aisObj->readAISVariable(nmeaData);
 
                 // RECORD NMEA
                 IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
@@ -1907,6 +2062,12 @@ void EcWidget::connectToMOOSDB(EcWidget *ecchart) {
 
     QObject::connect(socketAIS, &QTcpSocket::readyRead, [this, ecchart]() {
         processAISDataHybrid(socketAIS, ecchart);
+        // Update posisi kapal
+        // navShip.lat = jsonData["NAV_LAT"].toDouble();
+        // navShip.lon = jsonData["NAV_LONG"].toDouble();
+
+        // Trigger perhitungan CPA/TCPA untuk semua targets
+        //_aisObj->readAISVariable(nmeaData);
     });
 
     QObject::connect(socketAIS, &QTcpSocket::disconnected, [this]() {
@@ -2066,6 +2227,11 @@ void EcWidget::processAISDataHybrid(QTcpSocket* socket, EcWidget *ecchart) {
                 sendSocket->deleteLater();
             }, Qt::QueuedConnection);
         }
+        // ============= ALERT SYSTEM INTEGRATION =============
+        if (alertSystem && alertMonitoringEnabled) {
+            alertSystem->updateOwnShipPosition(navShip.lat, navShip.lon, navShip.depth);
+        }
+        // ==================================================
     }
 
     // RECORD NMEA
@@ -2222,6 +2388,12 @@ void EcWidget::processAISDataHybrid(QTcpSocket* socket, EcWidget *ecchart) {
         }
     }
 
+    // ============= ALERT SYSTEM INTEGRATION =============
+    // Update alert system with new position (TAMBAHAN BARU)
+    if (alertSystem && alertMonitoringEnabled) {
+        alertSystem->updateOwnShipPosition(navShip.lat, navShip.lon, navShip.depth);
+    }
+    // ==================================================
 }
 
 void EcWidget::stopAISSubscribeThread() {
@@ -3441,82 +3613,197 @@ bool EcWidget::importWaypointsFromFile(const QString &filename)
 void EcWidget::enableGuardZone(bool enable)
 {
     qDebug() << "enableGuardZone called with" << enable;
-    guardZoneActive = enable;
-    qDebug() << "guardZoneActive now" << guardZoneActive;
 
     guardZoneActive = enable;
-    if (guardZoneActive && !ECOK(currentGuardZone)) {
-        // Jika belum ada guardzone, buat guardzone default
-        EcCoordinate lat, lon;
-        GetCenter(lat, lon);
-        createCircularGuardZone(lat, lon, guardZoneRadius);
+
+    if (!enable) {
+        // Jika disable, clear semua legacy variables SAJA
+        guardZoneShape = GUARD_ZONE_CIRCLE;  // Reset ke default
+        guardZoneCenterLat = 0.0;
+        guardZoneCenterLon = 0.0;
+        guardZoneRadius = 0.5;
+        guardZoneAttachedToShip = false;
+        guardZoneLatLons.clear();
+
+        qDebug() << "GuardZone system disabled and legacy variables cleared";
+    } else {
+        // PERBAIKAN: Jangan ubah status active dari guardzone individual
+        // Hanya set legacy variables untuk backward compatibility
+        if (!guardZones.isEmpty()) {
+            // Cari guardzone pertama yang aktif untuk legacy compatibility
+            bool foundActive = false;
+            for (const GuardZone& gz : guardZones) {
+                if (gz.active) {
+                    guardZoneShape = gz.shape;
+                    guardZoneAttachedToShip = gz.attachedToShip;
+
+                    if (gz.shape == GUARD_ZONE_CIRCLE) {
+                        guardZoneCenterLat = gz.centerLat;
+                        guardZoneCenterLon = gz.centerLon;
+                        guardZoneRadius = gz.radius;
+                    } else if (gz.shape == GUARD_ZONE_POLYGON) {
+                        guardZoneLatLons = gz.latLons;
+                    }
+
+                    foundActive = true;
+                    break;
+                }
+            }
+
+            // Jika tidak ada yang aktif, gunakan yang pertama saja untuk legacy
+            if (!foundActive && !guardZones.isEmpty()) {
+                const GuardZone& firstGz = guardZones.first();
+                guardZoneShape = firstGz.shape;
+                guardZoneAttachedToShip = firstGz.attachedToShip;
+
+                if (firstGz.shape == GUARD_ZONE_CIRCLE) {
+                    guardZoneCenterLat = firstGz.centerLat;
+                    guardZoneCenterLon = firstGz.centerLon;
+                    guardZoneRadius = firstGz.radius;
+                } else if (firstGz.shape == GUARD_ZONE_POLYGON) {
+                    guardZoneLatLons = firstGz.latLons;
+                }
+            }
+
+            qDebug() << "GuardZone system enabled with" << guardZones.size() << "guardzones";
+        }
     }
-    update();
+
+    qDebug() << "guardZoneActive now" << guardZoneActive;
+    update();  // Force redraw
 }
 
-void EcWidget::startCreateGuardZone(GuardZoneShape shape)
+void EcWidget::startCreateGuardZone(::GuardZoneShape shape)
 {
-    guardZoneShape = shape;
-    creatingGuardZone = true;
-    guardZonePoints.clear();
+    qDebug() << "Starting GuardZone creation with shape:" << shape;
 
-    // Hapus GuardZone lama jika ada
-    if (ECOK(currentGuardZone)) {
-        EcFeatureDelete(currentGuardZone);
-        currentGuardZone = EcFeature{nullptr, 0};
+    // Clear previous state
+    guardZonePoints.clear();
+    newGuardZoneShape = shape;
+    creatingGuardZone = true;
+
+    // ========== PERBAIKAN: MOUSE TRACKING CONSISTENCY ==========
+    // Force enable mouse tracking
+    setMouseTracking(true);
+
+    // Get current mouse position immediately
+    QPoint globalPos = QCursor::pos();
+    currentMousePos = mapFromGlobal(globalPos);
+
+    // Validate mouse position
+    if (!rect().contains(currentMousePos)) {
+        currentMousePos = QPoint(width()/2, height()/2);  // Center if outside
     }
 
-    // Ubah cursor untuk menunjukkan mode pembuatan
+    qDebug() << "Mouse tracking enabled - Initial pos:" << currentMousePos;
+    qDebug() << "Widget rect:" << rect() << "Contains mouse:" << rect().contains(currentMousePos);
+    // ===========================================================
+
+    // Set cursor
     setCursor(Qt::CrossCursor);
 
-    // Pesan untuk pengguna
-    emit statusMessage(tr("Click to add points to guard zone. Right click to finish."));
+    // Set status message
+    QString message;
+    if (shape == GUARD_ZONE_CIRCLE) {
+        message = tr("Creating Circular GuardZone: Click to set center, then click again to set radius");
+    } else {
+        message = tr("Creating Polygon GuardZone: Click to add points, right-click to finish");
+    }
+
+    emit statusMessage(message);
+
+    // Force immediate update
+    update();
+
+    qDebug() << "GuardZone creation mode activated";
 }
 
 void EcWidget::finishCreateGuardZone()
 {
-    if (!creatingGuardZone)
-        return;
+    qDebug() << "Finishing GuardZone creation";
 
-    creatingGuardZone = false;
-    setCursor(Qt::ArrowCursor);
-
-    if (guardZoneShape == GUARD_ZONE_POLYGON && guardZonePoints.size() >= 3) {
-        createPolygonGuardZone();
-    }
-    else if (guardZoneShape == GUARD_ZONE_CIRCLE && guardZonePoints.size() == 2) {
-        // Untuk lingkaran, kita perlu menghitung radius dalam nautical mile
-        QPointF center = guardZonePoints.first();
-        QPointF edge = guardZonePoints.last();
-
-        // Konversi titik-titik dari koordinat layar ke koordinat geografis
-        double centerLat, centerLon, edgeLat, edgeLon;
-
-        if (XyToLatLon(center.x(), center.y(), centerLat, centerLon) &&
-            XyToLatLon(edge.x(), edge.y(), edgeLat, edgeLon)) {
-
-            // Hitung jarak dalam mil laut
-            double distance;
-            double bearing;
-            EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
-                                                   centerLat, centerLon,
-                                                   edgeLat, edgeLon,
-                                                   &distance, &bearing);
-
-            // Buat lingkaran
-            createCircularGuardZone(centerLat, centerLon, distance);
-        }
-    }
-
-    QMessageBox::information(this, tr("GuardZone"), tr("Guard Zone created"));
-    update();
-}
-void EcWidget::cancelCreateGuardZone()
-{
+    // ========== PERBAIKAN: ROBUST CLEANUP ==========
+    // Reset creation mode variables
     creatingGuardZone = false;
     guardZonePoints.clear();
+
+    // Reset mouse position to avoid stale data
+    currentMousePos = QPoint(0, 0);
+
+    // Restore cursor
     setCursor(Qt::ArrowCursor);
-    emit statusMessage(tr("Guard Zone creation cancelled"));
+
+    // ========== CONDITIONAL MOUSE TRACKING ==========
+    // Only disable mouse tracking if not needed by other systems
+    bool needsMouseTracking = false;
+
+    // Check if edit mode needs tracking
+    if (guardZoneManager && guardZoneManager->isEditingGuardZone()) {
+        needsMouseTracking = true;
+    }
+
+    // Check if other systems need tracking (add more conditions as needed)
+    // if (otherSystemNeedsTracking) {
+    //     needsMouseTracking = true;
+    // }
+
+    if (!needsMouseTracking) {
+        setMouseTracking(false);
+        qDebug() << "Mouse tracking disabled - no active systems need it";
+    } else {
+        qDebug() << "Mouse tracking kept active - needed by other systems";
+    }
+    // ===============================================
+
+    // Clear status message
+    emit statusMessage(tr("GuardZone creation completed"));
+
+    // Emit completion signal
+    emit guardZoneCreated();
+
+    // Final cleanup update
+    update();
+
+    qDebug() << "GuardZone creation finished successfully";
+}
+
+void EcWidget::cancelCreateGuardZone()
+{
+    qDebug() << "Cancelling GuardZone creation";
+
+    // ========== PERBAIKAN: CONSISTENT CLEANUP ==========
+    // Reset creation mode variables
+    creatingGuardZone = false;
+    guardZonePoints.clear();
+
+    // Reset mouse position
+    currentMousePos = QPoint(0, 0);
+
+    // Restore cursor
+    setCursor(Qt::ArrowCursor);
+
+    // ========== SAME CONDITIONAL TRACKING AS FINISH ==========
+    bool needsMouseTracking = false;
+
+    if (guardZoneManager && guardZoneManager->isEditingGuardZone()) {
+        needsMouseTracking = true;
+    }
+
+    if (!needsMouseTracking) {
+        setMouseTracking(false);
+    }
+    // =====================================================
+
+    // Show visual feedback
+    showVisualFeedback(tr("GuardZone creation cancelled"), FEEDBACK_INFO);
+
+    // Clear status message
+    emit statusMessage(tr("GuardZone creation cancelled"));
+
+    // Cleanup update
+    update();
+
+    qDebug() << "GuardZone creation cancelled";
 }
 
 void EcWidget::checkGuardZone()
@@ -3534,62 +3821,135 @@ void EcWidget::checkGuardZone()
 
 void EcWidget::drawGuardZone()
 {
-    if (!guardZoneActive)
-        return;
+    // TAMBAHAN: Performance timer
+    QElapsedTimer timer;
+    timer.start();
 
-    // Digambar dengan menggunakan QPainter pada widget
     QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing, true);
 
-    // Set pen untuk outline
-    QPen pen(Qt::red);
-    pen.setWidth(2);
-    pen.setStyle(Qt::DashLine);
-    painter.setPen(pen);
-
-    // Set brush untuk fill
-    QBrush brush(QColor(255, 0, 0, 50)); // Semi-transparan
-    painter.setBrush(brush);
-
-    // Jika mode pembuatan, gambar titik-titik
-    if (creatingGuardZone) {
-        // (kode yang sudah ada untuk mode pembuatan - tidak perlu diubah)
+    // TAMBAHAN: Early exit jika tidak ada guardzone
+    if (guardZones.isEmpty()) {
+        if (creatingGuardZone) {
+            // Tetap gambar preview creation
+            drawGuardZoneCreationPreview(painter);
+        }
+        return;
     }
-    else if (guardZoneShape == GUARD_ZONE_CIRCLE) {
-        // Jika guardzone terikat pada kapal, update posisi pusat
-        if (guardZoneAttachedToShip) {
-            guardZoneCenterLat = ownShip.lat;
-            guardZoneCenterLon = ownShip.lon;
+
+    int drawnCount = 0;
+    int skippedCount = 0;
+
+    // TAMBAHAN: Viewport culling untuk performance
+    QRect viewport = rect();
+
+    for (const GuardZone &gz : guardZones) {
+        if (!gz.active && !creatingGuardZone) {
+            skippedCount++;
+            continue;
         }
 
-        // Konversi dari koordinat geografis ke koordinat layar
-        int centerX, centerY;
-        if (LatLonToXy(guardZoneCenterLat, guardZoneCenterLon, centerX, centerY)) {
-            // Hitung radius dalam pixel berdasarkan skala saat ini
-            double radiusInPixels = calculatePixelsFromNauticalMiles(guardZoneRadius);
-
-            // Gambar lingkaran
-            painter.drawEllipse(QPoint(centerX, centerY),
-                                static_cast<int>(radiusInPixels),
-                                static_cast<int>(radiusInPixels));
+        // TAMBAHAN: Viewport culling check
+        if (!isGuardZoneInViewport(gz, viewport)) {
+            skippedCount++;
+            continue;
         }
-    }
-    else if (guardZoneShape == GUARD_ZONE_POLYGON && guardZoneLatLons.size() >= 6) { // Minimal 3 titik (6 koordinat)
-        // Konversi titik-titik polygon geografis ke koordinat layar
-        QPolygon poly;
-        for (int i = 0; i < guardZoneLatLons.size(); i += 2) {
-            int x, y;
-            if (LatLonToXy(guardZoneLatLons[i], guardZoneLatLons[i+1], x, y)) {
-                poly.append(QPoint(x, y));
+
+        bool isBeingEdited = (guardZoneManager && guardZoneManager->isEditingGuardZone() &&
+                              gz.id == guardZoneManager->getEditingGuardZoneId());
+
+        QPen pen(gz.color);
+        pen.setWidth(isBeingEdited ? 4 : 2);
+        if (isBeingEdited) {
+            pen.setStyle(Qt::DashLine);
+        }
+        painter.setPen(pen);
+
+        QColor fillColor = gz.color;
+        fillColor.setAlpha(isBeingEdited ? 80 : 50);
+        painter.setBrush(QBrush(fillColor));
+
+        int labelX = 0, labelY = 0;
+
+        if (gz.shape == GUARD_ZONE_CIRCLE) {
+            double lat = gz.centerLat;
+            double lon = gz.centerLon;
+
+            if (gz.attachedToShip) {
+                lat = ownShip.lat;
+                lon = ownShip.lon;
+            }
+
+            int centerX, centerY;
+            if (LatLonToXy(lat, lon, centerX, centerY)) {
+                double radiusInPixels = calculatePixelsFromNauticalMiles(gz.radius);
+
+                // TAMBAHAN: Clamp radius untuk performance
+                if (radiusInPixels > 5000) radiusInPixels = 5000;
+                if (radiusInPixels < 1) radiusInPixels = 1;
+
+                painter.drawEllipse(QPoint(centerX, centerY),
+                                    static_cast<int>(radiusInPixels),
+                                    static_cast<int>(radiusInPixels));
+
+                labelX = centerX;
+                labelY = centerY - static_cast<int>(radiusInPixels) - 15;
+                drawnCount++;
+            }
+        }
+        else if (gz.shape == GUARD_ZONE_POLYGON && gz.latLons.size() >= 6) {
+            QPolygon poly;
+            bool validPolygon = true;
+
+            for (int i = 0; i < gz.latLons.size(); i += 2) {
+                int x, y;
+                if (LatLonToXy(gz.latLons[i], gz.latLons[i+1], x, y)) {
+                    poly.append(QPoint(x, y));
+                } else {
+                    validPolygon = false;
+                    break;
+                }
+            }
+
+            if (validPolygon && poly.size() >= 3) {
+                painter.drawPolygon(poly);
+
+                QRect boundingRect = poly.boundingRect();
+                labelX = boundingRect.center().x();
+                labelY = boundingRect.top() - 15;
+                drawnCount++;
             }
         }
 
-        // Jika polygon valid, gambar
-        if (poly.size() >= 3) {
-            painter.drawPolygon(poly);
+        // Draw label jika ada posisi valid
+        if (labelX != 0 && labelY != 0) {
+            drawGuardZoneLabel(painter, gz, QPoint(labelX, labelY));
         }
     }
 
+    // Draw creation preview
+    if (creatingGuardZone) {
+        drawGuardZoneCreationPreview(painter);
+    }
+
+    // Draw edit overlay
+    if (guardZoneManager && guardZoneManager->isEditingGuardZone()) {
+        guardZoneManager->drawEditOverlay(painter);
+    }
+
+    // Draw feedback overlay
+    if (feedbackTimer.isActive()) {
+        drawFeedbackOverlay(painter);
+    }
+
     painter.end();
+
+    // TAMBAHAN: Performance logging
+    qint64 elapsed = timer.elapsed();
+    if (elapsed > 50) {  // Log jika lebih dari 50ms
+        qDebug() << "[PERF] drawGuardZone took" << elapsed << "ms"
+                 << "- Drawn:" << drawnCount << "Skipped:" << skippedCount;
+    }
 }
 
 void EcWidget::createCircularGuardZone(double centerLat, double centerLon, double radiusNM)
@@ -3835,51 +4195,90 @@ void EcWidget::generateTargetsTowardsGuardZone(int count)
     // Batasi jumlah target maksimum menjadi 5
     if (count > 5) count = 5;
 
-    // Dapatkan posisi guardzone
+    // ========== PERBAIKAN: CARI GUARDZONE AKTIF ==========
+    GuardZone* activeGuardZone = nullptr;
+
+    // Cari guardzone aktif pertama
+    for (GuardZone& gz : guardZones) {
+        if (gz.active) {
+            activeGuardZone = &gz;
+            qDebug() << "[SIMULATION] Using active GuardZone:" << gz.name << "ID:" << gz.id;
+            break;
+        }
+    }
+
+    // Jika tidak ada guardzone aktif, tampilkan pesan dan keluar
+    if (!activeGuardZone) {
+        qDebug() << "[SIMULATION] No active GuardZone found for simulation";
+        QMessageBox::warning(this, tr("Simulation Warning"),
+                             tr("No active GuardZone found!\nPlease enable at least one GuardZone for simulation."));
+        return;
+    }
+    // ===================================================
+
+    // Dapatkan posisi guardzone aktif
     double guardZoneLat, guardZoneLon;
     double effectiveRadius = 0.5; // Default minimal jarak 0.5 mil laut
 
-    if (guardZoneShape == GUARD_ZONE_CIRCLE) {
-        guardZoneLat = guardZoneCenterLat;
-        guardZoneLon = guardZoneCenterLon;
-        effectiveRadius = guardZoneRadius * 1.2; // Pastikan di luar guardzone
-    } else if (guardZoneShape == GUARD_ZONE_POLYGON && guardZoneLatLons.size() >= 2) {
-        // Gunakan titik pertama polygon sebagai referensi
-        guardZoneLat = guardZoneLatLons[0];
-        guardZoneLon = guardZoneLatLons[1];
+    if (activeGuardZone->shape == GUARD_ZONE_CIRCLE) {
+        // ========== GUNAKAN DATA DARI GUARDZONE AKTIF ==========
+        guardZoneLat = activeGuardZone->centerLat;
+        guardZoneLon = activeGuardZone->centerLon;
+        effectiveRadius = activeGuardZone->radius * 1.2; // Pastikan di luar guardzone
 
-        // Perkirakan ukuran polygon dengan menghitung jarak rata-rata dari pusat
-        double totalDist = 0.0;
-        int numPoints = guardZoneLatLons.size() / 2;
-
-        // Hitung pusat polygon
+        qDebug() << "[SIMULATION] Target: Circle at" << guardZoneLat << guardZoneLon
+                 << "radius" << activeGuardZone->radius;
+        // =====================================================
+    }
+    else if (activeGuardZone->shape == GUARD_ZONE_POLYGON && activeGuardZone->latLons.size() >= 2) {
+        // ========== GUNAKAN DATA DARI GUARDZONE AKTIF ==========
+        // Hitung pusat polygon dari guardzone aktif
         double centerLat = 0, centerLon = 0;
-        for (int i = 0; i < guardZoneLatLons.size(); i += 2) {
-            centerLat += guardZoneLatLons[i];
-            centerLon += guardZoneLatLons[i+1];
+        int numPoints = activeGuardZone->latLons.size() / 2;
+
+        for (int i = 0; i < activeGuardZone->latLons.size(); i += 2) {
+            centerLat += activeGuardZone->latLons[i];
+            centerLon += activeGuardZone->latLons[i+1];
         }
         centerLat /= numPoints;
         centerLon /= numPoints;
 
-        // Hitung radius efektif
-        for (int i = 0; i < guardZoneLatLons.size(); i += 2) {
+        // Hitung radius efektif dari polygon aktif
+        double totalDist = 0.0;
+        for (int i = 0; i < activeGuardZone->latLons.size(); i += 2) {
             double dist, dummy;
             EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
                                                    centerLat, centerLon,
-                                                   guardZoneLatLons[i], guardZoneLatLons[i+1],
+                                                   activeGuardZone->latLons[i],
+                                                   activeGuardZone->latLons[i+1],
                                                    &dist, &dummy);
             totalDist += dist;
         }
         effectiveRadius = (totalDist / numPoints) * 1.5; // Pastikan di luar polygon
         guardZoneLat = centerLat;
         guardZoneLon = centerLon;
-    } else {
-        // Jika tidak ada guardzone yang valid, gunakan posisi saat ini
+
+        qDebug() << "[SIMULATION] Target: Polygon at" << guardZoneLat << guardZoneLon
+                 << "effective radius" << effectiveRadius;
+        // ====================================================
+    }
+    else {
+        // Fallback jika data guardzone tidak valid
         GetCenter(guardZoneLat, guardZoneLon);
+        qDebug() << "[SIMULATION] Fallback to current center position";
     }
 
     // Pastikan effectiveRadius minimal 0.5 mil laut
     if (effectiveRadius < 0.5) effectiveRadius = 0.5;
+
+    // ========== TAMBAHAN: TAMPILKAN INFO GUARDZONE YANG DIGUNAKAN ==========
+    QString targetInfo = QString("Simulating %1 vessels approaching active GuardZone:\n'%2' (%3)")
+                             .arg(count)
+                             .arg(activeGuardZone->name)
+                             .arg(activeGuardZone->shape == GUARD_ZONE_CIRCLE ? "Circle" : "Polygon");
+
+    qDebug() << "[SIMULATION]" << targetInfo;
+    // ===================================================================
 
     // Distribusikan target di sekitar guardzone
     double angleStep = 360.0 / count;
@@ -3890,13 +4289,11 @@ void EcWidget::generateTargetsTowardsGuardZone(int count)
         // Setiap kapal memiliki arah yang berbeda sekitar guardzone
         double startBearing = i * angleStep + (qrand() % 20 - 10);
 
-        // Jarak ke guardzone berdasarkan waktu yang ingin dicapai (5 detik)
-        // Kecepatan bervariasi antara 10-20 knot
-        target.sog = 10.0 + (i * 2.5); // 10, 12.5, 15, 17.5, 20 knot
+        // Kecepatan bervariasi antara 25-45 knot
+        target.sog = 25.0 + (i * 5.0); // 25, 30, 35, 40, 45 knot
 
-        // Target kita ingin kapal mencapai guardzone dalam 1-5 detik
-        // Waktu yang diinginkan dalam detik, semakin besar i semakin lama
-        double desiredTimeSeconds = 1.0 + i;
+        // Target kita ingin kapal mencapai guardzone dalam 0.5-1.7 detik
+        double desiredTimeSeconds = 0.5 + (i * 0.3); // 0.5, 0.8, 1.1, 1.4, 1.7 detik
 
         // Konversi ke jam
         double desiredTimeHours = desiredTimeSeconds / 3600.0;
@@ -3913,12 +4310,18 @@ void EcWidget::generateTargetsTowardsGuardZone(int count)
         // Arah menuju ke guardzone (berlawanan dengan startBearing)
         target.cog = fmod(startBearing + 180.0, 360.0);
 
-        // MMSI
-        target.mmsi = QString("AIS%1").arg(i+1);
+        // MMSI dengan info guardzone
+        target.mmsi = QString("FAST%1→GZ%2").arg(i+1).arg(activeGuardZone->id);
         target.dangerous = false;
 
         simulatedTargets.append(target);
     }
+
+    // ========== TAMBAHAN: FEEDBACK KEPADA USER ==========
+    emit statusMessage(QString("Simulation started: %1 vessels → %2")
+                           .arg(count)
+                           .arg(activeGuardZone->name));
+    // ==================================================
 }
 
 void EcWidget::stopAISTargetSimulation()
@@ -4076,6 +4479,24 @@ bool EcWidget::checkTargetsInGuardZone()
     if (!guardZoneActive || simulatedTargets.isEmpty())
         return false;
 
+    // ========== PERBAIKAN: GUNAKAN GUARDZONE AKTIF ==========
+    GuardZone* activeGuardZone = nullptr;
+
+    // Cari guardzone aktif yang sama seperti di simulasi
+    for (GuardZone& gz : guardZones) {
+        if (gz.active) {
+            activeGuardZone = &gz;
+            break;
+        }
+    }
+
+    // Jika tidak ada guardzone aktif, return false
+    if (!activeGuardZone) {
+        qDebug() << "[AUTO-CHECK] No active GuardZone found for checking";
+        return false;
+    }
+    // ======================================================
+
     bool foundNewDanger = false;
     QString alertMessages;
     int alertCount = 0;
@@ -4083,31 +4504,42 @@ bool EcWidget::checkTargetsInGuardZone()
     for (int i = 0; i < simulatedTargets.size(); ++i) {
         bool inGuardZone = false;
 
-        if (guardZoneShape == GUARD_ZONE_CIRCLE) {
-            // Hitung jarak ke pusat guardzone
+        // ========== GUNAKAN DATA DARI GUARDZONE AKTIF ==========
+        if (activeGuardZone->shape == GUARD_ZONE_CIRCLE) {
+            // Hitung jarak ke pusat guardzone aktif
             double distance, bearing;
             EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
-                                                   guardZoneCenterLat, guardZoneCenterLon,
-                                                   simulatedTargets[i].lat, simulatedTargets[i].lon,
+                                                   activeGuardZone->centerLat,
+                                                   activeGuardZone->centerLon,
+                                                   simulatedTargets[i].lat,
+                                                   simulatedTargets[i].lon,
                                                    &distance, &bearing);
 
-            // Jika jarak kurang dari radius guardzone, target ada di dalam
-            inGuardZone = (distance <= guardZoneRadius);
+            // Jika jarak kurang dari radius guardzone aktif, target ada di dalam
+            inGuardZone = (distance <= activeGuardZone->radius);
+
+            qDebug() << "[AUTO-CHECK] Target" << simulatedTargets[i].mmsi
+                     << "distance:" << distance << "vs radius:" << activeGuardZone->radius
+                     << "inZone:" << inGuardZone;
         }
-        else if (guardZoneShape == GUARD_ZONE_POLYGON && guardZoneLatLons.size() >= 6) {
+        else if (activeGuardZone->shape == GUARD_ZONE_POLYGON && activeGuardZone->latLons.size() >= 6) {
             // Konversi titik ke koordinat layar
             int targetX, targetY;
             if (LatLonToXy(simulatedTargets[i].lat, simulatedTargets[i].lon, targetX, targetY)) {
                 QPolygon poly;
-                for (int j = 0; j < guardZoneLatLons.size(); j += 2) {
+                for (int j = 0; j < activeGuardZone->latLons.size(); j += 2) {
                     int x, y;
-                    LatLonToXy(guardZoneLatLons[j], guardZoneLatLons[j+1], x, y);
+                    LatLonToXy(activeGuardZone->latLons[j], activeGuardZone->latLons[j+1], x, y);
                     poly.append(QPoint(x, y));
                 }
 
                 inGuardZone = poly.containsPoint(QPoint(targetX, targetY), Qt::OddEvenFill);
+
+                qDebug() << "[AUTO-CHECK] Target" << simulatedTargets[i].mmsi
+                         << "polygon check - inZone:" << inGuardZone;
             }
         }
+        // =====================================================
 
         // Jika target baru masuk guardzone, tandai sebagai berbahaya dan tambahkan ke pesan
         if (inGuardZone && !simulatedTargets[i].dangerous) {
@@ -4119,18 +4551,41 @@ bool EcWidget::checkTargetsInGuardZone()
                                  .arg(simulatedTargets[i].sog, 0, 'f', 1)
                                  .arg(simulatedTargets[i].cog, 0, 'f', 0);
             alertCount++;
+
+            qDebug() << "[AUTO-CHECK] ⚠️ NEW DANGER:" << simulatedTargets[i].mmsi
+                     << "entered GuardZone" << activeGuardZone->name;
         } else if (!inGuardZone) {
             // Jika target keluar dari guardzone, tandai sebagai tidak berbahaya
+            if (simulatedTargets[i].dangerous) {
+                qDebug() << "[AUTO-CHECK] ✅ Target" << simulatedTargets[i].mmsi
+                         << "left GuardZone" << activeGuardZone->name;
+            }
             simulatedTargets[i].dangerous = false;
         }
     }
 
+    // ============= ALERT SYSTEM INTEGRATION =============
     // Hanya tampilkan peringatan jika ada target baru yang masuk
     if (foundNewDanger && alertCount > 0) {
-        QString title = tr("Guard Zone Alert - %1 Target(s) Detected").arg(alertCount);
 
+        // ===== ENHANCED ALERT MESSAGE =====
+        QString title = tr("Guard Zone Alert - %1 Target(s) in %2").arg(alertCount).arg(activeGuardZone->name);
+
+        // ===== ORIGINAL QMessageBox =====
         QMessageBox::warning(this, title, alertMessages);
+
+        // ===== NEW ALERT SYSTEM INTEGRATION =====
+        if (alertSystem) {
+            // Trigger alert through alert system with guardzone info
+            QString alertDetails = tr("%1 target(s) detected in GuardZone '%2':\n%3")
+                                       .arg(alertCount)
+                                       .arg(activeGuardZone->name)
+                                       .arg(alertMessages.trimmed());
+            triggerGuardZoneAlert(activeGuardZone->id, alertDetails);
+        }
+        // ====================================
     }
+    // ==================================================
 
     // Redraw untuk memperbarui warna target
     drawSimulatedTargets();
@@ -4339,5 +4794,1272 @@ void EcWidget::updateOwnShipPosition()
     lastSimulationTime = currentTime;
 }
 
+// Tambahkan di akhir file ecwidget.cpp (sebelum baris terakhir):
 
+void EcWidget::startEditGuardZone(int guardZoneId)
+{
+    if (guardZoneManager) {
+        guardZoneManager->startEditGuardZone(guardZoneId);
+    }
+}
 
+// Tambahkan di akhir file ecwidget.cpp:
+
+void EcWidget::showVisualFeedback(const QString& message, FeedbackType type)
+{
+    // Store feedback message dan type untuk ditampilkan
+    feedbackMessage = message;
+    feedbackType = type;
+    feedbackTimer.start(2500); // Tampilkan selama 2.5 detik
+
+    // Visual flash effect berdasarkan type
+    flashOpacity = 255;
+
+    // Sequence flash animation
+    QTimer::singleShot(50, [this]() {
+        flashOpacity = 200;
+        update();
+    });
+    QTimer::singleShot(100, [this]() {
+        flashOpacity = 150;
+        update();
+    });
+    QTimer::singleShot(150, [this]() {
+        flashOpacity = 100;
+        update();
+    });
+    QTimer::singleShot(200, [this]() {
+        flashOpacity = 50;
+        update();
+    });
+    QTimer::singleShot(250, [this]() {
+        flashOpacity = 0;
+        update();
+    });
+
+    qDebug() << "[FEEDBACK]" << message << "- Type:" << type;
+    update();
+}
+
+void EcWidget::playFeedbackSound(FeedbackType type)
+{
+    // Simple feedback dengan QApplication::beep()
+    switch (type) {
+    case FEEDBACK_SUCCESS:
+        QApplication::beep();
+        break;
+    case FEEDBACK_ERROR:
+        QApplication::beep();
+        QTimer::singleShot(200, []() { QApplication::beep(); });
+        break;
+    case FEEDBACK_WARNING:
+        QApplication::beep();
+        QTimer::singleShot(150, []() { QApplication::beep(); });
+        QTimer::singleShot(300, []() { QApplication::beep(); });
+        break;
+    case FEEDBACK_INFO:
+        // Info - no sound, just visual
+        break;
+    }
+}
+
+void EcWidget::drawFeedbackOverlay(QPainter& painter)
+{
+    // Flash effect overlay
+    if (flashOpacity > 0) {
+        QColor flashColor;
+        switch (feedbackType) {
+        case FEEDBACK_SUCCESS:
+            flashColor = QColor(0, 255, 0, flashOpacity / 4);
+            break;
+        case FEEDBACK_WARNING:
+            flashColor = QColor(255, 165, 0, flashOpacity / 4);
+            break;
+        case FEEDBACK_ERROR:
+            flashColor = QColor(255, 0, 0, flashOpacity / 4);
+            break;
+        case FEEDBACK_INFO:
+            flashColor = QColor(0, 150, 255, flashOpacity / 4);
+            break;
+        }
+        painter.fillRect(rect(), flashColor);
+    }
+
+    // Feedback message popup
+    if (feedbackTimer.isActive() && !feedbackMessage.isEmpty()) {
+        QRect messageRect(width() - 380, 20, 360, 100);
+
+        QColor bgColor;
+        QColor borderColor;
+        QString icon;
+
+        switch (feedbackType) {
+        case FEEDBACK_SUCCESS:
+            bgColor = QColor(34, 139, 34, 240);
+            borderColor = QColor(0, 100, 0);
+            icon = "✓";
+            break;
+        case FEEDBACK_WARNING:
+            bgColor = QColor(255, 140, 0, 240);
+            borderColor = QColor(200, 100, 0);
+            icon = "⚠";
+            break;
+        case FEEDBACK_ERROR:
+            bgColor = QColor(178, 34, 34, 240);
+            borderColor = QColor(150, 0, 0);
+            icon = "✗";
+            break;
+        case FEEDBACK_INFO:
+            bgColor = QColor(70, 130, 180, 240);
+            borderColor = QColor(0, 80, 150);
+            icon = "ℹ";
+            break;
+        }
+
+        // Shadow effect
+        QRect shadowRect = messageRect.adjusted(3, 3, 3, 3);
+        painter.fillRect(shadowRect, QColor(0, 0, 0, 100));
+
+        // Main background
+        painter.fillRect(messageRect, bgColor);
+        painter.setPen(QPen(borderColor, 3));
+        painter.drawRect(messageRect);
+
+        // Icon
+        painter.setPen(QPen(Qt::white, 2));
+        painter.setFont(QFont("Arial", 20, QFont::Bold));
+        painter.drawText(messageRect.adjusted(15, 15, -320, -60), Qt::AlignLeft | Qt::AlignTop, icon);
+
+        // Message text
+        painter.setFont(QFont("Arial", 9, QFont::Bold));
+        painter.setPen(QPen(Qt::white, 1));
+        painter.drawText(messageRect.adjusted(50, 20, -15, -15),
+                         Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap,
+                         feedbackMessage);
+
+        // Progress bar
+        int totalTime = 2500;
+        int timeLeft = feedbackTimer.remainingTime();
+        int progressWidth = messageRect.width() - 20;
+        int currentProgress = (timeLeft * progressWidth) / totalTime;
+
+        painter.setPen(QPen(Qt::white, 1));
+        painter.drawRect(messageRect.left() + 10, messageRect.bottom() - 15, progressWidth, 5);
+        painter.fillRect(messageRect.left() + 10, messageRect.bottom() - 15, currentProgress, 5, Qt::white);
+    }
+
+}
+
+void EcWidget::keyPressEvent(QKeyEvent *e)
+{
+    // Handle key press for GuardZone editing
+    if (guardZoneManager && guardZoneManager->isEditingGuardZone()) {
+        if (guardZoneManager->handleKeyPress(e)) {
+            return; // Event handled by guard zone manager
+        }
+    }
+
+    // Default key handling
+    QWidget::keyPressEvent(e);
+}
+
+// Tambahkan method baru ini di ecwidget.cpp
+
+void EcWidget::createCircularGuardZoneNew(double centerLat, double centerLon, double radiusNM)
+{
+    qDebug() << "Creating new circular guardzone at" << centerLat << centerLon << "radius" << radiusNM;
+
+    // Validation (existing code)
+    if (centerLat < -90 || centerLat > 90 || centerLon < -180 || centerLon > 180) {
+        showVisualFeedback(tr("Invalid coordinates for GuardZone center!"), FEEDBACK_ERROR);
+        return;
+    }
+
+    if (radiusNM <= 0 || radiusNM > 100) {
+        showVisualFeedback(tr("Invalid radius! Must be between 0.01 and 100 NM"), FEEDBACK_ERROR);
+        return;
+    }
+
+    // Create new GuardZone struct
+    GuardZone newGuardZone;
+    newGuardZone.id = getNextGuardZoneId();
+    newGuardZone.name = QString("GuardZone_%1").arg(newGuardZone.id);
+    newGuardZone.shape = GUARD_ZONE_CIRCLE;
+    newGuardZone.active = true;  // PENTING: Default active
+    newGuardZone.attachedToShip = false;
+    newGuardZone.color = Qt::red;
+    newGuardZone.centerLat = centerLat;
+    newGuardZone.centerLon = centerLon;
+    newGuardZone.radius = radiusNM;
+
+    // Add to guardzone list
+    guardZones.append(newGuardZone);
+
+    // PERBAIKAN: Set system level flag hanya jika belum aktif
+    if (!guardZoneActive) {
+        guardZoneActive = true;
+    }
+
+    // Set legacy variables untuk backward compatibility
+    guardZoneShape = GUARD_ZONE_CIRCLE;
+    guardZoneCenterLat = centerLat;
+    guardZoneCenterLon = centerLon;
+    guardZoneRadius = radiusNM;
+    guardZoneAttachedToShip = false;
+
+    qDebug() << "Circular guardzone created successfully with ID:" << newGuardZone.id;
+
+    // PERBAIKAN: Proper sequence - Save → Feedback → Signal → Update
+    saveGuardZones();
+
+    showVisualFeedback(tr("Circular GuardZone created!\nID: %1, Radius: %2 NM")
+                           .arg(newGuardZone.id)
+                           .arg(radiusNM, 0, 'f', 2),
+                       FEEDBACK_SUCCESS);
+
+    // EMIT SIGNAL HANYA SEKALI di akhir
+    emit guardZoneCreated();
+    qDebug() << "GuardZone created signal emitted for ID:" << newGuardZone.id;
+
+    // Final update
+    update();
+}
+
+void EcWidget::createPolygonGuardZoneNew()
+{
+    // Validation (existing code)
+    if (guardZonePoints.size() < 3) {
+        showVisualFeedback(tr("Polygon needs at least 3 points!"), FEEDBACK_ERROR);
+        return;
+    }
+
+    if (guardZonePoints.size() > 20) {
+        showVisualFeedback(tr("Too many points! Maximum 20 points allowed"), FEEDBACK_WARNING);
+        return;
+    }
+
+    qDebug() << "Creating new polygon guardzone with" << guardZonePoints.size() << "points";
+
+    // Convert screen points to lat/lon (existing code)
+    QVector<double> latLons;
+    int invalidPoints = 0;
+
+    for (const QPointF &point : guardZonePoints) {
+        EcCoordinate lat, lon;
+        if (XyToLatLon(point.x(), point.y(), lat, lon)) {
+            if (lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+                latLons.append(lat);
+                latLons.append(lon);
+            } else {
+                invalidPoints++;
+            }
+        } else {
+            invalidPoints++;
+        }
+    }
+
+    if (invalidPoints > 0) {
+        showVisualFeedback(tr("Warning: %1 invalid points were skipped").arg(invalidPoints), FEEDBACK_WARNING);
+    }
+
+    if (latLons.size() < 6) {
+        showVisualFeedback(tr("Failed to convert polygon points!"), FEEDBACK_ERROR);
+        return;
+    }
+
+    // Create new GuardZone struct
+    GuardZone newGuardZone;
+    newGuardZone.id = getNextGuardZoneId();
+    newGuardZone.name = QString("GuardZone_%1").arg(newGuardZone.id);
+    newGuardZone.shape = GUARD_ZONE_POLYGON;
+    newGuardZone.active = true;  // PENTING: Default active
+    newGuardZone.attachedToShip = false;
+    newGuardZone.color = Qt::red;
+    newGuardZone.latLons = latLons;
+
+    // Add to guardzone list
+    guardZones.append(newGuardZone);
+
+    // PERBAIKAN: Set system level flag hanya jika belum aktif
+    if (!guardZoneActive) {
+        guardZoneActive = true;
+    }
+
+    // Set legacy variables untuk backward compatibility
+    guardZoneShape = GUARD_ZONE_POLYGON;
+    guardZoneLatLons = latLons;
+    guardZoneAttachedToShip = false;
+
+    qDebug() << "Polygon guardzone created successfully with ID:" << newGuardZone.id;
+
+    // PERBAIKAN: Proper sequence - Save → Feedback → Signal → Update
+    saveGuardZones();
+
+    showVisualFeedback(tr("Polygon GuardZone created!\nID: %1, Points: %2")
+                           .arg(newGuardZone.id)
+                           .arg(guardZonePoints.size()),
+                       FEEDBACK_SUCCESS);
+
+    // EMIT SIGNAL HANYA SEKALI di akhir
+    emit guardZoneCreated();
+    qDebug() << "GuardZone created signal emitted for ID:" << newGuardZone.id;
+
+    // Final update
+    update();
+}
+
+// Tambahkan di ecwidget.cpp (di bagian akhir file sebelum closing bracket):
+
+void EcWidget::saveGuardZones()
+{
+    if (guardZones.isEmpty()) {
+        qDebug() << "[INFO] No guardzones to save";
+        return;
+    }
+
+    // Existing throttling code...
+    static QTime lastSaveTime;
+    QTime currentTime = QTime::currentTime();
+
+    if (lastSaveTime.isValid() && lastSaveTime.msecsTo(currentTime) < 500) {
+        qDebug() << "[INFO] Throttling save operation";
+        return;
+    }
+    lastSaveTime = currentTime;
+
+    // TAMBAHAN: Backup existing file sebelum save
+    QString filePath = getGuardZoneFilePath();
+    QString backupPath = filePath + ".backup";
+
+    QFile existingFile(filePath);
+    if (existingFile.exists()) {
+        if (QFile::exists(backupPath)) {
+            QFile::remove(backupPath);
+        }
+        existingFile.copy(backupPath);
+        qDebug() << "[INFO] Created backup:" << backupPath;
+    }
+
+    QJsonArray guardZoneArray;
+    int validCount = 0;
+    int invalidCount = 0;
+
+    for (const GuardZone &gz : guardZones) {
+        // Enhanced validation
+        if (gz.id <= 0) {
+            qDebug() << "[WARNING] Skipping guardzone with invalid ID:" << gz.id;
+            invalidCount++;
+            continue;
+        }
+
+        // TAMBAHAN: Deep validation
+        bool isValid = true;
+        QString validationError;
+
+        if (gz.shape == GUARD_ZONE_CIRCLE) {
+            if (gz.centerLat < -90 || gz.centerLat > 90) {
+                validationError = QString("Invalid latitude: %1").arg(gz.centerLat);
+                isValid = false;
+            } else if (gz.centerLon < -180 || gz.centerLon > 180) {
+                validationError = QString("Invalid longitude: %1").arg(gz.centerLon);
+                isValid = false;
+            } else if (gz.radius <= 0 || gz.radius > 100) {
+                validationError = QString("Invalid radius: %1").arg(gz.radius);
+                isValid = false;
+            }
+        } else if (gz.shape == GUARD_ZONE_POLYGON) {
+            if (gz.latLons.size() < 6 || gz.latLons.size() % 2 != 0) {
+                validationError = QString("Invalid polygon coordinates count: %1").arg(gz.latLons.size());
+                isValid = false;
+            } else {
+                for (int i = 0; i < gz.latLons.size(); i += 2) {
+                    if (gz.latLons[i] < -90 || gz.latLons[i] > 90 ||
+                        gz.latLons[i+1] < -180 || gz.latLons[i+1] > 180) {
+                        validationError = QString("Invalid coordinate at index %1").arg(i);
+                        isValid = false;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!isValid) {
+            qDebug() << "[ERROR] Skipping invalid guardzone" << gz.id << ":" << validationError;
+            invalidCount++;
+            continue;
+        }
+
+        // Create JSON object
+        QJsonObject gzObject;
+        gzObject["id"] = gz.id;
+        gzObject["name"] = gz.name.isEmpty() ? QString("GuardZone_%1").arg(gz.id) : gz.name;
+        gzObject["shape"] = static_cast<int>(gz.shape);
+        gzObject["active"] = gz.active;
+        gzObject["attachedToShip"] = gz.attachedToShip;
+        gzObject["color"] = gz.color.isValid() ? gz.color.name() : "#ff0000";
+        gzObject["created"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+
+        if (gz.shape == GUARD_ZONE_CIRCLE) {
+            gzObject["centerLat"] = gz.centerLat;
+            gzObject["centerLon"] = gz.centerLon;
+            gzObject["radius"] = gz.radius;
+        } else if (gz.shape == GUARD_ZONE_POLYGON) {
+            QJsonArray latLonArray;
+            for (double coord : gz.latLons) {
+                latLonArray.append(coord);
+            }
+            gzObject["latLons"] = latLonArray;
+        }
+
+        guardZoneArray.append(gzObject);
+        validCount++;
+    }
+
+    // TAMBAHAN: Enhanced metadata
+    QJsonObject rootObject;
+    rootObject["guardzones"] = guardZoneArray;
+    rootObject["version"] = "1.1";  // Increment version
+    rootObject["saved_on"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    rootObject["nextGuardZoneId"] = nextGuardZoneId;
+    rootObject["app_version"] = "ECDIS_v1.0";
+    rootObject["statistics"] = QJsonObject{
+        {"total_count", guardZones.size()},
+        {"valid_count", validCount},
+        {"invalid_count", invalidCount},
+        {"active_count", std::count_if(guardZones.begin(), guardZones.end(),
+                                       [](const GuardZone& gz) { return gz.active; })}
+    };
+
+    QJsonDocument jsonDoc(rootObject);
+
+    // TAMBAHAN: Atomic write operation
+    QString tempPath = filePath + ".tmp";
+    QFile tempFile(tempPath);
+
+    if (tempFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QByteArray jsonData = jsonDoc.toJson(QJsonDocument::Indented);
+        qint64 bytesWritten = tempFile.write(jsonData);
+        tempFile.close();
+
+        if (bytesWritten == jsonData.size()) {
+            // Atomic replace
+            if (QFile::exists(filePath)) {
+                QFile::remove(filePath);
+            }
+
+            if (QFile::rename(tempPath, filePath)) {
+                qDebug() << "[SUCCESS] GuardZones saved atomically:" << filePath
+                         << "Valid:" << validCount << "Invalid:" << invalidCount;
+
+                // TAMBAHAN: Emit save success signal
+                emit statusMessage(tr("GuardZones saved successfully (%1 valid, %2 invalid)")
+                                       .arg(validCount).arg(invalidCount));
+            } else {
+                qDebug() << "[ERROR] Failed to replace file atomically";
+                QFile::remove(tempPath);
+            }
+        } else {
+            qDebug() << "[ERROR] Incomplete write to temp file";
+            QFile::remove(tempPath);
+        }
+    } else {
+        qDebug() << "[ERROR] Failed to create temp file:" << tempFile.errorString();
+
+        // Fallback to direct write
+        QFile file(filePath);
+        if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            file.write(jsonDoc.toJson(QJsonDocument::Indented));
+            file.close();
+            qDebug() << "[INFO] GuardZones saved via fallback method";
+        }
+    }
+}
+
+void EcWidget::loadGuardZones()
+{
+    QString filePath = getGuardZoneFilePath();
+    QFile file(filePath);
+
+    // Check main location
+    if (!file.exists()) {
+        QFile fallbackFile("guardzones.json");
+        if (fallbackFile.exists()) {
+            file.setFileName("guardzones.json");
+            filePath = "guardzones.json";
+        } else {
+            qDebug() << "[INFO] No guardzones file found - starting fresh";
+            // PERBAIKAN: Initialize default state
+            guardZones.clear();
+            guardZoneActive = false;
+            nextGuardZoneId = 1;
+            return;
+        }
+    }
+
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QByteArray jsonData = file.readAll();
+        file.close();
+
+        QJsonParseError parseError;
+        QJsonDocument jsonDoc = QJsonDocument::fromJson(jsonData, &parseError);
+
+        if (parseError.error != QJsonParseError::NoError) {
+            qDebug() << "[ERROR] JSON parse error at" << parseError.offset << ":" << parseError.errorString();
+            return;
+        }
+
+        if (!jsonDoc.isObject()) {
+            qDebug() << "[ERROR] Invalid guardzones JSON file structure";
+            return;
+        }
+
+        QJsonObject rootObject = jsonDoc.object();
+
+        // PERBAIKAN: Load nextGuardZoneId dari file
+        if (rootObject.contains("nextGuardZoneId")) {
+            nextGuardZoneId = rootObject["nextGuardZoneId"].toInt();
+            if (nextGuardZoneId <= 0) nextGuardZoneId = 1;
+        }
+
+        if (!rootObject.contains("guardzones") || !rootObject["guardzones"].isArray()) {
+            qDebug() << "[ERROR] Invalid guardzones JSON file (missing guardzones array)";
+            return;
+        }
+
+        QJsonArray guardZoneArray = rootObject["guardzones"].toArray();
+
+        guardZones.clear();
+
+        int validGuardZones = 0;
+        int activeGuardZones = 0;
+
+        for (const QJsonValue &value : guardZoneArray) {
+            if (!value.isObject()) continue;
+
+            QJsonObject gzObject = value.toObject();
+
+            // Validate required fields
+            if (!gzObject.contains("shape")) continue;
+
+            GuardZone gz;
+            gz.id = gzObject.contains("id") ? gzObject["id"].toInt() : getNextGuardZoneId();
+            gz.name = gzObject.contains("name") ? gzObject["name"].toString() :
+                          QString("GuardZone_%1").arg(gz.id);
+            gz.shape = static_cast<::GuardZoneShape>(gzObject["shape"].toInt());
+
+            // PERBAIKAN: Preserve active status dari file
+            gz.active = gzObject.contains("active") ? gzObject["active"].toBool() : true;
+
+            gz.attachedToShip = gzObject.contains("attachedToShip") ?
+                                    gzObject["attachedToShip"].toBool() : false;
+
+            QString colorStr = gzObject.contains("color") ? gzObject["color"].toString() : "#ff0000";
+            gz.color = QColor(colorStr);
+            if (!gz.color.isValid()) gz.color = Qt::red;
+
+            // Load shape-specific data
+            bool shapeDataValid = false;
+
+            if (gz.shape == GUARD_ZONE_CIRCLE) {
+                if (gzObject.contains("centerLat") && gzObject.contains("centerLon") &&
+                    gzObject.contains("radius")) {
+
+                    gz.centerLat = gzObject["centerLat"].toDouble();
+                    gz.centerLon = gzObject["centerLon"].toDouble();
+                    gz.radius = gzObject["radius"].toDouble();
+
+                    // Validate circle data
+                    if (gz.centerLat >= -90 && gz.centerLat <= 90 &&
+                        gz.centerLon >= -180 && gz.centerLon <= 180 &&
+                        gz.radius > 0 && gz.radius <= 100) {
+                        shapeDataValid = true;
+                    }
+                }
+            } else if (gz.shape == GUARD_ZONE_POLYGON) {
+                if (gzObject.contains("latLons") && gzObject["latLons"].isArray()) {
+                    QJsonArray latLonArray = gzObject["latLons"].toArray();
+                    gz.latLons.clear();
+
+                    for (const QJsonValue &coord : latLonArray) {
+                        gz.latLons.append(coord.toDouble());
+                    }
+
+                    if (gz.latLons.size() >= 6 && gz.latLons.size() % 2 == 0) {
+                        // Validate all coordinates
+                        bool coordsValid = true;
+                        for (int i = 0; i < gz.latLons.size(); i += 2) {
+                            if (gz.latLons[i] < -90 || gz.latLons[i] > 90 ||
+                                gz.latLons[i+1] < -180 || gz.latLons[i+1] > 180) {
+                                coordsValid = false;
+                                break;
+                            }
+                        }
+                        if (coordsValid) shapeDataValid = true;
+                    }
+                }
+            }
+
+            if (shapeDataValid) {
+                guardZones.append(gz);
+                validGuardZones++;
+
+                if (gz.active) {
+                    activeGuardZones++;
+                }
+
+                // Update nextGuardZoneId if needed
+                if (gz.id >= nextGuardZoneId) {
+                    nextGuardZoneId = gz.id + 1;
+                }
+            } else {
+                qDebug() << "[WARNING] Skipping invalid guardzone:" << gz.name;
+            }
+        }
+
+        qDebug() << "[INFO] Loaded" << validGuardZones << "guardzones from" << filePath;
+        qDebug() << "[INFO] Active guardzones:" << activeGuardZones;
+
+        // PERBAIKAN: Set system state berdasarkan loaded data
+        if (!guardZones.isEmpty()) {
+            guardZoneActive = (activeGuardZones > 0);  // Active jika ada guardzone aktif
+
+            // Set legacy variables dari guardzone aktif pertama
+            for (const GuardZone& gz : guardZones) {
+                if (gz.active) {
+                    guardZoneShape = gz.shape;
+                    guardZoneAttachedToShip = gz.attachedToShip;
+
+                    if (gz.shape == GUARD_ZONE_CIRCLE) {
+                        guardZoneCenterLat = gz.centerLat;
+                        guardZoneCenterLon = gz.centerLon;
+                        guardZoneRadius = gz.radius;
+                    } else if (gz.shape == GUARD_ZONE_POLYGON) {
+                        guardZoneLatLons = gz.latLons;
+                    }
+                    break;
+                }
+            }
+        } else {
+            guardZoneActive = false;
+        }
+
+        qDebug() << "[INFO] GuardZone system state - Active:" << guardZoneActive
+                 << "NextID:" << nextGuardZoneId;
+
+        // PERBAIKAN: Trigger update hanya jika ada data
+        if (!guardZones.isEmpty()) {
+            update();
+        }
+    } else {
+        qDebug() << "[ERROR] Failed to open guardzones file:" << file.errorString();
+    }
+}
+
+QString EcWidget::getGuardZoneFilePath() const
+{
+    // Simpan di direktori data aplikasi (sama seperti waypoint)
+    QString basePath;
+
+#ifdef _WIN32
+    if (EcKernelGetEnv("APPDATA"))
+        basePath = QString(EcKernelGetEnv("APPDATA")) + "/SevenCs/EC2007/DENC";
+#else
+    if (EcKernelGetEnv("HOME"))
+        basePath = QString(EcKernelGetEnv("HOME")) + "/SevenCs/EC2007/DENC";
+#endif
+
+    // Jika base path tidak tersedia, gunakan direktori saat ini
+    if (basePath.isEmpty())
+        return "guardzones.json";
+    else
+        return basePath + "/guardzones.json";
+}
+
+void EcWidget::debugPreviewState()
+{
+    qDebug() << "=== GUARDZONE PREVIEW DEBUG ===";
+    qDebug() << "creatingGuardZone:" << creatingGuardZone;
+    qDebug() << "newGuardZoneShape:" << newGuardZoneShape;
+    qDebug() << "guardZonePoints.size():" << guardZonePoints.size();
+    qDebug() << "currentMousePos:" << currentMousePos;
+    qDebug() << "hasMouseTracking:" << hasMouseTracking();
+    qDebug() << "==============================";
+}
+
+void EcWidget::emitGuardZoneSignals(const QString& action, int guardZoneId)
+{
+    static QMap<QString, QTime> lastEmitTime;
+    QTime currentTime = QTime::currentTime();
+    QString key = QString("%1_%2").arg(action).arg(guardZoneId);
+
+    // Prevent rapid duplicate signals (dalam 100ms)
+    if (lastEmitTime.contains(key) &&
+        lastEmitTime[key].msecsTo(currentTime) < 100) {
+        qDebug() << "Preventing duplicate signal emission for" << action << guardZoneId;
+        return;
+    }
+
+    lastEmitTime[key] = currentTime;
+
+    if (action == "created") {
+        emit guardZoneCreated();
+    } else if (action == "modified") {
+        emit guardZoneModified();
+    } else if (action == "deleted") {
+        emit guardZoneDeleted();
+    }
+
+    qDebug() << "Signal emitted:" << action << "for GuardZone" << guardZoneId;
+}
+
+bool EcWidget::isGuardZoneInViewport(const GuardZone& gz, const QRect& viewport)
+{
+    // Simple viewport culling
+    if (gz.shape == GUARD_ZONE_CIRCLE) {
+        int centerX, centerY;
+        double lat = gz.attachedToShip ? ownShip.lat : gz.centerLat;
+        double lon = gz.attachedToShip ? ownShip.lon : gz.centerLon;
+
+        if (LatLonToXy(lat, lon, centerX, centerY)) {
+            double radiusPixels = calculatePixelsFromNauticalMiles(gz.radius);
+            QRect circleRect(centerX - radiusPixels, centerY - radiusPixels,
+                             radiusPixels * 2, radiusPixels * 2);
+            return viewport.intersects(circleRect);
+        }
+    } else if (gz.shape == GUARD_ZONE_POLYGON) {
+        // Check if any vertex is in viewport
+        for (int i = 0; i < gz.latLons.size(); i += 2) {
+            int x, y;
+            if (LatLonToXy(gz.latLons[i], gz.latLons[i+1], x, y)) {
+                if (viewport.contains(x, y)) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+void EcWidget::drawGuardZoneLabel(QPainter& painter, const GuardZone& gz, const QPoint& position)
+{
+    painter.setPen(QPen(Qt::black, 1));
+    painter.setBrush(QBrush(QColor(255, 255, 255, 200)));
+
+    QString labelText = gz.name;
+    if (!gz.active) {
+        labelText += " (Disabled)";
+    }
+    if (gz.attachedToShip) {
+        labelText += " [Ship]";
+    }
+
+    QFont labelFont("Arial", 9, QFont::Bold);
+    QFontMetrics fm(labelFont);
+    QRect textRect = fm.boundingRect(labelText);
+    textRect.moveCenter(position);
+    textRect.adjust(-3, -1, 3, 1);
+
+    painter.drawRect(textRect);
+
+    painter.setPen(QPen(Qt::black, 1));
+    painter.setFont(labelFont);
+    painter.drawText(textRect, Qt::AlignCenter, labelText);
+}
+
+void EcWidget::drawGuardZoneCreationPreview(QPainter& painter)
+{
+    // ========== PERBAIKAN: ERROR HANDLING ==========
+    if (!creatingGuardZone) return;
+
+    // Validate painter state
+    if (!painter.isActive()) {
+        qDebug() << "[ERROR] Painter not active in drawGuardZoneCreationPreview";
+        return;
+    }
+
+    // Validate widget size
+    if (width() <= 0 || height() <= 0) {
+        qDebug() << "[ERROR] Invalid widget size in preview";
+        return;
+    }
+
+    try {
+        painter.setRenderHint(QPainter::Antialiasing, true);
+
+        if (newGuardZoneShape == GUARD_ZONE_CIRCLE) {
+            if (guardZonePoints.size() == 1) {
+                // Preview circle creation - show center point and radius line to mouse
+                QPointF center = guardZonePoints.first();
+
+                // Draw center point
+                painter.setPen(QPen(Qt::red, 3));  // Merah
+                painter.setBrush(QBrush(Qt::red));  // Merah
+                painter.drawEllipse(center, 8, 8);
+
+                // Draw center label
+                painter.setPen(QPen(Qt::white, 2));  // Putih agar kontras
+                painter.setFont(QFont("Arial", 10, QFont::Bold));
+                painter.drawText(center.x() + 12, center.y() - 8, "CENTER");
+
+                // Draw preview circle if mouse is valid
+                if (currentMousePos.x() > 0 && currentMousePos.y() > 0) {
+                    // Calculate radius in pixels
+                    double dx = currentMousePos.x() - center.x();
+                    double dy = currentMousePos.y() - center.y();
+                    double radiusPixels = sqrt(dx*dx + dy*dy);
+
+                    if (radiusPixels > 5) { // Minimum radius
+                        // Draw preview circle
+                        painter.setPen(QPen(Qt::red, 2, Qt::DashLine));  // Merah
+                        painter.setBrush(Qt::NoBrush);
+                        painter.drawEllipse(center, radiusPixels, radiusPixels);
+
+                        // Draw radius line
+                        painter.setPen(QPen(Qt::red, 2));  // Merah
+                        painter.drawLine(center, currentMousePos);
+
+                        // Calculate and show radius in nautical miles
+                        EcCoordinate centerLat, centerLon, mouseLat, mouseLon;
+                        if (XyToLatLon(center.x(), center.y(), centerLat, centerLon) &&
+                            XyToLatLon(currentMousePos.x(), currentMousePos.y(), mouseLat, mouseLon)) {
+
+                            double distNM, bearing;
+                            EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
+                                                                   centerLat, centerLon,
+                                                                   mouseLat, mouseLon,
+                                                                   &distNM, &bearing);
+
+                            // Draw radius info
+                            QPoint midPoint = (center.toPoint() + currentMousePos) / 2;
+                            painter.setPen(QPen(Qt::black, 1));
+                            painter.setBrush(QBrush(QColor(255, 255, 255, 200)));
+                            QRect infoRect(midPoint.x() - 40, midPoint.y() - 15, 80, 30);
+                            painter.drawRect(infoRect);
+
+                            painter.setPen(QPen(Qt::black, 2));
+                            painter.setFont(QFont("Arial", 8, QFont::Bold));
+                            painter.drawText(infoRect, Qt::AlignCenter,
+                                             QString("%1 NM").arg(distNM, 0, 'f', 2));
+                        }
+                    }
+                }
+            }
+        }
+        else if (newGuardZoneShape == GUARD_ZONE_POLYGON) {
+            if (!guardZonePoints.isEmpty()) {
+                // Draw existing points
+                painter.setPen(QPen(Qt::red, 2));  // Merah
+                painter.setBrush(QBrush(Qt::red));  // Merah
+
+                for (int i = 0; i < guardZonePoints.size(); i++) {
+                    QPointF point = guardZonePoints[i];
+                    painter.drawEllipse(point, 6, 6);
+
+                    // Draw point number
+                    painter.setPen(QPen(Qt::white, 2));  // Putih
+                    painter.setFont(QFont("Arial", 8, QFont::Bold));
+                    painter.drawText(point.x() + 10, point.y() - 5, QString::number(i + 1));
+                    painter.setPen(QPen(Qt::red, 2));  // Merah
+                }
+
+                // Draw lines between points
+                if (guardZonePoints.size() > 1) {
+                    painter.setPen(QPen(Qt::red, 2, Qt::DashLine));  // Merah
+                    for (int i = 0; i < guardZonePoints.size() - 1; i++) {
+                        painter.drawLine(guardZonePoints[i], guardZonePoints[i + 1]);
+                    }
+                }
+
+                // Draw preview line to mouse cursor
+                if (currentMousePos.x() > 0 && currentMousePos.y() > 0) {
+                    painter.setPen(QPen(Qt::red, 1, Qt::DotLine));  // Merah
+                    painter.drawLine(guardZonePoints.last(), currentMousePos);
+
+                    // Draw mouse cursor position
+                    painter.setPen(QPen(Qt::red, 2));  // Merah
+                    painter.setBrush(QBrush(Qt::red));  // Merah
+                    painter.drawEllipse(currentMousePos, 4, 4);
+                }
+
+                // Draw closing line preview if we have 3+ points
+                if (guardZonePoints.size() >= 3 && currentMousePos.x() > 0) {
+                    painter.setPen(QPen(Qt::red, 1, Qt::DotLine));  // Merah
+                    painter.drawLine(currentMousePos, guardZonePoints.first());
+                }
+            }
+        }
+
+        // Draw creation instructions
+        painter.setPen(QPen(Qt::black, 1));
+        painter.setBrush(QBrush(QColor(255, 255, 255, 220)));
+
+        QRect instructionRect(10, height() - 100, 400, 80);
+        painter.drawRect(instructionRect);
+
+        painter.setPen(QPen(Qt::blue, 2));
+        painter.setFont(QFont("Arial", 9, QFont::Bold));
+
+        QString instructionText;
+        if (newGuardZoneShape == GUARD_ZONE_CIRCLE) {
+            if (guardZonePoints.isEmpty()) {
+                instructionText = "CREATING CIRCULAR GUARDZONE\n• Click to set CENTER point";
+            } else {
+                instructionText = "CREATING CIRCULAR GUARDZONE\n• Move mouse to set RADIUS\n• Click to confirm";
+            }
+        } else {
+            instructionText = QString("CREATING POLYGON GUARDZONE\n• Click to add points (%1 added)\n• Right-click to finish (min 3 points)")
+                                  .arg(guardZonePoints.size());
+        }
+
+        painter.drawText(instructionRect.adjusted(10, 10, -10, -10), Qt::AlignLeft | Qt::AlignTop, instructionText);
+
+    } catch (const std::exception& e) {
+        qDebug() << "[ERROR] Exception in drawGuardZoneCreationPreview:" << e.what();
+        return;
+    } catch (...) {
+        qDebug() << "[ERROR] Unknown exception in drawGuardZoneCreationPreview";
+        return;
+    }
+    // =============================================
+}
+
+bool EcWidget::validateGuardZoneSystem()
+{
+    qDebug() << "[VALIDATION] Starting comprehensive GuardZone system validation";
+
+    bool allValid = true;
+    QStringList issues;
+
+    // Check system state consistency
+    bool hasActiveGuardZones = std::any_of(guardZones.begin(), guardZones.end(),
+                                           [](const GuardZone& gz) { return gz.active; });
+
+    if (guardZoneActive && !hasActiveGuardZones) {
+        issues << "System marked active but no active guardzones found";
+        allValid = false;
+    }
+
+    if (!guardZoneActive && hasActiveGuardZones) {
+        issues << "System marked inactive but active guardzones exist";
+        allValid = false;
+    }
+
+    // Check ID uniqueness
+    QSet<int> usedIds;
+    for (const GuardZone& gz : guardZones) {
+        if (usedIds.contains(gz.id)) {
+            issues << QString("Duplicate ID detected: %1").arg(gz.id);
+            allValid = false;
+        }
+        usedIds.insert(gz.id);
+
+        if (gz.id >= nextGuardZoneId) {
+            issues << QString("ID %1 >= nextGuardZoneId %2").arg(gz.id).arg(nextGuardZoneId);
+            allValid = false;
+        }
+    }
+
+    // Check individual guardzone validity
+    for (const GuardZone& gz : guardZones) {
+        if (gz.name.isEmpty()) {
+            issues << QString("GuardZone %1 has empty name").arg(gz.id);
+        }
+
+        if (!gz.color.isValid()) {
+            issues << QString("GuardZone %1 has invalid color").arg(gz.id);
+        }
+
+        if (gz.shape == GUARD_ZONE_CIRCLE) {
+            if (gz.centerLat < -90 || gz.centerLat > 90) {
+                issues << QString("GuardZone %1 has invalid latitude").arg(gz.id);
+                allValid = false;
+            }
+            if (gz.centerLon < -180 || gz.centerLon > 180) {
+                issues << QString("GuardZone %1 has invalid longitude").arg(gz.id);
+                allValid = false;
+            }
+            if (gz.radius <= 0 || gz.radius > 100) {
+                issues << QString("GuardZone %1 has invalid radius").arg(gz.id);
+                allValid = false;
+            }
+        } else if (gz.shape == GUARD_ZONE_POLYGON) {
+            if (gz.latLons.size() < 6 || gz.latLons.size() % 2 != 0) {
+                issues << QString("GuardZone %1 has invalid polygon data").arg(gz.id);
+                allValid = false;
+            }
+        }
+    }
+
+    // Log results
+    if (allValid) {
+        qDebug() << "[VALIDATION] ✓ All guardzones are valid";
+    } else {
+        qDebug() << "[VALIDATION] ✗ Found" << issues.size() << "issues:";
+        for (const QString& issue : issues) {
+            qDebug() << "[VALIDATION]   -" << issue;
+        }
+    }
+
+    return allValid;
+}
+
+// Alert System
+void EcWidget::initializeAlertSystem()
+{
+    qDebug() << "[ECWIDGET] Initializing Alert System";
+
+    try {
+        // Create alert system
+        alertSystem = new AlertSystem(this, this);
+
+        qDebug() << "[ECWIDGET] AlertSystem created at address:" << alertSystem;
+
+        // Connect signals - DIRECT CONNECTION (TANPA LAMBDA)
+        bool conn1 = connect(alertSystem, &AlertSystem::alertTriggered,
+                             this, &EcWidget::onAlertTriggered);
+        bool conn2 = connect(alertSystem, &AlertSystem::criticalAlert,
+                             this, &EcWidget::onCriticalAlert);
+        bool conn3 = connect(alertSystem, &AlertSystem::systemStatusChanged,
+                             this, &EcWidget::onAlertSystemStatusChanged);
+
+        qDebug() << "[ECWIDGET] Signal connections:" << conn1 << conn2 << conn3;
+
+        // Configure alert system
+        alertSystem->setDepthMonitoringEnabled(autoDepthMonitoring);
+        alertSystem->setProximityMonitoringEnabled(autoProximityMonitoring);
+        alertSystem->setMinimumDepth(depthAlertThreshold);
+        alertSystem->setProximityThreshold(proximityAlertThreshold);
+
+        qDebug() << "[ECWIDGET] Alert System initialized successfully";
+        emit alertSystemStatusChanged(true);
+
+    } catch (const std::exception& e) {
+        qCritical() << "[ECWIDGET] Failed to initialize Alert System:" << e.what();
+        alertSystem = nullptr;  // TAMBAHAN: Ensure null on failure
+    } catch (...) {
+        qCritical() << "[ECWIDGET] Unknown error initializing Alert System";
+        alertSystem = nullptr;  // TAMBAHAN: Ensure null on failure
+    }
+}
+
+void EcWidget::checkAlertConditions()
+{
+    if (!alertSystem || !alertMonitoringEnabled) {
+        return;
+    }
+
+    // Update current position in alert system
+    if (navShip.lat != 0.0 && navShip.lon != 0.0) {
+        alertSystem->updateOwnShipPosition(navShip.lat, navShip.lon, navShip.depth);
+    } else {
+        alertSystem->updateOwnShipPosition(ownShip.lat, ownShip.lon, 0.0);
+    }
+}
+
+void EcWidget::triggerNavigationAlert(const QString& message, int priority)
+{
+    if (!alertSystem) {
+        qWarning() << "[ECWIDGET] Cannot trigger navigation alert - Alert System not initialized";
+        return;
+    }
+
+    AlertPriority alertPriority = static_cast<AlertPriority>(priority);
+    alertSystem->triggerAlert(ALERT_NAVIGATION_WARNING, alertPriority,
+                              tr("Navigation Alert"),
+                              message,
+                              "Navigation_System",
+                              navShip.lat, navShip.lon);
+}
+
+void EcWidget::triggerNavigationAlert(const QString& message)
+{
+    triggerNavigationAlert(message, 2); // Default PRIORITY_MEDIUM = 2
+}
+
+void EcWidget::triggerDepthAlert(double currentDepth, double threshold, bool isShallow)
+{
+    if (!alertSystem) {
+        qWarning() << "[ECWIDGET] Cannot trigger depth alert - Alert System not initialized";
+        return;
+    }
+
+    AlertType alertType = isShallow ? ALERT_DEPTH_SHALLOW : ALERT_DEPTH_DEEP;
+    AlertPriority priority = isShallow ? PRIORITY_CRITICAL : PRIORITY_MEDIUM;
+
+    QString title = isShallow ? tr("Shallow Water Alert") : tr("Deep Water Alert");
+    QString message = tr("Current depth: %.1f m, Threshold: %.1f m").arg(currentDepth).arg(threshold);
+
+    alertSystem->triggerAlert(alertType, priority, title, message,
+                              "Depth_Monitor", navShip.lat, navShip.lon);
+}
+
+void EcWidget::triggerGuardZoneAlert(int guardZoneId, const QString& details)
+{
+    if (!alertSystem) {
+        qWarning() << "[ECWIDGET] Cannot trigger guardzone alert - Alert System not initialized";
+        return;
+    }
+
+    QString title = tr("GuardZone Alert");
+    QString message = tr("GuardZone %1: %2").arg(guardZoneId).arg(details);
+    QString source = QString("GuardZone_%1").arg(guardZoneId);
+
+    alertSystem->triggerAlert(ALERT_GUARDZONE_PROXIMITY, PRIORITY_HIGH,
+                              title, message, source,
+                              navShip.lat, navShip.lon);
+}
+
+// SLOT IMPLEMENTATIONS - GUNAKAN CONST REFERENCE
+void EcWidget::onAlertTriggered(const AlertData& alert)
+{
+    qDebug() << "[ECWIDGET] Alert triggered:" << alert.title;
+
+    // Show visual feedback on chart
+    if (alert.priority >= PRIORITY_HIGH) {
+        showVisualFeedback(alert.title,
+                           alert.priority == PRIORITY_CRITICAL ? FEEDBACK_ERROR : FEEDBACK_WARNING);
+    }
+
+    // Emit signal for external handling (e.g., by MainWindow)
+    emit alertTriggered(alert);
+
+    // Force chart update if location-based alert
+    if (alert.latitude != 0.0 && alert.longitude != 0.0) {
+        update();
+    }
+}
+
+void EcWidget::onCriticalAlert(const AlertData& alert)
+{
+    qWarning() << "[ECWIDGET] CRITICAL ALERT:" << alert.title << "-" << alert.message;
+
+    // Show prominent visual feedback
+    showVisualFeedback(QString("CRITICAL: %1").arg(alert.title), FEEDBACK_ERROR);
+
+    // Force immediate chart update
+    update();
+
+    // Emit critical alert signal
+    emit criticalAlertTriggered(alert);
+}
+
+void EcWidget::onAlertSystemStatusChanged(bool enabled)
+{
+    qDebug() << "[ECWIDGET] Alert System status changed:" << enabled;
+    alertMonitoringEnabled = enabled;
+
+    if (enabled) {
+        if (alertCheckTimer && !alertCheckTimer->isActive()) {
+            alertCheckTimer->start();
+        }
+    } else {
+        if (alertCheckTimer && alertCheckTimer->isActive()) {
+            alertCheckTimer->stop();
+        }
+    }
+
+    emit alertSystemStatusChanged(enabled);
+}
+
+void EcWidget::performPeriodicAlertChecks()
+{
+    if (!alertSystem || !alertMonitoringEnabled) {
+        return;
+    }
+
+    lastAlertCheck = QDateTime::currentDateTime();
+    checkAlertConditions();
+
+    // Check for rapid depth changes
+    if (navShip.lat != 0.0 && navShip.lon != 0.0 && navShip.depth > 0.0) {
+        double depthDifference = abs(navShip.depth - lastDepthReading);
+
+        if (depthDifference > 10.0 && lastDepthReading > 0.0) {
+            triggerNavigationAlert(tr("Rapid depth change detected: %.1f m/check")
+                                       .arg(depthDifference), 3); // 3 = PRIORITY_HIGH
+        }
+
+        lastDepthReading = navShip.depth;
+    }
+}
+
+bool EcWidget::hasAISData() const
+{
+    return (_aisObj != nullptr);
+}
+
+QList<AISTargetData> EcWidget::getAISTargets() const
+{
+    aisTargetsMutex.lock();
+    QList<AISTargetData> result = currentAISTargets;
+    aisTargetsMutex.unlock();
+    return result;
+}
+
+int EcWidget::getAISTargetCount() const
+{
+    aisTargetsMutex.lock();
+    int count = currentAISTargets.size();
+    aisTargetsMutex.unlock();
+    return count;
+}
+
+void EcWidget::updateAISTargetsList()
+{
+    aisTargetsMutex.lock();
+    currentAISTargets.clear();
+
+    if (!_aisObj) {
+        aisTargetsMutex.unlock();
+        return;
+    }
+
+    // Simulasi data dari file BolivarToTexasCity.dat
+    AISTargetData target1;
+    target1.mmsi = "367123456";
+    target1.lat = 29.3989;
+    target1.lon = -94.7853;
+    target1.cog = 45.0;
+    target1.sog = 12.5;
+    target1.lastUpdate = QDateTime::currentDateTime();
+    currentAISTargets.append(target1);
+
+    AISTargetData target2;
+    target2.mmsi = "367789012";
+    target2.lat = 29.4156;
+    target2.lon = -94.7234;
+    target2.cog = 225.0;
+    target2.sog = 8.2;
+    target2.lastUpdate = QDateTime::currentDateTime();
+    currentAISTargets.append(target2);
+
+    AISTargetData target3;
+    target3.mmsi = "367654321";
+    target3.lat = 29.3845;
+    target3.lon = -94.8123;
+    target3.cog = 90.0;
+    target3.sog = 6.8;
+    target3.lastUpdate = QDateTime::currentDateTime();
+    currentAISTargets.append(target3);
+
+    qDebug() << "Updated AIS targets list with" << currentAISTargets.size() << "targets";
+    aisTargetsMutex.unlock();
+}
+
+void EcWidget::addOrUpdateAISTarget(const AISTargetData& target)
+{
+    aisTargetsMutex.lock();
+
+    // Update existing or add new
+    for (int i = 0; i < currentAISTargets.size(); ++i) {
+        if (currentAISTargets[i].mmsi == target.mmsi) {
+            currentAISTargets[i] = target;
+            aisTargetsMutex.unlock();
+            return;
+        }
+    }
+
+    // Add new target
+    currentAISTargets.append(target);
+    aisTargetsMutex.unlock();
+}

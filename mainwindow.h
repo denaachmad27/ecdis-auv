@@ -8,8 +8,16 @@
 #include "IAisDvrPlugin.h"
 #include "ecwidget.h"
 #include "moosdb.h"
+#include "guardzonepanel.h"
+#include "alertpanel.h"
+#include "alertsystem.h"
 
 #include <QPluginLoader>
+
+#include "cpatcpacalculator.h"
+#include "cpatcpasettings.h"
+#include <QTimer>
+#include "cpatcpapanel.h"
 
 // forward declerations
 class PickWindow;
@@ -248,6 +256,11 @@ protected slots:
     void onCheckGuardZone();
     void onAttachGuardZoneToShip(bool attached);
 
+    // GuardZone Panel slots
+    void onGuardZoneSelected(int guardZoneId);
+    void onGuardZoneEditRequested(int guardZoneId);
+    void onGuardZoneVisibilityChanged(int guardZoneId, bool visible);
+
     // Simulasi
     void onStartSimulation();
     void onStopSimulation();
@@ -259,6 +272,8 @@ protected slots:
 
     // NMEA DECODE
     void nmeaDecode();
+    void showSystemStatistics();
+    void createTestGuardZones();
 
 protected:
     void DrawChart();
@@ -286,6 +301,51 @@ protected:
     QAction* stopAisRecAction;
 
     IAisDvrPlugin* aisDvr;
+
+private slots:
+    // CPA/TCPA slots
+    void onCPASettings();
+    void onShowCPATargets(bool enabled);
+    void onShowTCPAInfo(bool enabled);
+    void onCPATCPAAlarms(bool enabled);
+
+private:
+    GuardZonePanel* guardZonePanel;
+    QDockWidget* guardZoneDock;
+    void setupGuardZonePanel();
+    void setupTestingMenu();
+
+    // Alert Panel
+    AlertPanel* alertPanel;
+    QDockWidget* alertDock;
+    void setupAlertPanel();
+
+    // Alert handling methods
+    void onAlertTriggered(const AlertData& alert);
+    void onCriticalAlertTriggered(const AlertData& alert);
+    void onAlertSelected(int alertId);
+    void onAlertSystemStatusChanged(bool enabled);
+
+    // Alert testing methods
+    void testAlertWorkflow();
+
+    // CPA/TCPA related members
+    CPATCPACalculator* m_cpaCalculator;
+    QTimer* m_cpaUpdateTimer;
+
+    // Helper methods untuk CPA/TCPA
+    void updateCPATCPAForAllTargets();
+    void checkCPATCPAAlarms();
+    void logCPATCPAInfo(const QString& mmsi, const CPATCPAResult& result);
+    void processTestTarget(const VesselState& ownShip);
+    void processAISTarget(const VesselState& ownShip, const AISTargetData& target);
+
+    // CPA/TCPA Panel
+    CPATCPAPanel* m_cpatcpaPanel;
+    QDockWidget* m_cpatcpaDock;
+
+    // Helper methods untuk CPA/TCPA
+    void setupCPATCPAPanel();
 };
 
 #endif // _mainwindow_h_

@@ -36,15 +36,23 @@ HEADERS += mainwindow.h ecwidget.h pickwindow.h ais.h \
     SettingsManager.h \
     aisdecoder.h \
     aivdoencoder.h \
+    alertmanager.h \
+    cpatcpacalculator.h \
+    cpatcpapanel.h \
+    cpatcpasettings.h \
+    cpatcpasettingsdialog.h \
     editwaypointdialog.h \
+    guardzone.h \
+    guardzonemanager.h \
+    guardzonepanel.h \
     iplugininterface.h \
     logger.h \
-    guardzonecheckdialog.h \
     guardzonecheckdialog.h \
     moosdb.h \
     nmeadecoder.h \
     searchwindow.h \
-
+    alertsystem.h \
+    alertpanel.h \
 
 SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     PluginManager.cpp \
@@ -52,11 +60,19 @@ SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     SettingsManager.cpp \
     aisdecoder.cpp \
     aivdoencoder.cpp \
+    cpatcpacalculator.cpp \
+    cpatcpapanel.cpp \
+    cpatcpasettings.cpp \
+    cpatcpasettingsdialog.cpp \
     editwaypointdialog.cpp \
+    guardzonemanager.cpp \
+    guardzonepanel.cpp \
     logger.cpp \
     moosdb.cpp \
     nmeadecoder.cpp \
     searchwindow.cpp \
+    alertsystem.cpp \
+    alertpanel.cpp \
 
 RESOURCES += \
     resources.qrc
