@@ -173,6 +173,8 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
 
       // Set the remaining attributes of the ais target feature
       EcAISSetTargetObjectData( feat, _dictInfo, ti, &_bSymbolize );
+
+      // qDebug() << ti->ownShip << " ~ " << ti->shipName;
     }
     else
     {
@@ -310,6 +312,7 @@ void Ais::readAISLogfile( const QString &logFile )
 
     extractNMEA(in.readLine());
 
+    // OWNSHIP NMEA
     PickWindow *pickWindow = new PickWindow(parentWidget, dictInfo, denc);
     if (navShip.lat != 0){
         ownShipText->setHtml(pickWindow->ownShipAutoFill());
@@ -322,6 +325,11 @@ void Ais::readAISLogfile( const QString &logFile )
         dvr->recordRawNmea(sLine);
     }
 
+    // OWNSHIP RIGHT PANEL
+    if (navShip.lat != 0){
+        _cpaPanel->updateOwnShipInfo(navShip.lat, navShip.lon, navShip.speed_og, navShip.heading);
+    }
+
     //qDebug() << sLine;
 
     if( EcAISAddTransponderOutput( _transponder, (unsigned char*)sLine.toStdString().c_str(), sLine.count() ) == False )
@@ -329,6 +337,9 @@ void Ais::readAISLogfile( const QString &logFile )
       addLogFileEntry( QString( "Error in readAISLogfile(): EcAISAddTransponderOutput() failed in input line %1" ).arg( iLineNo ) );
       break;
     }
+
+    // hapus pickwindow
+    delete pickWindow;
 
     iLineNo++;
   }

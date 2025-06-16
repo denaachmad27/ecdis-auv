@@ -693,10 +693,6 @@ MainWindow::MainWindow(QWidget *parent)
   moosMenu->addAction("Restart Connection", this, SLOT(subscribeMOOSDB()) );
   moosMenu->addAction("Stop Connection", this, SLOT(stopSubscribeMOOSDB()) );
 
-  // SIDEBAR
-  createDockWindows();
-  createActions();
-
   // AIS
   QMenu *aisMenu = menuBar()->addMenu("&AIS");
   aisMenu->addAction( tr( "Run AIS" ), this, SLOT( runAis() ) );
@@ -823,6 +819,7 @@ MainWindow::MainWindow(QWidget *parent)
     // EcS63CreateUserPermit(hwid, mkey, mid, &userpermit);
 
     // qDebug() << userpermit;
+
   setupGuardZonePanel();
   setupAlertPanel();
   setupTestingMenu();
@@ -833,6 +830,8 @@ MainWindow::MainWindow(QWidget *parent)
   connect(m_cpaUpdateTimer, SIGNAL(timeout()), this, SLOT(updateCPATCPAForAllTargets()));
   // Setup CPA/TCPA Panel
   setupCPATCPAPanel();
+
+  ecchart->setCPAPanelToAIS(m_cpatcpaPanel);
 
   // Connect to settings changes
   connect(&CPATCPASettings::instance(), &CPATCPASettings::settingsChanged, this, [this]() {

@@ -26,6 +26,8 @@
 #include "moosdb.h"
 #include "guardzone.h"
 
+class CPATCPAPanel;
+
 struct AISTargetData {
     QString mmsi;
     double lat;
@@ -420,6 +422,9 @@ public:
   bool hasAISData() const;
   QList<AISTargetData> getAISTargets() const;
   int getAISTargetCount() const;
+
+  // CPA TCPA
+  void setCPAPanelToAIS(CPATCPAPanel* panel);
 
 public slots:
   void updateAISTargetsList();

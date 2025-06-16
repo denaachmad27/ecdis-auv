@@ -1769,7 +1769,13 @@ void EcWidget::InitAIS( EcDictInfo *dict)
     ownShip.sog, ownShip.cog, dWarnDist, dWarnCPA,
     iWarnTCPA, strAisLib, iTimeOut, bInternalGPS, &bAISSymbolize, strErrLogAis );
 
-  QObject::connect( _aisObj, SIGNAL( signalRefreshChartDisplay( double, double ) ), this, SLOT( slotRefreshChartDisplay( double, double ) ) );  
+  QObject::connect( _aisObj, SIGNAL( signalRefreshChartDisplay( double, double ) ), this, SLOT( slotRefreshChartDisplay( double, double ) ) );
+}
+
+void EcWidget::setCPAPanelToAIS(CPATCPAPanel* panel) {
+    if (_aisObj) {
+        _aisObj->setCPAPanel(panel);
+    }
 }
 
 // Read an AIS logfile and display the AIS targets on the chart display.

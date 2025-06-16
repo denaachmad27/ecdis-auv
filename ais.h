@@ -1,6 +1,8 @@
 #ifndef _ais_h_
 #define _ais_h_
 
+#include "cpatcpapanel.h"
+
 #include <QObject>
 #include <QString>
 #include <QFile>
@@ -79,6 +81,9 @@ public:
 
     static void AISTargetUpdateCallback( EcAISTargetInfo* );
 
+    // CPA TCPA
+    void setCPAPanel(CPATCPAPanel* panel) { _cpaPanel = panel; }
+
 signals:
     void signalRefreshChartDisplay( double, double );
 
@@ -108,6 +113,9 @@ private:
     Bool        _bInternalGPS;
 
     EcAISTransponder    *_transponder;
+
+    // CPA TCPA
+    CPATCPAPanel* _cpaPanel = nullptr;
 };
 
 #endif

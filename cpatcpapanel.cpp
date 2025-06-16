@@ -44,15 +44,15 @@ void CPATCPAPanel::setupUI()
     QGridLayout* ownShipLayout = new QGridLayout();
     ownShipGroup->setLayout(ownShipLayout);
 
-    ownShipLatLabel = new QLabel("Lat: --");
-    ownShipLonLabel = new QLabel("Lon: --");
-    ownShipCogLabel = new QLabel("COG: --");
-    ownShipSogLabel = new QLabel("SOG: --");
+    ownShipLatLabel = new QLabel("LAT: " + QString::number(navShip.lat));
+    ownShipLonLabel = new QLabel("LON: " + QString::number(navShip.lon));
+    ownShipCogLabel = new QLabel("SOG: " + QString::number(navShip.speed_og));
+    ownShipSogLabel = new QLabel("HEAD: " + QString::number(navShip.heading));
 
     ownShipLayout->addWidget(new QLabel("Position:"), 0, 0);
     ownShipLayout->addWidget(ownShipLatLabel, 0, 1);
     ownShipLayout->addWidget(ownShipLonLabel, 0, 2);
-    ownShipLayout->addWidget(new QLabel("Course/Speed:"), 1, 0);
+    ownShipLayout->addWidget(new QLabel("Speed/Heading:"), 1, 0);
     ownShipLayout->addWidget(ownShipCogLabel, 1, 1);
     ownShipLayout->addWidget(ownShipSogLabel, 1, 2);
 
@@ -87,7 +87,7 @@ void CPATCPAPanel::setupStatusPanel()
     QGridLayout* statusLayout = new QGridLayout();
     statusGroup->setLayout(statusLayout);
 
-    systemStatusLabel = new QLabel("System: <font color='green'>ACTIVE</font>");
+    systemStatusLabel = new QLabel("System: <font color='grey'>INACTIVE</font>");
     activeTargetsLabel = new QLabel("Targets: 0");
     dangerousTargetsLabel = new QLabel("Dangerous: <font color='red'>0</font>");
     lastUpdateLabel = new QLabel("Last Update: --");
@@ -161,6 +161,8 @@ void CPATCPAPanel::refreshData()
 
 void CPATCPAPanel::updateTargetsDisplay()
 {
+    qDebug() << "UPDATE";
+
     if (!ecWidget) return;
 
     // Update AIS targets list
@@ -334,12 +336,12 @@ QString CPATCPAPanel::formatTime(double minutes)
     }
 }
 
-void CPATCPAPanel::updateOwnShipInfo(double lat, double lon, double cog, double sog)
+void CPATCPAPanel::updateOwnShipInfo(double lat, double lon, double sog, double cog)
 {
-    ownShipLatLabel->setText(QString("Lat: %1°").arg(lat, 0, 'f', 4));
-    ownShipLonLabel->setText(QString("Lon: %1°").arg(lon, 0, 'f', 4));
-    ownShipCogLabel->setText(QString("COG: %1°").arg(cog, 0, 'f', 1));
-    ownShipSogLabel->setText(QString("SOG: %1kt").arg(sog, 0, 'f', 1));
+    ownShipLatLabel->setText(QString("LAT: <b>%1°</b>").arg(lat, 0, 'f', 4));
+    ownShipLonLabel->setText(QString("LON: <b>%1°</b>").arg(lon, 0, 'f', 4));
+    ownShipCogLabel->setText(QString("SOG: <b>%1kt</b>").arg(sog, 0, 'f', 0));
+    ownShipSogLabel->setText(QString("HEAD: <b>%1°</b>").arg(cog, 0, 'f', 1));
 }
 
 void CPATCPAPanel::onTargetSelected()
