@@ -69,6 +69,11 @@ public:
     void loadPluginAis();
     void onNmeaReceived(const QString&);
 
+public slots:
+    void onEnableRedDotTracker(bool enabled);
+    void onAttachRedDotToShip(bool attached);
+    void onShipGuardianCircle(bool enabled);
+
 protected slots:
     void onReload();
 
