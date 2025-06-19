@@ -152,8 +152,14 @@ public:
       FEEDBACK_INFO
   };
 
+  void testRedDot();
+
   void setGuardZoneAttachedToShip(bool attached);
   void generateTargetsTowardsGuardZone(int count);
+  void setShipGuardianEnabled(bool enabled);
+  bool isShipGuardianEnabled() const;
+  void setGuardianRadius(double radius);
+  double getGuardianRadius() const;
 
   enum SimulationScenario {
       SCENARIO_STATIC_GUARDZONE = 1,
@@ -349,6 +355,18 @@ public:
   // Swiches the display of AIS targets on or off (only if AIS telegrams are read)
   void ShowAIS(bool on);
 
+  // Ship Guardian Circle variables (upgrade dari red dot)
+  bool shipGuardianEnabled;           // NEW: Enable Guardian Circle
+  double guardianRadius;              // NEW: Guardian circle radius (nautical miles)
+  QColor guardianFillColor;           // NEW: Fill color for guardian area
+  QColor guardianBorderColor;         // NEW: Border color
+
+  // Red Dot Tracker methods (TAMBAHKAN INI)
+  void setRedDotTrackerEnabled(bool enabled);
+  void setRedDotAttachedToShip(bool attached);
+  bool isRedDotTrackerEnabled() const;
+  bool isRedDotAttachedToShip() const;
+
   // Transforms device coordinates from this widget to geodetic coordinates (WGS84)
   virtual bool XyToLatLon (int x, int y, EcCoordinate & lat, EcCoordinate & lon);
 
@@ -503,6 +521,13 @@ protected:
   FILE          *errlog;
 
   OwnShipStruct ownShip;
+
+  // Red Dot Tracker variables
+  bool redDotTrackerEnabled;
+  bool redDotAttachedToShip;
+  EcCoordinate redDotLat, redDotLon;
+  QColor redDotColor;
+  double redDotSize;
 
   // Waypoint
   EcFeature         wp1;
@@ -685,6 +710,15 @@ private:
   QList<AISTargetData> currentAISTargets;
   mutable QMutex aisTargetsMutex;
 
+  // ========== RED DOT TRACKER VARIABLES ==========
+  bool attachedToShip;                // Flag untuk attachment ke ship
+  // ==============================================
+
+  // ========== RED DOT TRACKER METHODS ==========
+  void drawRedDotTracker();           // Keep existing (now draws guardian circle)
+  void updateRedDotPosition(double lat, double lon);  // Keep existing
+  void drawShipGuardianCircle();      // NEW: Draw guardian circle area
+  // ============================================
 }; // EcWidget
 
 #endif // _ec_widget_h_

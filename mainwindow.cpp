@@ -768,6 +768,14 @@ MainWindow::MainWindow(QWidget *parent)
 
   guardZoneMenu->addSeparator();
 
+  // ========== MENU BARU UNTUK SHIP GUARDIAN CIRCLE ==========
+  QAction *shipGuardianAction = guardZoneMenu->addAction("Ship Guardian Circle");
+  shipGuardianAction->setCheckable(true);
+  connect(shipGuardianAction, SIGNAL(toggled(bool)), this, SLOT(onShipGuardianCircle(bool)));
+  // =========================================================
+
+  guardZoneMenu->addSeparator();
+
   guardZoneMenu->addAction("Check for Threats", this, SLOT(onCheckGuardZone()));
 
   // Di constructor MainWindow
@@ -1626,8 +1634,23 @@ void MainWindow::onCheckGuardZone()
 
 void MainWindow::onAttachGuardZoneToShip(bool attached)
 {
+    qDebug() << "=== ATTACH TO SHIP CALLED ===" << attached;
+
     if (ecchart) {
-        ecchart->setGuardZoneAttachedToShip(attached);
+        ecchart->setRedDotAttachedToShip(attached);
+
+        if (attached) {
+            statusBar()->showMessage(tr("Red dot tracker attached to ship"), 3000);
+
+            // Test red dot after 1 second
+            QTimer::singleShot(1000, [this]() {
+                if (ecchart) {
+                    ecchart->testRedDot();
+                }
+            });
+        } else {
+            statusBar()->showMessage(tr("Red dot tracker detached from ship"), 3000);
+        }
     }
 }
 
@@ -2839,4 +2862,60 @@ void MainWindow::setupCPATCPAPanel()
     m_cpatcpaDock->setVisible(true);
 
     qDebug() << "CPA/TCPA panel setup completed";
+}
+
+void MainWindow::onEnableRedDotTracker(bool enabled)
+{
+    qDebug() << "onEnableRedDotTracker called with enabled =" << enabled;
+
+    if (ecchart) {
+        ecchart->setRedDotTrackerEnabled(enabled);
+
+        if (enabled) {
+            statusBar()->showMessage(tr("Red dot tracker enabled"), 3000);
+        } else {
+            statusBar()->showMessage(tr("Red dot tracker disabled"), 3000);
+        }
+    }
+}
+
+void MainWindow::onAttachRedDotToShip(bool attached)
+{
+    qDebug() << "onAttachRedDotToShip called with attached =" << attached;
+
+    if (ecchart) {
+        ecchart->setRedDotAttachedToShip(attached);
+
+        // Auto-enable tracker when attaching
+        if (attached) {
+            ecchart->setRedDotTrackerEnabled(true);
+            statusBar()->showMessage(tr("Red dot tracker attached to ship"), 3000);
+        } else {
+            statusBar()->showMessage(tr("Red dot tracker detached from ship"), 3000);
+        }
+    }
+}
+
+void MainWindow::onShipGuardianCircle(bool enabled)
+{
+    qDebug() << "onShipGuardianCircle called with enabled =" << enabled;
+
+    if (ecchart) {
+        if (enabled) {
+            // Aktifkan Ship Guardian Circle
+            ecchart->setShipGuardianEnabled(true);
+            ecchart->setRedDotAttachedToShip(true);  // Attach ke ship
+
+            statusBar()->showMessage(tr("Ship Guardian Circle activated"), 3000);
+        } else {
+            // Nonaktifkan Ship Guardian Circle
+            ecchart->setShipGuardianEnabled(false);
+            ecchart->setRedDotAttachedToShip(false);
+
+            statusBar()->showMessage(tr("Ship Guardian Circle deactivated"), 3000);
+        }
+
+        // Update chart display
+        ecchart->update();
+    }
 }

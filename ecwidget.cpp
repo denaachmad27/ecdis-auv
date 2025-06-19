@@ -114,6 +114,18 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
       nextGuardZoneId = 1;
   }
 
+  // Initialize Ship Guardian Circle
+  redDotTrackerEnabled = false;
+  redDotAttachedToShip = false;
+  shipGuardianEnabled = false;
+  redDotLat = 0.0;
+  redDotLon = 0.0;
+  redDotColor = QColor(255, 0, 0, 180);
+  redDotSize = 8.0;
+  guardianRadius = 0.5;
+  guardianFillColor = QColor(255, 0, 0, 50);
+  guardianBorderColor = QColor(255, 0, 0, 150);
+
   // Initialize feedback system
   feedbackMessage = "";
   feedbackType = FEEDBACK_INFO;
@@ -873,6 +885,11 @@ void EcWidget::paintEvent (QPaintEvent *e)
   painter.drawPixmap(e->rect(), drawPixmap, e->rect());
 
   drawGuardZone();
+
+  // ========== TAMBAHAN UNTUK RED DOT TRACKER ==========
+  // Draw red dot tracker at the very end
+  drawRedDotTracker();
+  // ==================================================
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2741,7 +2758,8 @@ void EcWidget::drawAISCell()
   drawPixmap = QPixmap::fromX11Pixmap(x11pixmap);
 
 #endif
-
+  // Draw red dot tracker overlay
+      drawRedDotTracker();
   update();
 
   emit projection();
@@ -2818,6 +2836,8 @@ bool EcWidget::deleteAISCell()
 /////////////////////////////////////////////
 void EcWidget::slotRefreshChartDisplay( double lat, double lon )
 {
+  qDebug() << "slotRefreshChartDisplay called with lat:" << lat << "lon:" << lon;
+
   if(showAIS)
   {
     // check if center position is out of defined frame, requires drawing of chart as well
@@ -2830,6 +2850,15 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon )
     }
     slotUpdateAISTargets( true );
   }
+
+  // ========== TAMBAHAN UNTUK RED DOT TRACKER ==========
+  // Update red dot position if attached to ship
+  if (redDotAttachedToShip && redDotTrackerEnabled) {
+      qDebug() << "Updating red dot position to:" << lat << "," << lon;
+      updateRedDotPosition(lat, lon);
+      update(); // Force widget repaint
+  }
+  // ==================================================
 }
 //////////////////////////////////////////////////////////////   END AIS   /////////////////////////////////////////////////////
 
@@ -6095,4 +6124,189 @@ void EcWidget::addOrUpdateAISTarget(const AISTargetData& target)
     // Add new target
     currentAISTargets.append(target);
     aisTargetsMutex.unlock();
+}
+
+void EcWidget::setRedDotTrackerEnabled(bool enabled)
+{
+    redDotTrackerEnabled = enabled;
+    qDebug() << "Red Dot Tracker enabled:" << enabled;
+
+    if (!enabled) {
+        redDotLat = 0.0;
+        redDotLon = 0.0;
+    }
+
+    update();
+}
+
+void EcWidget::setRedDotAttachedToShip(bool attached)
+{
+    qDebug() << "setRedDotAttachedToShip called with:" << attached;
+
+    redDotAttachedToShip = attached;
+
+    if (attached) {
+        // Auto-enable tracker when attaching
+        redDotTrackerEnabled = true;
+        qDebug() << "Red dot tracker auto-enabled";
+
+        // Try to get current ownship position
+        if (ownShip.lat != 0.0 && ownShip.lon != 0.0) {
+            qDebug() << "Using ownShip position:" << ownShip.lat << "," << ownShip.lon;
+            updateRedDotPosition(ownShip.lat, ownShip.lon);
+        } else {
+            qDebug() << "OwnShip position is zero, waiting for AIS update";
+        }
+    } else {
+        qDebug() << "Red dot detached from ship";
+    }
+
+    update(); // Force repaint
+}
+
+bool EcWidget::isRedDotTrackerEnabled() const
+{
+    return redDotTrackerEnabled;
+}
+
+bool EcWidget::isRedDotAttachedToShip() const
+{
+    return redDotAttachedToShip;
+}
+
+void EcWidget::updateRedDotPosition(double lat, double lon)
+{
+    if (!redDotTrackerEnabled || !redDotAttachedToShip) {
+        return;
+    }
+
+    redDotLat = lat;
+    redDotLon = lon;
+
+    qDebug() << "Red Dot position updated to:" << lat << "," << lon;
+}
+
+void EcWidget::drawRedDotTracker()
+{
+    if (!redDotTrackerEnabled || redDotLat == 0.0 || redDotLon == 0.0) {
+        return;
+    }
+
+    int screenX, screenY;
+    if (!LatLonToXy(redDotLat, redDotLon, screenX, screenY)) {
+        return;
+    }
+
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+
+    if (shipGuardianEnabled) {
+        // Draw guardian circle first
+        drawShipGuardianCircle();
+    }
+
+    // Always draw center dot for ship position
+    QColor dotColor(255, 0, 0, 200);
+    painter.setBrush(QBrush(dotColor));
+    painter.setPen(QPen(dotColor, 2));
+
+    int dotRadius = (int)redDotSize;
+    painter.drawEllipse(QPoint(screenX, screenY), dotRadius, dotRadius);
+
+    // Draw white border for center dot
+    painter.setPen(QPen(Qt::white, 1));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawEllipse(QPoint(screenX, screenY), dotRadius + 1, dotRadius + 1);
+
+    qDebug() << "Ship position marker drawn at:" << screenX << "," << screenY;
+}
+
+
+void EcWidget::testRedDot()
+{
+    qDebug() << "=== RED DOT TEST ===";
+    qDebug() << "redDotTrackerEnabled:" << redDotTrackerEnabled;
+    qDebug() << "redDotAttachedToShip:" << redDotAttachedToShip;
+    qDebug() << "redDotLat:" << redDotLat;
+    qDebug() << "redDotLon:" << redDotLon;
+    qDebug() << "ownShip.lat:" << ownShip.lat;
+    qDebug() << "ownShip.lon:" << ownShip.lon;
+
+    // Force set position for test
+    if (ownShip.lat != 0.0 && ownShip.lon != 0.0) {
+        updateRedDotPosition(ownShip.lat, ownShip.lon);
+        update();
+        qDebug() << "Test red dot position set and update called";
+    } else {
+        qDebug() << "Cannot test - no ownship position available";
+    }
+}
+
+
+void EcWidget::setShipGuardianEnabled(bool enabled)
+{
+    shipGuardianEnabled = enabled;
+    redDotTrackerEnabled = enabled;  // Keep compatibility
+    qDebug() << "Ship Guardian Circle enabled:" << enabled;
+
+    if (!enabled) {
+        redDotLat = 0.0;
+        redDotLon = 0.0;
+    }
+
+    update();
+}
+
+bool EcWidget::isShipGuardianEnabled() const
+{
+    return shipGuardianEnabled;
+}
+
+void EcWidget::setGuardianRadius(double radius)
+{
+    if (radius > 0.0 && radius <= 5.0) {  // Limit to reasonable range
+        guardianRadius = radius;
+        qDebug() << "Guardian radius set to:" << radius << "nautical miles";
+        update();
+    }
+}
+
+double EcWidget::getGuardianRadius() const
+{
+    return guardianRadius;
+}
+
+void EcWidget::drawShipGuardianCircle()
+{
+    if (!shipGuardianEnabled || redDotLat == 0.0 || redDotLon == 0.0) {
+        return;
+    }
+
+    int centerX, centerY;
+    if (!LatLonToXy(redDotLat, redDotLon, centerX, centerY)) {
+        return;
+    }
+
+    // Convert nautical miles to pixels
+    double radiusInPixels = calculatePixelsFromNauticalMiles(guardianRadius);
+
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+
+    // Draw filled circle (guardian area)
+    painter.setBrush(QBrush(guardianFillColor));
+    painter.setPen(Qt::NoPen);
+    painter.drawEllipse(QPoint(centerX, centerY),
+                      (int)radiusInPixels,
+                      (int)radiusInPixels);
+
+    // Draw border circle
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(guardianBorderColor, 2));
+    painter.drawEllipse(QPoint(centerX, centerY),
+                      (int)radiusInPixels,
+                      (int)radiusInPixels);
+
+    qDebug() << "Guardian circle drawn at" << centerX << "," << centerY
+             << "with radius" << radiusInPixels << "pixels";
 }
