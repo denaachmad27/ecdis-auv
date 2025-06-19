@@ -81,7 +81,7 @@ struct OwnShipStruct
   double heading;
   double length;
   double breadth;
-};		
+};
 
 //! Widget for drawing ECDIS data
 class EcWidget : public QWidget
@@ -389,6 +389,7 @@ public:
   // Draw AIS cell
   void InitAIS( EcDictInfo *dict );
   void ReadAISLogfile( const QString& );
+  void ReadAISLogfileWDelay( const QString& );
   void ReadAISVariable( const QStringList& );
   void StopReadAISVariable();
   QString StartReadAISSubscribe();
@@ -646,8 +647,8 @@ private:
   bool autoDepthMonitoring;
   bool autoProximityMonitoring;
 
-  NavShipStruct navShip;
-  NavShipStruct mapShip;
+  //NavShipStruct navShip;
+  //NavShipStruct mapShip;
 
   // Variabel simulasi AIS
   struct SimulatedAISTarget {

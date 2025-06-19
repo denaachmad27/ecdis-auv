@@ -1,9 +1,10 @@
-
+\
 #include "ais.h"
 #include "IAisDvrPlugin.h"
 #include "PluginManager.h"
 #include "aisdecoder.h"
-#include "pickwindow.h";
+#include "pickwindow.h"
+#include "moosdb.h"
 
 Ais::Ais( EcWidget *parent, EcView *view, EcDictInfo *dict, 
          EcCoordinate ownShipLat, EcCoordinate ownShipLon,
@@ -130,9 +131,13 @@ void Ais::closeSocketConnection()
 void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
 {
   EcCoordinate ownShipLat = 0, ownShipLon = 0;
+
+    double ownShipSog = 0, ownShipCog = 0;
+
   double dist = 0, bear = 0;
   double lat = ( (double) ti->latitude  / 10000.0 ) / 60.0;
   double lon = ( (double) ti->longitude / 10000.0 ) / 60.0;
+
   _myAis->getOwnShipPos(ownShipLat, ownShipLon);
   EcCalculateRhumblineDistanceAndBearing( EC_GEO_DATUM_WGS84, lat, lon, ownShipLat, ownShipLon, &dist, &bear);
 
@@ -146,8 +151,12 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
         abs(ti->longitude) < 180 * 60 * 10000 && 
         ti->navStatus != eNavS_baseStation)
     {
-      EcAISTrackingStatus aisTrkStatus = EcAISCalcTargetTrackingStatus( ti, ownShipLat, ownShipLon, _dSpeed, _dCourse, _dWarnDist, _dWarnCPA, _iWarnTCPA, _iTimeOut );
-      EcFeature feat = EcAISFindTargetObject( _cid, _dictInfo, ti );
+
+      //EcAISTrackingStatus aisTrkStatus = EcAISCalcTargetTrackingStatus( ti, ownShipLat, ownShipLon, _dSpeed, _dCourse, _dWarnDist, _dWarnCPA, _iWarnTCPA, _iTimeOut );
+
+        // COG dan SOG diubah ke data real
+        EcAISTrackingStatus aisTrkStatus = EcAISCalcTargetTrackingStatus( ti, ownShipLat, ownShipLon, ownShipSog, ownShipCog, _dWarnDist, _dWarnCPA, _iWarnTCPA, _iTimeOut );
+        EcFeature feat = EcAISFindTargetObject( _cid, _dictInfo, ti );
 
       // if there is no feature yet create one
       if( !ECOK( feat ) && aisTrkStatus != aisLost )
@@ -174,6 +183,28 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
       // Set the remaining attributes of the ais target feature
       EcAISSetTargetObjectData( feat, _dictInfo, ti, &_bSymbolize );
 
+
+      // SIMPEN DATA AIS
+      if (ti && ti->mmsi != 0)
+      {
+          AISTargetData data;
+          data.mmsi = QString::number(ti->mmsi);
+          data.lat = lat;
+          data.lon = lon;
+          data.cog = ti->cog / 10.0;
+          data.sog = ti->sog / 10.0;
+          //data.cpa = ti->cpa;
+          //data.tcpa = ti->tcpa;
+          //data.isDangerous = (ti->status == eAIS_dangerous);
+          data.lastUpdate = QDateTime::currentDateTime();
+          data.currentRange = dist;
+          data.relativeBearing = bear;
+          //data.cpaCalculationValid = (ti->cpa >= 0 && ti->tcpa >= 0);
+          data.cpaCalculatedAt = QDateTime::currentDateTime();
+
+          Ais::instance()->_aisTargetMap[ti->mmsi] = data;
+      }
+
       // qDebug() << ti->ownShip << " ~ " << ti->shipName;
     }
     else
@@ -195,11 +226,34 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
           EcEasyMoveObject( _featureOwnShip, deltaLat, deltaLon );
           ownShipLat = _oLat;
           ownShipLon = _oLon;
+
+          ownShipCog = ti->cog;
+          ownShipSog = ti->sog;
+
           _myAis->setOwnShipPos(ownShipLat, ownShipLon);
+
+          // SIMPEN DATA AIS
+          AISTargetData dataOS;
+          dataOS.lat = lat;
+          dataOS.lon = lon;
+          dataOS.cog = ti->cog / 10.0;
+          dataOS.sog = ti->sog / 10.0;
+          dataOS.cpaCalculatedAt = QDateTime::currentDateTime();
+
+          Ais::instance()->_aisOwnShip = dataOS;
         }
       }
     } // if( ti->ownShip == False ...
   } // if (dist ...
+
+  if (ti->mmsi == 366884150){
+      QMap<unsigned int, AISTargetData> targets = Ais::instance()->getTargetMap();
+      for (const auto &target : targets) {
+          if (target.mmsi != "366884150") continue;
+
+          //qDebug() << target.lat << ", " << target.lon << ", " << target.sog << ", " << target.cog;
+      }
+  }
 
   // The callback informs the application to refresh the chart display with AIS target by sending an event.
   /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -220,6 +274,18 @@ void Ais::stopAnimation()
   closeErrLogFile();
   closeAisFile();
   closeSocketConnection();
+}
+
+Ais* Ais::instance() {
+    return _myAis;
+}
+
+QMap<unsigned int, AISTargetData>& Ais::getTargetMap() {
+    return _aisTargetMap;
+}
+
+AISTargetData& Ais::getOwnShipVar() {
+    return _aisOwnShip;
 }
 
 // Create transponder object.
@@ -295,6 +361,7 @@ void Ais::readAISLogfile( const QString &logFile )
   QTextStream in( _fAisFile );
   while( in.atEnd() == False )
   {
+
     if( _bReadFromFile == False )
     {
       break;
@@ -308,9 +375,8 @@ void Ais::readAISLogfile( const QString &logFile )
     QString sLine = in.readLine();
     sLine = sLine.append( "\r\n" );
 
-    nmeaText->append(in.readLine());
-
-    extractNMEA(in.readLine());
+    nmeaText->append(sLine);
+    extractNMEA(sLine);
 
     // OWNSHIP NMEA
     PickWindow *pickWindow = new PickWindow(parentWidget, dictInfo, denc);
@@ -327,7 +393,7 @@ void Ais::readAISLogfile( const QString &logFile )
 
     // OWNSHIP RIGHT PANEL
     if (navShip.lat != 0){
-        _cpaPanel->updateOwnShipInfo(navShip.lat, navShip.lon, navShip.speed_og, navShip.heading);
+        _cpaPanel->updateOwnShipInfo(navShip.lat, navShip.lon, navShip.speed_og, navShip.heading_og);
     }
 
     //qDebug() << sLine;
@@ -345,11 +411,83 @@ void Ais::readAISLogfile( const QString &logFile )
   }
 }
 
+void Ais::readAISLogfileWDelay(const QString &logFile, int delayMs, std::atomic<bool>* stopFlag)
+{
+    _bReadFromFile = True;
+    _bReadFromVariable = False;
+    _bReadFromServer = False;
+
+    closeSocketConnection();
+
+    _fAisFile->setFileName(logFile);
+    if (_fAisFile->exists() == False) {
+        addLogFileEntry("Error in readAISLogfile(): AIS logfile doesn't exist.");
+        return;
+    }
+
+    if (_fAisFile->open(QIODevice::ReadOnly | QIODevice::Text) == False) {
+        addLogFileEntry(QString("Error in readAISLogfile(): Could not open AIS logfile: %1.").arg(logFile));
+        return;
+    }
+
+    if (!_transponder) {
+        addLogFileEntry("Error in readAISLogfile(): Transponder object is not initialized!");
+        return;
+    }
+
+    QTextStream in(_fAisFile);
+    QWidget *parentWidget = nullptr;
+    EcDictInfo *dictInfo = nullptr;
+    EcDENC *denc = nullptr;
+
+    int iLineNo = 1;
+    while (!in.atEnd())
+    {
+        if (!_bReadFromFile || !_transponder || (stopFlag && stopFlag->load())) {
+            break;
+        }
+
+        QString sLine = in.readLine().append("\r\n");
+
+        nmeaText->append(sLine);
+        extractNMEA(sLine);
+
+        PickWindow *pickWindow = new PickWindow(parentWidget, dictInfo, denc);
+        if (navShip.lat != 0) {
+            ownShipText->setHtml(pickWindow->ownShipAutoFill());
+        }
+
+        IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
+        if (dvr && dvr->isRecording()) {
+            dvr->recordRawNmea(sLine);
+        }
+
+        if (navShip.lat != 0) {
+            _cpaPanel->updateOwnShipInfo(navShip.lat, navShip.lon, navShip.speed_og, navShip.heading_og);
+        }
+
+        if (!EcAISAddTransponderOutput(_transponder, (unsigned char*)sLine.toStdString().c_str(), sLine.count())) {
+            addLogFileEntry(QString("Error in readAISLogfile(): EcAISAddTransponderOutput() failed at line %1").arg(iLineNo));
+            delete pickWindow;
+            break;
+        }
+
+        delete pickWindow;
+        iLineNo++;
+
+        if (delayMs > 0)
+            QThread::msleep(delayMs);
+    }
+
+    _fAisFile->close();
+}
+
+
 void Ais::extractNMEA(QString nmea){
-    navShip.heading = AisDecoder::decodeAisOption(nmea, "heading", "!AIVDO");
     navShip.lat = AisDecoder::decodeAisOption(nmea, "latitude", "!AIVDO");
     navShip.lon = AisDecoder::decodeAisOption(nmea, "longitude", "!AIVDO");
     navShip.speed_og = AisDecoder::decodeAisOption(nmea, "sog", "!AIVDO");
+    navShip.heading_og = AisDecoder::decodeAisOption(nmea, "cog", "!AIVDO") / 10;
 }
 
 // Read AIS variable.

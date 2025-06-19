@@ -3,7 +3,7 @@
 #include <QBoxLayout>
 
 #include "pickwindow.h"
-#include "moosdb.h"
+#include "ecwidget.h"
 #include "nmeadecoder.h"
 
 PickWindow::PickWindow(QWidget *parent, EcDictInfo *dict, EcDENC *dc)

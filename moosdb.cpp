@@ -36,7 +36,7 @@ QString nmea;
 // Thread Subscribe from MOOSDB
 QString serverThreadMOOSSubscribe() {
     serverS = new QTcpServer();
-    
+
     if (!serverS->listen(QHostAddress::Any, 8080)) {
         qDebug() << "Server failed to start.";
         return aivdo;

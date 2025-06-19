@@ -35,8 +35,9 @@ CPATCPAResult CPATCPACalculator::calculateCPATCPA(const VesselState& ownShip, co
     // Check if TCPA is within reasonable limits
     if (tcpa < 0 || tcpa > (MAX_TCPA_HOURS * 60)) {
         result.isValid = false;
-        qDebug() << "TCPA out of range:" << tcpa << "minutes";
-    } else {
+        //qDebug() << "TCPA out of range:" << tcpa << "minutes";
+    }
+    else {
         result.isValid = true;
     }
 

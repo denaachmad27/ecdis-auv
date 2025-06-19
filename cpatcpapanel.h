@@ -31,12 +31,13 @@ public:
 
 public slots:
     void refreshData();
-    void onTargetSelected();
     void onSettingsClicked();
     void onClearAlarmsClicked();
 
 private slots:
     void onTimerTimeout();  // Ganti nama dari updateTimer
+    void onTargetSelected();
+    void onTableSorted(int column, Qt::SortOrder order);
 
 private:
     void setupUI();
@@ -79,6 +80,9 @@ private:
     EcWidget* ecWidget;
     int dangerousCount;
     int totalTargets;
+
+    // SELECTION
+    QString selectedMmsi;
 };
 
 #endif // CPATCPAPANEL_H

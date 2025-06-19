@@ -27,7 +27,6 @@
 
 #include <eckernel.h>
 #include <ecwidget.h>
-#include <moosdb.h>
 
 #define LINEMAX 1024
 #define OBJ_CLEAN_TIME      (10*60)
@@ -64,6 +63,7 @@ public:
 
     Bool createTransponderObject();
     void readAISLogfile( const QString& );
+    void readAISLogfileWDelay(const QString &logFile, int delayMs, std::atomic<bool>* stopFlag);
     void readAISVariable( const QStringList& );
 
     void extractNMEA(QString nmea);
@@ -83,6 +83,10 @@ public:
 
     // CPA TCPA
     void setCPAPanel(CPATCPAPanel* panel) { _cpaPanel = panel; }
+    QMap<unsigned int, AISTargetData>& getTargetMap();
+    AISTargetData& getOwnShipVar();
+
+    static Ais* instance();                       // untuk ambil pointer dari class lain
 
 signals:
     void signalRefreshChartDisplay( double, double );
@@ -116,6 +120,8 @@ private:
 
     // CPA TCPA
     CPATCPAPanel* _cpaPanel = nullptr;
+    QMap<unsigned int, AISTargetData> _aisTargetMap;
+    AISTargetData _aisOwnShip;
 };
 
 #endif

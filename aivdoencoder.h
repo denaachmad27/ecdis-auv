@@ -7,6 +7,7 @@
 class AIVDOEncoder {
 public:
     static QString encodeAIVDO(int mmsi, double latitude, double longitude, double speed, double course);
+    static QString encodeAIVDM(int mmsi, double latitude, double longitude, double speed, double course);
 
 private:
     static QString calculateNMEAChecksum(const QString &sentence);

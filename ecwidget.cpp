@@ -41,6 +41,8 @@ QThread* threadAISMAP = nullptr;
 QTcpSocket* socketAISMAP = nullptr;
 std::atomic<bool> stopThreadMAP;
 
+std::atomic<bool> stopFlag;
+
 // define for type of AIS overlay cell
 #define AISCELL_IN_RAM
 
@@ -1801,6 +1803,31 @@ void EcWidget::ReadAISLogfile( const QString &aisLogFile )
 
   _aisObj->setAISCell( aisCellId );
   _aisObj->readAISLogfile( aisLogFile );
+}
+
+void EcWidget::ReadAISLogfileWDelay( const QString &aisLogFile)
+{
+    if( deleteAISCell() == false )
+    {
+        QMessageBox::warning( this, tr( "ReadAISLogfile" ), tr( "Could not remove old AIS overlay cell. Please restart the program." ) );
+        return;
+    }
+
+    if( createAISCell() == false )
+    {
+        QMessageBox::warning( this, tr( "ReadAISLogfile" ), tr( "Could not create AIS overlay cell. Please restart the program." ) );
+        return;
+    }
+
+    //qDebug() << showAIS;
+
+    //deleteAISCell();
+    //createAISCell();
+
+    stopFlag = false;
+
+    _aisObj->setAISCell( aisCellId );
+    _aisObj->readAISLogfileWDelay(aisLogFile, 300, &stopFlag);
 }
 
 // Read an AIS from MOOSDB -- NAV INFO
@@ -6048,7 +6075,7 @@ void EcWidget::updateAISTargetsList()
     target3.lastUpdate = QDateTime::currentDateTime();
     currentAISTargets.append(target3);
 
-    qDebug() << "Updated AIS targets list with" << currentAISTargets.size() << "targets";
+    //qDebug() << "Updated AIS targets list with" << currentAISTargets.size() << "targets";
     aisTargetsMutex.unlock();
 }
 

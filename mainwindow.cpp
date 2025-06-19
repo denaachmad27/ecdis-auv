@@ -3,6 +3,7 @@
 
 #include <QPluginLoader>
 #include <QDir>
+#include <QMessageBox>
 
 #include "mainwindow.h"
 #include "pickwindow.h"
@@ -16,8 +17,8 @@
 #include "alertpanel.h"
 #include "alertsystem.h"
 #include "cpatcpasettingsdialog.h"
-#include <QMessageBox>
 #include "cpatcpasettings.h"
+#include "moosdb.h";
 
 QTextEdit *informationText;
 
@@ -274,18 +275,37 @@ void MainWindow::stopAisRecord(){
 
 void MainWindow::nmeaDecode(){
     //QString nmea = "!AIVDM,1,1,,B,17ldJpP0007aA>ctPKjrS@:f05A@,0*07";
-    QString nmea = "!AIVDM,1,1,,A,17ldGv0P007aCeUtPW4KIwvd0@=S,0*62";
+    //QString nmea = "!AIVDM,1,1,,A,17ldGv0P007aCeUtPW4KIwvd0@=S,0*62";
 
-    qDebug() << "NMEA: " << nmea;
-    qDebug() << "MMSI: " << AisDecoder::decodeAisOption(nmea, "mmsi", "!AIVDM");
-    qDebug() << "Latitude: " << AisDecoder::decodeAisOption(nmea, "latitude", "!AIVDM");
-    qDebug() << "Longitude: " << AisDecoder::decodeAisOption(nmea, "longitude", "!AIVDM");
-    qDebug() << "SOG: " << AisDecoder::decodeAisOption(nmea, "sog", "!AIVDM");
-    qDebug() << "COG: " << AisDecoder::decodeAisOption(nmea, "cog", "!AIVDM");
-    qDebug() << "Nav Status: " << AisDecoder::decodeAisOption(nmea, "navStatus", "!AIVDM");
-    qDebug() << "Message Type: " << AisDecoder::decodeAisOption(nmea, "messageType", "!AIVDM");
-    qDebug() << "Pos Accuracy: " << AisDecoder::decodeAisOption(nmea, "posAccuracy", "!AIVDM");
-    qDebug() << "Heading: " << AisDecoder::decodeAisOption(nmea, "heading", "!AIVDM");
+    // qDebug() << "NMEA: " << nmea;
+    // qDebug() << "MMSI: " << AisDecoder::decodeAisOption(nmea, "mmsi", "!AIVDM");
+    // qDebug() << "Latitude: " << AisDecoder::decodeAisOption(nmea, "latitude", "!AIVDM");
+    // qDebug() << "Longitude: " << AisDecoder::decodeAisOption(nmea, "longitude", "!AIVDM");
+    // qDebug() << "SOG: " << AisDecoder::decodeAisOption(nmea, "sog", "!AIVDM");
+    // qDebug() << "COG: " << AisDecoder::decodeAisOption(nmea, "cog", "!AIVDM");
+    // qDebug() << "Nav Status: " << AisDecoder::decodeAisOption(nmea, "navStatus", "!AIVDM");
+    // qDebug() << "Message Type: " << AisDecoder::decodeAisOption(nmea, "messageType", "!AIVDM");
+    // qDebug() << "Pos Accuracy: " << AisDecoder::decodeAisOption(nmea, "posAccuracy", "!AIVDM");
+    // qDebug() << "Heading: " << AisDecoder::decodeAisOption(nmea, "heading", "!AIVDM");
+
+    double lat = -7.19806403;
+    double lon = 112.79611588;
+    double sog = 3;
+    double cog = 90;
+
+    double latx = -7.19559455;
+    double lonx = 112.85671234;
+    double sogx = 3;
+    double cogx = 255;
+
+    for (int i = 0; i < 100; i ++){
+        qDebug() << AIVDOEncoder::encodeAIVDO(0, lat, lon, sog, cog);
+        qDebug() << AIVDOEncoder::encodeAIVDM(366996240, latx, lonx, sogx, cogx);
+
+        lon = lon + 0.0006471633;
+        latx = latx + 0.0000272494;
+        lonx = lonx - 0.0003828049;
+    }
 }
 
 void MainWindow::onNmeaReceived(const QString& line) {
@@ -820,17 +840,17 @@ MainWindow::MainWindow(QWidget *parent)
 
     // qDebug() << userpermit;
 
-  setupGuardZonePanel();
-  setupAlertPanel();
-  setupTestingMenu();
+  //setupGuardZonePanel();
+  //setupAlertPanel();
+  //setupTestingMenu();
 
   // Initialize CPA/TCPA system
   m_cpaCalculator = new CPATCPACalculator(this);
   m_cpaUpdateTimer = new QTimer(this);
   connect(m_cpaUpdateTimer, SIGNAL(timeout()), this, SLOT(updateCPATCPAForAllTargets()));
+
   // Setup CPA/TCPA Panel
   setupCPATCPAPanel();
-
   ecchart->setCPAPanelToAIS(m_cpatcpaPanel);
 
   // Connect to settings changes
@@ -1342,7 +1362,8 @@ void MainWindow::runAis()
         return;
     }
 
-    ecchart->ReadAISLogfile( strLogFile );
+    //ecchart->ReadAISLogfile( strLogFile );
+    ecchart->ReadAISLogfileWDelay(strLogFile);
 }
 
 void MainWindow::slotLoadAisVariable()

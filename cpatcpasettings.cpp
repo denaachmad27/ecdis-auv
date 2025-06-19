@@ -2,13 +2,13 @@
 #include <QDebug>
 
 // Default values
-const double CPATCPASettings::DEFAULT_CPA_THRESHOLD = 0.5;
-const double CPATCPASettings::DEFAULT_TCPA_THRESHOLD = 6.0;
+const double CPATCPASettings::DEFAULT_CPA_THRESHOLD = 0.2;
+const double CPATCPASettings::DEFAULT_TCPA_THRESHOLD = 1.0;
 const bool CPATCPASettings::DEFAULT_CPA_ALARM_ENABLED = true;
 const bool CPATCPASettings::DEFAULT_TCPA_ALARM_ENABLED = true;
 const bool CPATCPASettings::DEFAULT_VISUAL_ALARM_ENABLED = true;
 const bool CPATCPASettings::DEFAULT_AUDIO_ALARM_ENABLED = false;
-const int CPATCPASettings::DEFAULT_UPDATE_INTERVAL = 5;
+const int CPATCPASettings::DEFAULT_UPDATE_INTERVAL = 500;
 
 CPATCPASettings::CPATCPASettings(QObject *parent)
     : QObject(parent)
