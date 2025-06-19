@@ -88,6 +88,11 @@ public:
 
     static Ais* instance();                       // untuk ambil pointer dari class lain
 
+    EcAISTransponder    *_transponder;
+
+    QMap<unsigned int, EcAISTargetInfo>& getTargetInfoMap() { return _aisTargetInfoMap; }
+    EcAISTargetInfo* getTargetInfo(unsigned int mmsi);
+
 signals:
     void signalRefreshChartDisplay( double, double );
 
@@ -116,12 +121,11 @@ private:
     Bool        _bReadFromServer;
     Bool        _bInternalGPS;
 
-    EcAISTransponder    *_transponder;
-
     // CPA TCPA
     CPATCPAPanel* _cpaPanel = nullptr;
     QMap<unsigned int, AISTargetData> _aisTargetMap;
     AISTargetData _aisOwnShip;
+    QMap<unsigned int, EcAISTargetInfo> _aisTargetInfoMap;
 };
 
 #endif

@@ -203,6 +203,7 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
           data.cpaCalculatedAt = QDateTime::currentDateTime();
 
           Ais::instance()->_aisTargetMap[ti->mmsi] = data;
+          Ais::instance()->_aisTargetInfoMap[ti->mmsi] = *ti;
       }
 
       // qDebug() << ti->ownShip << " ~ " << ti->shipName;
@@ -739,3 +740,12 @@ void Ais::setOwnShipNull()
     _myAis->setOwnShipPos(0,0);
 }
 //////////////// AIS MOOSDB ??
+
+
+EcAISTargetInfo* Ais::getTargetInfo(unsigned int mmsi)
+{
+    if (_aisTargetInfoMap.contains(mmsi)) {
+        return &_aisTargetInfoMap[mmsi];
+    }
+    return nullptr;
+}

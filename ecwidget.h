@@ -26,6 +26,12 @@
 #include "moosdb.h"
 #include "guardzone.h"
 
+//popup
+#include <QLabel>
+#include <QFrame>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+
 class CPATCPAPanel;
 
 struct AISTargetData {
@@ -486,6 +492,9 @@ private slots:
   void onAlertSystemStatusChanged(bool enabled);
   void performPeriodicAlertChecks();
 
+  //popup
+  void checkMouseOverAISTarget();
+
 protected:
   // Drawing functions
   void clearBackground();
@@ -599,6 +608,9 @@ protected:
 
   bool initialized;
   Ais  *_aisObj;
+
+  //popup
+  void leaveEvent(QEvent *event) override;
 
 private:
   bool asciiToByte(const char *keyAscii, unsigned char keyByte[]);
@@ -719,6 +731,58 @@ private:
   void updateRedDotPosition(double lat, double lon);  // Keep existing
   void drawShipGuardianCircle();      // NEW: Draw guardian circle area
   // ============================================
+
+  //popup
+  // AIS Tooltip variables
+  QFrame* aisTooltip;
+  QLabel* tooltipObjectName;
+  QLabel* tooltipShipBreadth;
+  QLabel* tooltipShipLength;
+  QLabel* tooltipCOG;
+  QLabel* tooltipSOG;
+  QLabel* tooltipShipDraft;
+  QLabel* tooltipTypeOfShip;
+  QLabel* tooltipNavStatus;
+  QLabel* tooltipMMSI;
+  QLabel* tooltipCallSign;
+  QLabel* tooltipPositionSensor;
+  QLabel* tooltipTrackStatus;
+  QLabel* tooltipListOfPorts;
+  QLabel* tooltipAntennaLocation;
+
+  // Helper functions for tooltip
+  void createAISTooltip();
+  void showAISTooltip(const QPoint& position, const AISTargetData& targetData);
+  void hideAISTooltip();
+
+  QTimer* aisTooltipTimer;
+  QPoint lastMousePos;
+  bool isAISTooltipVisible;
+
+  // Helper functions
+  AISTargetData* findAISTargetAtPosition(const QPoint& mousePos);
+  AISTargetData getEnhancedAISTargetData(const QString& mmsi);
+
+  QString getShipTypeString(int shipType);
+  QString getNavStatusString(int navStatus);
+
+  EcAISTargetInfo* findAISTargetInfoAtPosition(const QPoint& mousePos);
+  void showAISTooltipFromTargetInfo(const QPoint& position, EcAISTargetInfo* targetInfo);
+  void updateAISTooltipContent(EcAISTargetInfo* targetInfo);
+
+  void getAISDataFromFeature(EcFeature feature, QString& objectName, QString& shipBreadth,
+                             QString& shipLength, QString& cog, QString& sog, QString& shipDraft,
+                             QString& typeOfShip, QString& navStatus, QString& mmsi,
+                             QString& callSign, QString& trackStatus, QString& listOfPorts,
+                             QString& antennaLocation);
+  void updateAISTooltipFromFeature(EcFeature feature);
+  void showAISTooltipFromFeature(const QPoint& position, EcFeature feature);
+  unsigned int currentHoveredMMSI;
+  EcFeature findAISFeatureAtPosition(const QPoint& mousePos);
+  void updateAISTooltipFromMMSI(unsigned int mmsi);
+  void showAISTooltipFromMMSI(const QPoint& position, unsigned int mmsi);
+
+
 }; // EcWidget
 
 #endif // _ec_widget_h_
