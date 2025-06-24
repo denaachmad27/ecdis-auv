@@ -2931,7 +2931,7 @@ bool EcWidget::deleteAISCell()
 /////////////////////////////////////////////
 void EcWidget::slotRefreshChartDisplay( double lat, double lon )
 {
-  qDebug() << "slotRefreshChartDisplay called with lat:" << lat << "lon:" << lon;
+  //qDebug() << "slotRefreshChartDisplay called with lat:" << lat << "lon:" << lon;
 
   if(showAIS)
   {
