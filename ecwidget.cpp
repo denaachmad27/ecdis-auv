@@ -2822,7 +2822,43 @@ void EcWidget::drawAISCell()
 
 #endif
   // Draw red dot tracker overlay
-      drawRedDotTracker();
+  drawRedDotTracker();
+
+
+  // icon ownship
+  AISTargetData ownShipData = Ais::instance()->getOwnShipVar();
+
+      if (ownShipData.lat != 0.0 && ownShipData.lon != 0.0) {
+          int x, y;
+          if (LatLonToXy(ownShipData.lat, ownShipData.lon, x, y)) {
+
+              QPainter painter(&drawPixmap);
+              painter.setRenderHint(QPainter::Antialiasing, true);
+
+              // Gunakan fungsi drawing ownship yang sudah kita buat
+              double heading = ownShipData.cog; // Course Over Ground sebagai heading
+              drawOwnShipIcon(painter, x, y, heading);
+
+              painter.end();
+          }
+      }
+
+      // ALTERNATIVE: Jika ingin drawing bersamaan dengan simulasi
+      // Cek apakah sedang dalam mode simulasi
+      if (simulationActive && ownShipInSimulation) {
+          int x, y;
+          if (LatLonToXy(ownShip.lat, ownShip.lon, x, y)) {
+
+              QPainter painter(&drawPixmap);
+              painter.setRenderHint(QPainter::Antialiasing, true);
+
+              double heading = ownShip.heading; // Gunakan heading dari simulasi
+              drawOwnShipIcon(painter, x, y, heading);
+
+              painter.end();
+          }
+      }
+
   update();
 
   emit projection();
@@ -6673,4 +6709,72 @@ void EcWidget::showAISTooltipFromTargetInfo(const QPoint& position, EcAISTargetI
     aisTooltip->move(tooltipPos);
     aisTooltip->show();
     aisTooltip->raise();
+}
+
+// icon ownship
+void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double heading)
+{
+    painter.save();
+
+    // Pindah ke posisi kapal dan rotasi sesuai heading
+    painter.translate(x, y);
+    painter.rotate(heading);
+
+    // Ukuran sesuai referensi
+    int shipLength = 32;
+    int shipWidth = 12;
+
+    // BENTUK KAPAL DENGAN LENGKUNGAN YANG LEBIH HALUS
+    QPainterPath shipPath;
+
+    // Mulai dari hidung kapal
+    shipPath.moveTo(0, -shipLength/2);  // ujung hidung
+
+    // SISI KANAN dengan kurva yang smooth menggunakan quadratic curves
+    QPointF control1(shipWidth/3, -shipLength/2 + 6);  // control point dekat hidung
+    QPointF point1(shipWidth/2, -shipLength/4);        // titik lengkung pertama
+    shipPath.quadTo(control1, point1);
+
+    // Lengkung tengah kanan (bagian terlebar)
+    QPointF point2(shipWidth/2, shipLength/4);         // bagian tengah
+    shipPath.lineTo(point2);
+
+    // Lengkung menuju buritan
+    QPointF control2(shipWidth/2, shipLength/2 - 3);   // control point menuju buritan
+    QPointF point3(shipWidth/3, shipLength/2);         // sudut buritan kanan
+    shipPath.quadTo(control2, point3);
+
+    // BURITAN DATAR
+    shipPath.lineTo(-shipWidth/3, shipLength/2);       // buritan datar
+
+    // SISI KIRI (mirror dari kanan)
+    QPointF control3(-shipWidth/2, shipLength/2 - 3);  // control point menuju buritan kiri
+    QPointF point4(-shipWidth/2, shipLength/4);        // bagian tengah kiri
+    shipPath.quadTo(control3, point4);
+
+    // Lengkung tengah kiri
+    QPointF point5(-shipWidth/2, -shipLength/4);       // titik lengkung kiri
+    shipPath.lineTo(point5);
+
+    // Lengkung kembali ke hidung
+    QPointF control4(-shipWidth/3, -shipLength/2 + 6); // control point dekat hidung kiri
+    QPointF point6(0, -shipLength/2);                  // kembali ke hidung
+    shipPath.quadTo(control4, point6);
+
+    // DRAWING KAPAL
+    painter.setBrush(QBrush(QColor(120, 120, 120)));   // Abu-abu
+    painter.setPen(QPen(Qt::black, 1.5));              // Border hitam
+    painter.drawPath(shipPath);
+
+    // TITIK CENTER
+    painter.setBrush(QBrush(Qt::black));
+    painter.setPen(QPen(Qt::black, 1));
+    painter.drawEllipse(-2, -2, 4, 4);
+
+    // GARIS PENUNJUK ARAH - HITAM PUTUS-PUTUS
+    painter.setPen(QPen(Qt::black, 1.5, Qt::DashLine));
+    int arrowLength = 35;  // Sesuaikan panjang dengan gambar referensi
+    painter.drawLine(0, -shipLength/2, 0, -shipLength/2 - arrowLength);
+
+    painter.restore();
 }
