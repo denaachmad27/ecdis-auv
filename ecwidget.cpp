@@ -121,7 +121,7 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   shipGuardianEnabled = false;
   redDotLat = 0.0;
   redDotLon = 0.0;
-  redDotColor = QColor(255, 0, 0, 180);
+  redDotColor = QColor(255, 0, 0, 50);
   redDotSize = 8.0;
   guardianRadius = 0.5;
   guardianFillColor = QColor(255, 0, 0, 50);
@@ -6251,10 +6251,12 @@ void EcWidget::updateRedDotPosition(double lat, double lon)
 
 void EcWidget::drawRedDotTracker()
 {
+    // Check if tracker is enabled and position is valid
     if (!redDotTrackerEnabled || redDotLat == 0.0 || redDotLon == 0.0) {
         return;
     }
 
+    // Convert geographic coordinates to screen coordinates
     int screenX, screenY;
     if (!LatLonToXy(redDotLat, redDotLon, screenX, screenY)) {
         return;
@@ -6263,25 +6265,51 @@ void EcWidget::drawRedDotTracker()
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
 
+    // TAHAP 2: Perbesar ukuran menggunakan nautical miles seperti guardzone
+    double nauticalMilesRadius = 0.2; // 0.2 NM untuk red dot (lebih besar dari 8 piksel)
+    double pixelRadius = calculatePixelsFromNauticalMiles(nauticalMilesRadius);
+
+    // Pastikan minimum radius untuk visibility
+    if (pixelRadius < 15.0) {
+        pixelRadius = 15.0; // Minimum 15 piksel
+    }
+
+    // TAHAP 3: Warna transparan seperti guardzone
+    QColor fillColor(255, 0, 0, 50);    // Transparan seperti guardianFillColor
+    QColor borderColor(255, 0, 0, 150); // Border seperti guardianBorderColor
+    QColor centerColor(255, 0, 0, 200); // Center dot yang lebih solid
+
+    // Draw guardian circle first if enabled
     if (shipGuardianEnabled) {
-        // Draw guardian circle first
         drawShipGuardianCircle();
     }
 
-    // Always draw center dot for ship position
-    QColor dotColor(255, 0, 0, 200);
-    painter.setBrush(QBrush(dotColor));
-    painter.setPen(QPen(dotColor, 2));
+    // MODIFIKASI UTAMA: Draw filled circle area (seperti guardzone)
+    painter.setBrush(QBrush(fillColor));
+    painter.setPen(Qt::NoPen);
+    painter.drawEllipse(QPoint(screenX, screenY),
+                       (int)pixelRadius,
+                       (int)pixelRadius);
 
-    int dotRadius = (int)redDotSize;
-    painter.drawEllipse(QPoint(screenX, screenY), dotRadius, dotRadius);
+    // Draw border circle (seperti guardzone border)
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(borderColor, 2));
+    painter.drawEllipse(QPoint(screenX, screenY),
+                       (int)pixelRadius,
+                       (int)pixelRadius);
 
-    // Draw white border for center dot
+    // Draw center dot untuk menandai posisi ship yang tepat
+    painter.setBrush(QBrush(centerColor));
+    painter.setPen(QPen(centerColor, 1));
+    painter.drawEllipse(QPoint(screenX, screenY), 4, 4); // Small center dot 4px
+
+    // Draw white border untuk center dot agar terlihat jelas
     painter.setPen(QPen(Qt::white, 1));
     painter.setBrush(Qt::NoBrush);
-    painter.drawEllipse(QPoint(screenX, screenY), dotRadius + 1, dotRadius + 1);
+    painter.drawEllipse(QPoint(screenX, screenY), 5, 5); // White outline
 
-    qDebug() << "Ship position marker drawn at:" << screenX << "," << screenY;
+    qDebug() << "Enhanced Red Dot drawn at:" << screenX << "," << screenY
+             << "with radius:" << pixelRadius << "pixels (" << nauticalMilesRadius << "NM)";
 }
 
 
