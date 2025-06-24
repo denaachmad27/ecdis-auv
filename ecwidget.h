@@ -785,6 +785,7 @@ private:
   // icon vessel
   void drawOwnShipIcon(QPainter& painter, int x, int y, double heading);
   AISTargetData ownShipData;
+  bool showCustomOwnShip = true; // Flag untuk kontrol visibility
 
 
 }; // EcWidget
