@@ -80,6 +80,7 @@ public:
     void setOwnShipNull();
 
     static void AISTargetUpdateCallback( EcAISTargetInfo* );
+    static void AISTargetUpdateCallbackOld( EcAISTargetInfo* );
 
     // CPA TCPA
     void setCPAPanel(CPATCPAPanel* panel) { _cpaPanel = panel; }
