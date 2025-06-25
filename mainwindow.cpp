@@ -288,30 +288,64 @@ void MainWindow::nmeaDecode(){
     // qDebug() << "Pos Accuracy: " << AisDecoder::decodeAisOption(nmea, "posAccuracy", "!AIVDM");
     // qDebug() << "Heading: " << AisDecoder::decodeAisOption(nmea, "heading", "!AIVDM");
 
+    // OWNSHIP
     double lat = -7.19806403;
     double lon = 112.8;
-    double sog = 3;
-    double cog = 90;
+    double sog = 3.087;
+    double cog = 97.74;
 
-    double latx = -7.19806403;
-    double lonx = 112.8;
-    double sogx = 3;
-    double cogx = 270;
+    // SHIP 1
+    double latx = -7.19712733;
+    double lonx = 112.86649704;
+    double sogx = 2.159;
+    double cogx = 198.04;
 
-    // for (int i = 0; i < 100; i ++){
-    //     qDebug() << AIVDOEncoder::encodeAIVDO(0, lat, lon, sog, cog);
-    //     qDebug() << AIVDOEncoder::encodeAIVDM(366996240, latx, lonx, sogx, cogx);
+    // SHIP 2
+    double laty = -7.19644609;
+    double lony = 112.82684326;
+    double sogy = 0.305;
+    double cogy = 90;
 
-    //     lon = lon + 0.0006471633;
-    //     latx = latx + 0.0000272494;
-    //     lonx = lonx - 0.0003828049;
-    // }
+    // SHIP 3
+    double latz = -7.22556802;
+    double lonz = 112.81911850;
+    double sogz = 0.974;
+    double cogz = 71.49;
 
-    QStringList *nmea = new QStringList();
-    nmea->append(AIVDOEncoder::encodeAIVDO(0, lat, lon, sog, cog));
-    nmea->append(AIVDOEncoder::encodeAIVDM(366996240, latx, lonx, sogx, cogx));
+    // SHIP 4
+    double lata = -7.20198111;
+    double lona = 112.80529976;
+    double soga = 2.509;
+    double coga = 107.45;
 
-    ecchart->ReadAISVariable(*nmea);
+    for (int i = 0; i < 100; i ++){
+        qDebug() << AIVDOEncoder::encodeAIVDO(0, lat, lon, sog, cog);
+        //qDebug() << AIVDOEncoder::encodeAIVDM(366882412, latx, lonx, sogx, cogx);
+        qDebug() << AIVDOEncoder::encodeAIVDM(366996240, laty, lony, sogy, cogy);
+        qDebug() << AIVDOEncoder::encodeAIVDM(367159080, latz, lonz, sogz, cogz);
+        //qDebug() << AIVDOEncoder::encodeAIVDM(366973590, lata, lona, soga, coga);
+
+        lat = lat - 0.0000774897;
+        lon = lon + 0.0006701202;
+
+        latx = latx - 0.0001124025;
+        lonx = lonx - 0.0003450394;
+
+        laty = laty - 0;
+        lony = lony - 0.0000274658;
+
+        latz = latz + 0.0000544958;
+        lonz = lonz + 0.00016222;
+
+        lata = lata - 0.00012858;
+        lona = lona + 0.0004085541;
+    }
+
+    // QStringList *nmea = new QStringList();
+    // nmea->append(AIVDOEncoder::encodeAIVDO(0, lat, lon, sog, cog));
+    // nmea->append(AIVDOEncoder::encodeAIVDM(366996240, latx, lonx, sogx, cogx));
+
+    // ecchart->ReadAISVariable(*nmea);
 }
 
 void MainWindow::onNmeaReceived(const QString& line) {

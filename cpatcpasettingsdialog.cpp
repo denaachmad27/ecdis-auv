@@ -53,7 +53,7 @@ void CPATCPASettingsDialog::setupUI()
 
     updateIntervalSpinBox = new QSpinBox();
     updateIntervalSpinBox->setSuffix(" seconds");
-    updateIntervalSpinBox->setRange(1, 30);
+    updateIntervalSpinBox->setRange(1, 60);
     updateIntervalSpinBox->setSingleStep(1);
     updateLayout->addRow("Update Interval:", updateIntervalSpinBox);
 

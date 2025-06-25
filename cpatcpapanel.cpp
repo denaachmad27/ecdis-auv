@@ -20,10 +20,9 @@ CPATCPAPanel::CPATCPAPanel(QWidget *parent)
     refreshTimer->setParent(this);
     connect(refreshTimer, SIGNAL(timeout()), this, SLOT(onTimerTimeout()));  // Ganti nama
 
-    // Update setiap 2 detik
+    // Update setiap interval detik
     CPATCPASettings& settings = CPATCPASettings::instance();
-    //refreshTimer->start(settings.getAlarmUpdateInterval());
-    refreshTimer->start(2000);
+    refreshTimer->start(settings.getAlarmUpdateInterval() * 1000);
 
     // Add tooltips
     refreshButton->setToolTip("Refresh AIS targets data (F5)");
