@@ -18,6 +18,16 @@
 #include "cpatcpasettings.h"
 #include "cpatcpacalculator.h"
 
+// SevenCs Kernel EC2007
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <stdio.h>
+#include <X11/Xlib.h>
+#endif
+
+#include <eckernel.h>
+
 class CPATCPAPanel : public QWidget
 {
     Q_OBJECT

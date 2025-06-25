@@ -896,7 +896,7 @@ void EcWidget::Draw()
     // karena akan dipanggil secara otomatis di paintEvent
 
     // ========== REFRESH GUARDZONE HANDLE POSITIONS ==========
-        if (guardZoneManager && guardZoneManager->isEditingGuardZone()) {
+    if (guardZoneManager && guardZoneManager->isEditingGuardZone()) {
         guardZoneManager->refreshHandlePositions();
     }
     // ======================================================
@@ -1839,9 +1839,15 @@ void EcWidget::InitAIS( EcDictInfo *dict)
 #else
   QString strAisLib = "libdpimaist.so";
 #endif
+  // JARAK (NM) AIS WARNA MERAH
   double dWarnDist = 0.5;
+
+  // CPATCPASettings& settings = CPATCPASettings::instance();
+  // double dWarnDist = settings.getCPAThreshold();
+
   double dWarnCPA = 0.2;
-  int iWarnTCPA = 10;
+  int iWarnTCPA = 1;
+
   int iTimeOut = 1;
   Bool bInternalGPS = False;
   Bool bAISSymbolize;
@@ -2899,7 +2905,7 @@ bool EcWidget::deleteAISCell()
 /////////////////////////////////////////////
 void EcWidget::slotRefreshChartDisplay( double lat, double lon )
 {
-  qDebug() << "slotRefreshChartDisplay called with lat:" << lat << "lon:" << lon;
+  //qDebug() << "slotRefreshChartDisplay called with lat:" << lat << "lon:" << lon;
 
   if(showAIS)
   {
@@ -6373,6 +6379,46 @@ void EcWidget::drawShipGuardianCircle()
     qDebug() << "Guardian circle drawn at" << centerX << "," << centerY
              << "with radius" << radiusInPixels << "pixels";
 }
+
+void EcWidget::drawShipGuardianSquare(double aisLat, double aisLon)
+{
+    if (!shipGuardianEnabled || aisLat == 0.0 || aisLon == 0.0) {
+        return;
+    }
+
+    int centerX, centerY;
+    if (!LatLonToXy(aisLat, aisLon, centerX, centerY)) {
+        return;
+    }
+
+    // Convert nautical miles to pixels
+    double radiusInPixels = calculatePixelsFromNauticalMiles(guardianRadius);
+
+    // Hitung sisi persegi berdasarkan "radius"
+    int sideLength = (int)(radiusInPixels * 2);
+    int topLeftX = centerX - (sideLength / 2);
+    int topLeftY = centerY - (sideLength / 2);
+
+    QRect squareRect(topLeftX, topLeftY, sideLength, sideLength);
+
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+
+    // Draw filled square (guardian area)
+    painter.setBrush(QBrush(guardianFillColor));
+    painter.setPen(Qt::NoPen);
+    painter.drawRect(squareRect);
+
+    // Draw border square
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(guardianBorderColor, 2));
+    painter.drawRect(squareRect);
+
+    qDebug() << "Guardian square drawn at center"
+             << centerX << "," << centerY
+             << "with side length" << sideLength << "pixels";
+}
+
 
 // Implementasi fungsi createAISTooltip
 void EcWidget::createAISTooltip()

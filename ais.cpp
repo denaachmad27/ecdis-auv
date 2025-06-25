@@ -132,7 +132,7 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
 {
   EcCoordinate ownShipLat = 0, ownShipLon = 0;
 
-    double ownShipSog = 0, ownShipCog = 0;
+    double ownShipSog = _dSpeed, ownShipCog = _dCourse;
 
   double dist = 0, bear = 0;
   double lat = ( (double) ti->latitude  / 10000.0 ) / 60.0;
@@ -141,12 +141,27 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
   _myAis->getOwnShipPos(ownShipLat, ownShipLon);
   EcCalculateRhumblineDistanceAndBearing( EC_GEO_DATUM_WGS84, lat, lon, ownShipLat, ownShipLon, &dist, &bear);
 
+  // QSet<unsigned int> mmsiSet = {
+  //     236391000, 366811570, 368834350,
+  //     366934050, 366995280, 366996920,
+  //     367048970, 367155310, 367159080,
+  //     367163760, 367193790, 368299000,
+  //     636013091
+  // };
+
+  // QSet<unsigned int> mmsiSet = {
+  //     367155310
+  // };
+
+  //  (mmsiSet.contains(ti->mmsi)) &&
+
+
   // Process only targets which are further away than 48 nm or no own ship position exists yet
   if( dist < 48 || (ownShipLat == 0 && ownShipLon == 0))
   {
     // Filter the ais targets which shall be displayed
     // Some transponders do not send the official numbers in case of invalid positions
-    if( ti->ownShip == False && 
+    if( ti->ownShip == False &&
         abs(ti->latitude) < 90 * 60 * 10000 && 
         abs(ti->longitude) < 180 * 60 * 10000 && 
         ti->navStatus != eNavS_baseStation)
@@ -178,7 +193,7 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
         EcAISSetTargetActivationStatus( feat, _dictInfo, aisActivated, NULL );
 
       // Set the tracking status of the ais target feature
-      EcAISSetTargetTrackingStatus( feat, _dictInfo, aisTrkStatus, NULL );
+      // EcAISSetTargetTrackingStatus( feat, _dictInfo, aisTrkStatusManual, NULL );
 
       // Set the remaining attributes of the ais target feature
       EcAISSetTargetObjectData( feat, _dictInfo, ti, &_bSymbolize );
@@ -192,7 +207,7 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
           data.lat = lat;
           data.lon = lon;
           data.cog = ti->cog / 10.0;
-          data.sog = ti->sog / 10.0;
+          data.sog = ti->sog;
           //data.cpa = ti->cpa;
           //data.tcpa = ti->tcpa;
           //data.isDangerous = (ti->status == eAIS_dangerous);
@@ -202,11 +217,16 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
           //data.cpaCalculationValid = (ti->cpa >= 0 && ti->tcpa >= 0);
           data.cpaCalculatedAt = QDateTime::currentDateTime();
 
+          data.feat = feat;
+          data._dictInfo = _dictInfo;
+
           Ais::instance()->_aisTargetMap[ti->mmsi] = data;
           Ais::instance()->_aisTargetInfoMap[ti->mmsi] = *ti;
       }
 
-      // qDebug() << ti->ownShip << " ~ " << ti->shipName;
+      // if (aisTrkStatusManual == aisDangerous){
+      //     _wParent->drawShipGuardianSquare(lat, lon);
+      // }
     }
     else
     {
@@ -228,8 +248,8 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
           ownShipLat = _oLat;
           ownShipLon = _oLon;
 
-          ownShipCog = ti->cog;
-          ownShipSog = ti->sog;
+          _dSpeed = ti->sog;
+          _dCourse = ti->cog / 10;
 
           _myAis->setOwnShipPos(ownShipLat, ownShipLon);
 
@@ -238,7 +258,7 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
           dataOS.lat = lat;
           dataOS.lon = lon;
           dataOS.cog = ti->cog / 10.0;
-          dataOS.sog = ti->sog / 10.0;
+          dataOS.sog = ti->sog;
           dataOS.cpaCalculatedAt = QDateTime::currentDateTime();
 
           Ais::instance()->_aisOwnShip = dataOS;
@@ -511,6 +531,11 @@ void Ais::readAISVariable( const QStringList &dataLines )
         return;
     }
 
+    // NULL DECLARATION
+    EcDENC *denc = nullptr;
+    EcDictInfo *dictInfo = nullptr;
+    QWidget *parentWidget = nullptr;
+
     // Read AIS logfile line by line and add each line to the AIS transponder object by calling EcAISAddTransponderOutput.
     // EcAISAddTransponderOutput calls the callback AISTargetUpdateCallback for each line read from the logfile.
     int iLineNo = 1;
@@ -529,6 +554,14 @@ void Ais::readAISVariable( const QStringList &dataLines )
 
         QString line = sLine + "\r\n";
         nmeaText->append(sLine);
+        extractNMEA(sLine);
+
+        // OWNSHIP PANEL
+        PickWindow *pickWindow = new PickWindow(parentWidget, dictInfo, denc);
+        if (navShip.lat != 0){
+            ownShipText->setHtml(pickWindow->ownShipAutoFill());
+            _cpaPanel->updateOwnShipInfo(navShip.lat, navShip.lon, navShip.speed_og, navShip.heading_og);
+        }
 
         if( EcAISAddTransponderOutput( _transponder, (unsigned char*)line.toStdString().c_str(), line.count() ) == False )
         {

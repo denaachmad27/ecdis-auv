@@ -303,7 +303,6 @@ void CPATCPAPanel::updateTargetsDisplay()
     };
 
     QList<TargetWithResult> sortedList;
-
     for (const auto &target : targets) {
         //if (target.mmsi != "367159080" && target.mmsi != "366973590" && target.mmsi != "366996240") continue;
 
@@ -313,11 +312,6 @@ void CPATCPAPanel::updateTargetsDisplay()
         ownShip.sog = Ais::instance()->getOwnShipVar().sog;
         ownShip.cog = Ais::instance()->getOwnShipVar().cog;
 
-        // ownShip.lat = 29.4037;
-        // ownShip.lon = -94.7477;
-        // ownShip.sog = 40;
-        // ownShip.cog = 10;
-
         VesselState targetVessel;
         targetVessel.lat = target.lat;
         targetVessel.lon = target.lon;
@@ -326,18 +320,21 @@ void CPATCPAPanel::updateTargetsDisplay()
 
         // Hitung CPA/TCPA
         CPATCPACalculator calculator;
-
-        //qDebug() << "OWNSHIP LAT/LON == SOG/COG: " << ownShip.lat << "/" << ownShip.lon << "==" << ownShip.sog << "/" << ownShip.cog;
-
         CPATCPAResult result = calculator.calculateCPATCPA(ownShip, targetVessel);
 
         bool isDangerous = false;
         CPATCPASettings& settings = CPATCPASettings::instance();
-        if (result.isValid &&
+        EcAISTrackingStatus aisTrkStatusManual;
+
+        if (result.isValid && result.currentRange < 0.5 &&
             ((settings.isCPAAlarmEnabled() && result.cpa < settings.getCPAThreshold()) ||
              (settings.isTCPAAlarmEnabled() && result.tcpa > 0 && result.tcpa < settings.getTCPAThreshold()))) {
             isDangerous = true;
             dangerousCount++;
+            aisTrkStatusManual = aisIntruder;
+        }
+        else {
+            aisTrkStatusManual = aisInformationAvailable;
         }
 
         if (result.isValid) {
@@ -347,6 +344,11 @@ void CPATCPAPanel::updateTargetsDisplay()
         }
 
         sortedList.append({target, result, isDangerous});
+
+        // Set the tracking status of the ais target feature
+        EcAISSetTargetTrackingStatus(target.feat, target._dictInfo, aisTrkStatusManual, NULL );
+
+        ecWidget->drawShipGuardianSquare(target.lat, target.lon);
     }
 
     // Urutkan: yang dangerous di atas
@@ -394,7 +396,7 @@ void CPATCPAPanel::updateTargetRow(int row, const AISTargetData& target, const C
     //     if (settings.isTCPAAlarmEnabled() && result.tcpa > 0 && result.tcpa < settings.getTCPAThreshold()) isDangerous = true;
     // }
 
-    if (result.isValid) {
+    if (result.isValid && result.currentRange < 0.5) {
         if (settings.isCPAAlarmEnabled() && result.cpa < settings.getCPAThreshold()) isDangerous = true;
         if (settings.isTCPAAlarmEnabled() && result.tcpa > 0 && result.tcpa < settings.getTCPAThreshold()) isDangerous = true;
     }

@@ -289,23 +289,29 @@ void MainWindow::nmeaDecode(){
     // qDebug() << "Heading: " << AisDecoder::decodeAisOption(nmea, "heading", "!AIVDM");
 
     double lat = -7.19806403;
-    double lon = 112.79611588;
+    double lon = 112.8;
     double sog = 3;
     double cog = 90;
 
-    double latx = -7.19559455;
-    double lonx = 112.85671234;
+    double latx = -7.19806403;
+    double lonx = 112.8;
     double sogx = 3;
-    double cogx = 255;
+    double cogx = 270;
 
-    for (int i = 0; i < 100; i ++){
-        qDebug() << AIVDOEncoder::encodeAIVDO(0, lat, lon, sog, cog);
-        qDebug() << AIVDOEncoder::encodeAIVDM(366996240, latx, lonx, sogx, cogx);
+    // for (int i = 0; i < 100; i ++){
+    //     qDebug() << AIVDOEncoder::encodeAIVDO(0, lat, lon, sog, cog);
+    //     qDebug() << AIVDOEncoder::encodeAIVDM(366996240, latx, lonx, sogx, cogx);
 
-        lon = lon + 0.0006471633;
-        latx = latx + 0.0000272494;
-        lonx = lonx - 0.0003828049;
-    }
+    //     lon = lon + 0.0006471633;
+    //     latx = latx + 0.0000272494;
+    //     lonx = lonx - 0.0003828049;
+    // }
+
+    QStringList *nmea = new QStringList();
+    nmea->append(AIVDOEncoder::encodeAIVDO(0, lat, lon, sog, cog));
+    nmea->append(AIVDOEncoder::encodeAIVDM(366996240, latx, lonx, sogx, cogx));
+
+    ecchart->ReadAISVariable(*nmea);
 }
 
 void MainWindow::onNmeaReceived(const QString& line) {
@@ -1370,8 +1376,8 @@ void MainWindow::runAis()
         return;
     }
 
-    //ecchart->ReadAISLogfile( strLogFile );
-    ecchart->ReadAISLogfileWDelay(strLogFile);
+    ecchart->ReadAISLogfile( strLogFile );
+    //ecchart->ReadAISLogfileWDelay(strLogFile);
 }
 
 void MainWindow::slotLoadAisVariable()

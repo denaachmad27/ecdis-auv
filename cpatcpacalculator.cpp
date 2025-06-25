@@ -1,4 +1,5 @@
 #include "cpatcpacalculator.h"
+#include "ais.h"
 
 // Constants
 const double CPATCPACalculator::EARTH_RADIUS_NM = 3440.065; // Nautical miles
@@ -43,6 +44,7 @@ CPATCPAResult CPATCPACalculator::calculateCPATCPA(const VesselState& ownShip, co
 
     return result;
 }
+
 
 double CPATCPACalculator::calculateCPA(const VesselState& ownShip, const VesselState& target, double& tcpa)
 {

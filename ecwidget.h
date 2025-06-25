@@ -49,6 +49,9 @@ struct AISTargetData {
     double relativeBearing; // Relative bearing
     bool cpaCalculationValid; // Whether CPA calculation is valid
     QDateTime cpaCalculatedAt; // When CPA was last calculated
+
+    EcFeature feat;
+    EcDictInfo *_dictInfo;
 };
 
 class AlertSystem;
@@ -450,6 +453,9 @@ public:
 
   // CPA TCPA
   void setCPAPanelToAIS(CPATCPAPanel* panel);
+
+  // GUARDIAN AIS
+  void drawShipGuardianSquare(double aisLat, double aisLon);      // NEW: Draw warning square area
 
 public slots:
   void updateAISTargetsList();
