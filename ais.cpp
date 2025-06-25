@@ -46,6 +46,14 @@ Ais::Ais( EcWidget *parent, EcView *view, EcDictInfo *dict,
   //connect( _tcpSocket, SIGNAL( hostFound() ), this, SLOT( slotHostFound() ) );      // TEST
   //connect( _tcpSocket, SIGNAL( connected() ), this, SLOT( slotConnected() ) );      // TEST
 
+  // icon ship
+  ownShipLat = 0.0;
+  ownShipLon = 0.0;
+  ownShipCog = 0.0;
+  ownShipSog = 0.0;
+
+  deleteOldOwnShipFeature();
+
 }
 
 Ais::~Ais()
@@ -130,9 +138,9 @@ void Ais::closeSocketConnection()
 /////////////////////////////////////
 void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
 {
-  EcCoordinate ownShipLat = 0, ownShipLon = 0;
+  // Pisahkan handling berdasarkan jenis target
 
-    double ownShipSog = _dSpeed, ownShipCog = _dCourse;
+  double ownShipSog = _dSpeed, ownShipCog = _dCourse;
 
   double dist = 0, bear = 0;
   double lat = ( (double) ti->latitude  / 10000.0 ) / 60.0;
@@ -162,16 +170,16 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
     // Filter the ais targets which shall be displayed
     // Some transponders do not send the official numbers in case of invalid positions
     if( ti->ownShip == False &&
-        abs(ti->latitude) < 90 * 60 * 10000 && 
-        abs(ti->longitude) < 180 * 60 * 10000 && 
-        ti->navStatus != eNavS_baseStation)
+    abs(ti->latitude) < 90 * 60 * 10000 && 
+    abs(ti->longitude) < 180 * 60 * 10000 && 
+    ti->navStatus != eNavS_baseStation)
     {
 
       //EcAISTrackingStatus aisTrkStatus = EcAISCalcTargetTrackingStatus( ti, ownShipLat, ownShipLon, _dSpeed, _dCourse, _dWarnDist, _dWarnCPA, _iWarnTCPA, _iTimeOut );
 
-        // COG dan SOG diubah ke data real
-        EcAISTrackingStatus aisTrkStatus = EcAISCalcTargetTrackingStatus( ti, ownShipLat, ownShipLon, ownShipSog, ownShipCog, _dWarnDist, _dWarnCPA, _iWarnTCPA, _iTimeOut );
-        EcFeature feat = EcAISFindTargetObject( _cid, _dictInfo, ti );
+      // COG dan SOG diubah ke data real
+      EcAISTrackingStatus aisTrkStatus = EcAISCalcTargetTrackingStatus( ti, ownShipLat, ownShipLon, ownShipSog, ownShipCog, _dWarnDist, _dWarnCPA, _iWarnTCPA, _iTimeOut );
+      EcFeature feat = EcAISFindTargetObject( _cid, _dictInfo, ti );
 
       // if there is no feature yet create one
       if( !ECOK( feat ) && aisTrkStatus != aisLost )
@@ -189,8 +197,7 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
       }
 
       // Set the status of the ais target to active if it is located within a certain distance
-      if( dist < 4 )
-        EcAISSetTargetActivationStatus( feat, _dictInfo, aisActivated, NULL );
+      if( dist < 4 ){EcAISSetTargetActivationStatus( feat, _dictInfo, aisActivated, NULL );}
 
       // Set the tracking status of the ais target feature
       // EcAISSetTargetTrackingStatus( feat, _dictInfo, aisTrkStatusManual, NULL );
@@ -198,87 +205,81 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
       // Set the remaining attributes of the ais target feature
       EcAISSetTargetObjectData( feat, _dictInfo, ti, &_bSymbolize );
 
-
       // SIMPEN DATA AIS
       if (ti && ti->mmsi != 0)
       {
-          AISTargetData data;
-          data.mmsi = QString::number(ti->mmsi);
-          data.lat = lat;
-          data.lon = lon;
-          data.cog = ti->cog / 10.0;
-          data.sog = ti->sog;
-          //data.cpa = ti->cpa;
-          //data.tcpa = ti->tcpa;
-          //data.isDangerous = (ti->status == eAIS_dangerous);
-          data.lastUpdate = QDateTime::currentDateTime();
-          data.currentRange = dist;
-          data.relativeBearing = bear;
-          //data.cpaCalculationValid = (ti->cpa >= 0 && ti->tcpa >= 0);
-          data.cpaCalculatedAt = QDateTime::currentDateTime();
+        AISTargetData data;
+        data.mmsi = QString::number(ti->mmsi);
+        data.lat = lat;
+        data.lon = lon;
+        data.cog = ti->cog / 10.0;
+        data.sog = ti->sog;
+        //data.cpa = ti->cpa;
+        //data.tcpa = ti->tcpa;
+        //data.isDangerous = (ti->status == eAIS_dangerous);
+        data.lastUpdate = QDateTime::currentDateTime();
+        data.currentRange = dist;
+        data.relativeBearing = bear;
+        //data.cpaCalculationValid = (ti->cpa >= 0 && ti->tcpa >= 0);
+        data.cpaCalculatedAt = QDateTime::currentDateTime();
 
-          data.feat = feat;
-          data._dictInfo = _dictInfo;
+        data.feat = feat;
+        data._dictInfo = _dictInfo;
 
-          Ais::instance()->_aisTargetMap[ti->mmsi] = data;
-          Ais::instance()->_aisTargetInfoMap[ti->mmsi] = *ti;
+        Ais::instance()->_aisTargetMap[ti->mmsi] = data;
+        Ais::instance()->_aisTargetInfoMap[ti->mmsi] = *ti;
       }
 
       // if (aisTrkStatusManual == aisDangerous){
       //     _wParent->drawShipGuardianSquare(lat, lon);
       // }
-    }
-    else
-    {
-      // For simulation purposes we take the actual ship position of the own ship from transponder. 
-      // In reality the own ship handling and display is NOT implemented within the AIS handling.
-      if( ( ti->ownShip == True ) &&
-            abs(ti->latitude) < 90 * 60 * 10000 && 
-            abs(ti->longitude) < 180 * 60 * 10000)
-      {
-        if( ti->ownShip == True )
-        {
-          _oLat = ((double)ti->latitude / 10000) / 60;
-          _oLon = ((double)ti->longitude / 10000) / 60;
 
-          // Update feature object of own ship.
-          double deltaLat = _oLat - ownShipLat;
-          double deltaLon = _oLon - ownShipLon;
-          EcEasyMoveObject( _featureOwnShip, deltaLat, deltaLon );
-          ownShipLat = _oLat;
-          ownShipLon = _oLon;
-
-          _dSpeed = ti->sog;
-          _dCourse = ti->cog / 10;
-
-          _myAis->setOwnShipPos(ownShipLat, ownShipLon);
-
-          // SIMPEN DATA AIS
-          AISTargetData dataOS;
-          dataOS.lat = lat;
-          dataOS.lon = lon;
-          dataOS.cog = ti->cog / 10.0;
-          dataOS.sog = ti->sog;
-          dataOS.cpaCalculatedAt = QDateTime::currentDateTime();
-
-          Ais::instance()->_aisOwnShip = dataOS;
+      // 1. Handle ownship update terlebih dahulu
+      if (ti->ownShip == True) {
+        _myAis->handleOwnShipUpdate(ti);
+        // KURANGI emit signal - hanya emit sekali per detik atau sesuai kebutuhan
+        static QDateTime lastEmit = QDateTime::currentDateTime();
+        if (lastEmit.msecsTo(QDateTime::currentDateTime()) > 3000) {
+          EcCoordinate ownLat, ownLon;
+          _myAis->getOwnShipPos(ownLat, ownLon);
+          _myAis->emitSignal(ownLat, ownLon);
+          lastEmit = QDateTime::currentDateTime();
         }
+        return;
       }
+
+      // Update feature object of own ship.
+      double deltaLat = _oLat - ownShipLat;
+      double deltaLon = _oLon - ownShipLon;
+      EcEasyMoveObject( _featureOwnShip, deltaLat, deltaLon );
+      ownShipLat = _oLat;
+      ownShipLon = _oLon;
+
+      _dSpeed = ti->sog;
+      _dCourse = ti->cog / 10;
+
+      _myAis->setOwnShipPos(ownShipLat, ownShipLon);
+
+      // SIMPEN DATA AIS
+      AISTargetData dataOS;
+      dataOS.lat = lat;
+      dataOS.lon = lon;
+      dataOS.cog = ti->cog / 10.0;
+      dataOS.sog = ti->sog;
+      dataOS.cpaCalculatedAt = QDateTime::currentDateTime();
+
+      Ais::instance()->_aisOwnShip = dataOS;
     } // if( ti->ownShip == False ...
-  } // if (dist ...
-
-  if (ti->mmsi == 366884150){
-      QMap<unsigned int, AISTargetData> targets = Ais::instance()->getTargetMap();
-      for (const auto &target : targets) {
-          if (target.mmsi != "366884150") continue;
-
-          //qDebug() << target.lat << ", " << target.lon << ", " << target.sog << ", " << target.cog;
-      }
-  }
+  } // if (dist ... 
 
   // The callback informs the application to refresh the chart display with AIS target by sending an event.
   /////////////////////////////////////////////////////////////////////////////////////////////////////////
   _myAis->emitSignal( ownShipLat, ownShipLon );
+  // 2. Handle AIS targets (bukan ownship)
+  if (ti->ownShip == False) {
+    _myAis->handleAISTargetUpdate(ti);
+    return;
+  }
 }
 
 void Ais::emitSignal( double lat, double lon )
@@ -781,4 +782,131 @@ EcAISTargetInfo* Ais::getTargetInfo(unsigned int mmsi)
         return &_aisTargetInfoMap[mmsi];
     }
     return nullptr;
+}
+
+// Fungsi khusus untuk handle ownship update
+void Ais::handleOwnShipUpdate(EcAISTargetInfo *ti)
+{
+    qDebug() << "Processing OWNSHIP update - MMSI:" << ti->mmsi;
+
+    if (ti->ownShip != True) return;
+
+    if (abs(ti->latitude) < 90 * 60 * 10000 &&
+        abs(ti->longitude) < 180 * 60 * 10000)
+    {
+        _oLat = ((double)ti->latitude / 10000) / 60;
+        _oLon = ((double)ti->longitude / 10000) / 60;
+
+        ownShipLat = _oLat;
+        ownShipLon = _oLon;
+        ownShipCog = ti->cog;
+        ownShipSog = ti->sog;
+
+        _myAis->setOwnShipPos(ownShipLat, ownShipLon);
+
+        // SIMPEN DATA AIS OWNSHIP
+        AISTargetData dataOS;
+        dataOS.lat = _oLat;
+        dataOS.lon = _oLon;
+        dataOS.cog = ti->cog / 10.0;
+        dataOS.sog = ti->sog / 10.0;
+        dataOS.cpaCalculatedAt = QDateTime::currentDateTime();
+
+        Ais::instance()->_aisOwnShip = dataOS;
+
+        qDebug() << "Ownship data updated without using old feature object";
+    }
+}
+
+// Fungsi khusus untuk handle AIS targets (bukan ownship)
+void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
+{
+    if (ti->ownShip == True) return; // Skip jika ini ownship
+
+    EcCoordinate ownShipLat = 0, ownShipLon = 0;
+    double ownShipSog = 0, ownShipCog = 0;
+
+    double dist = 0, bear = 0;
+    double lat = ((double)ti->latitude / 10000.0) / 60.0;
+    double lon = ((double)ti->longitude / 10000.0) / 60.0;
+
+    _myAis->getOwnShipPos(ownShipLat, ownShipLon);
+    EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84, lat, lon, ownShipLat, ownShipLon, &dist, &bear);
+
+    // Process only targets which are further away than 48 nm or no own ship position exists yet
+    if (dist < 48 || (ownShipLat == 0 && ownShipLon == 0))
+    {
+        // Filter the ais targets which shall be displayed
+        if (abs(ti->latitude) < 90 * 60 * 10000 &&
+            abs(ti->longitude) < 180 * 60 * 10000 &&
+            ti->navStatus != eNavS_baseStation)
+        {
+            EcAISTrackingStatus aisTrkStatus = EcAISCalcTargetTrackingStatus(ti, ownShipLat, ownShipLon, ownShipSog, ownShipCog, _dWarnDist, _dWarnCPA, _iWarnTCPA, _iTimeOut);
+            EcFeature feat = EcAISFindTargetObject(_cid, _dictInfo, ti);
+
+            // if there is no feature yet create one
+            if (!ECOK(feat) && aisTrkStatus != aisLost)
+            {
+                if (EcAISCreateTargetObject(_cid, _dictInfo, ti, &feat))
+                {
+                    EcAISSetTargetActivationStatus(feat, _dictInfo, aisSleeping, NULL);
+                    _bSymbolize = True;
+                }
+                else
+                {
+                    addLogFileEntry(QString("EcAISCreateTargetObject() failed! New target object could not be created."));
+                }
+            }
+
+            // Set the status of the ais target to active if it is located within a certain distance
+            if (dist < 4)
+                EcAISSetTargetActivationStatus(feat, _dictInfo, aisActivated, NULL);
+
+            // Set the tracking status of the ais target feature
+            EcAISSetTargetTrackingStatus(feat, _dictInfo, aisTrkStatus, NULL);
+
+            // Set the remaining attributes of the ais target feature
+            EcAISSetTargetObjectData(feat, _dictInfo, ti, &_bSymbolize);
+
+            // SIMPEN DATA AIS TARGET
+            if (ti && ti->mmsi != 0)
+            {
+                AISTargetData data;
+                data.mmsi = QString::number(ti->mmsi);
+                data.lat = lat;
+                data.lon = lon;
+                data.cog = ti->cog / 10.0;
+                data.sog = ti->sog / 10.0;
+                data.lastUpdate = QDateTime::currentDateTime();
+                data.currentRange = dist;
+                data.relativeBearing = bear;
+                data.cpaCalculatedAt = QDateTime::currentDateTime();
+
+                Ais::instance()->_aisTargetMap[ti->mmsi] = data;
+                Ais::instance()->_aisTargetInfoMap[ti->mmsi] = *ti;
+            }
+        }
+    }
+
+    // Emit signal untuk refresh chart display
+    EcCoordinate ownLat, ownLon;
+    _myAis->getOwnShipPos(ownLat, ownLon);
+    _myAis->emitSignal(ownLat, ownLon);
+}
+
+// Fungsi untuk menghapus feature object ownship lama
+void Ais::deleteOldOwnShipFeature()
+{
+    if (ECOK(_featureOwnShip)) {
+        qDebug() << "Deleting old ownship feature object";
+
+        // Set status menjadi deletable
+        EcFeatureSetStatus(_featureOwnShip, EC_OS_DELETABLE);
+
+        // Hapus feature object
+        EcFeatureDelete(_featureOwnShip);
+
+        // Jangan reset handle, biarkan sistem yang handle
+        qDebug() << "Old ownship feature deleted successfully";
+    }
 }

@@ -788,6 +788,11 @@ private:
   void updateAISTooltipFromMMSI(unsigned int mmsi);
   void showAISTooltipFromMMSI(const QPoint& position, unsigned int mmsi);
 
+  // icon vessel
+  void drawOwnShipIcon(QPainter& painter, int x, int y, double heading);
+  AISTargetData ownShipData;
+  bool showCustomOwnShip = true; // Flag untuk kontrol visibility
+
 
 }; // EcWidget
 

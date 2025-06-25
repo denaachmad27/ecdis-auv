@@ -121,7 +121,7 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   shipGuardianEnabled = false;
   redDotLat = 0.0;
   redDotLon = 0.0;
-  redDotColor = QColor(255, 0, 0, 180);
+  redDotColor = QColor(255, 0, 0, 50);
   redDotSize = 8.0;
   guardianRadius = 0.5;
   guardianFillColor = QColor(255, 0, 0, 50);
@@ -2828,7 +2828,39 @@ void EcWidget::drawAISCell()
 
 #endif
   // Draw red dot tracker overlay
-      drawRedDotTracker();
+  drawRedDotTracker();
+
+
+  // DRAWING OWNSHIP CUSTOM
+  if (showCustomOwnShip) {  // <-- TAMBAHKAN KONDISI INI
+    AISTargetData ownShipData = Ais::instance()->getOwnShipVar();
+
+    // Untuk simulasi, gunakan data simulasi
+    if (simulationActive && ownShipInSimulation) {
+        ownShipData.lat = ownShip.lat;
+        ownShipData.lon = ownShip.lon;
+        ownShipData.cog = ownShip.heading;
+        ownShipData.sog = ownShip.sog;
+    }
+
+    if (ownShipData.lat != 0.0 && ownShipData.lon != 0.0) {
+            int x, y;
+            if (LatLonToXy(ownShipData.lat, ownShipData.lon, x, y)) {
+
+                QPainter painter(&drawPixmap);
+                painter.setRenderHint(QPainter::Antialiasing, true);
+
+                // Pastikan heading dalam range 0-360
+                double heading = ownShipData.cog;
+                while (heading < 0) heading += 360;
+                while (heading >= 360) heading -= 360;
+
+                drawOwnShipIcon(painter, x, y, heading);
+                painter.end();
+            }
+        }
+    }
+
   update();
 
   emit projection();
@@ -6257,10 +6289,12 @@ void EcWidget::updateRedDotPosition(double lat, double lon)
 
 void EcWidget::drawRedDotTracker()
 {
+    // Check if tracker is enabled and position is valid
     if (!redDotTrackerEnabled || redDotLat == 0.0 || redDotLon == 0.0) {
         return;
     }
 
+    // Convert geographic coordinates to screen coordinates
     int screenX, screenY;
     if (!LatLonToXy(redDotLat, redDotLon, screenX, screenY)) {
         return;
@@ -6269,25 +6303,51 @@ void EcWidget::drawRedDotTracker()
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
 
+    // TAHAP 2: Perbesar ukuran menggunakan nautical miles seperti guardzone
+    double nauticalMilesRadius = 0.2; // 0.2 NM untuk red dot (lebih besar dari 8 piksel)
+    double pixelRadius = calculatePixelsFromNauticalMiles(nauticalMilesRadius);
+
+    // Pastikan minimum radius untuk visibility
+    if (pixelRadius < 15.0) {
+        pixelRadius = 15.0; // Minimum 15 piksel
+    }
+
+    // TAHAP 3: Warna transparan seperti guardzone
+    QColor fillColor(255, 0, 0, 50);    // Transparan seperti guardianFillColor
+    QColor borderColor(255, 0, 0, 150); // Border seperti guardianBorderColor
+    QColor centerColor(255, 0, 0, 200); // Center dot yang lebih solid
+
+    // Draw guardian circle first if enabled
     if (shipGuardianEnabled) {
-        // Draw guardian circle first
         drawShipGuardianCircle();
     }
 
-    // Always draw center dot for ship position
-    QColor dotColor(255, 0, 0, 200);
-    painter.setBrush(QBrush(dotColor));
-    painter.setPen(QPen(dotColor, 2));
+    // MODIFIKASI UTAMA: Draw filled circle area (seperti guardzone)
+    painter.setBrush(QBrush(fillColor));
+    painter.setPen(Qt::NoPen);
+    painter.drawEllipse(QPoint(screenX, screenY),
+                       (int)pixelRadius,
+                       (int)pixelRadius);
 
-    int dotRadius = (int)redDotSize;
-    painter.drawEllipse(QPoint(screenX, screenY), dotRadius, dotRadius);
+    // Draw border circle (seperti guardzone border)
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(borderColor, 2));
+    painter.drawEllipse(QPoint(screenX, screenY),
+                       (int)pixelRadius,
+                       (int)pixelRadius);
 
-    // Draw white border for center dot
+    // Draw center dot untuk menandai posisi ship yang tepat
+    painter.setBrush(QBrush(centerColor));
+    painter.setPen(QPen(centerColor, 1));
+    painter.drawEllipse(QPoint(screenX, screenY), 4, 4); // Small center dot 4px
+
+    // Draw white border untuk center dot agar terlihat jelas
     painter.setPen(QPen(Qt::white, 1));
     painter.setBrush(Qt::NoBrush);
-    painter.drawEllipse(QPoint(screenX, screenY), dotRadius + 1, dotRadius + 1);
+    painter.drawEllipse(QPoint(screenX, screenY), 5, 5); // White outline
 
-    qDebug() << "Ship position marker drawn at:" << screenX << "," << screenY;
+    qDebug() << "Enhanced Red Dot drawn at:" << screenX << "," << screenY
+             << "with radius:" << pixelRadius << "pixels (" << nauticalMilesRadius << "NM)";
 }
 
 
@@ -6691,4 +6751,71 @@ void EcWidget::showAISTooltipFromTargetInfo(const QPoint& position, EcAISTargetI
     aisTooltip->move(tooltipPos);
     aisTooltip->show();
     aisTooltip->raise();
+}
+
+// icon ownship
+void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double heading)
+{
+    painter.save();
+
+    painter.translate(x, y);
+    painter.rotate(heading);
+
+    // UKURAN DISESUAIKAN AGAR SECARA VISUAL PROPORSIONAL
+    int shipLength = 45;  // Lebih panjang dari segitiga (15) untuk kompensasi bentuk ramping
+    int shipWidth = 15;   // Lebih lebar dari separuh segitiga (7) untuk area visual yang sama
+
+    // BENTUK KAPAL DENGAN LENGKUNGAN HALUS
+    QPainterPath shipPath;
+
+    // Mulai dari hidung kapal
+    shipPath.moveTo(0, -shipLength/2);  // ujung hidung
+
+    // SISI KANAN dengan kurva yang smooth
+    QPointF control1(shipWidth/3, -shipLength/2 + 3);  // control point dekat hidung
+    QPointF point1(shipWidth/2, -shipLength/4);        // titik lengkung pertama
+    shipPath.quadTo(control1, point1);
+
+    // Lengkung tengah kanan (bagian terlebar)
+    QPointF point2(shipWidth/2, shipLength/4);         // bagian tengah
+    shipPath.lineTo(point2);
+
+    // Lengkung menuju buritan
+    QPointF control2(shipWidth/2, shipLength/2 - 2);   // control point menuju buritan
+    QPointF point3(shipWidth/3, shipLength/2);         // sudut buritan kanan
+    shipPath.quadTo(control2, point3);
+
+    // BURITAN DATAR
+    shipPath.lineTo(-shipWidth/3, shipLength/2);       // buritan datar
+
+    // SISI KIRI (mirror dari kanan)
+    QPointF control3(-shipWidth/2, shipLength/2 - 2);  // control point menuju buritan kiri
+    QPointF point4(-shipWidth/2, shipLength/4);        // bagian tengah kiri
+    shipPath.quadTo(control3, point4);
+
+    // Lengkung tengah kiri
+    QPointF point5(-shipWidth/2, -shipLength/4);       // titik lengkung kiri
+    shipPath.lineTo(point5);
+
+    // Lengkung kembali ke hidung
+    QPointF control4(-shipWidth/3, -shipLength/2 + 3); // control point dekat hidung kiri
+    QPointF point6(0, -shipLength/2);                  // kembali ke hidung
+    shipPath.quadTo(control4, point6);
+
+    // DRAWING KAPAL
+    painter.setBrush(QBrush(QColor(120, 120, 120)));   // Abu-abu
+    painter.setPen(QPen(Qt::black, 1));                // Border hitam
+    painter.drawPath(shipPath);
+
+    // TITIK CENTER
+    painter.setBrush(QBrush(Qt::black));
+    painter.setPen(QPen(Qt::black, 1));
+    painter.drawEllipse(-1, -1, 2, 2);
+
+    // GARIS PENUNJUK ARAH
+    painter.setPen(QPen(Qt::black, 1.5, Qt::DashLine));
+    int arrowLength = 20;  // Sama dengan AIS target
+    painter.drawLine(0, -shipLength/2, 0, -shipLength/2 - arrowLength);
+
+    painter.restore();
 }

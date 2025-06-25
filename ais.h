@@ -126,6 +126,16 @@ private:
     QMap<unsigned int, AISTargetData> _aisTargetMap;
     AISTargetData _aisOwnShip;
     QMap<unsigned int, EcAISTargetInfo> _aisTargetInfoMap;
+
+    // icon ship
+    EcCoordinate ownShipLat;
+    EcCoordinate ownShipLon;
+    double ownShipCog;
+    double ownShipSog;
+
+    void deleteOldOwnShipFeature();
+    void handleOwnShipUpdate(EcAISTargetInfo *ti);
+    void handleAISTargetUpdate(EcAISTargetInfo *ti);
 };
 
 #endif
