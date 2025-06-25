@@ -808,20 +808,29 @@ MainWindow::MainWindow(QWidget *parent)
 
   guardZoneMenu->addSeparator();
 
-  // ========== MENU BARU UNTUK SHIP GUARDIAN CIRCLE ==========
   QAction *shipGuardianAction = guardZoneMenu->addAction("Ship Guardian Circle");
   shipGuardianAction->setCheckable(true);
   connect(shipGuardianAction, SIGNAL(toggled(bool)), this, SLOT(onShipGuardianCircle(bool)));
-  // =========================================================
 
   guardZoneMenu->addSeparator();
 
   guardZoneMenu->addAction("Check for Threats", this, SLOT(onCheckGuardZone()));
 
-  // Di constructor MainWindow
   QAction *attachToShipAction = guardZoneMenu->addAction("Attach to Ship");
   attachToShipAction->setCheckable(true);
   connect(attachToShipAction, SIGNAL(toggled(bool)), this, SLOT(onAttachGuardZoneToShip(bool)));
+
+  guardZoneMenu->addSeparator();
+
+  // ========== TAMBAHAN BARU: SUB MENU TEST GUARDZONE ==========
+  QAction *testGuardZoneAction = guardZoneMenu->addAction("Test guardzone");
+  testGuardZoneAction->setCheckable(true);
+  connect(testGuardZoneAction, SIGNAL(toggled(bool)), this, SLOT(onTestGuardZone(bool)));
+  // ===========================================================
+
+
+
+
 
   QMenu *simulationMenu = menuBar()->addMenu("&Simulation");
 
@@ -888,7 +897,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     // qDebug() << userpermit;
 
-  //setupGuardZonePanel();
+  setupGuardZonePanel();
   //setupAlertPanel();
   //setupTestingMenu();
 
@@ -2953,6 +2962,27 @@ void MainWindow::onShipGuardianCircle(bool enabled)
             ecchart->setRedDotAttachedToShip(false);
 
             statusBar()->showMessage(tr("Ship Guardian Circle deactivated"), 3000);
+        }
+
+        // Update chart display
+        ecchart->update();
+    }
+}
+
+// test guardzone
+void MainWindow::onTestGuardZone(bool enabled)
+{
+    qDebug() << "onTestGuardZone called with enabled =" << enabled;
+
+    if (ecchart) {
+        if (enabled) {
+            // Aktifkan Test GuardZone
+            ecchart->setTestGuardZoneEnabled(true);
+            statusBar()->showMessage(tr("Test guardzone activated"), 3000);
+        } else {
+            // Nonaktifkan Test GuardZone
+            ecchart->setTestGuardZoneEnabled(false);
+            statusBar()->showMessage(tr("Test guardzone deactivated"), 3000);
         }
 
         // Update chart display

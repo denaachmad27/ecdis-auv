@@ -115,6 +115,11 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
       nextGuardZoneId = 1;
   }
 
+  // Initialize test guardzone
+      testGuardZoneEnabled = false;
+      testGuardZoneRadius = 2.0;  // default 2 nautical miles
+      testGuardZoneColor = QColor(255, 165, 0, 128);  // orange semi-transparent
+
   // Initialize Ship Guardian Circle
   redDotTrackerEnabled = false;
   redDotAttachedToShip = false;
@@ -913,11 +918,13 @@ void EcWidget::paintEvent (QPaintEvent *e)
   painter.drawPixmap(e->rect(), drawPixmap, e->rect());
 
   drawGuardZone();
-
-  // ========== TAMBAHAN UNTUK RED DOT TRACKER ==========
-  // Draw red dot tracker at the very end
   drawRedDotTracker();
-  // ==================================================
+
+  // ========== DRAW TEST GUARDZONE ==========
+  if (testGuardZoneEnabled) {
+      drawTestGuardZone(painter);
+  }
+  // =======================================
 }
 
 /*---------------------------------------------------------------------------*/
@@ -6818,4 +6825,85 @@ void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double heading)
     painter.drawLine(0, -shipLength/2, 0, -shipLength/2 - arrowLength);
 
     painter.restore();
+}
+
+// Implementasi test guardzone methods:
+void EcWidget::setTestGuardZoneEnabled(bool enabled)
+{
+    testGuardZoneEnabled = enabled;
+    qDebug() << "Test GuardZone enabled:" << enabled;
+    update(); // Trigger repaint
+}
+
+bool EcWidget::isTestGuardZoneEnabled() const
+{
+    return testGuardZoneEnabled;
+}
+
+void EcWidget::setTestGuardZoneRadius(double radius)
+{
+    if (radius > 0) {
+        testGuardZoneRadius = radius;
+        qDebug() << "Test GuardZone radius set to:" << radius << "NM";
+        if (testGuardZoneEnabled) {
+            update(); // Trigger repaint if enabled
+        }
+    }
+}
+
+double EcWidget::getTestGuardZoneRadius() const
+{
+    return testGuardZoneRadius;
+}
+
+// Method untuk menggambar test guardzone:
+void EcWidget::drawTestGuardZone(QPainter& painter)
+{
+    // Get center of current view (pusat peta yang sedang dilihat)
+    QRect viewport = rect();
+    int centerX = viewport.width() / 2;
+    int centerY = viewport.height() / 2;
+
+    // Convert screen center back to lat/lon
+    double centerLat, centerLon;
+    if (!XyToLatLon(centerX, centerY, centerLat, centerLon)) {
+        qDebug() << "Failed to convert screen center to lat/lon";
+        return;
+    }
+
+    qDebug() << "Drawing test guardzone at center:" << centerLat << centerLon;
+
+    // Calculate radius in pixels
+    double radiusInPixels = calculatePixelsFromNauticalMiles(testGuardZoneRadius);
+
+    // Setup painter
+    painter.save();
+    painter.setPen(QPen(testGuardZoneColor.darker(), 2, Qt::SolidLine));
+    painter.setBrush(QBrush(testGuardZoneColor));
+
+    // Draw circle
+    QRectF circleRect(centerX - radiusInPixels,
+                      centerY - radiusInPixels,
+                      radiusInPixels * 2,
+                      radiusInPixels * 2);
+
+    painter.drawEllipse(circleRect);
+
+    // Draw center point
+    painter.setPen(QPen(Qt::red, 4));
+    painter.drawPoint(centerX, centerY);
+
+    // Draw label
+    painter.setPen(QPen(Qt::black, 1));
+    painter.setFont(QFont("Arial", 10, QFont::Bold));
+    QString label = QString("Test GuardZone\nRadius: %1 NM").arg(testGuardZoneRadius, 0, 'f', 1);
+
+    QRect textRect(centerX + radiusInPixels/2, centerY - 30, 120, 40);
+    painter.fillRect(textRect, QBrush(QColor(255, 255, 255, 200)));
+    painter.drawText(textRect, Qt::AlignCenter, label);
+
+    painter.restore();
+
+    qDebug() << "Test guardzone drawn successfully at pixels:" << centerX << centerY
+             << "radius:" << radiusInPixels;
 }
