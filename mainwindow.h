@@ -211,6 +211,9 @@ private slots:
     void onShowTCPAInfo(bool enabled);
     void onCPATCPAAlarms(bool enabled);
 
+    // test guardzone
+    void onTestGuardZone(bool enabled);
+
 private:
     GuardZonePanel* guardZonePanel;
     QDockWidget* guardZoneDock;

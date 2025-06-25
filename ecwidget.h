@@ -203,6 +203,12 @@ public:
 
   // End Guardzone
 
+  // Test GuardZone methods
+  void setTestGuardZoneEnabled(bool enabled);
+  bool isTestGuardZoneEnabled() const;
+  void setTestGuardZoneRadius(double radius);
+  double getTestGuardZoneRadius() const;
+
   // Alert System methods
   AlertSystem* getAlertSystem() { return alertSystem; }
   void initializeAlertSystem();
@@ -792,6 +798,14 @@ private:
   void drawOwnShipIcon(QPainter& painter, int x, int y, double heading);
   AISTargetData ownShipData;
   bool showCustomOwnShip = true; // Flag untuk kontrol visibility
+
+  // Test GuardZone properties
+  bool testGuardZoneEnabled;
+  double testGuardZoneRadius;  // dalam nautical miles
+  QColor testGuardZoneColor;
+
+  // Test GuardZone drawing
+  void drawTestGuardZone(QPainter& painter);
 
 
 }; // EcWidget
