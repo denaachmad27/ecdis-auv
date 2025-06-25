@@ -912,6 +912,8 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
                 data.currentRange = dist;
                 data.relativeBearing = bear;
                 data.cpaCalculatedAt = QDateTime::currentDateTime();
+                data.feat = feat;
+                data._dictInfo = _dictInfo;
 
                 Ais::instance()->_aisTargetMap[ti->mmsi] = data;
                 Ais::instance()->_aisTargetInfoMap[ti->mmsi] = *ti;

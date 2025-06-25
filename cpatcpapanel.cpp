@@ -189,7 +189,7 @@ void CPATCPAPanel::refreshData()
     if (!ecWidget) return;
 
     // Update targets display
-    //updateTargetsDisplay();
+    updateTargetsDisplay();
 
     // Update last update time
     lastUpdateLabel->setText(QString("Last Update: %1").arg(QTime::currentTime().toString("hh:mm:ss")));
