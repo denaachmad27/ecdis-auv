@@ -260,7 +260,7 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   EcDrawSetSymbolFilter(view, True);
 
   //Define some hard coded chart display settings which should be set by the user as well
-  //Safety Contour which more or less reflects the draft and influences the display of underwater hazards, displayed as thick black line 
+  //Safety Contour which more or less reflects the draft and influences the display of underwater hazards, displayed as thick black line
   double safetyContour = 10.0;
   EcChartSetSafetyContour(view, safetyContour);
   //Deep contour defines the limit between grey and light grey depth areas in safe waters
@@ -332,7 +332,7 @@ EcWidget::~EcWidget ()
         alertCheckTimer = nullptr;
     }
 
-  // Release AIS object.  
+  // Release AIS object.
   if( _aisObj )
   {
     _aisObj->stopAnimation();
@@ -402,7 +402,7 @@ void EcWidget::GetCenter (EcCoordinate & lat, EcCoordinate & lon) const
 
 /*---------------------------------------------------------------------------*/
 
-double EcWidget::GetRange (int scaleVal) const 
+double EcWidget::GetRange (int scaleVal) const
 {
   return EcDrawScaleToRange (view, scaleVal);
 }
@@ -448,7 +448,7 @@ void EcWidget::SetCenter (EcCoordinate lat, EcCoordinate lon)
 
 /*---------------------------------------------------------------------------*/
 
-void EcWidget::SetScale (int newScale) 
+void EcWidget::SetScale (int newScale)
 {
   currentScale = newScale;
   if (currentScale < minScale) currentScale = minScale;
@@ -459,7 +459,7 @@ void EcWidget::SetScale (int newScale)
 
 /*---------------------------------------------------------------------------*/
 
-void EcWidget::SetHeading (double newHeading) 
+void EcWidget::SetHeading (double newHeading)
 {
   currentHeading = newHeading;
   if (currentScale > maxScale) currentScale = maxScale; // in case the world overview has been shown before
@@ -519,7 +519,7 @@ void EcWidget::SetColorScheme (int newScheme, bool greyMode, int brightness)
 
 #ifdef _WIN32
   if (hPalette)
-    DeleteObject (hPalette); 
+    DeleteObject (hPalette);
   hPalette = (HPALETTE)EcDrawNTSetColorSchemeExt (view, NULL, currentColorScheme, greyMode, brightness, 1);
 #else
   EcDrawX11SetColorScheme (view, dpy, cmap, currentColorScheme, greyMode, brightness);
@@ -585,7 +585,7 @@ void EcWidget::ShowAIS(bool on)
 
   if(on)
   {
-	  EcChartSetViewingGroup(view, EC_VG_SET, &vg, 1);
+      EcChartSetViewingGroup(view, EC_VG_SET, &vg, 1);
   }
   else
   {
@@ -622,7 +622,7 @@ bool EcWidget::CreateDENC(const QString & dp, bool updateCatalog)
   // If DENC path is still empty, import the world data
   QString cellDirName = dencPath + "/CELLS";
   QDir cellDir(cellDirName);
-  if (cellDir.count() == 2) // . and .. count 
+  if (cellDir.count() == 2) // . and .. count
   {
     if (EcKernelGetEnv("EC2007DIR"))
     {
@@ -630,7 +630,7 @@ bool EcWidget::CreateDENC(const QString & dp, bool updateCatalog)
       int nCharts = ImportTree(impPath);
       if (nCharts == 0)
       {
-        QString hlpStr = "No charts found in " + impPath; 
+        QString hlpStr = "No charts found in " + impPath;
         QMessageBox::information(this, "Initialize DENC", hlpStr);
       }
     }
@@ -785,7 +785,7 @@ int EcWidget::ApplyUpdate()
 // Protected members
 /*---------------------------------------------------------------------------*/
 
-void EcWidget::draw(bool upd) 
+void EcWidget::draw(bool upd)
 {
   if (!initialized) return;
 
@@ -810,8 +810,8 @@ void EcWidget::draw(bool upd)
     // Draw chart to chartPixmap
     EcCatList *catList = EcDENCGetCatalogueList(denc);
 #ifdef _WIN32
-    HPALETTE oldPal = SelectPalette (hdc, hPalette, true);    
-    
+    HPALETTE oldPal = SelectPalette (hdc, hPalette, true);
+
     // Temporarily unassign the AIS overlay cell from the view to get a pure chart image
     aisCellId = _aisObj->getAISCell();
     if( aisCellId != EC_NOCELLID )
@@ -819,32 +819,32 @@ void EcWidget::draw(bool upd)
 
     // Draw the charts
     EcDrawNTDrawChart (view, hdc, NULL, dictInfo, catList, currentLat, currentLon, GetRange(currentScale), currentHeading);
-    
+
     // Assign the AIS overlay cell again
     if( aisCellId != EC_NOCELLID )
       EcChartAssignCellToView(view, aisCellId);
-    
+
     if(showGrid)
       EcDrawNTDrawGrid (view, hdc, chartPixmap.width(), chartPixmap.height(), 8, 8, True);
-    
+
     chartPixmap = QtWin::fromHBITMAP(hBitmap);
     drawPixmap = chartPixmap;
     SelectPalette (hdc, oldPal, false);
 #else
-#if QT_VERSION > 0x040400 
+#if QT_VERSION > 0x040400
     EcDrawX11DrawChart (view, drawGC, x11pixmap, dictInfo, catList, currentLat, currentLon, GetRange(currentScale), currentHeading);
-   
+
     if(showGrid)
       EcDrawX11DrawGrid (view, drawGC, x11pixmap, chartPixmap.width(), chartPixmap.height(), 8, 8, True);
-    
+
     chartPixmap = QPixmap::fromX11Pixmap(x11pixmap);
     drawPixmap = chartPixmap;
 #else
     EcDrawX11DrawChart (view, drawGC, chartPixmap.handle(), dictInfo, catList, currentLat, currentLon, GetRange(currentScale), currentHeading);
-    
+
     if(showGrid)
       EcDrawX11DrawGrid (view, drawGC, chartPixmap.handle(), chartPixmap.width(), chartPixmap.height(), 8, 8, True);
-    
+
     drawPixmap = chartPixmap;
 #endif
 #endif
@@ -1402,7 +1402,7 @@ void EcWidget::GetPickedFeatures(QList<EcFeature> &pickedFeatureList)
       pickedFeatureList.append(featureList[i]);
     }
     // Free the allocated memory for the list of features
-    EcFree((void*)featureList);     
+    EcFree((void*)featureList);
   }
   // Free the allocated memory for the list of cells
   if (cids)
@@ -1438,7 +1438,7 @@ void EcWidget::GetSearchedFeatures(QList<EcFeature> &pickedFeatureList)
       pickedFeatureList.append(featureList[i]);
     }
     // Free the allocated memory for the list of features
-    EcFree((void*)featureList);     
+    EcFree((void*)featureList);
   }
   // Free the allocated memory for the list of cells
   if (cids)
@@ -1578,7 +1578,7 @@ void EcWidget::clearBackground()
 #ifdef _WIN32
   HANDLE   hPen,hBrush;
 
-  HPALETTE oldPal = SelectPalette (hdc, hPalette, true);   
+  HPALETTE oldPal = SelectPalette (hdc, hPalette, true);
 
   COLORREF cref = RGB(bg.red(), bg.green(), bg.blue());
   LOGBRUSH myBrush;
@@ -2782,7 +2782,7 @@ void EcWidget::StopReadAISVariable()
 }
 
 // Update AIS targtes and own ship on chart.
-//////////////////////////////////////////// 
+////////////////////////////////////////////
 void EcWidget::slotUpdateAISTargets( Bool bSymbolize )
 {
   if(showAIS)
@@ -2813,7 +2813,7 @@ void EcWidget::drawAISCell()
   hBitmapOverlay = QtWin::toHBITMAP(chartAisPixmap, QtWin::HBitmapNoAlpha);
   HBITMAP hBitmapOverlayOld = (HBITMAP)SelectObject( overlayDC, hBitmapOverlay );
   HPALETTE oldPal = SelectPalette( overlayDC, hPalette, TRUE );
-  
+
   EcDrawNTDrawCells( view, overlayDC, NULL, 1, &aisCellId, 0 );
 
   BitBlt( hdc, 0, 0, chartAisPixmap.width(), chartAisPixmap.height(), overlayDC, 0, 0, SRCCOPY );
@@ -2901,7 +2901,7 @@ bool EcWidget::createAISCell()
   }
 
   // set overlay flag
-  INT32 usage = EC_OVERLAY; 
+  INT32 usage = EC_OVERLAY;
   if( !EcCellSetHeaderInfo( aisCellId, EC_HDR_INTU, (caddr_t)&usage ) )
   {
     EcChartUnAssignCellFromView( view, aisCellId );
@@ -6495,7 +6495,7 @@ void EcWidget::createAISTooltip()
     aisTooltip->setFrameStyle(QFrame::NoFrame); // Hilangkan frame
     aisTooltip->setStyleSheet(
         "QFrame {"
-        "background-color: rgba(248, 248, 248, 240);" // Semi-transparent background
+        "background-color: rgba(248, 248, 248, 128);" // Semi-transparent background
         "border: 1px solid #cccccc;"                   // Subtle border
         "border-radius: 6px;"
         "padding: 8px;"
@@ -6859,29 +6859,25 @@ double EcWidget::getTestGuardZoneRadius() const
 // Method untuk menggambar test guardzone:
 void EcWidget::drawTestGuardZone(QPainter& painter)
 {
-    // Get center of current view (pusat peta yang sedang dilihat)
-    QRect viewport = rect();
-    int centerX = viewport.width() / 2;
-    int centerY = viewport.height() / 2;
+    // Pusat guardzone dalam lat/lon
+    double centerLat = -7.19806403;
+    double centerLon = 112.8;
 
-    // Convert screen center back to lat/lon
-    double centerLat, centerLon;
-    if (!XyToLatLon(centerX, centerY, centerLat, centerLon)) {
-        qDebug() << "Failed to convert screen center to lat/lon";
+    int centerX, centerY;
+    if (!LatLonToXy(centerLat, centerLon, centerX, centerY)) {
+        qDebug() << "Failed to convert lat/lon to XY";
         return;
     }
 
-    qDebug() << "Drawing test guardzone at center:" << centerLat << centerLon;
-
-    // Calculate radius in pixels
     double radiusInPixels = calculatePixelsFromNauticalMiles(testGuardZoneRadius);
 
-    // Setup painter
     painter.save();
-    painter.setPen(QPen(testGuardZoneColor.darker(), 2, Qt::SolidLine));
-    painter.setBrush(QBrush(testGuardZoneColor));
 
-    // Draw circle
+    // Gunakan garis putus-putus tanpa fill
+    QPen dashedPen(Qt::red, 2, Qt::DashLine);
+    painter.setPen(dashedPen);
+    painter.setBrush(Qt::NoBrush);
+
     QRectF circleRect(centerX - radiusInPixels,
                       centerY - radiusInPixels,
                       radiusInPixels * 2,
@@ -6889,21 +6885,12 @@ void EcWidget::drawTestGuardZone(QPainter& painter)
 
     painter.drawEllipse(circleRect);
 
-    // Draw center point
+    // Titik tengah
     painter.setPen(QPen(Qt::red, 4));
     painter.drawPoint(centerX, centerY);
 
-    // Draw label
-    painter.setPen(QPen(Qt::black, 1));
-    painter.setFont(QFont("Arial", 10, QFont::Bold));
-    QString label = QString("Test GuardZone\nRadius: %1 NM").arg(testGuardZoneRadius, 0, 'f', 1);
-
-    QRect textRect(centerX + radiusInPixels/2, centerY - 30, 120, 40);
-    painter.fillRect(textRect, QBrush(QColor(255, 255, 255, 200)));
-    painter.drawText(textRect, Qt::AlignCenter, label);
-
     painter.restore();
 
-    qDebug() << "Test guardzone drawn successfully at pixels:" << centerX << centerY
-             << "radius:" << radiusInPixels;
+    qDebug() << "Dashed guardzone drawn at center (px):" << centerX << centerY
+             << "radius:" << radiusInPixels << "px";
 }
