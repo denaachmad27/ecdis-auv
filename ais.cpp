@@ -239,38 +239,39 @@ void Ais::AISTargetUpdateCallbackOld( EcAISTargetInfo *ti )
     {
       // For simulation purposes we take the actual ship position of the own ship from transponder.
       // In reality the own ship handling and display is NOT implemented within the AIS handling.
-      if( ( ti->ownShip == True ) &&
+        if( ( ti->ownShip == True ) &&
             abs(ti->latitude) < 90 * 60 * 10000 &&
             abs(ti->longitude) < 180 * 60 * 10000)
-      {
-        if( ti->ownShip == True )
         {
-          _oLat = ((double)ti->latitude / 10000) / 60;
-          _oLon = ((double)ti->longitude / 10000) / 60;
+            if( ti->ownShip == True )
+            {
+                _oLat = ((double)ti->latitude / 10000) / 60;
+                _oLon = ((double)ti->longitude / 10000) / 60;
 
-          // Update feature object of own ship.
-          double deltaLat = _oLat - ownShipLat;
-          double deltaLon = _oLon - ownShipLon;
-          EcEasyMoveObject( _featureOwnShip, deltaLat, deltaLon );
-          ownShipLat = _oLat;
-          ownShipLon = _oLon;
+                // Update feature object of own ship.
+                double deltaLat = _oLat - ownShipLat;
+                double deltaLon = _oLon - ownShipLon;
+                EcEasyMoveObject( _featureOwnShip, deltaLat, deltaLon );
+                ownShipLat = _oLat;
+                ownShipLon = _oLon;
 
-          _dSpeed = ti->sog;
-          _dCourse = ti->cog / 10;
+                _dSpeed = ti->sog;
+                _dCourse = ti->cog / 10;
 
-          _myAis->setOwnShipPos(ownShipLat, ownShipLon);
+                _myAis->setOwnShipPos(ownShipLat, ownShipLon);
 
-          // SIMPEN DATA AIS
-          AISTargetData dataOS;
-          dataOS.lat = lat;
-          dataOS.lon = lon;
-          dataOS.cog = ti->cog / 10;
-          dataOS.sog = ti->sog;
-          dataOS.cpaCalculatedAt = QDateTime::currentDateTime();
+                // ⭐ SIMPEN DATA AIS DENGAN HEADING
+                AISTargetData dataOS;
+                dataOS.lat = _oLat;
+                dataOS.lon = _oLon;
+                dataOS.cog = ti->cog / 10.0;        // Course over ground
+                dataOS.sog = ti->sog;               // Speed over ground
+                dataOS.heading = ti->heading;       // ⭐ TAMBAHAN: True heading
+                dataOS.cpaCalculatedAt = QDateTime::currentDateTime();
 
-          Ais::instance()->_aisOwnShip = dataOS;
+                Ais::instance()->_aisOwnShip = dataOS;
+            }
         }
-      }
     } // if( ti->ownShip == False ...
   } // if (dist ...
 
@@ -835,17 +836,18 @@ void Ais::handleOwnShipUpdate(EcAISTargetInfo *ti)
 
         _myAis->setOwnShipPos(ownShipLat, ownShipLon);
 
-        // SIMPEN DATA AIS OWNSHIP
+        // ⭐ SIMPEN DATA AIS OWNSHIP DENGAN HEADING
         AISTargetData dataOS;
         dataOS.lat = _oLat;
         dataOS.lon = _oLon;
-        dataOS.cog = ti->cog / 10;
-        dataOS.sog = ti->sog;
+        dataOS.cog = ti->cog / 10.0;        // Course over ground
+        dataOS.sog = ti->sog;               // Speed over ground
+        dataOS.heading = ti->heading;       // ⭐ TAMBAHAN: True heading dari compass
         dataOS.cpaCalculatedAt = QDateTime::currentDateTime();
 
         Ais::instance()->_aisOwnShip = dataOS;
 
-        qDebug() << "Ownship data updated without using old feature object";
+        qDebug() << "Ownship data updated - COG:" << dataOS.cog << "Heading:" << dataOS.heading;
     }
 }
 

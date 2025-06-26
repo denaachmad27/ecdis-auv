@@ -2839,34 +2839,40 @@ void EcWidget::drawAISCell()
 
 
   // DRAWING OWNSHIP CUSTOM
-  if (showCustomOwnShip) {  // <-- TAMBAHKAN KONDISI INI
-    AISTargetData ownShipData = Ais::instance()->getOwnShipVar();
+      if (showCustomOwnShip) {
+          AISTargetData ownShipData = Ais::instance()->getOwnShipVar();
 
-    // Untuk simulasi, gunakan data simulasi
-    if (simulationActive && ownShipInSimulation) {
-        ownShipData.lat = ownShip.lat;
-        ownShipData.lon = ownShip.lon;
-        ownShipData.cog = ownShip.heading;
-        ownShipData.sog = ownShip.sog;
-    }
+          // Untuk simulasi, gunakan data simulasi
+          if (simulationActive && ownShipInSimulation) {
+              ownShipData.lat = ownShip.lat;
+              ownShipData.lon = ownShip.lon;
+              ownShipData.cog = ownShip.cog;          // ⭐ Gunakan COG dari simulasi
+              ownShipData.heading = ownShip.heading;  // ⭐ Gunakan heading dari simulasi
+              ownShipData.sog = ownShip.sog;
+          }
 
-    if (ownShipData.lat != 0.0 && ownShipData.lon != 0.0) {
-            int x, y;
-            if (LatLonToXy(ownShipData.lat, ownShipData.lon, x, y)) {
+          if (ownShipData.lat != 0.0 && ownShipData.lon != 0.0) {
+              int x, y;
+              if (LatLonToXy(ownShipData.lat, ownShipData.lon, x, y)) {
 
-                QPainter painter(&drawPixmap);
-                painter.setRenderHint(QPainter::Antialiasing, true);
+                  QPainter painter(&drawPixmap);
+                  painter.setRenderHint(QPainter::Antialiasing, true);
 
-                // Pastikan heading dalam range 0-360
-                double heading = ownShipData.cog;
-                while (heading < 0) heading += 360;
-                while (heading >= 360) heading -= 360;
+                  // ⭐ Pastikan COG dan heading dalam range 0-360
+                  double cog = ownShipData.cog;
+                  while (cog < 0) cog += 360;
+                  while (cog >= 360) cog -= 360;
 
-                drawOwnShipIcon(painter, x, y, heading);
-                painter.end();
-            }
-        }
-    }
+                  double heading = ownShipData.heading;
+                  while (heading < 0) heading += 360;
+                  while (heading >= 360) heading -= 360;
+
+                  // ⭐ PANGGIL DENGAN PARAMETER BARU: COG, Heading, SOG
+                  drawOwnShipIcon(painter, x, y, cog, heading, ownShipData.sog);
+                  painter.end();
+              }
+          }
+      }
 
   update();
 
@@ -6761,12 +6767,12 @@ void EcWidget::showAISTooltipFromTargetInfo(const QPoint& position, EcAISTargetI
 }
 
 // icon ownship
-void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double heading)
+void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, double heading, double sog)
 {
     painter.save();
 
     painter.translate(x, y);
-    painter.rotate(heading);
+    painter.rotate(heading);  // Rotasi kapal sesuai heading
 
     // UKURAN DISESUAIKAN AGAR SECARA VISUAL PROPORSIONAL
     int shipLength = 45;  // Lebih panjang dari segitiga (15) untuk kompensasi bentuk ramping
@@ -6819,10 +6825,47 @@ void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double heading)
     painter.setPen(QPen(Qt::black, 1));
     painter.drawEllipse(-1, -1, 2, 2);
 
-    // GARIS PENUNJUK ARAH
-    painter.setPen(QPen(Qt::black, 1.5, Qt::DashLine));
-    int arrowLength = 20;  // Sama dengan AIS target
-    painter.drawLine(0, -shipLength/2, 0, -shipLength/2 - arrowLength);
+    // GARIS PENUNJUK ARAH HEADING (current orientation)
+    painter.setPen(QPen(Qt::black, 2));
+    painter.drawLine(0, 0, 0, -shipLength/2 - 10);
+
+    painter.restore();  // Kembalikan transformasi
+
+    // ⭐ TAMBAHAN BARU: GAMBAR VECTOR GARIS COG DAN HEADING
+    drawOwnShipVectors(painter, x, y, cog, heading, sog);
+}
+
+void EcWidget::drawOwnShipVectors(QPainter& painter, int x, int y, double cog, double heading, double sog)
+{
+    // Jangan gambar vector jika kecepatan terlalu rendah
+    if (sog < 0.5) return;
+
+    // Panjang vector berdasarkan kecepatan (max 60 pixel)
+    int vectorLength = qMin(60, qMax(20, (int)(sog * 3)));
+
+    // Toleransi untuk menentukan apakah COG dan heading berbeda
+    double angleDifference = qAbs(cog - heading);
+    if (angleDifference > 180) angleDifference = 360 - angleDifference;
+
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    // GARIS HIJAU PUTUS-PUTUS: Vector COG/SOG (arah pergerakan)
+    painter.setPen(QPen(QColor(0, 255, 0), 2, Qt::DashLine));
+    double cogRad = cog * M_PI / 180.0;
+    int cogEndX = x + (int)(sin(cogRad) * vectorLength);
+    int cogEndY = y - (int)(cos(cogRad) * vectorLength);
+    painter.drawLine(x, y, cogEndX, cogEndY);
+
+    // GARIS HIJAU SOLID: Vector Heading (arah kepala kapal)
+    // Hanya tampilkan jika heading berbeda dari COG dengan toleransi 5 derajat
+    if (angleDifference > 5.0) {
+        painter.setPen(QPen(QColor(0, 200, 0), 2, Qt::SolidLine));
+        double headingRad = heading * M_PI / 180.0;
+        int headingEndX = x + (int)(sin(headingRad) * vectorLength);
+        int headingEndY = y - (int)(cos(headingRad) * vectorLength);
+        painter.drawLine(x, y, headingEndX, headingEndY);
+    }
 
     painter.restore();
 }

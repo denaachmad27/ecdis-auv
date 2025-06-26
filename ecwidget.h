@@ -40,6 +40,7 @@ struct AISTargetData {
     double lon;
     double cog;         // Course over ground
     double sog;         // Speed over ground
+    double heading;
     double cpa;         // Closest Point of Approach (nautical miles)
     double tcpa;        // Time to CPA (minutes)
     bool isDangerous;   // Apakah target berbahaya
@@ -795,7 +796,8 @@ private:
   void showAISTooltipFromMMSI(const QPoint& position, unsigned int mmsi);
 
   // icon vessel
-  void drawOwnShipIcon(QPainter& painter, int x, int y, double heading);
+  void drawOwnShipIcon(QPainter& painter, int x, int y, double cog, double heading, double sog);
+  void drawOwnShipVectors(QPainter& painter, int x, int y, double cog, double heading, double sog);
   AISTargetData ownShipData;
   bool showCustomOwnShip = true; // Flag untuk kontrol visibility
 
