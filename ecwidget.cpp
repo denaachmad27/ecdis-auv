@@ -9,6 +9,7 @@
 #include "alertsystem.h"
 #include "ais.h"
 #include "pickwindow.h"
+#include "aistooltip.h"
 
 // Waypoint
 #include "SettingsManager.h"
@@ -173,7 +174,7 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
 
   //popup
   // Initialize AIS tooltip
-  aisTooltip = nullptr;
+  aisTooltip = new AISTooltip(this);
   createAISTooltip();
   // Initialize AIS tooltip timer
   aisTooltipTimer = new QTimer(this);
@@ -921,9 +922,10 @@ void EcWidget::paintEvent (QPaintEvent *e)
   drawRedDotTracker();
 
   // ========== DRAW TEST GUARDZONE ==========
-  if (testGuardZoneEnabled) {
-      drawTestGuardZone(painter);
-  }
+  drawTestGuardSquare(painter);
+  // if (testGuardZoneEnabled) {
+  //
+  // }
   // =======================================
 
   // Draw red box around dangerous AIS targets
@@ -995,95 +997,97 @@ void EcWidget::resizeEvent (QResizeEvent *event)
 
 /*---------------------------------------------------------------------------*/
 
+/*
 // Mouseevent lama
-// void EcWidget::mousePressEvent(QMouseEvent *e)
-// {
-//   setFocus();
+void EcWidget::mousePressEvent(QMouseEvent *e)
+{
+  setFocus();
 
-//   if (e->button() == Qt::LeftButton)
-//   {
-//     // if (activeFunction == CREATE_WAYP) {
-//     //       qDebug() << "CREATE WAYP";
-//     //     EcCoordinate lat, lon;
-//     //     if (XyToLatLon(e->x(), e->y(), lat, lon)) {
-//     //         SetWaypointPos(lat, lon);
-//     //         createWaypoint();
-//     //     }
-//     // }
-//     // else {
-//     //     EcCoordinate lat, lon;
-//     //     if (XyToLatLon(e->x(), e->y(), lat, lon))
-//     //     {
-//     //         SetCenter(lat, lon);
-//     //         //draw(true);
-//     //         Draw();
-//     //     }
-//     // }
+  if (e->button() == Qt::LeftButton)
+  {
+    // if (activeFunction == CREATE_WAYP) {
+    //       qDebug() << "CREATE WAYP";
+    //     EcCoordinate lat, lon;
+    //     if (XyToLatLon(e->x(), e->y(), lat, lon)) {
+    //         SetWaypointPos(lat, lon);
+    //         createWaypoint();
+    //     }
+    // }
+    // else {
+    //     EcCoordinate lat, lon;
+    //     if (XyToLatLon(e->x(), e->y(), lat, lon))
+    //     {
+    //         SetCenter(lat, lon);
+    //         //draw(true);
+    //         Draw();
+    //     }
+    // }
 
-//       // Get mouse coordinates
-//       QPoint pos = e->pos();
+      // Get mouse coordinates
+      QPoint pos = e->pos();
 
-//       // Get position of the ecchart widget within the main window
-//       QPoint chartPos = ecchart->mapFromParent(pos);
+      // Get position of the ecchart widget within the main window
+      QPoint chartPos = ecchart->mapFromParent(pos);
 
-//       // Check if click is within the chart area
-//       if (!ecchart->rect().contains(chartPos)) {
-//           // Click is outside chart area
-//           QMainWindow::mousePressEvent(event);
-//           return;
-//       }
+      // Check if click is within the chart area
+      if (!ecchart->rect().contains(chartPos)) {
+          // Click is outside chart area
+          QMainWindow::mousePressEvent(event);
+          return;
+      }
 
-//       // Convert screen coordinates to lat/lon
-//       EcCoordinate latPos, lonPos;
-//       EcView* view = ecchart->GetView();
+      // Convert screen coordinates to lat/lon
+      EcCoordinate latPos, lonPos;
+      EcView* view = ecchart->GetView();
 
-//       if (EcDrawXyToLatLon(view, chartPos.x(), chartPos.y(), &latPos, &lonPos)) {
-//           // Handle based on active function
-//           switch (activeFunction) {
-//           case CREATE_WAYP: {
-//               // Define PICKRADIUS based on current range
-//               double range = ecchart->GetRange();
-//               double PICKRADIUS = 0.03 * range;
+      if (EcDrawXyToLatLon(view, chartPos.x(), chartPos.y(), &latPos, &lonPos)) {
+          // Handle based on active function
+          switch (activeFunction) {
+          case CREATE_WAYP: {
+              // Define PICKRADIUS based on current range
+              double range = ecchart->GetRange();
+              double PICKRADIUS = 0.03 * range;
 
-//               // Create waypoint at clicked position
-//               EcCellId udoCid = ecchart->GetUdoCellId();
-//               wp1 = EcRouteAddWaypoint(udoCid, dict, latPos, lonPos,
-//                                        PICKRADIUS, TURNRADIUS);
+              // Create waypoint at clicked position
+              EcCellId udoCid = ecchart->GetUdoCellId();
+              wp1 = EcRouteAddWaypoint(udoCid, dict, latPos, lonPos,
+                                       PICKRADIUS, TURNRADIUS);
 
-//               if (!ECOK(wp1)) {
-//                   QMessageBox::critical(this, "Error", "Waypoint could not be created");
-//               } else {
-//                   // Update display
-//                   drawUdo();
-//                   ecchart->update();
-//               }
+              if (!ECOK(wp1)) {
+                  QMessageBox::critical(this, "Error", "Waypoint could not be created");
+              } else {
+                  // Update display
+                  drawUdo();
+                  ecchart->update();
+              }
 
-//               // Reset to PAN mode
-//               activeFunction = PAN;
-//               showHeader();
-//               statusBar()->clearMessage();
-//               break;
-//           }
+              // Reset to PAN mode
+              activeFunction = PAN;
+              showHeader();
+              statusBar()->clearMessage();
+              break;
+          }
 
-//           // Add other cases as needed...
+          // Add other cases as needed...
 
-//           default:
-//               // Pass to base class for default handling
-//               QMainWindow::mousePressEvent(event);
-//               break;
-//           }
-//       }
-//   }
-//   else if (e->button() == Qt::RightButton)
-//   {
-//       if (activeFunction == CREATE_WAYP) {
-//           activeFunction = NONE;
-//       }
-//     pickX = e->x();
-//     pickY = e->y();
-//     emit mouseRightClick();
-//   }
-// }
+          default:
+              // Pass to base class for default handling
+              QMainWindow::mousePressEvent(event);
+              break;
+          }
+      }
+  }
+  else if (e->button() == Qt::RightButton)
+  {
+      if (activeFunction == CREATE_WAYP) {
+          activeFunction = NONE;
+      }
+    pickX = e->x();
+    pickY = e->y();
+    emit mouseRightClick();
+  }
+}
+*/
 
 void EcWidget::mousePressEvent(QMouseEvent *e)
 {
@@ -6509,85 +6513,66 @@ void EcWidget::drawShipGuardianSquare(double aisLat, double aisLon)
              << "with side length" << sideLength << "pixels";
 }
 
-
 // Implementasi fungsi createAISTooltip
 void EcWidget::createAISTooltip()
 {
-    // Create tooltip frame
-    aisTooltip = new QFrame(this);
-    aisTooltip->setFrameStyle(QFrame::NoFrame); // Hilangkan frame
-    aisTooltip->setStyleSheet(
-        "QFrame {"
-        "background-color: rgba(248, 248, 248, 128);" // Semi-transparent background
-        "border: 1px solid #cccccc;"                   // Subtle border
-        "border-radius: 6px;"
-        "padding: 8px;"
-        "box-shadow: 0px 3px 10px rgba(0,0,0,0.2);"
-        "}"
-        "QLabel {"
-        "background-color: transparent;"               // Transparent background
-        "border: none;"                               // Hilangkan border biru
-        "color: #333333;"
-        "font-family: 'Segoe UI', Arial, sans-serif;"
-        "font-size: 11px;"
-        "font-weight: normal;"
-        "margin: 2px 0px;"
-        "padding: 2px 4px;"
-        "}"
-    );
-
-    aisTooltip->setWindowFlags(Qt::ToolTip | Qt::FramelessWindowHint);
-    aisTooltip->setAttribute(Qt::WA_ShowWithoutActivating);
+    // Gunakan subclass AISTooltip yang menggambar transparansi sendiri
+    aisTooltip = new AISTooltip(this);
     aisTooltip->hide();
 
-    // Create main layout dengan spacing yang lebih rapi
-    QVBoxLayout* mainLayout = new QVBoxLayout(aisTooltip);
-    mainLayout->setSpacing(1);  // Kurangi spacing
-    mainLayout->setContentsMargins(8, 8, 8, 8);
+    QVBoxLayout* mainLayout = static_cast<QVBoxLayout*>(aisTooltip->layout());
 
-    // Create labels dengan styling yang clean
-    tooltipObjectName = new QLabel("Object name: ", aisTooltip);
-    tooltipShipBreadth = new QLabel("Ship breadth (beam): ", aisTooltip);
-    tooltipShipLength = new QLabel("Ship length over all: ", aisTooltip);
+    tooltipMMSI = new QLabel("MMSI: ", aisTooltip);
+    tooltipObjectName = new QLabel("NAME: ", aisTooltip);
     tooltipCOG = new QLabel("COG: ", aisTooltip);
     tooltipSOG = new QLabel("SOG: ", aisTooltip);
-    tooltipShipDraft = new QLabel("Ship Draft: ", aisTooltip);
-    tooltipTypeOfShip = new QLabel("Type of Ship: ", aisTooltip);
-    tooltipNavStatus = new QLabel("Nav Status: ", aisTooltip);
-    tooltipMMSI = new QLabel("MMSI: ", aisTooltip);
-    tooltipCallSign = new QLabel("Ship Call Sign: ", aisTooltip);
-    tooltipPositionSensor = new QLabel("Position Sensor Indication: ", aisTooltip);
-    tooltipTrackStatus = new QLabel("Track Status: ", aisTooltip);
-    tooltipListOfPorts = new QLabel("List of Ports: ", aisTooltip);
-    tooltipAntennaLocation = new QLabel("Antenna Location: ", aisTooltip);
+    tooltipTypeOfShip = new QLabel("SHIP TYPE: ", aisTooltip);
+    tooltipAntennaLocation = new QLabel("POS: ", aisTooltip);
+    //tooltipTrackStatus = new QLabel("STATUS: ", aisTooltip);
+    //tooltipShipBreadth = new QLabel("Ship breadth (beam): ", aisTooltip);
+    //tooltipShipLength = new QLabel("Ship length over all: ", aisTooltip);
+    //tooltipShipDraft = new QLabel("Ship Draft: ", aisTooltip);
+    //tooltipNavStatus = new QLabel("Nav Status: ", aisTooltip);
+    //tooltipCallSign = new QLabel("Ship Call Sign: ", aisTooltip);
+    //tooltipPositionSensor = new QLabel("Position Sensor Indication: ", aisTooltip);
+    //tooltipListOfPorts = new QLabel("List of Ports: ", aisTooltip);
 
-    // Set properties untuk semua label
-    QList<QLabel*> labels = {tooltipObjectName, tooltipShipBreadth, tooltipShipLength,
-                            tooltipCOG, tooltipSOG, tooltipShipDraft, tooltipTypeOfShip,
-                            tooltipNavStatus, tooltipMMSI, tooltipCallSign, tooltipPositionSensor,
-                            tooltipTrackStatus, tooltipListOfPorts, tooltipAntennaLocation};
+    QList<QLabel*> labels = {
+        tooltipMMSI,
+        tooltipObjectName,
+        tooltipCOG,
+        tooltipSOG,
+        tooltipTypeOfShip,
+        tooltipAntennaLocation
+        //tooltipTrackStatus,
+        //tooltipShipBreadth,
+        //tooltipShipLength,
+        //tooltipShipDraft,
+        //tooltipNavStatus,
+        //tooltipCallSign,
+        //tooltipPositionSensor,
+        //tooltipListOfPorts,
+    };
 
     for (QLabel* label : labels) {
         label->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
         label->setWordWrap(false);
         label->setTextInteractionFlags(Qt::NoTextInteraction);
-
-        // Style individual label agar clean
         label->setStyleSheet(
             "QLabel {"
             "background-color: transparent;"
             "border: none;"
+            "color: #333333;"
+            "font-family: 'Segoe UI', Arial, sans-serif;"
+            "font-size: 11px;"
+            "font-weight: normal;"
             "padding: 1px 2px;"
             "margin: 0px;"
             "}"
         );
-
         mainLayout->addWidget(label);
     }
 
-    aisTooltip->setLayout(mainLayout);
-
-    // Set fixed width untuk konsistensi
     aisTooltip->setFixedWidth(250);
 }
 
@@ -6612,26 +6597,27 @@ void EcWidget::updateAISTooltipContent(EcAISTargetInfo* ti)
     QString mmsiValue = QString::number(ti->mmsi);
     QString callSign = QString(ti->callSign).trimmed();
     QString destination = QString(ti->destination).trimmed();
+    //QString trackStatus = QString(ti->trackingStatus == 2 ? "Dangerous" : "Tracking");
 
     double lat = ((double)ti->latitude / 10000.0) / 60.0;
     double lon = ((double)ti->longitude / 10000.0) / 60.0;
     QString antennaLocation = QString("%1,%2").arg(lat, 0, 'f', 6).arg(lon, 0, 'f', 6);
 
     // Update semua label
-    tooltipObjectName->setText(QString("Object name: %1").arg(objectName));
-    tooltipShipBreadth->setText(QString("Ship breadth (beam): %1").arg(shipBreadth));
-    tooltipShipLength->setText(QString("Ship length over all: %1").arg(shipLength));
+    tooltipMMSI->setText(QString("MMSI: %1").arg(mmsiValue));
+    tooltipObjectName->setText(QString("NAME: %1").arg(objectName));
     tooltipCOG->setText(QString("COG: %1").arg(cogValue));
     tooltipSOG->setText(QString("SOG: %1").arg(sogValue));
-    tooltipShipDraft->setText(QString("Ship Draft: %1").arg(shipDraft));
-    tooltipTypeOfShip->setText(QString("Type of Ship: %1").arg(typeOfShip));
-    tooltipNavStatus->setText(QString("Nav Status: %1").arg(navStatus));
-    tooltipMMSI->setText(QString("MMSI: %1").arg(mmsiValue));
-    tooltipCallSign->setText(QString("Ship Call Sign: %1").arg(callSign));
-    tooltipPositionSensor->setText(QString("Position Sensor Indication: GPS"));
-    tooltipTrackStatus->setText(QString("Track Status: AIS information available"));
-    tooltipListOfPorts->setText(QString("List of Ports: %1").arg(destination));
-    tooltipAntennaLocation->setText(QString("Antenna Location: %1").arg(antennaLocation));
+    tooltipTypeOfShip->setText(QString("SHIP TYPE: %1").arg(typeOfShip));
+    //tooltipTrackStatus->setText(QString("STATUS: %1").arg(trackStatus));
+    tooltipAntennaLocation->setText(QString("POS: %1").arg(antennaLocation));
+    //tooltipShipBreadth->setText(QString("Ship breadth (beam): %1").arg(shipBreadth));
+    //tooltipShipLength->setText(QString("Ship length over all: %1").arg(shipLength));
+    //tooltipShipDraft->setText(QString("Ship Draft: %1").arg(shipDraft));
+    //tooltipNavStatus->setText(QString("Nav Status: %1").arg(navStatus));
+    //tooltipCallSign->setText(QString("Ship Call Sign: %1").arg(callSign));
+    //tooltipPositionSensor->setText(QString("Position Sensor Indication: GPS"));
+    //tooltipListOfPorts->setText(QString("List of Ports: %1").arg(destination));
 
     aisTooltip->adjustSize();
 }
@@ -6642,6 +6628,11 @@ void EcWidget::hideAISTooltip()
     if (aisTooltip) {
         aisTooltip->hide();
     }
+    currentTooltipTarget = nullptr;
+    if (aisTooltipUpdateTimer) {
+        aisTooltipUpdateTimer->stop();
+    }
+    isAISTooltipVisible = false;
 }
 
 // Tambahkan fungsi untuk mencari AIS target di posisi mouse
@@ -6693,9 +6684,16 @@ void EcWidget::checkMouseOverAISTarget()
 {
     EcAISTargetInfo* targetInfo = findAISTargetInfoAtPosition(lastMousePos);
 
-    if (targetInfo && !isAISTooltipVisible) {
-        showAISTooltipFromTargetInfo(lastMousePos, targetInfo);  // Gunakan fungsi yang baru
-        isAISTooltipVisible = true;
+    if (targetInfo) {
+        if (!isAISTooltipVisible) {
+            showAISTooltipFromTargetInfo(lastMousePos, targetInfo);
+            isAISTooltipVisible = true;
+        }
+        // else: tooltip sudah tampil, biarkan update jalan
+    } else {
+        if (isAISTooltipVisible) {
+            hideAISTooltip();
+        }
     }
 }
 
@@ -6756,31 +6754,42 @@ QString EcWidget::getNavStatusString(int navStatus)
 
 void EcWidget::showAISTooltipFromTargetInfo(const QPoint& position, EcAISTargetInfo* targetInfo)
 {
-    if (!aisTooltip || !targetInfo) return;
+    if (!aisTooltip || !targetInfo)
+        return;
 
-    updateAISTooltipContent(targetInfo);
+    currentTooltipTarget = targetInfo;
+    updateAISTooltipContent(currentTooltipTarget);  // Isi awal
 
-    // Positioning logic sama seperti sebelumnya
-    QPoint tooltipPos = mapToGlobal(position);
-    tooltipPos.setX(tooltipPos.x() + 15);
-    tooltipPos.setY(tooltipPos.y() + 15);
-
-    // Screen boundary checking
+    // Posisi tooltip relatif terhadap kursor
+    QPoint tooltipPos = mapToGlobal(position) + QPoint(15, 15);
     QRect screenGeometry = QApplication::primaryScreen()->geometry();
     QSize tooltipSize = aisTooltip->sizeHint();
 
+    // Koreksi posisi jika melebihi layar
     if (tooltipPos.x() + tooltipSize.width() > screenGeometry.right()) {
-        tooltipPos.setX(position.x() - tooltipSize.width() - 15);
-        tooltipPos = mapToGlobal(QPoint(tooltipPos.x(), position.y()));
+        tooltipPos.setX(mapToGlobal(QPoint(position.x() - tooltipSize.width() - 15, position.y())).x());
     }
-
     if (tooltipPos.y() + tooltipSize.height() > screenGeometry.bottom()) {
-        tooltipPos.setY(mapToGlobal(position).y() - tooltipSize.height() - 15);
+        tooltipPos.setY(mapToGlobal(QPoint(position.x(), position.y() - tooltipSize.height() - 15)).y());
     }
 
     aisTooltip->move(tooltipPos);
     aisTooltip->show();
     aisTooltip->raise();
+
+    // Mulai timer update isi tooltip
+    if (!aisTooltipUpdateTimer) {
+        aisTooltipUpdateTimer = new QTimer(this);
+        connect(aisTooltipUpdateTimer, &QTimer::timeout, this, &EcWidget::updateTooltipIfVisible);
+    }
+    aisTooltipUpdateTimer->start(1000);  // 1 detik
+}
+
+void EcWidget::updateTooltipIfVisible()
+{
+    if (aisTooltip && aisTooltip->isVisible() && currentTooltipTarget) {
+        updateAISTooltipContent(currentTooltipTarget);
+    }
 }
 
 // icon ownship
@@ -6887,6 +6896,7 @@ void EcWidget::drawOwnShipVectors(QPainter& painter, int x, int y, double cog, d
     painter.restore();
 }
 
+
 // Implementasi test guardzone methods:
 void EcWidget::setTestGuardZoneEnabled(bool enabled)
 {
@@ -6953,4 +6963,64 @@ void EcWidget::drawTestGuardZone(QPainter& painter)
 
     qDebug() << "Dashed guardzone drawn at center (px):" << centerX << centerY
              << "radius:" << radiusInPixels << "px";
+}
+
+void EcWidget::drawTestGuardSquare(QPainter& painter)
+{
+    // Pusat guardzone dalam lat/lon
+    double centerLat = closestAIS.lat;
+    double centerLon = closestAIS.lon;
+
+    // qDebug() << "LAT: " << centerLat << " / LON: " << centerLon;
+
+    int centerX, centerY;
+    if (!LatLonToXy(centerLat, centerLon, centerX, centerY)) {
+        qDebug() << "Failed to convert lat/lon to XY";
+        return;
+    }
+
+    double radiusInPixels = calculatePixelsFromNauticalMiles(0.2);
+
+    painter.save();
+
+    // Gunakan garis putus-putus tanpa fill
+    QPen dashedPen(Qt::red, 2, Qt::DashLine);
+    painter.setPen(dashedPen);
+    painter.setBrush(Qt::NoBrush);
+
+    QRectF squareRect(centerX - radiusInPixels,
+                      centerY - radiusInPixels,
+                      radiusInPixels * 2,
+                      radiusInPixels * 2);
+
+    painter.drawRect(squareRect); // Ganti dari drawEllipse ke drawRect
+
+    // Titik tengah
+    painter.setPen(QPen(Qt::red, 4));
+    painter.drawPoint(centerX, centerY);
+
+    painter.restore();
+
+    // qDebug() << "Dashed square guardzone drawn at center (px):" << centerX << centerY
+    //          << "side length:" << radiusInPixels * 2 << "px";
+}
+
+void EcWidget::setClosestCPA(double val)
+{
+    closestCPA = val;
+}
+
+double EcWidget::getClosestCPA() const
+{
+    return closestCPA;
+}
+
+void EcWidget::setClosestAIS(AISTargetData val)
+{
+    closestAIS = val;
+}
+
+AISTargetData EcWidget::getClosestAIS() const
+{
+    return closestAIS;
 }

@@ -460,6 +460,11 @@ public:
 
   // CPA TCPA
   void setCPAPanelToAIS(CPATCPAPanel* panel);
+  void setClosestCPA(double val);
+  double getClosestCPA() const;
+
+  void setClosestAIS(AISTargetData val);
+  AISTargetData getClosestAIS() const;
 
   // GUARDIAN AIS
   void drawShipGuardianSquare(double aisLat, double aisLon);      // NEW: Draw warning square area
@@ -763,6 +768,9 @@ private:
   QLabel* tooltipListOfPorts;
   QLabel* tooltipAntennaLocation;
 
+  QTimer* aisTooltipUpdateTimer = nullptr;
+  EcAISTargetInfo* currentTooltipTarget = nullptr;
+
   // Helper functions for tooltip
   void createAISTooltip();
   void showAISTooltip(const QPoint& position, const AISTargetData& targetData);
@@ -781,6 +789,7 @@ private:
 
   EcAISTargetInfo* findAISTargetInfoAtPosition(const QPoint& mousePos);
   void showAISTooltipFromTargetInfo(const QPoint& position, EcAISTargetInfo* targetInfo);
+  void updateTooltipIfVisible();
   void updateAISTooltipContent(EcAISTargetInfo* targetInfo);
 
   void getAISDataFromFeature(EcFeature feature, QString& objectName, QString& shipBreadth,
@@ -808,7 +817,13 @@ private:
 
   // Test GuardZone drawing
   void drawTestGuardZone(QPainter& painter);
+  void drawTestGuardSquare(QPainter& painter);
 
+  // CLOSEST CPA VAR
+  AISTargetData closestAIS;
+  double closestCPA = 999;
+  double closestLat = -1;
+  double closestLon = -1;
 
 }; // EcWidget
 

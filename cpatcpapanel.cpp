@@ -194,6 +194,7 @@ void CPATCPAPanel::refreshData()
     lastUpdateLabel->setText(QString("Last Update: %1").arg(QTime::currentTime().toString("hh:mm:ss")));
 }
 
+/*
 // void CPATCPAPanel::updateTargetsDisplay()
 // {
 //     if (!ecWidget || !targetsTable) return;
@@ -264,6 +265,7 @@ void CPATCPAPanel::refreshData()
 //         systemStatusLabel->setText(QString("System: <font color='green'>ACTIVE</font> | Closest CPA: %1").arg(formatDistance(closestCPA)));
 //     }
 // }
+*/
 
 void CPATCPAPanel::updateTargetsDisplay()
 {
@@ -301,6 +303,8 @@ void CPATCPAPanel::updateTargetsDisplay()
         bool isDangerous;
     };
 
+    AISTargetData closestAIS;
+
     QList<TargetWithResult> sortedList;
     for (const auto &target : targets) {
         //if (target.mmsi != "367159080" && target.mmsi != "366973590" && target.mmsi != "366996240") continue;
@@ -336,9 +340,15 @@ void CPATCPAPanel::updateTargetsDisplay()
             aisTrkStatusManual = aisInformationAvailable;
         }
 
+        if (ecWidget && isDangerous){
+            closestAIS.mmsi = target.mmsi;
+        }
+
         if (result.isValid) {
             trackingCount++;
-            if (result.cpa < closestCPA) closestCPA = result.cpa;
+            if (result.cpa < closestCPA) {
+                closestCPA = result.cpa;
+            }
             if (result.tcpa > 0 && result.tcpa < shortestTCPA) shortestTCPA = result.tcpa;
         }
 

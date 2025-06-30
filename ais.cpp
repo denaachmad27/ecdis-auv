@@ -819,7 +819,8 @@ EcAISTargetInfo* Ais::getTargetInfo(unsigned int mmsi)
 // Fungsi khusus untuk handle ownship update
 void Ais::handleOwnShipUpdate(EcAISTargetInfo *ti)
 {
-    qDebug() << "Processing OWNSHIP update - MMSI:" << ti->mmsi;
+    // DEBUG COMMENT TEMP
+    //qDebug() << "Processing OWNSHIP update - MMSI:" << ti->mmsi;
 
     if (ti->ownShip != True) return;
 
@@ -847,7 +848,8 @@ void Ais::handleOwnShipUpdate(EcAISTargetInfo *ti)
 
         Ais::instance()->_aisOwnShip = dataOS;
 
-        qDebug() << "Ownship data updated - COG:" << dataOS.cog << "Heading:" << dataOS.heading;
+        // DEBUG COMMENT TEMP
+        //qDebug() << "Ownship data updated - COG:" << dataOS.cog << "Heading:" << dataOS.heading;
     }
 }
 
@@ -901,6 +903,16 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
             // Set the remaining attributes of the ais target feature
             EcAISSetTargetObjectData(feat, _dictInfo, ti, &_bSymbolize);
 
+
+            // if (ti->mmsi == _wParent->getClosestAIS().mmsi){
+            //     AISTargetData ais;
+            //     ais.mmsi = ti->mmsi;
+            //     ais.lat = lat;
+            //     ais.lon = lon;
+
+            //     _wParent->setClosestAIS(ais);
+            // }
+
             // SIMPEN DATA AIS TARGET
             if (ti && ti->mmsi != 0)
             {
@@ -922,6 +934,15 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
                 Ais::instance()->_aisTargetInfoMap[ti->mmsi] = *ti;
             }
         }
+    }
+
+    if (_wParent->getClosestAIS().mmsi == QString::number(ti->mmsi)){
+        AISTargetData ais;
+        ais.mmsi = QString::number(ti->mmsi);
+        ais.lat = lat;
+        ais.lon = lon;
+
+        _wParent->setClosestAIS(ais);
     }
 
     // Emit signal untuk refresh chart display
