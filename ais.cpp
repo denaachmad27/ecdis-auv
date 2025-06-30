@@ -916,6 +916,7 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
                 data.cpaCalculatedAt = QDateTime::currentDateTime();
                 data.feat = feat;
                 data._dictInfo = _dictInfo;
+                data.isDangerous = (aisTrkStatus == aisDangerous);
 
                 Ais::instance()->_aisTargetMap[ti->mmsi] = data;
                 Ais::instance()->_aisTargetInfoMap[ti->mmsi] = *ti;

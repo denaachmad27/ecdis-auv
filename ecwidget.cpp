@@ -925,6 +925,23 @@ void EcWidget::paintEvent (QPaintEvent *e)
       drawTestGuardZone(painter);
   }
   // =======================================
+
+  // Draw red box around dangerous AIS targets
+  if (_aisObj) {
+      QPainter painter(this);
+      painter.setRenderHint(QPainter::Antialiasing);
+      QMap<unsigned int, AISTargetData> targetMap = _aisObj->getTargetMap();
+      for (const AISTargetData &target : targetMap) {
+          if (target.isDangerous) {
+              int x, y;
+              if (LatLonToXy(target.lat, target.lon, x, y)) {
+                  painter.setPen(QPen(Qt::red, 2, Qt::SolidLine));
+                  painter.setBrush(QColor(255, 0, 0, 40)); // Solid red border, 40/255 transparent fill
+                  painter.drawRect(x - 20, y - 20, 40, 40);
+              }
+          }
+      }
+  }
 }
 
 /*---------------------------------------------------------------------------*/
