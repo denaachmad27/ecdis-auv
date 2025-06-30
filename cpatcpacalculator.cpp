@@ -18,7 +18,8 @@ CPATCPAResult CPATCPACalculator::calculateCPATCPA(const VesselState& ownShip, co
 
     // Validate input data
     if (!isValidForCalculation(ownShip) || !isValidForCalculation(target)) {
-        qDebug() << "Invalid vessel data for CPA/TCPA calculation";
+        // DEBUG COMMENT TEMP
+        //qDebug() << "Invalid vessel data for CPA/TCPA calculation";
         return result;
     }
 

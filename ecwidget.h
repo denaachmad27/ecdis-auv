@@ -460,6 +460,11 @@ public:
 
   // CPA TCPA
   void setCPAPanelToAIS(CPATCPAPanel* panel);
+  void setClosestCPA(double val);
+  double getClosestCPA() const;
+
+  void setClosestAIS(AISTargetData val);
+  AISTargetData getClosestAIS() const;
 
   // GUARDIAN AIS
   void drawShipGuardianSquare(double aisLat, double aisLon);      // NEW: Draw warning square area
@@ -812,7 +817,13 @@ private:
 
   // Test GuardZone drawing
   void drawTestGuardZone(QPainter& painter);
+  void drawTestGuardSquare(QPainter& painter);
 
+  // CLOSEST CPA VAR
+  AISTargetData closestAIS;
+  double closestCPA = 999;
+  double closestLat = -1;
+  double closestLon = -1;
 
 }; // EcWidget
 

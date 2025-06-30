@@ -922,9 +922,10 @@ void EcWidget::paintEvent (QPaintEvent *e)
   drawRedDotTracker();
 
   // ========== DRAW TEST GUARDZONE ==========
-  if (testGuardZoneEnabled) {
-      drawTestGuardZone(painter);
-  }
+  drawTestGuardSquare(painter);
+  // if (testGuardZoneEnabled) {
+  //
+  // }
   // =======================================
 }
 
@@ -979,95 +980,97 @@ void EcWidget::resizeEvent (QResizeEvent *event)
 
 /*---------------------------------------------------------------------------*/
 
+/*
 // Mouseevent lama
-// void EcWidget::mousePressEvent(QMouseEvent *e)
-// {
-//   setFocus();
+void EcWidget::mousePressEvent(QMouseEvent *e)
+{
+  setFocus();
 
-//   if (e->button() == Qt::LeftButton)
-//   {
-//     // if (activeFunction == CREATE_WAYP) {
-//     //       qDebug() << "CREATE WAYP";
-//     //     EcCoordinate lat, lon;
-//     //     if (XyToLatLon(e->x(), e->y(), lat, lon)) {
-//     //         SetWaypointPos(lat, lon);
-//     //         createWaypoint();
-//     //     }
-//     // }
-//     // else {
-//     //     EcCoordinate lat, lon;
-//     //     if (XyToLatLon(e->x(), e->y(), lat, lon))
-//     //     {
-//     //         SetCenter(lat, lon);
-//     //         //draw(true);
-//     //         Draw();
-//     //     }
-//     // }
+  if (e->button() == Qt::LeftButton)
+  {
+    // if (activeFunction == CREATE_WAYP) {
+    //       qDebug() << "CREATE WAYP";
+    //     EcCoordinate lat, lon;
+    //     if (XyToLatLon(e->x(), e->y(), lat, lon)) {
+    //         SetWaypointPos(lat, lon);
+    //         createWaypoint();
+    //     }
+    // }
+    // else {
+    //     EcCoordinate lat, lon;
+    //     if (XyToLatLon(e->x(), e->y(), lat, lon))
+    //     {
+    //         SetCenter(lat, lon);
+    //         //draw(true);
+    //         Draw();
+    //     }
+    // }
 
-//       // Get mouse coordinates
-//       QPoint pos = e->pos();
+      // Get mouse coordinates
+      QPoint pos = e->pos();
 
-//       // Get position of the ecchart widget within the main window
-//       QPoint chartPos = ecchart->mapFromParent(pos);
+      // Get position of the ecchart widget within the main window
+      QPoint chartPos = ecchart->mapFromParent(pos);
 
-//       // Check if click is within the chart area
-//       if (!ecchart->rect().contains(chartPos)) {
-//           // Click is outside chart area
-//           QMainWindow::mousePressEvent(event);
-//           return;
-//       }
+      // Check if click is within the chart area
+      if (!ecchart->rect().contains(chartPos)) {
+          // Click is outside chart area
+          QMainWindow::mousePressEvent(event);
+          return;
+      }
 
-//       // Convert screen coordinates to lat/lon
-//       EcCoordinate latPos, lonPos;
-//       EcView* view = ecchart->GetView();
+      // Convert screen coordinates to lat/lon
+      EcCoordinate latPos, lonPos;
+      EcView* view = ecchart->GetView();
 
-//       if (EcDrawXyToLatLon(view, chartPos.x(), chartPos.y(), &latPos, &lonPos)) {
-//           // Handle based on active function
-//           switch (activeFunction) {
-//           case CREATE_WAYP: {
-//               // Define PICKRADIUS based on current range
-//               double range = ecchart->GetRange();
-//               double PICKRADIUS = 0.03 * range;
+      if (EcDrawXyToLatLon(view, chartPos.x(), chartPos.y(), &latPos, &lonPos)) {
+          // Handle based on active function
+          switch (activeFunction) {
+          case CREATE_WAYP: {
+              // Define PICKRADIUS based on current range
+              double range = ecchart->GetRange();
+              double PICKRADIUS = 0.03 * range;
 
-//               // Create waypoint at clicked position
-//               EcCellId udoCid = ecchart->GetUdoCellId();
-//               wp1 = EcRouteAddWaypoint(udoCid, dict, latPos, lonPos,
-//                                        PICKRADIUS, TURNRADIUS);
+              // Create waypoint at clicked position
+              EcCellId udoCid = ecchart->GetUdoCellId();
+              wp1 = EcRouteAddWaypoint(udoCid, dict, latPos, lonPos,
+                                       PICKRADIUS, TURNRADIUS);
 
-//               if (!ECOK(wp1)) {
-//                   QMessageBox::critical(this, "Error", "Waypoint could not be created");
-//               } else {
-//                   // Update display
-//                   drawUdo();
-//                   ecchart->update();
-//               }
+              if (!ECOK(wp1)) {
+                  QMessageBox::critical(this, "Error", "Waypoint could not be created");
+              } else {
+                  // Update display
+                  drawUdo();
+                  ecchart->update();
+              }
 
-//               // Reset to PAN mode
-//               activeFunction = PAN;
-//               showHeader();
-//               statusBar()->clearMessage();
-//               break;
-//           }
+              // Reset to PAN mode
+              activeFunction = PAN;
+              showHeader();
+              statusBar()->clearMessage();
+              break;
+          }
 
-//           // Add other cases as needed...
+          // Add other cases as needed...
 
-//           default:
-//               // Pass to base class for default handling
-//               QMainWindow::mousePressEvent(event);
-//               break;
-//           }
-//       }
-//   }
-//   else if (e->button() == Qt::RightButton)
-//   {
-//       if (activeFunction == CREATE_WAYP) {
-//           activeFunction = NONE;
-//       }
-//     pickX = e->x();
-//     pickY = e->y();
-//     emit mouseRightClick();
-//   }
-// }
+          default:
+              // Pass to base class for default handling
+              QMainWindow::mousePressEvent(event);
+              break;
+          }
+      }
+  }
+  else if (e->button() == Qt::RightButton)
+  {
+      if (activeFunction == CREATE_WAYP) {
+          activeFunction = NONE;
+      }
+    pickX = e->x();
+    pickY = e->y();
+    emit mouseRightClick();
+  }
+}
+*/
 
 void EcWidget::mousePressEvent(QMouseEvent *e)
 {
@@ -6943,4 +6946,64 @@ void EcWidget::drawTestGuardZone(QPainter& painter)
 
     qDebug() << "Dashed guardzone drawn at center (px):" << centerX << centerY
              << "radius:" << radiusInPixels << "px";
+}
+
+void EcWidget::drawTestGuardSquare(QPainter& painter)
+{
+    // Pusat guardzone dalam lat/lon
+    double centerLat = closestAIS.lat;
+    double centerLon = closestAIS.lon;
+
+    // qDebug() << "LAT: " << centerLat << " / LON: " << centerLon;
+
+    int centerX, centerY;
+    if (!LatLonToXy(centerLat, centerLon, centerX, centerY)) {
+        qDebug() << "Failed to convert lat/lon to XY";
+        return;
+    }
+
+    double radiusInPixels = calculatePixelsFromNauticalMiles(0.2);
+
+    painter.save();
+
+    // Gunakan garis putus-putus tanpa fill
+    QPen dashedPen(Qt::red, 2, Qt::DashLine);
+    painter.setPen(dashedPen);
+    painter.setBrush(Qt::NoBrush);
+
+    QRectF squareRect(centerX - radiusInPixels,
+                      centerY - radiusInPixels,
+                      radiusInPixels * 2,
+                      radiusInPixels * 2);
+
+    painter.drawRect(squareRect); // Ganti dari drawEllipse ke drawRect
+
+    // Titik tengah
+    painter.setPen(QPen(Qt::red, 4));
+    painter.drawPoint(centerX, centerY);
+
+    painter.restore();
+
+    // qDebug() << "Dashed square guardzone drawn at center (px):" << centerX << centerY
+    //          << "side length:" << radiusInPixels * 2 << "px";
+}
+
+void EcWidget::setClosestCPA(double val)
+{
+    closestCPA = val;
+}
+
+double EcWidget::getClosestCPA() const
+{
+    return closestCPA;
+}
+
+void EcWidget::setClosestAIS(AISTargetData val)
+{
+    closestAIS = val;
+}
+
+AISTargetData EcWidget::getClosestAIS() const
+{
+    return closestAIS;
 }
