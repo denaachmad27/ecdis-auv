@@ -269,6 +269,8 @@ void CPATCPAPanel::refreshData()
 
 void CPATCPAPanel::updateTargetsDisplay()
 {
+    ecWidget->clearDangerousAISList();
+
     if (!ecWidget || !targetsTable) return;
 
     // Simpan MMSI dari baris yang sedang terseleksi
@@ -304,6 +306,7 @@ void CPATCPAPanel::updateTargetsDisplay()
     };
 
     AISTargetData closestAIS;
+    AISTargetData dangerousAIS;
 
     QList<TargetWithResult> sortedList;
     for (const auto &target : targets) {
@@ -340,8 +343,12 @@ void CPATCPAPanel::updateTargetsDisplay()
             aisTrkStatusManual = aisInformationAvailable;
         }
 
-        if (ecWidget && isDangerous){
-            closestAIS.mmsi = target.mmsi;
+        if (isDangerous){
+            dangerousAIS.mmsi = target.mmsi;
+            dangerousAIS.lat = target.lat;
+            dangerousAIS.lon = target.lon;
+
+            ecWidget->addDangerousAISTarget(dangerousAIS);
         }
 
         if (result.isValid) {
@@ -357,7 +364,7 @@ void CPATCPAPanel::updateTargetsDisplay()
         // Set the tracking status of the ais target feature
         EcAISSetTargetTrackingStatus(target.feat, target._dictInfo, aisTrkStatusManual, NULL );
 
-        ecWidget->drawShipGuardianSquare(target.lat, target.lon);
+        //ecWidget->drawShipGuardianSquare(target.lat, target.lon);
     }
 
     // Urutkan: yang dangerous di atas

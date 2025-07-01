@@ -594,6 +594,10 @@ void EcWidget::ShowAIS(bool on)
   }
 }
 
+void EcWidget::TrackTarget(QString mmsi){
+    trackTarget = mmsi;
+}
+
 /*---------------------------------------------------------------------------*/
 
 bool EcWidget::XyToLatLon (int x, int y, EcCoordinate & lat, EcCoordinate & lon)
@@ -1262,7 +1266,7 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
         activeFunction = PAN;
         pickX = e->x();
         pickY = e->y();
-        emit mouseRightClick();
+        emit mouseRightClick(e->pos());
     }
 }
 
@@ -1886,6 +1890,7 @@ void EcWidget::InitAIS( EcDictInfo *dict)
     iWarnTCPA, strAisLib, iTimeOut, bInternalGPS, &bAISSymbolize, strErrLogAis );
 
   QObject::connect( _aisObj, SIGNAL( signalRefreshChartDisplay( double, double ) ), this, SLOT( slotRefreshChartDisplay( double, double ) ) );
+  QObject::connect( _aisObj, SIGNAL( signalRefreshCenter( double, double ) ), this, SLOT( slotRefreshCenter( double, double ) ) );
 }
 
 void EcWidget::setCPAPanelToAIS(CPATCPAPanel* panel) {
@@ -2980,8 +2985,10 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon )
 
     if((lat != 0 && lon != 0) && (fabs(currentLat - lat) > maxDist || fabs(currentLon - lon) > maxDist))
     {
-      SetCenter( lat, lon );
-      draw(true);
+        if (trackTarget.isEmpty()){
+            SetCenter( lat, lon );
+        }
+        draw(true);
     }
     slotUpdateAISTargets( true );
   }
@@ -2994,6 +3001,25 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon )
       update(); // Force widget repaint
   }
   // ==================================================
+}
+
+void EcWidget::slotRefreshCenter( double lat, double lon )
+{
+  if (showAIS)
+  {
+    // check if center position is out of defined frame, requires drawing of chart as well
+    // double maxDist = GetRange(currentScale) / 60 / 2;
+
+    // if((lat != 0 && lon != 0) && (fabs(currentLat - lat) > maxDist || fabs(currentLon - lon) > maxDist))
+    // {
+
+    if(lat != 0 && lon != 0)
+    {
+      SetCenter( lat, lon );
+      draw(true);
+    }
+    slotUpdateAISTargets( true );
+  }
 }
 //////////////////////////////////////////////////////////////   END AIS   /////////////////////////////////////////////////////
 
@@ -6526,8 +6552,8 @@ void EcWidget::createAISTooltip()
     tooltipObjectName = new QLabel("NAME: ", aisTooltip);
     tooltipCOG = new QLabel("COG: ", aisTooltip);
     tooltipSOG = new QLabel("SOG: ", aisTooltip);
-    tooltipTypeOfShip = new QLabel("SHIP TYPE: ", aisTooltip);
     tooltipAntennaLocation = new QLabel("POS: ", aisTooltip);
+    //tooltipTypeOfShip = new QLabel("SHIP TYPE: ", aisTooltip);
     //tooltipTrackStatus = new QLabel("STATUS: ", aisTooltip);
     //tooltipShipBreadth = new QLabel("Ship breadth (beam): ", aisTooltip);
     //tooltipShipLength = new QLabel("Ship length over all: ", aisTooltip);
@@ -6542,8 +6568,8 @@ void EcWidget::createAISTooltip()
         tooltipObjectName,
         tooltipCOG,
         tooltipSOG,
-        tooltipTypeOfShip,
         tooltipAntennaLocation
+        //tooltipTypeOfShip,
         //tooltipTrackStatus,
         //tooltipShipBreadth,
         //tooltipShipLength,
@@ -6584,6 +6610,9 @@ void EcWidget::updateAISTooltipContent(EcAISTargetInfo* ti)
     // Gunakan field yang benar dari EcAISTargetInfo
     QString objectName = QString(ti->shipName).trimmed();
     if (objectName.isEmpty()) objectName = QString::number(ti->mmsi);
+    while (objectName.endsWith('@')) {
+        objectName.chop(1);
+    }
 
     // Untuk field yang tidak ada, gunakan nilai default seperti di panel
     QString shipBreadth = "7.00";  // Default value
@@ -6608,9 +6637,9 @@ void EcWidget::updateAISTooltipContent(EcAISTargetInfo* ti)
     tooltipObjectName->setText(QString("NAME: %1").arg(objectName));
     tooltipCOG->setText(QString("COG: %1").arg(cogValue));
     tooltipSOG->setText(QString("SOG: %1").arg(sogValue));
-    tooltipTypeOfShip->setText(QString("SHIP TYPE: %1").arg(typeOfShip));
-    //tooltipTrackStatus->setText(QString("STATUS: %1").arg(trackStatus));
     tooltipAntennaLocation->setText(QString("POS: %1").arg(antennaLocation));
+    //tooltipTypeOfShip->setText(QString("SHIP TYPE: %1").arg(typeOfShip));
+    //tooltipTrackStatus->setText(QString("STATUS: %1").arg(trackStatus));
     //tooltipShipBreadth->setText(QString("Ship breadth (beam): %1").arg(shipBreadth));
     //tooltipShipLength->setText(QString("Ship length over all: %1").arg(shipLength));
     //tooltipShipDraft->setText(QString("Ship Draft: %1").arg(shipDraft));
@@ -6967,6 +6996,99 @@ void EcWidget::drawTestGuardZone(QPainter& painter)
 
 void EcWidget::drawTestGuardSquare(QPainter& painter)
 {
+    painter.save();
+
+    double rangeNM = GetRange(currentScale);  // misalnya return 6, 12, 24, 48, dst.
+    if (rangeNM > 48.0) {
+        painter.restore();
+        return; // zoom terlalu jauh, tidak usah gambar kotak
+    }
+
+    double scaleFactor = 1.0;
+    if (rangeNM > 24.0) scaleFactor = 0.25;
+    else if (rangeNM > 12.0) scaleFactor = 0.5;
+    else if (rangeNM > 6.0) scaleFactor = 0.75;
+
+    QPen cornerPen(Qt::red, 2);
+    painter.setPen(cornerPen);
+    painter.setBrush(Qt::NoBrush);
+
+    const double cornerLength = 10.0; // panjang garis sudut dalam pixel
+
+    for (const AISTargetData& target : dangerousAISList) {
+        double centerLat = target.lat;
+        double centerLon = target.lon;
+
+        int centerX, centerY;
+        if (!LatLonToXy(centerLat, centerLon, centerX, centerY)) {
+            continue;
+        }
+
+        // Ukuran pixel konstan * skala
+        double radiusInPixels = 20.0 * scaleFactor;
+        double left = centerX - radiusInPixels;
+        double right = centerX + radiusInPixels;
+        double top = centerY - radiusInPixels;
+        double bottom = centerY + radiusInPixels;
+
+        // Sudut kiri atas
+        painter.drawLine(QPointF(left, top), QPointF(left + cornerLength, top));           // horizontal
+        painter.drawLine(QPointF(left, top), QPointF(left, top + cornerLength));           // vertical
+
+        // Sudut kanan atas
+        painter.drawLine(QPointF(right, top), QPointF(right - cornerLength, top));         // horizontal
+        painter.drawLine(QPointF(right, top), QPointF(right, top + cornerLength));         // vertical
+
+        // Sudut kiri bawah
+        painter.drawLine(QPointF(left, bottom), QPointF(left + cornerLength, bottom));     // horizontal
+        painter.drawLine(QPointF(left, bottom), QPointF(left, bottom - cornerLength));     // vertical
+
+        // Sudut kanan bawah
+        painter.drawLine(QPointF(right, bottom), QPointF(right - cornerLength, bottom));   // horizontal
+        painter.drawLine(QPointF(right, bottom), QPointF(right, bottom - cornerLength));   // vertical
+
+        // Titik tengah
+        painter.drawPoint(centerX, centerY);
+    }
+
+    // Gambar kotak khusus untuk target yang sedang di-follow
+    if (!trackTarget.isEmpty()) {
+        // Asumsikan kamu punya variabel followedTarget bertipe AISTargetData
+        AISTargetData ais;
+
+        _aisObj->getAISTrack(ais);
+
+        //qDebug() << ais.lat << ", " << ais.lon;
+
+        double centerLat = ais.lat;
+        double centerLon = ais.lon;
+
+        int centerX, centerY;
+        if (LatLonToXy(centerLat, centerLon, centerX, centerY)) {
+            double radiusInPixels = 24.0 * scaleFactor;  // lebih besar dari kotak AIS bahaya
+            double left = centerX - radiusInPixels;
+            double right = centerX + radiusInPixels;
+            double top = centerY - radiusInPixels;
+            double bottom = centerY + radiusInPixels;
+
+            QPen followPen(QColor(0, 255, 255, 180));  // cyan semi-transparan
+            followPen.setWidth(3);
+            followPen.setStyle(Qt::DashLine);
+            painter.setPen(followPen);
+            painter.setBrush(Qt::NoBrush);
+
+            painter.drawRect(QRectF(QPointF(left, top), QPointF(right, bottom)));
+        }
+    }
+
+    painter.restore();
+}
+
+
+
+/*
+void EcWidget::drawTestGuardSquare(QPainter& painter)
+{
     // Pusat guardzone dalam lat/lon
     double centerLat = closestAIS.lat;
     double centerLon = closestAIS.lon;
@@ -7004,6 +7126,7 @@ void EcWidget::drawTestGuardSquare(QPainter& painter)
     // qDebug() << "Dashed square guardzone drawn at center (px):" << centerX << centerY
     //          << "side length:" << radiusInPixels * 2 << "px";
 }
+*/
 
 void EcWidget::setClosestCPA(double val)
 {
@@ -7020,7 +7143,31 @@ void EcWidget::setClosestAIS(AISTargetData val)
     closestAIS = val;
 }
 
+QString EcWidget::getTrackMMSI(){
+    return trackTarget;
+}
+
 AISTargetData EcWidget::getClosestAIS() const
 {
     return closestAIS;
+}
+
+void EcWidget::setDangerousAISList(const QList<AISTargetData>& list)
+{
+    dangerousAISList = list;
+}
+
+QList<AISTargetData> EcWidget::getDangerousAISList() const
+{
+    return dangerousAISList;
+}
+
+void EcWidget::addDangerousAISTarget(const AISTargetData& target)
+{
+    dangerousAISList.append(target);
+}
+
+void EcWidget::clearDangerousAISList()
+{
+    dangerousAISList.clear();
 }

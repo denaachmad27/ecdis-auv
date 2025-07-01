@@ -94,6 +94,28 @@ void Ais::getOwnShipPos(EcCoordinate & lat, EcCoordinate & lon) const
   lon = _ownShipLon;
 }
 
+void Ais::setTargetPos(EcCoordinate lat, EcCoordinate lon)
+{
+    _targetLat = lat;
+    _targetLon = lon;
+}
+
+void Ais::getTargetPos(EcCoordinate & lat, EcCoordinate & lon) const
+{
+    lat = _targetLat;
+    lon = _targetLon;
+}
+
+void Ais::setAISTrack(AISTargetData aisTrack)
+{
+    _aisTrack = aisTrack;
+}
+
+void Ais::getAISTrack(AISTargetData & aisTrack) const
+{
+    aisTrack = _aisTrack;
+}
+
 
 // Close AIs file.
 //////////////////
@@ -299,9 +321,11 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
         // KURANGI emit signal - hanya emit sekali per detik atau sesuai kebutuhan
         static QDateTime lastEmit = QDateTime::currentDateTime();
         if (lastEmit.msecsTo(QDateTime::currentDateTime()) > 3000) {
+
             EcCoordinate ownLat, ownLon;
             _myAis->getOwnShipPos(ownLat, ownLon);
             _myAis->emitSignal(ownLat, ownLon);
+
             lastEmit = QDateTime::currentDateTime();
         }
         return;
@@ -310,6 +334,22 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
     // 2. Handle AIS targets (bukan ownship)
     if (ti->ownShip == False) {
         _myAis->handleAISTargetUpdate(ti);
+
+        // KURANGI emit signal - hanya emit sekali per detik atau sesuai kebutuhan
+        // static QDateTime lastEmit = QDateTime::currentDateTime();
+        if (_wParent->getTrackMMSI() == QString::number(ti->mmsi))
+        {
+            EcCoordinate ownLat, ownLon;
+            _myAis->getTargetPos(ownLat, ownLon);
+
+            AISTargetData ais;
+            ais.mmsi = QString::number(ti->mmsi);
+            ais.lat = ownLat;
+            ais.lon = ownLon;
+
+            _myAis->setAISTrack(ais);
+            _myAis->emitSignalTarget(ownLat, ownLon);
+        }
         return;
     }
 }
@@ -317,6 +357,11 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
 void Ais::emitSignal( double lat, double lon )
 {
   emit signalRefreshChartDisplay( lat, lon );
+}
+
+void Ais::emitSignalTarget( double lat, double lon )
+{
+    emit signalRefreshCenter( lat, lon );
 }
 
 void Ais::stopAnimation()
@@ -903,15 +948,7 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
             // Set the remaining attributes of the ais target feature
             EcAISSetTargetObjectData(feat, _dictInfo, ti, &_bSymbolize);
 
-
-            // if (ti->mmsi == _wParent->getClosestAIS().mmsi){
-            //     AISTargetData ais;
-            //     ais.mmsi = ti->mmsi;
-            //     ais.lat = lat;
-            //     ais.lon = lon;
-
-            //     _wParent->setClosestAIS(ais);
-            // }
+            _myAis->setTargetPos(lat, lon);
 
             // SIMPEN DATA AIS TARGET
             if (ti && ti->mmsi != 0)
@@ -934,15 +971,6 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
                 Ais::instance()->_aisTargetInfoMap[ti->mmsi] = *ti;
             }
         }
-    }
-
-    if (_wParent->getClosestAIS().mmsi == QString::number(ti->mmsi)){
-        AISTargetData ais;
-        ais.mmsi = QString::number(ti->mmsi);
-        ais.lat = lat;
-        ais.lon = lon;
-
-        _wParent->setClosestAIS(ais);
     }
 
     // Emit signal untuk refresh chart display
