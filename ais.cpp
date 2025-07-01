@@ -337,6 +337,10 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
 
         // KURANGI emit signal - hanya emit sekali per detik atau sesuai kebutuhan
         // static QDateTime lastEmit = QDateTime::currentDateTime();
+
+        // =========== CARA 1: SET KE CENTER KALO ADA PERUBAHAN/PERTAMBAHAN DATA =============
+
+        /*
         if (_wParent->getTrackMMSI() == QString::number(ti->mmsi))
         {
             EcCoordinate ownLat, ownLon;
@@ -350,6 +354,28 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
             _myAis->setAISTrack(ais);
             _myAis->emitSignalTarget(ownLat, ownLon);
         }
+        */
+
+        // =========== CARA 2: SET KE CENTER TERUS ADA ATAU PUN TIADA PERUBAHAN DATA ===========
+        AISTargetData ais;
+        _myAis->getAISTrack(ais);
+
+        if (!ais.mmsi.isEmpty())
+        {
+            _myAis->emitSignalTarget(ais.lat, ais.lon);
+
+            if (ais.mmsi == QString::number(ti->mmsi)){
+                EcCoordinate ownLat, ownLon;
+                _myAis->getTargetPos(ownLat, ownLon);
+
+                ais.lat = ownLat;
+                ais.lon = ownLon;
+
+                _myAis->setAISTrack(ais);
+            }
+        }
+
+
         return;
     }
 }

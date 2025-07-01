@@ -6824,71 +6824,89 @@ void EcWidget::updateTooltipIfVisible()
 // icon ownship
 void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, double heading, double sog)
 {
+    double rangeNM = GetRange(currentScale);
+
+    // Jika zoom terlalu jauh, tampilkan dua lingkaran sebagai simbol ownship
+    if (rangeNM > 10.0) {
+        painter.save();
+        painter.setPen(QPen(Qt::black, 2));
+
+        int r1 = 6;   // lingkaran dalam
+        int r2 = 12;  // lingkaran luar
+
+        painter.drawEllipse(QPointF(x, y), r2, r2); // Lingkaran luar
+        painter.drawEllipse(QPointF(x, y), r1, r1); // Lingkaran dalam
+
+        // Titik kecil di tengah (hitam solid)
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(Qt::black);
+        painter.drawEllipse(QPointF(x, y), 2, 2); // Titik diameter 4px
+
+        painter.restore();
+        return;  // jangan lanjut gambar kapal
+    }
+
+    // Skala ikon kapal berdasarkan range
+    double scaleFactor = 1.0;
+
     painter.save();
 
     painter.translate(x, y);
     painter.rotate(heading);  // Rotasi kapal sesuai heading
 
-    // UKURAN DISESUAIKAN AGAR SECARA VISUAL PROPORSIONAL
-    int shipLength = 45;  // Lebih panjang dari segitiga (15) untuk kompensasi bentuk ramping
-    int shipWidth = 15;   // Lebih lebar dari separuh segitiga (7) untuk area visual yang sama
+    int shipLength = int(45 * scaleFactor);
+    int shipWidth  = int(15 * scaleFactor);
 
-    // BENTUK KAPAL DENGAN LENGKUNGAN HALUS
     QPainterPath shipPath;
+    shipPath.moveTo(0, -shipLength / 2);  // ujung hidung
 
-    // Mulai dari hidung kapal
-    shipPath.moveTo(0, -shipLength/2);  // ujung hidung
-
-    // SISI KANAN dengan kurva yang smooth
-    QPointF control1(shipWidth/3, -shipLength/2 + 3);  // control point dekat hidung
-    QPointF point1(shipWidth/2, -shipLength/4);        // titik lengkung pertama
+    // Sisi kanan
+    QPointF control1(shipWidth / 3, -shipLength / 2 + 3);
+    QPointF point1(shipWidth / 2, -shipLength / 4);
     shipPath.quadTo(control1, point1);
 
-    // Lengkung tengah kanan (bagian terlebar)
-    QPointF point2(shipWidth/2, shipLength/4);         // bagian tengah
+    QPointF point2(shipWidth / 2, shipLength / 4);
     shipPath.lineTo(point2);
 
-    // Lengkung menuju buritan
-    QPointF control2(shipWidth/2, shipLength/2 - 2);   // control point menuju buritan
-    QPointF point3(shipWidth/3, shipLength/2);         // sudut buritan kanan
+    QPointF control2(shipWidth / 2, shipLength / 2 - 2);
+    QPointF point3(shipWidth / 3, shipLength / 2);
     shipPath.quadTo(control2, point3);
 
-    // BURITAN DATAR
-    shipPath.lineTo(-shipWidth/3, shipLength/2);       // buritan datar
+    // Buritan datar
+    shipPath.lineTo(-shipWidth / 3, shipLength / 2);
 
-    // SISI KIRI (mirror dari kanan)
-    QPointF control3(-shipWidth/2, shipLength/2 - 2);  // control point menuju buritan kiri
-    QPointF point4(-shipWidth/2, shipLength/4);        // bagian tengah kiri
+    // Sisi kiri (mirror)
+    QPointF control3(-shipWidth / 2, shipLength / 2 - 2);
+    QPointF point4(-shipWidth / 2, shipLength / 4);
     shipPath.quadTo(control3, point4);
 
-    // Lengkung tengah kiri
-    QPointF point5(-shipWidth/2, -shipLength/4);       // titik lengkung kiri
+    QPointF point5(-shipWidth / 2, -shipLength / 4);
     shipPath.lineTo(point5);
 
-    // Lengkung kembali ke hidung
-    QPointF control4(-shipWidth/3, -shipLength/2 + 3); // control point dekat hidung kiri
-    QPointF point6(0, -shipLength/2);                  // kembali ke hidung
+    QPointF control4(-shipWidth / 3, -shipLength / 2 + 3);
+    QPointF point6(0, -shipLength / 2);
     shipPath.quadTo(control4, point6);
 
-    // DRAWING KAPAL
+    // Gambar kapal
     painter.setBrush(QBrush(QColor(120, 120, 120)));   // Abu-abu
-    painter.setPen(QPen(Qt::black, 1));                // Border hitam
+    painter.setPen(QPen(Qt::black, 1));
     painter.drawPath(shipPath);
 
-    // TITIK CENTER
+    // Titik pusat kapal
     painter.setBrush(QBrush(Qt::black));
     painter.setPen(QPen(Qt::black, 1));
     painter.drawEllipse(-1, -1, 2, 2);
 
-    // GARIS PENUNJUK ARAH HEADING (current orientation)
+    // Garis heading
     painter.setPen(QPen(Qt::black, 2));
-    painter.drawLine(0, 0, 0, -shipLength/2 - 10);
+    painter.drawLine(0, 0, 0, -shipLength / 2 - int(10 * scaleFactor));
 
-    painter.restore();  // Kembalikan transformasi
+    painter.restore();
 
-    // ⭐ TAMBAHAN BARU: GAMBAR VECTOR GARIS COG DAN HEADING
+    // Gambar vektor COG/SOG di luar rotasi
     drawOwnShipVectors(painter, x, y, cog, heading, sog);
 }
+
 
 void EcWidget::drawOwnShipVectors(QPainter& painter, int x, int y, double cog, double heading, double sog)
 {
@@ -7170,4 +7188,9 @@ void EcWidget::addDangerousAISTarget(const AISTargetData& target)
 void EcWidget::clearDangerousAISList()
 {
     dangerousAISList.clear();
+}
+
+void EcWidget::setAISTrack(const AISTargetData aisTrack)
+{
+    _aisObj->setAISTrack(aisTrack);
 }

@@ -480,6 +480,7 @@ public:
 
   EcAISTargetInfo* findAISTargetInfoAtPosition(const QPoint& mousePos);
   QString getTrackMMSI();
+  void setAISTrack(AISTargetData aisTrack);
 
 public slots:
   void updateAISTargetsList();

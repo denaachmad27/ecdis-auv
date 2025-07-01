@@ -1354,12 +1354,27 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
 
     if (target) {
         QString mmsiStr = QString::number(target->mmsi);
-        qDebug() << "Track Target MMSI:" << mmsiStr;
+        AISTargetData ais;
 
+        ais.mmsi = mmsiStr;
+        ais.lat = ((double)target->latitude / 10000) / 60;
+        ais.lon = ((double)target->longitude / 10000) / 60;
+
+        ecchart->setAISTrack(ais);
         ecchart->TrackTarget(mmsiStr);
+
+        qDebug() << "Track Target MMSI:" << mmsiStr;
     }
     else {
+        AISTargetData ais;
+
+        ais.mmsi = "";
+        ais.lat = 0;
+        ais.lon = 0;
+
+        ecchart->setAISTrack(ais);
         ecchart->TrackTarget("");
+
         qDebug() << "Track Ownship";
     }
 
