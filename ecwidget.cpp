@@ -132,6 +132,9 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   guardianRadius = 0.5;
   guardianFillColor = QColor(255, 0, 0, 50);
   guardianBorderColor = QColor(255, 0, 0, 150);
+  redDotGuardianEnabled = false;
+  redDotGuardianId = -1;
+  redDotGuardianName = "";
 
   // Initialize feedback system
   feedbackMessage = "";
@@ -299,6 +302,9 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   guardZoneWarningLevel = EC_WARNING_LEVEL; // Default level peringatan
   guardZoneActive = false;                  // Default tidak aktif
   guardZoneAttachedToShip = false;          // Default tidak terikat ke kapal
+
+  attachedGuardZoneId = -1;
+  attachedGuardZoneName = "";
 
 }
 
@@ -6283,7 +6289,11 @@ void EcWidget::setRedDotAttachedToShip(bool attached)
     if (attached) {
         // Auto-enable tracker when attaching
         redDotTrackerEnabled = true;
-        qDebug() << "Red dot tracker auto-enabled";
+
+        // TAMBAHAN: Buat guardzone di manager
+        createAttachedGuardZone();
+
+        qDebug() << "Red dot tracker auto-enabled and added to GuardZone Manager";
 
         // Try to get current ownship position
         if (ownShip.lat != 0.0 && ownShip.lon != 0.0) {
@@ -6293,7 +6303,10 @@ void EcWidget::setRedDotAttachedToShip(bool attached)
             qDebug() << "OwnShip position is zero, waiting for AIS update";
         }
     } else {
-        qDebug() << "Red dot detached from ship";
+        // TAMBAHAN: Hapus guardzone dari manager
+        removeAttachedGuardZone();
+
+        qDebug() << "Red dot detached from ship and removed from GuardZone Manager";
     }
 
     update(); // Force repaint
@@ -6317,6 +6330,19 @@ void EcWidget::updateRedDotPosition(double lat, double lon)
 
     redDotLat = lat;
     redDotLon = lon;
+
+    // TAMBAHAN: Update posisi di GuardZone Manager
+    if (attachedGuardZoneId != -1) {
+        for (GuardZone& gz : guardZones) {
+            if (gz.id == attachedGuardZoneId) {
+                gz.centerLat = lat;
+                gz.centerLon = lon;
+                break;
+            }
+        }
+        // Emit signal untuk update panel
+        emit guardZoneModified();
+    }
 
     qDebug() << "Red Dot position updated to:" << lat << "," << lon;
 }
@@ -6409,14 +6435,25 @@ void EcWidget::testRedDot()
 void EcWidget::setShipGuardianEnabled(bool enabled)
 {
     shipGuardianEnabled = enabled;
-    redDotTrackerEnabled = enabled;  // Keep compatibility
-    qDebug() << "Ship Guardian Circle enabled:" << enabled;
+    redDotTrackerEnabled = enabled;
 
-    if (!enabled) {
+    if (enabled) {
+        // Buat red dot guardian di GuardZone Manager
+        createRedDotGuardian();
+
+        // Set posisi ke ship position
+        if (ownShip.lat != 0.0 && ownShip.lon != 0.0) {
+            updateRedDotPosition(ownShip.lat, ownShip.lon);
+        }
+    } else {
+        // Hapus red dot guardian dari GuardZone Manager
+        removeRedDotGuardian();
+
         redDotLat = 0.0;
         redDotLon = 0.0;
     }
 
+    qDebug() << "Ship Guardian Circle enabled:" << enabled;
     update();
 }
 
@@ -7023,4 +7060,161 @@ void EcWidget::setClosestAIS(AISTargetData val)
 AISTargetData EcWidget::getClosestAIS() const
 {
     return closestAIS;
+}
+
+void EcWidget::createRedDotGuardian()
+{
+    if (redDotGuardianEnabled) {
+        qDebug() << "Red Dot Guardian already exists";
+        return;
+    }
+
+    // Generate unique ID untuk red dot guardian
+    redDotGuardianId = getNextGuardZoneId();  // Menggunakan fungsi yang sudah ada
+    redDotGuardianName = QString("Ship Guardian Circle #%1").arg(redDotGuardianId);
+
+    // Buat GuardZone object untuk red dot
+    GuardZone redDotGuardZone;
+    redDotGuardZone.id = redDotGuardianId;
+    redDotGuardZone.name = redDotGuardianName;
+    redDotGuardZone.shape = GUARD_ZONE_CIRCLE;
+    redDotGuardZone.active = true;
+    redDotGuardZone.attachedToShip = true;  // Selalu attached ke ship
+    redDotGuardZone.color = QColor(255, 0, 0, 150);  // Red color
+
+    // Set posisi dan radius
+    redDotGuardZone.centerLat = ownShip.lat;
+    redDotGuardZone.centerLon = ownShip.lon;
+    redDotGuardZone.radius = guardianRadius;  // Menggunakan radius yang sudah ada (0.2 NM)
+
+    // Tambahkan ke list guardZones
+    guardZones.append(redDotGuardZone);
+
+    // Enable red dot guardian
+    redDotGuardianEnabled = true;
+
+    // Update GuardZone Manager menggunakan signal yang sudah ada
+    if (guardZoneManager) {
+        emit guardZoneCreated();  // Signal yang sudah ada
+    }
+
+    // Save guardZones
+    saveGuardZones();
+
+    qDebug() << "Red Dot Guardian created with ID:" << redDotGuardianId;
+}
+
+void EcWidget::removeRedDotGuardian()
+{
+    if (!redDotGuardianEnabled) {
+        return;
+    }
+
+    // Hapus dari guardZones list
+    for (int i = 0; i < guardZones.size(); i++) {
+        if (guardZones[i].id == redDotGuardianId) {
+            guardZones.removeAt(i);
+            break;
+        }
+    }
+
+    // Disable red dot guardian
+    redDotGuardianEnabled = false;
+    int oldId = redDotGuardianId;
+    redDotGuardianId = -1;
+    redDotGuardianName.clear();
+
+    // Update GuardZone Manager menggunakan signal yang sudah ada
+    if (guardZoneManager) {
+        emit guardZoneDeleted();  // Signal yang sudah ada
+    }
+
+    // Save guardZones
+    saveGuardZones();
+
+    qDebug() << "Red Dot Guardian removed with ID:" << oldId;
+}
+
+void EcWidget::updateRedDotGuardianInManager()
+{
+    if (!redDotGuardianEnabled || !redDotAttachedToShip) {
+        return;
+    }
+
+    // Update posisi red dot guardian di guardZones list
+    for (GuardZone& gz : guardZones) {
+        if (gz.id == redDotGuardianId) {
+            gz.centerLat = ownShip.lat;
+            gz.centerLon = ownShip.lon;
+            gz.radius = guardianRadius;
+            gz.active = shipGuardianEnabled;
+            break;
+        }
+    }
+
+    // Refresh GuardZone Manager menggunakan signal yang sudah ada
+    if (guardZoneManager) {
+        emit guardZoneModified();  // Signal yang sudah ada
+    }
+}
+
+void EcWidget::createAttachedGuardZone()
+{
+    // Cek apakah sudah ada
+    if (attachedGuardZoneId != -1) {
+        qDebug() << "Attached GuardZone already exists with ID:" << attachedGuardZoneId;
+        return;
+    }
+
+    // Generate ID dan nama
+    attachedGuardZoneId = getNextGuardZoneId();
+    attachedGuardZoneName = QString("Ship Guardian Zone #%1").arg(attachedGuardZoneId);
+
+    // Buat GuardZone object
+    GuardZone attachedGZ;
+    attachedGZ.id = attachedGuardZoneId;
+    attachedGZ.name = attachedGuardZoneName;
+    attachedGZ.shape = GUARD_ZONE_CIRCLE;
+    attachedGZ.active = true;
+    attachedGZ.attachedToShip = true;
+    attachedGZ.color = QColor(255, 0, 0, 150);  // Red color
+
+    // Set posisi dan radius (menggunakan nilai red dot yang sudah ada)
+    attachedGZ.centerLat = ownShip.lat;
+    attachedGZ.centerLon = ownShip.lon;
+    attachedGZ.radius = 0.2;  // 0.2 NM seperti yang sudah ditentukan
+
+    // Tambahkan ke list
+    guardZones.append(attachedGZ);
+
+    // Save dan update
+    saveGuardZones();
+    emit guardZoneCreated();
+
+    qDebug() << "Attached GuardZone created with ID:" << attachedGuardZoneId;
+}
+
+void EcWidget::removeAttachedGuardZone()
+{
+    if (attachedGuardZoneId == -1) {
+        return;
+    }
+
+    // Hapus dari list
+    for (int i = 0; i < guardZones.size(); i++) {
+        if (guardZones[i].id == attachedGuardZoneId) {
+            guardZones.removeAt(i);
+            break;
+        }
+    }
+
+    // Reset ID
+    attachedGuardZoneId = -1;
+    attachedGuardZoneName = "";
+
+    // Save dan update
+    saveGuardZones();
+    emit guardZoneDeleted();
+
+    qDebug() << "Attached GuardZone removed";
 }

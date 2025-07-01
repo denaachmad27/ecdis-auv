@@ -74,6 +74,10 @@ public:
     void deleteGuardZone(int guardZoneId);
     void refreshHandlePositions();
 
+public slots:
+    void refreshGuardZoneList();           // Refresh semua guardzone
+    void updateGuardZoneInList(int id);    // Update guardzone tertentu
+
 signals:
     void editModeChanged(bool isEditing);
     void guardZoneModified(int guardZoneId);

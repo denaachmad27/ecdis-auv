@@ -1464,3 +1464,23 @@ void GuardZoneManager::restoreToOriginalShape()
         emit guardZoneModified(editingGuardZoneId);
     }
 }
+
+void GuardZoneManager::refreshGuardZoneList()
+{
+    if (!ecWidget) return;
+
+    // Emit signal yang sudah ada untuk refresh GuardZone Panel
+    emit guardZoneModified(-1);  // -1 untuk refresh semua
+
+    qDebug() << "GuardZone list refreshed";
+}
+
+void GuardZoneManager::updateGuardZoneInList(int guardZoneId)
+{
+    if (!ecWidget) return;
+
+    // Emit signal yang sudah ada untuk update guardzone tertentu
+    emit guardZoneModified(guardZoneId);
+
+    qDebug() << "GuardZone" << guardZoneId << "updated in list";
+}

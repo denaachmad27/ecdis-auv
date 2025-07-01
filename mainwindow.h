@@ -72,7 +72,6 @@ public:
 public slots:
     void onEnableRedDotTracker(bool enabled);
     void onAttachRedDotToShip(bool attached);
-    void onShipGuardianCircle(bool enabled);
 
 protected slots:
     void onReload();

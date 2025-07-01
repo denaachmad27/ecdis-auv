@@ -202,6 +202,13 @@ public:
   void drawGuardZoneLabel(QPainter& painter, const GuardZone& gz, const QPoint& position);
   void drawGuardZoneCreationPreview(QPainter& painter);
 
+  void createRedDotGuardian();
+  void removeRedDotGuardian();
+  void updateRedDotGuardianInManager();
+
+  void createAttachedGuardZone();
+  void removeAttachedGuardZone();
+
   // End Guardzone
 
   // Test GuardZone methods
@@ -684,6 +691,13 @@ private:
 
   void createCircularGuardZoneNew(double centerLat, double centerLon, double radiusNM);
   void createPolygonGuardZoneNew();
+
+  bool redDotGuardianEnabled;
+  int redDotGuardianId;           // ID untuk GuardZone Manager
+  QString redDotGuardianName;     // Nama untuk GuardZone Manager
+
+  int attachedGuardZoneId;           // ID guardzone untuk "Attach to Ship"
+  QString attachedGuardZoneName;     // Nama guardzone
 
   // End Guardzone
 
