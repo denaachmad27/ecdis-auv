@@ -54,6 +54,7 @@ void MainWindow::createDockWindows()
     dock->setWidget(ownShipText);
     addDockWidget(Qt::LeftDockWidgetArea, dock);
     viewMenu->addAction(dock->toggleViewAction());
+    dock->hide();
 
     dock = new QDockWidget(tr("Log"), this);
     dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::TopDockWidgetArea | Qt::BottomDockWidgetArea);
@@ -546,7 +547,7 @@ MainWindow::MainWindow(QWidget *parent)
   connect(ecchart, SIGNAL(scale(int)), this, SLOT( onScale(int)));  
   connect(ecchart, SIGNAL(projection()), this, SLOT( onProjection()));  
   connect(ecchart, SIGNAL(mouseMove(EcCoordinate, EcCoordinate)), this, SLOT( onMouseMove(EcCoordinate, EcCoordinate)));  
-  connect(ecchart, SIGNAL(mouseRightClick()), this, SLOT( onMouseRightClick()));  
+  connect(ecchart, SIGNAL(mouseRightClick(QPoint)), this, SLOT( onMouseRightClick(QPoint)));
 
   // Status bar
   posEdit = new QLineEdit(statusBar());
@@ -1322,8 +1323,12 @@ void MainWindow::onMouseMove(EcCoordinate lat, EcCoordinate lon)
 
 /*---------------------------------------------------------------------------*/
 
-void MainWindow::onMouseRightClick()
+void MainWindow::onMouseRightClick(const QPoint& pos)
 {
+    // KLIK TARGET AIS
+    EcAISTargetInfo* target = ecchart->findAISTargetInfoAtPosition(pos);
+
+    // GET FEATURE
 	QList<EcFeature> pickedFeatureList;
 
 	ecchart->GetPickedFeatures(pickedFeatureList);
@@ -1333,9 +1338,38 @@ void MainWindow::onMouseRightClick()
     if (!aisTemp->toPlainText().trimmed().isEmpty()){
         aisText->setHtml(aisTemp->toHtml());
     }
+    else {
+        aisText->setHtml("");
+    }
 
     if (!ownShipTemp->toPlainText().trimmed().isEmpty()){
         ownShipText->setHtml(ownShipTemp->toHtml());
+    }
+
+    if (target) {
+        QString mmsiStr = QString::number(target->mmsi);
+        AISTargetData ais;
+
+        ais.mmsi = mmsiStr;
+        ais.lat = ((double)target->latitude / 10000) / 60;
+        ais.lon = ((double)target->longitude / 10000) / 60;
+
+        ecchart->setAISTrack(ais);
+        ecchart->TrackTarget(mmsiStr);
+
+        qDebug() << "Track Target MMSI:" << mmsiStr;
+    }
+    else {
+        AISTargetData ais;
+
+        ais.mmsi = "";
+        ais.lat = 0;
+        ais.lon = 0;
+
+        ecchart->setAISTrack(ais);
+        ecchart->TrackTarget("");
+
+        qDebug() << "Track Ownship";
     }
 
 

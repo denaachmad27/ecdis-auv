@@ -378,6 +378,9 @@ public:
   // Swiches the display of AIS targets on or off (only if AIS telegrams are read)
   void ShowAIS(bool on);
 
+  // Swiches the track of AIS Target
+  void TrackTarget(QString mmsi);
+
   // Ship Guardian Circle variables (upgrade dari red dot)
   bool shipGuardianEnabled;           // NEW: Enable Guardian Circle
   double guardianRadius;              // NEW: Guardian circle radius (nautical miles)
@@ -473,8 +476,18 @@ public:
   void setClosestAIS(AISTargetData val);
   AISTargetData getClosestAIS() const;
 
+  void setDangerousAISList(const QList<AISTargetData>& list);
+  QList<AISTargetData> getDangerousAISList() const;
+
+  void addDangerousAISTarget(const AISTargetData& target); // opsional
+  void clearDangerousAISList(); // opsional
+
   // GUARDIAN AIS
   void drawShipGuardianSquare(double aisLat, double aisLon);      // NEW: Draw warning square area
+
+  EcAISTargetInfo* findAISTargetInfoAtPosition(const QPoint& mousePos);
+  QString getTrackMMSI();
+  void setAISTrack(AISTargetData aisTrack);
 
 public slots:
   void updateAISTargetsList();
@@ -483,7 +496,7 @@ public slots:
 signals:
   // Drawing signals
   void mouseMove(EcCoordinate, EcCoordinate);
-  void mouseRightClick();
+  void mouseRightClick(QPoint);
   void projection();
   void scale(int);
 
@@ -510,6 +523,7 @@ signals:
 private slots:
   void slotUpdateAISTargets( Bool bSymbolize );
   void slotRefreshChartDisplay( double lat, double lon );
+  void slotRefreshCenter( double lat, double lon );
 
   // Alert Systems
   void onAlertTriggered(const AlertData& alert);
@@ -598,6 +612,8 @@ protected:
   int              currentLookupTable;
   int              currentScale;
   double           currentHeading;
+
+  QString          trackTarget;
 
   // PICKWINDOW
 	PickWindow *pickWindow;
@@ -801,7 +817,6 @@ private:
   QString getShipTypeString(int shipType);
   QString getNavStatusString(int navStatus);
 
-  EcAISTargetInfo* findAISTargetInfoAtPosition(const QPoint& mousePos);
   void showAISTooltipFromTargetInfo(const QPoint& position, EcAISTargetInfo* targetInfo);
   void updateTooltipIfVisible();
   void updateAISTooltipContent(EcAISTargetInfo* targetInfo);
@@ -835,6 +850,7 @@ private:
 
   // CLOSEST CPA VAR
   AISTargetData closestAIS;
+  QList<AISTargetData> dangerousAISList;
   double closestCPA = 999;
   double closestLat = -1;
   double closestLon = -1;

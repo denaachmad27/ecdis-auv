@@ -600,6 +600,10 @@ void EcWidget::ShowAIS(bool on)
   }
 }
 
+void EcWidget::TrackTarget(QString mmsi){
+    trackTarget = mmsi;
+}
+
 /*---------------------------------------------------------------------------*/
 
 bool EcWidget::XyToLatLon (int x, int y, EcCoordinate & lat, EcCoordinate & lon)
@@ -1268,7 +1272,7 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
         activeFunction = PAN;
         pickX = e->x();
         pickY = e->y();
-        emit mouseRightClick();
+        emit mouseRightClick(e->pos());
     }
 }
 
@@ -1892,6 +1896,7 @@ void EcWidget::InitAIS( EcDictInfo *dict)
     iWarnTCPA, strAisLib, iTimeOut, bInternalGPS, &bAISSymbolize, strErrLogAis );
 
   QObject::connect( _aisObj, SIGNAL( signalRefreshChartDisplay( double, double ) ), this, SLOT( slotRefreshChartDisplay( double, double ) ) );
+  QObject::connect( _aisObj, SIGNAL( signalRefreshCenter( double, double ) ), this, SLOT( slotRefreshCenter( double, double ) ) );
 }
 
 void EcWidget::setCPAPanelToAIS(CPATCPAPanel* panel) {
@@ -2986,8 +2991,10 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon )
 
     if((lat != 0 && lon != 0) && (fabs(currentLat - lat) > maxDist || fabs(currentLon - lon) > maxDist))
     {
-      SetCenter( lat, lon );
-      draw(true);
+        if (trackTarget.isEmpty()){
+            SetCenter( lat, lon );
+        }
+        draw(true);
     }
     slotUpdateAISTargets( true );
   }
@@ -3000,6 +3007,25 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon )
       update(); // Force widget repaint
   }
   // ==================================================
+}
+
+void EcWidget::slotRefreshCenter( double lat, double lon )
+{
+  if (showAIS)
+  {
+    // check if center position is out of defined frame, requires drawing of chart as well
+    // double maxDist = GetRange(currentScale) / 60 / 2;
+
+    // if((lat != 0 && lon != 0) && (fabs(currentLat - lat) > maxDist || fabs(currentLon - lon) > maxDist))
+    // {
+
+    if(lat != 0 && lon != 0)
+    {
+      SetCenter( lat, lon );
+      draw(true);
+    }
+    slotUpdateAISTargets( true );
+  }
 }
 //////////////////////////////////////////////////////////////   END AIS   /////////////////////////////////////////////////////
 
@@ -6563,8 +6589,8 @@ void EcWidget::createAISTooltip()
     tooltipObjectName = new QLabel("NAME: ", aisTooltip);
     tooltipCOG = new QLabel("COG: ", aisTooltip);
     tooltipSOG = new QLabel("SOG: ", aisTooltip);
-    tooltipTypeOfShip = new QLabel("SHIP TYPE: ", aisTooltip);
     tooltipAntennaLocation = new QLabel("POS: ", aisTooltip);
+    //tooltipTypeOfShip = new QLabel("SHIP TYPE: ", aisTooltip);
     //tooltipTrackStatus = new QLabel("STATUS: ", aisTooltip);
     //tooltipShipBreadth = new QLabel("Ship breadth (beam): ", aisTooltip);
     //tooltipShipLength = new QLabel("Ship length over all: ", aisTooltip);
@@ -6579,8 +6605,8 @@ void EcWidget::createAISTooltip()
         tooltipObjectName,
         tooltipCOG,
         tooltipSOG,
-        tooltipTypeOfShip,
         tooltipAntennaLocation
+        //tooltipTypeOfShip,
         //tooltipTrackStatus,
         //tooltipShipBreadth,
         //tooltipShipLength,
@@ -6621,6 +6647,9 @@ void EcWidget::updateAISTooltipContent(EcAISTargetInfo* ti)
     // Gunakan field yang benar dari EcAISTargetInfo
     QString objectName = QString(ti->shipName).trimmed();
     if (objectName.isEmpty()) objectName = QString::number(ti->mmsi);
+    while (objectName.endsWith('@')) {
+        objectName.chop(1);
+    }
 
     // Untuk field yang tidak ada, gunakan nilai default seperti di panel
     QString shipBreadth = "7.00";  // Default value
@@ -6645,9 +6674,9 @@ void EcWidget::updateAISTooltipContent(EcAISTargetInfo* ti)
     tooltipObjectName->setText(QString("NAME: %1").arg(objectName));
     tooltipCOG->setText(QString("COG: %1").arg(cogValue));
     tooltipSOG->setText(QString("SOG: %1").arg(sogValue));
-    tooltipTypeOfShip->setText(QString("SHIP TYPE: %1").arg(typeOfShip));
-    //tooltipTrackStatus->setText(QString("STATUS: %1").arg(trackStatus));
     tooltipAntennaLocation->setText(QString("POS: %1").arg(antennaLocation));
+    //tooltipTypeOfShip->setText(QString("SHIP TYPE: %1").arg(typeOfShip));
+    //tooltipTrackStatus->setText(QString("STATUS: %1").arg(trackStatus));
     //tooltipShipBreadth->setText(QString("Ship breadth (beam): %1").arg(shipBreadth));
     //tooltipShipLength->setText(QString("Ship length over all: %1").arg(shipLength));
     //tooltipShipDraft->setText(QString("Ship Draft: %1").arg(shipDraft));
@@ -6832,71 +6861,89 @@ void EcWidget::updateTooltipIfVisible()
 // icon ownship
 void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, double heading, double sog)
 {
+    double rangeNM = GetRange(currentScale);
+
+    // Jika zoom terlalu jauh, tampilkan dua lingkaran sebagai simbol ownship
+    if (rangeNM > 10.0) {
+        painter.save();
+        painter.setPen(QPen(Qt::black, 2));
+
+        int r1 = 6;   // lingkaran dalam
+        int r2 = 12;  // lingkaran luar
+
+        painter.drawEllipse(QPointF(x, y), r2, r2); // Lingkaran luar
+        painter.drawEllipse(QPointF(x, y), r1, r1); // Lingkaran dalam
+
+        // Titik kecil di tengah (hitam solid)
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(Qt::black);
+        painter.drawEllipse(QPointF(x, y), 2, 2); // Titik diameter 4px
+
+        painter.restore();
+        return;  // jangan lanjut gambar kapal
+    }
+
+    // Skala ikon kapal berdasarkan range
+    double scaleFactor = 1.0;
+
     painter.save();
 
     painter.translate(x, y);
     painter.rotate(heading);  // Rotasi kapal sesuai heading
 
-    // UKURAN DISESUAIKAN AGAR SECARA VISUAL PROPORSIONAL
-    int shipLength = 45;  // Lebih panjang dari segitiga (15) untuk kompensasi bentuk ramping
-    int shipWidth = 15;   // Lebih lebar dari separuh segitiga (7) untuk area visual yang sama
+    int shipLength = int(45 * scaleFactor);
+    int shipWidth  = int(15 * scaleFactor);
 
-    // BENTUK KAPAL DENGAN LENGKUNGAN HALUS
     QPainterPath shipPath;
+    shipPath.moveTo(0, -shipLength / 2);  // ujung hidung
 
-    // Mulai dari hidung kapal
-    shipPath.moveTo(0, -shipLength/2);  // ujung hidung
-
-    // SISI KANAN dengan kurva yang smooth
-    QPointF control1(shipWidth/3, -shipLength/2 + 3);  // control point dekat hidung
-    QPointF point1(shipWidth/2, -shipLength/4);        // titik lengkung pertama
+    // Sisi kanan
+    QPointF control1(shipWidth / 3, -shipLength / 2 + 3);
+    QPointF point1(shipWidth / 2, -shipLength / 4);
     shipPath.quadTo(control1, point1);
 
-    // Lengkung tengah kanan (bagian terlebar)
-    QPointF point2(shipWidth/2, shipLength/4);         // bagian tengah
+    QPointF point2(shipWidth / 2, shipLength / 4);
     shipPath.lineTo(point2);
 
-    // Lengkung menuju buritan
-    QPointF control2(shipWidth/2, shipLength/2 - 2);   // control point menuju buritan
-    QPointF point3(shipWidth/3, shipLength/2);         // sudut buritan kanan
+    QPointF control2(shipWidth / 2, shipLength / 2 - 2);
+    QPointF point3(shipWidth / 3, shipLength / 2);
     shipPath.quadTo(control2, point3);
 
-    // BURITAN DATAR
-    shipPath.lineTo(-shipWidth/3, shipLength/2);       // buritan datar
+    // Buritan datar
+    shipPath.lineTo(-shipWidth / 3, shipLength / 2);
 
-    // SISI KIRI (mirror dari kanan)
-    QPointF control3(-shipWidth/2, shipLength/2 - 2);  // control point menuju buritan kiri
-    QPointF point4(-shipWidth/2, shipLength/4);        // bagian tengah kiri
+    // Sisi kiri (mirror)
+    QPointF control3(-shipWidth / 2, shipLength / 2 - 2);
+    QPointF point4(-shipWidth / 2, shipLength / 4);
     shipPath.quadTo(control3, point4);
 
-    // Lengkung tengah kiri
-    QPointF point5(-shipWidth/2, -shipLength/4);       // titik lengkung kiri
+    QPointF point5(-shipWidth / 2, -shipLength / 4);
     shipPath.lineTo(point5);
 
-    // Lengkung kembali ke hidung
-    QPointF control4(-shipWidth/3, -shipLength/2 + 3); // control point dekat hidung kiri
-    QPointF point6(0, -shipLength/2);                  // kembali ke hidung
+    QPointF control4(-shipWidth / 3, -shipLength / 2 + 3);
+    QPointF point6(0, -shipLength / 2);
     shipPath.quadTo(control4, point6);
 
-    // DRAWING KAPAL
+    // Gambar kapal
     painter.setBrush(QBrush(QColor(120, 120, 120)));   // Abu-abu
-    painter.setPen(QPen(Qt::black, 1));                // Border hitam
+    painter.setPen(QPen(Qt::black, 1));
     painter.drawPath(shipPath);
 
-    // TITIK CENTER
+    // Titik pusat kapal
     painter.setBrush(QBrush(Qt::black));
     painter.setPen(QPen(Qt::black, 1));
     painter.drawEllipse(-1, -1, 2, 2);
 
-    // GARIS PENUNJUK ARAH HEADING (current orientation)
+    // Garis heading
     painter.setPen(QPen(Qt::black, 2));
-    painter.drawLine(0, 0, 0, -shipLength/2 - 10);
+    painter.drawLine(0, 0, 0, -shipLength / 2 - int(10 * scaleFactor));
 
-    painter.restore();  // Kembalikan transformasi
+    painter.restore();
 
-    // ⭐ TAMBAHAN BARU: GAMBAR VECTOR GARIS COG DAN HEADING
+    // Gambar vektor COG/SOG di luar rotasi
     drawOwnShipVectors(painter, x, y, cog, heading, sog);
 }
+
 
 void EcWidget::drawOwnShipVectors(QPainter& painter, int x, int y, double cog, double heading, double sog)
 {
@@ -7004,6 +7051,99 @@ void EcWidget::drawTestGuardZone(QPainter& painter)
 
 void EcWidget::drawTestGuardSquare(QPainter& painter)
 {
+    painter.save();
+
+    double rangeNM = GetRange(currentScale);  // misalnya return 6, 12, 24, 48, dst.
+    if (rangeNM > 48.0) {
+        painter.restore();
+        return; // zoom terlalu jauh, tidak usah gambar kotak
+    }
+
+    double scaleFactor = 1.0;
+    if (rangeNM > 24.0) scaleFactor = 0.25;
+    else if (rangeNM > 12.0) scaleFactor = 0.5;
+    else if (rangeNM > 6.0) scaleFactor = 0.75;
+
+    QPen cornerPen(Qt::red, 2);
+    painter.setPen(cornerPen);
+    painter.setBrush(Qt::NoBrush);
+
+    const double cornerLength = 10.0; // panjang garis sudut dalam pixel
+
+    for (const AISTargetData& target : dangerousAISList) {
+        double centerLat = target.lat;
+        double centerLon = target.lon;
+
+        int centerX, centerY;
+        if (!LatLonToXy(centerLat, centerLon, centerX, centerY)) {
+            continue;
+        }
+
+        // Ukuran pixel konstan * skala
+        double radiusInPixels = 20.0 * scaleFactor;
+        double left = centerX - radiusInPixels;
+        double right = centerX + radiusInPixels;
+        double top = centerY - radiusInPixels;
+        double bottom = centerY + radiusInPixels;
+
+        // Sudut kiri atas
+        painter.drawLine(QPointF(left, top), QPointF(left + cornerLength, top));           // horizontal
+        painter.drawLine(QPointF(left, top), QPointF(left, top + cornerLength));           // vertical
+
+        // Sudut kanan atas
+        painter.drawLine(QPointF(right, top), QPointF(right - cornerLength, top));         // horizontal
+        painter.drawLine(QPointF(right, top), QPointF(right, top + cornerLength));         // vertical
+
+        // Sudut kiri bawah
+        painter.drawLine(QPointF(left, bottom), QPointF(left + cornerLength, bottom));     // horizontal
+        painter.drawLine(QPointF(left, bottom), QPointF(left, bottom - cornerLength));     // vertical
+
+        // Sudut kanan bawah
+        painter.drawLine(QPointF(right, bottom), QPointF(right - cornerLength, bottom));   // horizontal
+        painter.drawLine(QPointF(right, bottom), QPointF(right, bottom - cornerLength));   // vertical
+
+        // Titik tengah
+        painter.drawPoint(centerX, centerY);
+    }
+
+    // Gambar kotak khusus untuk target yang sedang di-follow
+    if (!trackTarget.isEmpty()) {
+        // Asumsikan kamu punya variabel followedTarget bertipe AISTargetData
+        AISTargetData ais;
+
+        _aisObj->getAISTrack(ais);
+
+        //qDebug() << ais.lat << ", " << ais.lon;
+
+        double centerLat = ais.lat;
+        double centerLon = ais.lon;
+
+        int centerX, centerY;
+        if (LatLonToXy(centerLat, centerLon, centerX, centerY)) {
+            double radiusInPixels = 24.0 * scaleFactor;  // lebih besar dari kotak AIS bahaya
+            double left = centerX - radiusInPixels;
+            double right = centerX + radiusInPixels;
+            double top = centerY - radiusInPixels;
+            double bottom = centerY + radiusInPixels;
+
+            QPen followPen(QColor(0, 255, 255, 180));  // cyan semi-transparan
+            followPen.setWidth(3);
+            followPen.setStyle(Qt::DashLine);
+            painter.setPen(followPen);
+            painter.setBrush(Qt::NoBrush);
+
+            painter.drawRect(QRectF(QPointF(left, top), QPointF(right, bottom)));
+        }
+    }
+
+    painter.restore();
+}
+
+
+
+/*
+void EcWidget::drawTestGuardSquare(QPainter& painter)
+{
     // Pusat guardzone dalam lat/lon
     double centerLat = closestAIS.lat;
     double centerLon = closestAIS.lon;
@@ -7041,6 +7181,7 @@ void EcWidget::drawTestGuardSquare(QPainter& painter)
     // qDebug() << "Dashed square guardzone drawn at center (px):" << centerX << centerY
     //          << "side length:" << radiusInPixels * 2 << "px";
 }
+*/
 
 void EcWidget::setClosestCPA(double val)
 {
@@ -7057,164 +7198,36 @@ void EcWidget::setClosestAIS(AISTargetData val)
     closestAIS = val;
 }
 
+QString EcWidget::getTrackMMSI(){
+    return trackTarget;
+}
+
 AISTargetData EcWidget::getClosestAIS() const
 {
     return closestAIS;
 }
 
-void EcWidget::createRedDotGuardian()
+void EcWidget::setDangerousAISList(const QList<AISTargetData>& list)
 {
-    if (redDotGuardianEnabled) {
-        qDebug() << "Red Dot Guardian already exists";
-        return;
-    }
-
-    // Generate unique ID untuk red dot guardian
-    redDotGuardianId = getNextGuardZoneId();  // Menggunakan fungsi yang sudah ada
-    redDotGuardianName = QString("Ship Guardian Circle #%1").arg(redDotGuardianId);
-
-    // Buat GuardZone object untuk red dot
-    GuardZone redDotGuardZone;
-    redDotGuardZone.id = redDotGuardianId;
-    redDotGuardZone.name = redDotGuardianName;
-    redDotGuardZone.shape = GUARD_ZONE_CIRCLE;
-    redDotGuardZone.active = true;
-    redDotGuardZone.attachedToShip = true;  // Selalu attached ke ship
-    redDotGuardZone.color = QColor(255, 0, 0, 150);  // Red color
-
-    // Set posisi dan radius
-    redDotGuardZone.centerLat = ownShip.lat;
-    redDotGuardZone.centerLon = ownShip.lon;
-    redDotGuardZone.radius = guardianRadius;  // Menggunakan radius yang sudah ada (0.2 NM)
-
-    // Tambahkan ke list guardZones
-    guardZones.append(redDotGuardZone);
-
-    // Enable red dot guardian
-    redDotGuardianEnabled = true;
-
-    // Update GuardZone Manager menggunakan signal yang sudah ada
-    if (guardZoneManager) {
-        emit guardZoneCreated();  // Signal yang sudah ada
-    }
-
-    // Save guardZones
-    saveGuardZones();
-
-    qDebug() << "Red Dot Guardian created with ID:" << redDotGuardianId;
+    dangerousAISList = list;
 }
 
-void EcWidget::removeRedDotGuardian()
+QList<AISTargetData> EcWidget::getDangerousAISList() const
 {
-    if (!redDotGuardianEnabled) {
-        return;
-    }
-
-    // Hapus dari guardZones list
-    for (int i = 0; i < guardZones.size(); i++) {
-        if (guardZones[i].id == redDotGuardianId) {
-            guardZones.removeAt(i);
-            break;
-        }
-    }
-
-    // Disable red dot guardian
-    redDotGuardianEnabled = false;
-    int oldId = redDotGuardianId;
-    redDotGuardianId = -1;
-    redDotGuardianName.clear();
-
-    // Update GuardZone Manager menggunakan signal yang sudah ada
-    if (guardZoneManager) {
-        emit guardZoneDeleted();  // Signal yang sudah ada
-    }
-
-    // Save guardZones
-    saveGuardZones();
-
-    qDebug() << "Red Dot Guardian removed with ID:" << oldId;
+    return dangerousAISList;
 }
 
-void EcWidget::updateRedDotGuardianInManager()
+void EcWidget::addDangerousAISTarget(const AISTargetData& target)
 {
-    if (!redDotGuardianEnabled || !redDotAttachedToShip) {
-        return;
-    }
-
-    // Update posisi red dot guardian di guardZones list
-    for (GuardZone& gz : guardZones) {
-        if (gz.id == redDotGuardianId) {
-            gz.centerLat = ownShip.lat;
-            gz.centerLon = ownShip.lon;
-            gz.radius = guardianRadius;
-            gz.active = shipGuardianEnabled;
-            break;
-        }
-    }
-
-    // Refresh GuardZone Manager menggunakan signal yang sudah ada
-    if (guardZoneManager) {
-        emit guardZoneModified();  // Signal yang sudah ada
-    }
+    dangerousAISList.append(target);
 }
 
-void EcWidget::createAttachedGuardZone()
+void EcWidget::clearDangerousAISList()
 {
-    // Cek apakah sudah ada
-    if (attachedGuardZoneId != -1) {
-        qDebug() << "Attached GuardZone already exists with ID:" << attachedGuardZoneId;
-        return;
-    }
-
-    // Generate ID dan nama
-    attachedGuardZoneId = getNextGuardZoneId();
-    attachedGuardZoneName = QString("Ship Guardian Zone #%1").arg(attachedGuardZoneId);
-
-    // Buat GuardZone object
-    GuardZone attachedGZ;
-    attachedGZ.id = attachedGuardZoneId;
-    attachedGZ.name = attachedGuardZoneName;
-    attachedGZ.shape = GUARD_ZONE_CIRCLE;
-    attachedGZ.active = true;
-    attachedGZ.attachedToShip = true;
-    attachedGZ.color = QColor(255, 0, 0, 150);  // Red color
-
-    // Set posisi dan radius (menggunakan nilai red dot yang sudah ada)
-    attachedGZ.centerLat = ownShip.lat;
-    attachedGZ.centerLon = ownShip.lon;
-    attachedGZ.radius = 0.2;  // 0.2 NM seperti yang sudah ditentukan
-
-    // Tambahkan ke list
-    guardZones.append(attachedGZ);
-
-    // Save dan update
-    saveGuardZones();
-    emit guardZoneCreated();
-
-    qDebug() << "Attached GuardZone created with ID:" << attachedGuardZoneId;
+    dangerousAISList.clear();
 }
 
-void EcWidget::removeAttachedGuardZone()
+void EcWidget::setAISTrack(const AISTargetData aisTrack)
 {
-    if (attachedGuardZoneId == -1) {
-        return;
-    }
-
-    // Hapus dari list
-    for (int i = 0; i < guardZones.size(); i++) {
-        if (guardZones[i].id == attachedGuardZoneId) {
-            guardZones.removeAt(i);
-            break;
-        }
-    }
-
-    // Reset ID
-    attachedGuardZoneId = -1;
-    attachedGuardZoneName = "";
-
-    // Save dan update
-    saveGuardZones();
-    emit guardZoneDeleted();
-
-    qDebug() << "Attached GuardZone removed";
+    _aisObj->setAISTrack(aisTrack);
 }

@@ -114,7 +114,7 @@ protected slots:
     void onScale(int);
     void onProjection();
     void onMouseMove(EcCoordinate, EcCoordinate);
-    void onMouseRightClick();
+    void onMouseRightClick(const QPoint&);
 
     void runAis();
     void slotLoadAisFile();

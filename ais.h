@@ -74,8 +74,16 @@ public:
     void stopAnimation();  
     void closeLogFile();
     void emitSignal( double, double );
+    void emitSignalTarget( double, double );
     void setOwnShipPos(EcCoordinate lat, EcCoordinate lon);
     void getOwnShipPos(EcCoordinate & lat, EcCoordinate & lon) const;
+
+    void setTargetPos(EcCoordinate lat, EcCoordinate lon);
+    void getTargetPos(EcCoordinate & lat, EcCoordinate & lon) const;
+
+    void setAISTrack(AISTargetData aisTrack);
+    void getAISTrack(AISTargetData & aisTrack) const;
+
     void deleteObject();
     void setOwnShipNull();
 
@@ -96,6 +104,7 @@ public:
 
 signals:
     void signalRefreshChartDisplay( double, double );
+    void signalRefreshCenter( double, double );
 
 private slots:
     void slotReadAISServerData();
@@ -110,6 +119,9 @@ private:
     void closeSocketConnection();
     
     EcCoordinate _ownShipLat, _ownShipLon;
+    EcCoordinate _targetLat, _targetLon;
+    AISTargetData _aisTrack;
+
     QTcpSocket  *_tcpSocket;
     QString     _strCurrentData;
     quint16     _uiBlockSize;
