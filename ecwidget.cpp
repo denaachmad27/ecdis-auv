@@ -598,6 +598,11 @@ void EcWidget::TrackTarget(QString mmsi){
     trackTarget = mmsi;
 }
 
+void EcWidget::TrackShip(bool on)
+{
+  trackShip = on;
+}
+
 /*---------------------------------------------------------------------------*/
 
 bool EcWidget::XyToLatLon (int x, int y, EcCoordinate & lat, EcCoordinate & lon)
@@ -2985,7 +2990,7 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon )
 
     if((lat != 0 && lon != 0) && (fabs(currentLat - lat) > maxDist || fabs(currentLon - lon) > maxDist))
     {
-        if (trackTarget.isEmpty()){
+        if (trackTarget.isEmpty() && trackShip){
             SetCenter( lat, lon );
         }
         draw(true);
@@ -3015,8 +3020,10 @@ void EcWidget::slotRefreshCenter( double lat, double lon )
 
     if(lat != 0 && lon != 0)
     {
-      SetCenter( lat, lon );
-      draw(true);
+        if (trackShip){
+            SetCenter( lat, lon );
+        }
+        draw(true);
     }
     slotUpdateAISTargets( true );
   }

@@ -522,6 +522,7 @@ MainWindow::MainWindow(QWidget *parent)
   showSoundings = false;
   showGrid = false;
   showAIS = true;
+  trackShip = true;
   ecchart->SetLookupTable(lookupTable);
   ecchart->SetDisplayCategory(displayCategory);
   ecchart->ShowLights(showLights);
@@ -529,6 +530,7 @@ MainWindow::MainWindow(QWidget *parent)
   ecchart->ShowSoundings(showSoundings);
   ecchart->ShowGrid(showGrid);
   ecchart->ShowAIS(showAIS);
+  ecchart->TrackShip(trackShip);
   setDisplay();
 
   // Create the window for the pick report
@@ -720,6 +722,11 @@ MainWindow::MainWindow(QWidget *parent)
   aisAction->setCheckable(true);
   aisAction->setChecked(showAIS);
   connect(aisAction, SIGNAL(toggled(bool)), this, SLOT(onAIS(bool)));
+
+  QAction *trackAction = viewMenu->addAction("Track Ship");
+  trackAction->setCheckable(true);
+  trackAction->setChecked(trackShip);
+  connect(trackAction, SIGNAL(toggled(bool)), this, SLOT(onTrack(bool)));
 
   viewMenu->addSeparator();
 
@@ -1253,6 +1260,12 @@ void MainWindow::onAIS(bool on)
 {
   ecchart->ShowAIS(on);
   DrawChart();
+}
+
+void MainWindow::onTrack(bool on)
+{
+    ecchart->TrackShip(on);
+    DrawChart();
 }
 
 /*---------------------------------------------------------------------------*/
