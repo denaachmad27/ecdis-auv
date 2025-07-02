@@ -823,7 +823,13 @@ MainWindow::MainWindow(QWidget *parent)
   connect(testGuardZoneAction, SIGNAL(toggled(bool)), this, SLOT(onTestGuardZone(bool)));
   // ===========================================================
 
+  guardZoneMenu->addSeparator();
 
+  QAction *autoCheckShipGuardianAction = guardZoneMenu->addAction("Auto-Check Ship Guardian");
+  autoCheckShipGuardianAction->setCheckable(true);
+  connect(autoCheckShipGuardianAction, SIGNAL(toggled(bool)), this, SLOT(onAutoCheckShipGuardian(bool)));
+
+  guardZoneMenu->addAction("Check Ship Guardian Now", this, SLOT(onCheckShipGuardianNow()));
 
 
 
@@ -2991,5 +2997,33 @@ void MainWindow::onTestGuardZone(bool enabled)
 
         // Update chart display
         ecchart->update();
+    }
+}
+
+void MainWindow::onAutoCheckShipGuardian(bool enabled)
+{
+    qDebug() << "onAutoCheckShipGuardian called with enabled =" << enabled;
+
+    if (ecchart) {
+        ecchart->setShipGuardianAutoCheck(enabled);
+
+        if (enabled) {
+            statusBar()->showMessage(tr("Ship Guardian auto-check enabled (every 5 seconds)"), 3000);
+        } else {
+            statusBar()->showMessage(tr("Ship Guardian auto-check disabled"), 3000);
+        }
+    }
+}
+
+void MainWindow::onCheckShipGuardianNow()
+{
+    qDebug() << "onCheckShipGuardianNow called";
+
+    if (ecchart) {
+        if (ecchart->checkShipGuardianZone()) {
+            statusBar()->showMessage(tr("Ship Guardian check completed - obstacles detected!"), 5000);
+        } else {
+            statusBar()->showMessage(tr("Ship Guardian check completed - no obstacles"), 3000);
+        }
     }
 }
