@@ -72,7 +72,6 @@ public:
 public slots:
     void onEnableRedDotTracker(bool enabled);
     void onAttachRedDotToShip(bool attached);
-    void onShipGuardianCircle(bool enabled);
 
 protected slots:
     void onReload();
@@ -214,6 +213,9 @@ private slots:
 
     // test guardzone
     void onTestGuardZone(bool enabled);
+
+    void onAutoCheckShipGuardian(bool enabled);
+    void onCheckShipGuardianNow();
 
 private:
     GuardZonePanel* guardZonePanel;

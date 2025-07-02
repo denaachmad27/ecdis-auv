@@ -132,6 +132,15 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   guardianRadius = 0.5;
   guardianFillColor = QColor(255, 0, 0, 50);
   guardianBorderColor = QColor(255, 0, 0, 150);
+  redDotGuardianEnabled = false;
+  redDotGuardianId = -1;
+  redDotGuardianName = "";
+
+  // Inisialisasi Ship Guardian auto-check
+  shipGuardianAutoCheck = false;
+  shipGuardianCheckTimer = new QTimer(this);
+  shipGuardianCheckTimer->setInterval(5000); // Check setiap 5 detik
+  connect(shipGuardianCheckTimer, &QTimer::timeout, this, &EcWidget::checkShipGuardianZone);
 
   // Initialize feedback system
   feedbackMessage = "";
@@ -299,6 +308,9 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   guardZoneWarningLevel = EC_WARNING_LEVEL; // Default level peringatan
   guardZoneActive = false;                  // Default tidak aktif
   guardZoneAttachedToShip = false;          // Default tidak terikat ke kapal
+
+  attachedGuardZoneId = -1;
+  attachedGuardZoneName = "";
 
 }
 
@@ -6321,17 +6333,36 @@ void EcWidget::setRedDotAttachedToShip(bool attached)
     if (attached) {
         // Auto-enable tracker when attaching
         redDotTrackerEnabled = true;
-        qDebug() << "Red dot tracker auto-enabled";
+
+        // Buat guardzone di manager
+        createAttachedGuardZone();
+
+        // Start auto-check jika enabled
+        if (shipGuardianAutoCheck) {
+            shipGuardianCheckTimer->start();
+            qDebug() << "Ship Guardian auto-check started";
+        }
+
+        qDebug() << "Ship Guardian activated with obstacle detection";
 
         // Try to get current ownship position
         if (ownShip.lat != 0.0 && ownShip.lon != 0.0) {
-            qDebug() << "Using ownShip position:" << ownShip.lat << "," << ownShip.lon;
             updateRedDotPosition(ownShip.lat, ownShip.lon);
-        } else {
-            qDebug() << "OwnShip position is zero, waiting for AIS update";
         }
+
+        if (shipGuardianAutoCheck) {
+            shipGuardianCheckTimer->start();
+        }
+
     } else {
-        qDebug() << "Red dot detached from ship";
+        // Hapus guardzone dari manager
+        removeAttachedGuardZone();
+
+        // Stop auto-check
+        shipGuardianCheckTimer->stop();
+        lastDetectedObstacles.clear();
+
+        qDebug() << "Ship Guardian deactivated and auto-check stopped";
     }
 
     update(); // Force repaint
@@ -6355,6 +6386,19 @@ void EcWidget::updateRedDotPosition(double lat, double lon)
 
     redDotLat = lat;
     redDotLon = lon;
+
+    // TAMBAHAN: Update posisi di GuardZone Manager
+    if (attachedGuardZoneId != -1) {
+        for (GuardZone& gz : guardZones) {
+            if (gz.id == attachedGuardZoneId) {
+                gz.centerLat = lat;
+                gz.centerLon = lon;
+                break;
+            }
+        }
+        // Emit signal untuk update panel
+        emit guardZoneModified();
+    }
 
     qDebug() << "Red Dot position updated to:" << lat << "," << lon;
 }
@@ -6447,14 +6491,25 @@ void EcWidget::testRedDot()
 void EcWidget::setShipGuardianEnabled(bool enabled)
 {
     shipGuardianEnabled = enabled;
-    redDotTrackerEnabled = enabled;  // Keep compatibility
-    qDebug() << "Ship Guardian Circle enabled:" << enabled;
+    redDotTrackerEnabled = enabled;
 
-    if (!enabled) {
+    if (enabled) {
+        // Buat red dot guardian di GuardZone Manager
+        createRedDotGuardian();
+
+        // Set posisi ke ship position
+        if (ownShip.lat != 0.0 && ownShip.lon != 0.0) {
+            updateRedDotPosition(ownShip.lat, ownShip.lon);
+        }
+    } else {
+        // Hapus red dot guardian dari GuardZone Manager
+        removeRedDotGuardian();
+
         redDotLat = 0.0;
         redDotLon = 0.0;
     }
 
+    qDebug() << "Ship Guardian Circle enabled:" << enabled;
     update();
 }
 
@@ -7207,4 +7262,447 @@ void EcWidget::clearDangerousAISList()
 void EcWidget::setAISTrack(const AISTargetData aisTrack)
 {
     _aisObj->setAISTrack(aisTrack);
+}
+
+void EcWidget::createRedDotGuardian()
+{
+    if (redDotGuardianEnabled) {
+        qDebug() << "Red Dot Guardian already exists";
+        return;
+    }
+
+    // Generate unique ID untuk red dot guardian
+    redDotGuardianId = getNextGuardZoneId();  // Menggunakan fungsi yang sudah ada
+    redDotGuardianName = QString("Ship Guardian Circle #%1").arg(redDotGuardianId);
+
+    // Buat GuardZone object untuk red dot
+    GuardZone redDotGuardZone;
+    redDotGuardZone.id = redDotGuardianId;
+    redDotGuardZone.name = redDotGuardianName;
+    redDotGuardZone.shape = GUARD_ZONE_CIRCLE;
+    redDotGuardZone.active = true;
+    redDotGuardZone.attachedToShip = true;  // Selalu attached ke ship
+    redDotGuardZone.color = QColor(255, 0, 0, 150);  // Red color
+
+    // Set posisi dan radius
+    redDotGuardZone.centerLat = ownShip.lat;
+    redDotGuardZone.centerLon = ownShip.lon;
+    redDotGuardZone.radius = guardianRadius;  // Menggunakan radius yang sudah ada (0.2 NM)
+
+    // Tambahkan ke list guardZones
+    guardZones.append(redDotGuardZone);
+
+    // Enable red dot guardian
+    redDotGuardianEnabled = true;
+
+    // Update GuardZone Manager menggunakan signal yang sudah ada
+    if (guardZoneManager) {
+        emit guardZoneCreated();  // Signal yang sudah ada
+    }
+
+    // Save guardZones
+    saveGuardZones();
+
+    qDebug() << "Red Dot Guardian created with ID:" << redDotGuardianId;
+}
+
+void EcWidget::removeRedDotGuardian()
+{
+    if (!redDotGuardianEnabled) {
+        return;
+    }
+
+    // Hapus dari guardZones list
+    for (int i = 0; i < guardZones.size(); i++) {
+        if (guardZones[i].id == redDotGuardianId) {
+            guardZones.removeAt(i);
+            break;
+        }
+    }
+
+    // Disable red dot guardian
+    redDotGuardianEnabled = false;
+    int oldId = redDotGuardianId;
+    redDotGuardianId = -1;
+    redDotGuardianName.clear();
+
+    // Update GuardZone Manager menggunakan signal yang sudah ada
+    if (guardZoneManager) {
+        emit guardZoneDeleted();  // Signal yang sudah ada
+    }
+
+    // Save guardZones
+    saveGuardZones();
+
+    qDebug() << "Red Dot Guardian removed with ID:" << oldId;
+}
+
+void EcWidget::updateRedDotGuardianInManager()
+{
+    if (!redDotGuardianEnabled || !redDotAttachedToShip) {
+        return;
+    }
+
+    // Update posisi red dot guardian di guardZones list
+    for (GuardZone& gz : guardZones) {
+        if (gz.id == redDotGuardianId) {
+            gz.centerLat = ownShip.lat;
+            gz.centerLon = ownShip.lon;
+            gz.radius = guardianRadius;
+            gz.active = shipGuardianEnabled;
+            break;
+        }
+    }
+
+    // Refresh GuardZone Manager menggunakan signal yang sudah ada
+    if (guardZoneManager) {
+        emit guardZoneModified();  // Signal yang sudah ada
+    }
+}
+
+void EcWidget::createAttachedGuardZone()
+{
+    // Cek apakah sudah ada
+    if (attachedGuardZoneId != -1) {
+        qDebug() << "Attached GuardZone already exists with ID:" << attachedGuardZoneId;
+        return;
+    }
+
+    // Generate ID dan nama
+    attachedGuardZoneId = getNextGuardZoneId();
+    attachedGuardZoneName = QString("Ship Guardian Zone #%1").arg(attachedGuardZoneId);
+
+    // Buat GuardZone object
+    GuardZone attachedGZ;
+    attachedGZ.id = attachedGuardZoneId;
+    attachedGZ.name = attachedGuardZoneName;
+    attachedGZ.shape = GUARD_ZONE_CIRCLE;
+    attachedGZ.active = true;
+    attachedGZ.attachedToShip = true;
+    attachedGZ.color = QColor(255, 0, 0, 150);  // Red color
+
+    // Set posisi dan radius (menggunakan nilai red dot yang sudah ada)
+    attachedGZ.centerLat = ownShip.lat;
+    attachedGZ.centerLon = ownShip.lon;
+    attachedGZ.radius = 0.2;  // 0.2 NM seperti yang sudah ditentukan
+
+    // Tambahkan ke list
+    guardZones.append(attachedGZ);
+
+    // Save dan update
+    saveGuardZones();
+    emit guardZoneCreated();
+
+    qDebug() << "Attached GuardZone created with ID:" << attachedGuardZoneId;
+}
+
+void EcWidget::removeAttachedGuardZone()
+{
+    if (attachedGuardZoneId == -1) {
+        return;
+    }
+
+    // Hapus dari list
+    for (int i = 0; i < guardZones.size(); i++) {
+        if (guardZones[i].id == attachedGuardZoneId) {
+            guardZones.removeAt(i);
+            break;
+        }
+    }
+
+    // Reset ID
+    attachedGuardZoneId = -1;
+    attachedGuardZoneName = "";
+
+    // Save dan update
+    saveGuardZones();
+    emit guardZoneDeleted();
+
+    qDebug() << "Attached GuardZone removed";
+}
+
+// FUNGSI UTAMA UNTUK CHECK SHIP GUARDIAN ZONE
+bool EcWidget::checkShipGuardianZone()
+{
+    // Cek apakah Ship Guardian aktif
+    if (!redDotAttachedToShip || attachedGuardZoneId == -1) {
+        return false;
+    }
+
+    qDebug() << "=== CHECKING SHIP GUARDIAN ZONE ===" << attachedGuardZoneId;
+
+    // Clear previous detections
+    lastDetectedObstacles.clear();
+
+    bool hasObstacles = false;
+
+    // Check AIS targets
+    if (checkAISTargetsInShipGuardian(lastDetectedObstacles)) {
+        hasObstacles = true;
+    }
+
+    // Check static obstacles
+    if (checkStaticObstaclesInShipGuardian(lastDetectedObstacles)) {
+        hasObstacles = true;
+    }
+
+    // Show alert jika ada obstacles
+    if (hasObstacles && !lastDetectedObstacles.isEmpty()) {
+        showShipGuardianAlert(lastDetectedObstacles);
+    }
+
+    return hasObstacles;
+}
+
+// CHECK AIS TARGETS (PRIVATE HELPER)
+bool EcWidget::checkAISTargetsInShipGuardian(QList<DetectedObstacle>& obstacles)
+{
+    if (currentAISTargets.isEmpty()) {
+        return false;
+    }
+
+    bool foundDanger = false;
+    double guardianRadius = 0.2; // 0.2 NM radius
+
+    aisTargetsMutex.lock();
+
+    for (const AISTargetData& target : currentAISTargets) {
+        // Hitung jarak dari ship ke AIS target
+        double distance, bearing;
+        EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
+                                               ownShip.lat, ownShip.lon,
+                                               target.lat, target.lon,
+                                               &distance, &bearing);
+
+        // Jika AIS target dalam Ship Guardian Zone
+        if (distance <= guardianRadius) {
+            DetectedObstacle obstacle;
+            obstacle.type = "AIS_TARGET";
+            obstacle.name = QString("AIS %1").arg(target.mmsi);
+            obstacle.description = QString("COG: %1°, SOG: %2 kts")
+                                   .arg(target.cog, 0, 'f', 1)
+                                   .arg(target.sog, 0, 'f', 1);
+
+            // Level bahaya berdasarkan jarak dan kecepatan
+            if (distance < 0.05) {
+                obstacle.level = 3; // Danger - sangat dekat (< 0.05 NM)
+            } else if (target.sog > 15.0 || distance < 0.1) {
+                obstacle.level = 2; // Warning - kecepatan tinggi atau dekat
+            } else {
+                obstacle.level = 1; // Note - normal
+            }
+
+            obstacle.lat = target.lat;
+            obstacle.lon = target.lon;
+            obstacle.distance = distance;
+            obstacle.bearing = bearing;
+
+            obstacles.append(obstacle);
+            foundDanger = true;
+
+            qDebug() << "🚨 AIS TARGET DETECTED in Ship Guardian:" << target.mmsi
+                     << "Distance:" << distance << "NM, Level:" << obstacle.level;
+        }
+    }
+
+    aisTargetsMutex.unlock();
+    return foundDanger;
+}
+
+// CHECK STATIC OBSTACLES (PRIVATE HELPER)
+bool EcWidget::checkStaticObstaclesInShipGuardian(QList<DetectedObstacle>& obstacles)
+{
+    double guardianRadius = 0.2; // 0.2 NM radius
+    bool foundDanger = false;
+
+    // SIMULASI: Wreck di area Houston Ship Channel
+    if (ownShip.lat > 29.30 && ownShip.lat < 29.50 &&
+        ownShip.lon > -95.00 && ownShip.lon < -94.50) {
+
+        DetectedObstacle obstacle;
+        obstacle.type = "WRECKS";
+        obstacle.name = "Dangerous Wreck";
+        obstacle.description = "Depth: 3m - DANGER TO NAVIGATION";
+        obstacle.level = 3; // Danger level
+
+        // Posisi wreck (relatif terhadap ship)
+        obstacle.lat = ownShip.lat + 0.0008;
+        obstacle.lon = ownShip.lon + 0.0012;
+
+        // Hitung jarak
+        double distance, bearing;
+        EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
+                                               ownShip.lat, ownShip.lon,
+                                               obstacle.lat, obstacle.lon,
+                                               &distance, &bearing);
+
+        if (distance <= guardianRadius) {
+            obstacle.distance = distance;
+            obstacle.bearing = bearing;
+            obstacles.append(obstacle);
+            foundDanger = true;
+
+            qDebug() << "🚨 WRECK DETECTED in Ship Guardian:" << obstacle.name
+                     << "Distance:" << distance << "NM";
+        }
+    }
+
+    // SIMULASI: Buoy di area Galveston
+    if (ownShip.lat > 29.35 && ownShip.lat < 29.45 &&
+        ownShip.lon > -94.85 && ownShip.lon < -94.65) {
+
+        DetectedObstacle obstacle;
+        obstacle.type = "BOYISD";
+        obstacle.name = "Isolated Danger Buoy";
+        obstacle.description = "Red/Black buoy marking danger";
+        obstacle.level = 2; // Warning level
+
+        obstacle.lat = ownShip.lat - 0.0006;
+        obstacle.lon = ownShip.lon + 0.0009;
+
+        double distance, bearing;
+        EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
+                                               ownShip.lat, ownShip.lon,
+                                               obstacle.lat, obstacle.lon,
+                                               &distance, &bearing);
+
+        if (distance <= guardianRadius) {
+            obstacle.distance = distance;
+            obstacle.bearing = bearing;
+            obstacles.append(obstacle);
+            foundDanger = true;
+
+            qDebug() << "⚠️ BUOY DETECTED in Ship Guardian:" << obstacle.name
+                     << "Distance:" << distance << "NM";
+        }
+    }
+
+    return foundDanger;
+}
+
+// SHOW ALERT (PRIVATE HELPER)
+void EcWidget::showShipGuardianAlert(const QList<DetectedObstacle>& obstacles)
+{
+    QString alertMessage = "🚨 SHIP GUARDIAN ZONE ALERT 🚨\n\n";
+    int dangerCount = 0, warningCount = 0, noteCount = 0;
+
+    for (const DetectedObstacle& obs : obstacles) {
+        QString levelIcon;
+        if (obs.level == 3) {
+            levelIcon = "🔴 DANGER";
+            dangerCount++;
+        } else if (obs.level == 2) {
+            levelIcon = "🟡 WARNING";
+            warningCount++;
+        } else {
+            levelIcon = "🔵 NOTE";
+            noteCount++;
+        }
+
+        alertMessage += QString("%1 - %2\n").arg(levelIcon, obs.name);
+        alertMessage += QString("📝 %1\n").arg(obs.description);
+        alertMessage += QString("📏 Distance: %1 NM | 🧭 Bearing: %2°\n\n")
+                       .arg(obs.distance, 0, 'f', 3)
+                       .arg(obs.bearing, 0, 'f', 1);
+    }
+
+    alertMessage += QString("📊 Total: %1 Dangers, %2 Warnings, %3 Notes")
+                   .arg(dangerCount).arg(warningCount).arg(noteCount);
+
+    // Status message
+    emit statusMessage(QString("Ship Guardian Alert: %1 obstacles detected").arg(obstacles.size()));
+
+    qDebug() << "🚨 SHIP GUARDIAN ALERT:" << obstacles.size() << "obstacles";
+
+    // Show alert dialog
+    QMessageBox msgBox;
+    msgBox.setWindowTitle("Ship Guardian Zone Alert");
+    msgBox.setText(alertMessage);
+
+    if (dangerCount > 0) {
+        msgBox.setIcon(QMessageBox::Critical);
+    } else if (warningCount > 0) {
+        msgBox.setIcon(QMessageBox::Warning);
+    } else {
+        msgBox.setIcon(QMessageBox::Information);
+    }
+
+    msgBox.exec();
+}
+
+// AUTO-CHECK FUNCTIONS
+void EcWidget::setShipGuardianAutoCheck(bool enabled)
+{
+    shipGuardianAutoCheck = enabled;
+
+    if (enabled && redDotAttachedToShip) {
+        shipGuardianCheckTimer->start();
+        qDebug() << "✅ Ship Guardian auto-check ENABLED (every 5 seconds)";
+        emit statusMessage("Ship Guardian auto-check enabled");
+    } else {
+        shipGuardianCheckTimer->stop();
+        qDebug() << "❌ Ship Guardian auto-check DISABLED";
+        emit statusMessage("Ship Guardian auto-check disabled");
+    }
+}
+
+bool EcWidget::isShipGuardianAutoCheckEnabled() const
+{
+    return shipGuardianAutoCheck;
+}
+
+// TRIGGER ALERT UNTUK SHIP GUARDIAN ZONE
+void EcWidget::triggerShipGuardianAlert(const QList<DetectedObstacle>& obstacles)
+{
+    QString alertMessage = "🚨 SHIP GUARDIAN ZONE ALERT! 🚨\n\n";
+    int dangerCount = 0, warningCount = 0, noteCount = 0;
+
+    for (const DetectedObstacle& obs : obstacles) {
+        QString levelText;
+        if (obs.level == 3) {
+            levelText = "🔴 DANGER";
+            dangerCount++;
+        } else if (obs.level == 2) {
+            levelText = "🟡 WARNING";
+            warningCount++;
+        } else {
+            levelText = "🔵 NOTE";
+            noteCount++;
+        }
+
+        alertMessage += QString("%1 - %2\n").arg(levelText, obs.name);
+        alertMessage += QString("📝 %1\n").arg(obs.description);
+        alertMessage += QString("📏 Distance: %1 NM\n")
+                       .arg(obs.distance, 0, 'f', 3);
+        alertMessage += QString("🧭 Bearing: %1°\n\n")
+                       .arg(obs.bearing, 0, 'f', 1);
+    }
+
+    alertMessage += QString("📊 Summary: %1 Dangers, %2 Warnings, %3 Notes")
+                   .arg(dangerCount).arg(warningCount).arg(noteCount);
+
+    // Emit signal untuk status message
+    emit statusMessage(QString("Ship Guardian Alert: %1 obstacles detected").arg(obstacles.size()));
+
+    // Log untuk debugging
+    qDebug() << "SHIP GUARDIAN ALERT TRIGGERED:" << obstacles.size() << "obstacles detected";
+
+    // Tampilkan message box dengan icon sesuai level bahaya
+    QMessageBox msgBox;
+    msgBox.setWindowTitle("Ship Guardian Zone Alert");
+    msgBox.setText(alertMessage);
+    msgBox.setDetailedText("Ship Guardian Zone has detected obstacles within 0.2 nautical miles radius.");
+
+    if (dangerCount > 0) {
+        msgBox.setIcon(QMessageBox::Critical);
+        msgBox.setWindowIcon(QIcon(":/icons/danger.png"));
+    } else if (warningCount > 0) {
+        msgBox.setIcon(QMessageBox::Warning);
+        msgBox.setWindowIcon(QIcon(":/icons/warning.png"));
+    } else {
+        msgBox.setIcon(QMessageBox::Information);
+        msgBox.setWindowIcon(QIcon(":/icons/info.png"));
+    }
+
+    msgBox.exec();
 }

@@ -202,6 +202,25 @@ public:
   void drawGuardZoneLabel(QPainter& painter, const GuardZone& gz, const QPoint& position);
   void drawGuardZoneCreationPreview(QPainter& painter);
 
+  void createRedDotGuardian();
+  void removeRedDotGuardian();
+  void updateRedDotGuardianInManager();
+
+  void createAttachedGuardZone();
+  void removeAttachedGuardZone();
+
+  struct DetectedObstacle {
+      QString type;
+      QString name;
+      QString description;
+      int level;              // 1=Note, 2=Warning, 3=Danger
+      double lat, lon;
+      double distance;
+      double bearing;
+
+      DetectedObstacle() : level(1), lat(0.0), lon(0.0), distance(0.0), bearing(0.0) {}
+  };
+
   // End Guardzone
 
   // Test GuardZone methods
@@ -412,6 +431,24 @@ public:
   void cancelCreateGuardZone();
   void checkGuardZone();
   QString getGuardZoneFilePath() const;
+
+  // Fungsi deteksi obstacles untuk Ship Guardian Zone
+  bool checkShipGuardianZone();
+  bool checkAISTargetsInShipGuardian();
+  bool checkStaticObstaclesInShipGuardian();
+  void triggerShipGuardianAlert(const QList<DetectedObstacle>& obstacles);
+
+  // Auto-check functions
+  void setShipGuardianAutoCheck(bool enabled);
+  bool isShipGuardianAutoCheckEnabled() const;
+
+  // List untuk menyimpan obstacles yang terdeteksi
+  QList<DetectedObstacle> lastDetectedObstacles;
+
+  // Helper functions (private)
+  bool checkAISTargetsInShipGuardian(QList<DetectedObstacle>& obstacles);
+  bool checkStaticObstaclesInShipGuardian(QList<DetectedObstacle>& obstacles);
+  void showShipGuardianAlert(const QList<DetectedObstacle>& obstacles);
 
   // Simulasi AIS
   void startAISTargetSimulation();
@@ -704,6 +741,13 @@ private:
   void createCircularGuardZoneNew(double centerLat, double centerLon, double radiusNM);
   void createPolygonGuardZoneNew();
 
+  bool redDotGuardianEnabled;
+  int redDotGuardianId;           // ID untuk GuardZone Manager
+  QString redDotGuardianName;     // Nama untuk GuardZone Manager
+
+  int attachedGuardZoneId;           // ID guardzone untuk "Attach to Ship"
+  QString attachedGuardZoneName;     // Nama guardzone
+
   // End Guardzone
 
   // Alert System
@@ -843,6 +887,11 @@ private:
   double closestCPA = 999;
   double closestLat = -1;
   double closestLon = -1;
+
+  // Auto-check timer untuk Ship Guardian Zone
+  QTimer* shipGuardianCheckTimer;
+  bool shipGuardianAutoCheck;
+  QDateTime lastShipGuardianCheck;
 
 }; // EcWidget
 
