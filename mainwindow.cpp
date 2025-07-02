@@ -523,6 +523,7 @@ MainWindow::MainWindow(QWidget *parent)
   showGrid = false;
   showAIS = true;
   trackShip = true;
+  showDangerTarget = true;
   ecchart->SetLookupTable(lookupTable);
   ecchart->SetDisplayCategory(displayCategory);
   ecchart->ShowLights(showLights);
@@ -531,6 +532,7 @@ MainWindow::MainWindow(QWidget *parent)
   ecchart->ShowGrid(showGrid);
   ecchart->ShowAIS(showAIS);
   ecchart->TrackShip(trackShip);
+  ecchart->ShowDangerTarget(showDangerTarget);
   setDisplay();
 
   // Create the window for the pick report
@@ -877,7 +879,7 @@ MainWindow::MainWindow(QWidget *parent)
 
   QAction *showCPATargetsAction = cpaMenu->addAction("Show CPA Targets");
   showCPATargetsAction->setCheckable(true);
-  showCPATargetsAction->setChecked(false);
+  showCPATargetsAction->setChecked(true);
   connect(showCPATargetsAction, SIGNAL(triggered(bool)), this, SLOT(onShowCPATargets(bool)));
 
   QAction *showTCPAInfoAction = cpaMenu->addAction("Show TCPA Info");
@@ -931,6 +933,17 @@ MainWindow::MainWindow(QWidget *parent)
   m_cpaUpdateTimer->start();
 
   qDebug() << "CPA/TCPA system initialized with update interval:" << interval << "ms";
+
+  connect(m_cpatcpaDock, &QDockWidget::visibilityChanged, this, [=](bool visible) {
+      // Jika dock ditutup (visibility = false), lakukan sesuatu
+      if (!visible) {
+          showCPATargetsAction->setChecked(false);
+          ecchart->ShowDangerTarget(false);
+      }
+      else {
+          showCPATargetsAction->setChecked(true);
+      }
+  });
 
 #ifdef _DEBUG
       // Testing menu hanya untuk debug build
@@ -2702,6 +2715,8 @@ void MainWindow::onCPASettings()
 void MainWindow::onShowCPATargets(bool enabled)
 {
     qDebug() << "Show CPA Targets:" << enabled;
+
+    ecchart->ShowDangerTarget(enabled);
 
     if (m_cpatcpaDock) {
         m_cpatcpaDock->setVisible(enabled);

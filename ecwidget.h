@@ -374,6 +374,7 @@ public:
   // Swiches the track of AIS Target
   void TrackTarget(QString mmsi);
   void TrackShip(bool on);
+  void ShowDangerTarget(bool on);
 
   // Ship Guardian Circle variables (upgrade dari red dot)
   bool shipGuardianEnabled;           // NEW: Enable Guardian Circle
@@ -607,7 +608,7 @@ protected:
   int              currentScale;
   double           currentHeading;
 
-  QString          trackTarget;
+  QString          trackTarget, showDangerTarget;
   bool             trackShip;
 
   // PICKWINDOW

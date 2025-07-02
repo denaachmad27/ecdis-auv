@@ -56,8 +56,8 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
 {
   denc              = NULL;
   dictInfo          = dict;
-  currentLat        = 0;
-  currentLon        = 0;
+  currentLat        = qQNaN();
+  currentLon        = qQNaN();
   currentHeading    = 0.0;
   currentScale      = 42000;
   projectionMode    = MercatorProjection;
@@ -601,6 +601,11 @@ void EcWidget::TrackTarget(QString mmsi){
 void EcWidget::TrackShip(bool on)
 {
   trackShip = on;
+}
+
+void EcWidget::ShowDangerTarget(bool on)
+{
+  showDangerTarget = on;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -7040,40 +7045,42 @@ void EcWidget::drawTestGuardSquare(QPainter& painter)
 
     const double cornerLength = 10.0; // panjang garis sudut dalam pixel
 
-    for (const AISTargetData& target : dangerousAISList) {
-        double centerLat = target.lat;
-        double centerLon = target.lon;
+    if (showDangerTarget == true){
+        for (const AISTargetData& target : dangerousAISList) {
+            double centerLat = target.lat;
+            double centerLon = target.lon;
 
-        int centerX, centerY;
-        if (!LatLonToXy(centerLat, centerLon, centerX, centerY)) {
-            continue;
+            int centerX, centerY;
+            if (!LatLonToXy(centerLat, centerLon, centerX, centerY)) {
+                continue;
+            }
+
+            // Ukuran pixel konstan * skala
+            double radiusInPixels = 20.0 * scaleFactor;
+            double left = centerX - radiusInPixels;
+            double right = centerX + radiusInPixels;
+            double top = centerY - radiusInPixels;
+            double bottom = centerY + radiusInPixels;
+
+            // Sudut kiri atas
+            painter.drawLine(QPointF(left, top), QPointF(left + cornerLength, top));           // horizontal
+            painter.drawLine(QPointF(left, top), QPointF(left, top + cornerLength));           // vertical
+
+            // Sudut kanan atas
+            painter.drawLine(QPointF(right, top), QPointF(right - cornerLength, top));         // horizontal
+            painter.drawLine(QPointF(right, top), QPointF(right, top + cornerLength));         // vertical
+
+            // Sudut kiri bawah
+            painter.drawLine(QPointF(left, bottom), QPointF(left + cornerLength, bottom));     // horizontal
+            painter.drawLine(QPointF(left, bottom), QPointF(left, bottom - cornerLength));     // vertical
+
+            // Sudut kanan bawah
+            painter.drawLine(QPointF(right, bottom), QPointF(right - cornerLength, bottom));   // horizontal
+            painter.drawLine(QPointF(right, bottom), QPointF(right, bottom - cornerLength));   // vertical
+
+            // Titik tengah
+            painter.drawPoint(centerX, centerY);
         }
-
-        // Ukuran pixel konstan * skala
-        double radiusInPixels = 20.0 * scaleFactor;
-        double left = centerX - radiusInPixels;
-        double right = centerX + radiusInPixels;
-        double top = centerY - radiusInPixels;
-        double bottom = centerY + radiusInPixels;
-
-        // Sudut kiri atas
-        painter.drawLine(QPointF(left, top), QPointF(left + cornerLength, top));           // horizontal
-        painter.drawLine(QPointF(left, top), QPointF(left, top + cornerLength));           // vertical
-
-        // Sudut kanan atas
-        painter.drawLine(QPointF(right, top), QPointF(right - cornerLength, top));         // horizontal
-        painter.drawLine(QPointF(right, top), QPointF(right, top + cornerLength));         // vertical
-
-        // Sudut kiri bawah
-        painter.drawLine(QPointF(left, bottom), QPointF(left + cornerLength, bottom));     // horizontal
-        painter.drawLine(QPointF(left, bottom), QPointF(left, bottom - cornerLength));     // vertical
-
-        // Sudut kanan bawah
-        painter.drawLine(QPointF(right, bottom), QPointF(right - cornerLength, bottom));   // horizontal
-        painter.drawLine(QPointF(right, bottom), QPointF(right, bottom - cornerLength));   // vertical
-
-        // Titik tengah
-        painter.drawPoint(centerX, centerY);
     }
 
     // Gambar kotak khusus untuk target yang sedang di-follow

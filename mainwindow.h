@@ -191,7 +191,7 @@ protected:
     QString      impPath;
 
     int lookupTable, displayCategory;
-    bool showLights, showText, showNationalText, showSoundings, showGrid, showAIS, trackShip;
+    bool showLights, showText, showNationalText, showSoundings, showGrid, showAIS, trackShip, showDangerTarget;
 
     QActionGroup *dencActionGroup;
     QAction *autoProjectionAction, *mercatorAction, *gnomonicAction, *stereographicAction;
