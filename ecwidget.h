@@ -120,12 +120,26 @@ public:
 
   struct Waypoint
   {
+      // Data SevenCs native
+      EcFeature featureHandle;     // Handle EcFeature dari SevenCs
+
+      // Data aplikasi (untuk UI/UX)
       double lat;
       double lon;
       QString label;
       QString remark;
-      double turningRadius = 10.0;
-      bool active = true;
+      double turningRadius;
+      bool active;
+
+      // Constructor - inisialisasi dengan invalid handle
+      Waypoint() : lat(0), lon(0), turningRadius(10.0), active(true)
+      {
+          featureHandle.id = EC_NOCELLID;
+          featureHandle.offset = 0;
+      }
+
+      // Method untuk cek validitas
+      bool isValid() const { return ECOK(featureHandle); }
   };
 
   void setActiveFunction(ActiveFunction func) { activeFunction = func; }
@@ -417,11 +431,9 @@ public:
   void Draw();
 
   // Waypoint
-  void CreateWaypoint(ActiveFunction active);
   void SetWaypointPos(EcCoordinate lat, EcCoordinate lon);
   bool drawUdo(void);
   bool createUdoCell();
-  void createWaypoint();
 
   // GuardZone
   void enableGuardZone(bool enable);
@@ -524,6 +536,9 @@ public:
 public slots:
   void updateAISTargetsList();
   void addOrUpdateAISTarget(const AISTargetData& target);
+
+  // waypoint
+  void createWaypointAt(EcCoordinate lat, EcCoordinate lon);
 
 signals:
   // Drawing signals

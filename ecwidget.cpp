@@ -1767,60 +1767,6 @@ void EcWidget::SetWaypointPos(EcCoordinate lat, EcCoordinate lon)
     wplon = lon;
 }
 
-void EcWidget::CreateWaypoint(ActiveFunction active)
-{
-    // if(udoCid == EC_NOCELLID){
-    //     if( createUdoCell() == false )
-    //     {
-    //         QMessageBox::warning( this, tr( "error showroute" ), tr( "Could not create udo cell. Please restart the program." ) );
-    //         return;
-    //     }
-    // }
-
-    activeFunction = active;
-    // qDebug() << "Active function" << activeFunction;
-    // range = (int)GetRange(currentScale);
-    // qDebug() << "Range: " << range;
-    // double pickRadius = (0.03 * range);
-    // qDebug() << "Rad" << pickRadius;
-    // // add a new waypoint object to the udo cell
-    // wp1 = EcRouteAddWaypoint(udoCid, dictInfo, wplat, wplon, pickRadius, 5);
-    // if (!ECOK(wp1))
-    //     QMessageBox::warning(this, tr ("error showroute"), tr("Waypoint could not be created"));
-    // else
-    // {
-    //     // symbolize and redraw the udo cell
-    //     drawUdo();
-    //     // InvalidateRect(hWnd, NULL,0);
-    // }
-
-    createWaypointCell();
-}
-
-void EcWidget::createWaypoint()
-{
-    qDebug() << "Active function" << activeFunction;
-    range = (int)GetRange(currentScale);
-    qDebug() << "Range: " << range;
-    double pickRadius = (0.03 * range);
-    qDebug() << "Rad" << pickRadius;
-    qDebug() << wplat << wplon;
-    qDebug() << "udoCid" << udoCid;
-
-    // add a new waypoint object to the udo cell
-    wp1 = EcRouteAddWaypoint(udoCid, dictInfo, wplat, wplon, pickRadius, 5);
-    if (!ECOK(wp1))
-        QMessageBox::warning(this, tr ("error showroute"), tr("Waypoint could not be created"));
-    else
-    {
-        // symbolize and redraw the udo cell
-        drawWaypointCell();
-        // InvalidateRect(hWnd, NULL,0);
-        Draw();
-
-    }
-}
-
 
 /* draw the user defined cell */
 
@@ -3185,6 +3131,46 @@ void EcWidget::drawOverlayCell()
     qDebug() << "[DEBUG] Update() called after overlay.";
 }
 
+// waypoint
+
+void EcWidget::createWaypointAt(EcCoordinate lat, EcCoordinate lon)
+{
+    double range = GetRange(currentScale);
+    double pickRadius = 0.03 * range;
+
+    qDebug() << "[DEBUG] Creating waypoint at" << lat << lon << "with pickRadius:" << pickRadius;
+
+    // 🎯 Buat waypoint dengan EcRouteAddWaypoint
+    EcFeature wp = EcRouteAddWaypoint(udoCid, dictInfo, lat, lon, pickRadius, 5.0);
+
+    if (!ECOK(wp))
+    {
+        QMessageBox::warning(this, tr("Error"), tr("Waypoint could not be created"));
+        qDebug() << "[ERROR] EcRouteAddWaypoint failed";
+        return;
+    }
+
+    // 🎯 Buat struct Waypoint dan simpan EcFeature handle
+    Waypoint newWaypoint;
+    newWaypoint.featureHandle = wp;  // Simpan handle dari SevenCs
+    newWaypoint.lat = lat;
+    newWaypoint.lon = lon;
+    newWaypoint.label = QString("WP%1").arg(waypointList.size() + 1, 3, 10, QChar('0'));
+    newWaypoint.remark = "";
+    newWaypoint.turningRadius = 5.0;  // Sesuai dengan parameter EcRouteAddWaypoint
+    newWaypoint.active = true;
+
+    // 🎯 Tambahkan ke list dan simpan
+    waypointList.append(newWaypoint);
+    saveWaypoints();
+
+    // Symbolize dan redraw
+    drawWaypointCell();
+    Draw();
+
+    qDebug() << "[INFO] Waypoint created with SevenCs handle. Total waypoints:" << waypointList.size();
+}
+
 void EcWidget::drawWaypointMarker(double lat, double lon)
 {
     int x, y;
@@ -3319,25 +3305,44 @@ void EcWidget::removeWaypointAt(int x, int y)
         int wx, wy;
         if (LatLonToXy(waypointList[i].lat, waypointList[i].lon, wx, wy))
         {
-            if (qAbs(x - wx) <= 10 && qAbs(y - wy) <= 10) // Radius klik 10 pixel
+            if (qAbs(x - wx) <= 10 && qAbs(y - wy) <= 10)
             {
+                Waypoint& wp = waypointList[i];
+                QString waypointLabel = wp.label; // Simpan label sebelum dihapus
+
+                // 🎯 Cek validitas handle SevenCs dan gunakan yang sesuai
+                if (wp.isValid()) {
+                    qDebug() << "[DEBUG] Removing waypoint using SevenCs";
+                    Bool result = EcRouteDeleteWaypoint(dictInfo, wp.featureHandle);
+
+                    if (!result) {
+                        qDebug() << "[WARNING] EcRouteDeleteWaypoint failed, removing from list anyway";
+                    } else {
+                        qDebug() << "[INFO] Waypoint removed using SevenCs";
+                    }
+                } else {
+                    qDebug() << "[WARNING] Removing waypoint from list only (invalid SevenCs handle)";
+                }
+
+                // Hapus dari list lokal (untuk kedua kasus)
                 waypointList.removeAt(i);
-                saveWaypoints(); // Save waypoint baru
-                Draw(); // Redraw semua waypoint
-                qDebug() << "[DEBUG] Waypoint removed.";
+                saveWaypoints();
+                Draw();
+
+                QMessageBox::information(this, tr("Waypoint Removed"),
+                                         tr("Waypoint '%1' has been removed.").arg(waypointLabel));
                 return;
             }
         }
     }
-
-    qDebug() << "[DEBUG] No waypoint clicked.";
+    qDebug() << "[DEBUG] No waypoint found at click position for removal.";
 }
 
 void EcWidget::moveWaypointAt(int x, int y)
 {
     if (moveSelectedIndex == -1)
     {
-        // Klik pertama: cari waypoint yang mau dipindah
+        // Klik pertama: pilih waypoint untuk dipindah
         for (int i = 0; i < waypointList.size(); ++i)
         {
             int wx, wy;
@@ -3346,13 +3351,12 @@ void EcWidget::moveWaypointAt(int x, int y)
                 if (qAbs(x - wx) <= 10 && qAbs(y - wy) <= 10)
                 {
                     moveSelectedIndex = i;
-                    QMessageBox::information(this, "Info", "Set new position of waypoint");
-                    qDebug() << "[DEBUG] Waypoint selected to move: index " << i;
+                    qDebug() << "[DEBUG] Waypoint selected for moving:" << i;
                     return;
                 }
             }
         }
-        qDebug() << "[DEBUG] No waypoint selected.";
+        qDebug() << "[DEBUG] No waypoint found at click position";
     }
     else
     {
@@ -3360,12 +3364,35 @@ void EcWidget::moveWaypointAt(int x, int y)
         EcCoordinate newLat, newLon;
         if (XyToLatLon(x, y, newLat, newLon))
         {
-            waypointList[moveSelectedIndex].lat = newLat;
-            waypointList[moveSelectedIndex].lon = newLon;
+            Waypoint& wp = waypointList[moveSelectedIndex];
+
+            // 🎯 Cek validitas handle SevenCs dan gunakan yang sesuai
+            if (wp.isValid()) {
+                // Gunakan EcRouteMoveWaypoint dari SevenCs
+                double range = GetRange(currentScale);
+                double pickRadius = 0.03 * range;
+
+                qDebug() << "[DEBUG] Moving waypoint using SevenCs";
+                Bool result = EcRouteMoveWaypoint(udoCid, dictInfo, EC_GEO_DATUM_WGS84,
+                                                  wp.featureHandle, newLat, newLon, pickRadius);
+
+                if (!result) {
+                    QMessageBox::warning(this, tr("Error"), tr("Failed to move waypoint using SevenCs"));
+                    qDebug() << "[ERROR] EcRouteMoveWaypoint failed";
+                    return;
+                }
+                qDebug() << "[INFO] Waypoint moved successfully using SevenCs";
+            } else {
+                qDebug() << "[WARNING] Using manual coordinate update (invalid SevenCs handle)";
+            }
+
+            // Update koordinat di struct waypoint (untuk kedua kasus)
+            wp.lat = newLat;
+            wp.lon = newLon;
             saveWaypoints();
             Draw();
 
-            // 🎯 Tampilkan Pick Report setelah pindah waypoint
+            // Tampilkan Pick Report setelah pindah waypoint
             QList<EcFeature> pickedList;
             GetPickedFeaturesSubs(pickedList, newLat, newLon);
             PickWindow *pw = new PickWindow(this, dictInfo, denc);
@@ -3491,72 +3518,38 @@ void EcWidget::loadWaypoints()
     QString filePath = getWaypointFilePath();
     QFile file(filePath);
 
-    // Cek lokasi utama
     if (!file.exists())
     {
-        // Coba lokasi cadangan
-        QFile fallbackFile("waypoints.json");
-        if (fallbackFile.exists()) {
-            file.setFileName("waypoints.json");
-            filePath = "waypoints.json";
-        } else {
-            qDebug() << "[INFO] No waypoints file found at" << filePath << "or in current directory";
-            return;
-        }
+        qDebug() << "[INFO] Waypoints file not found. Starting with empty list.";
+        return;
     }
 
-    if (file.open(QIODevice::ReadOnly | QIODevice::Text))
+    if (file.open(QIODevice::ReadOnly))
     {
-        QByteArray jsonData = file.readAll();
-        file.close();
-
-        QJsonParseError parseError;
-        QJsonDocument jsonDoc = QJsonDocument::fromJson(jsonData, &parseError);
-
-        if (parseError.error != QJsonParseError::NoError)
-        {
-            qDebug() << "[ERROR] JSON parse error at" << parseError.offset << ":" << parseError.errorString();
-            return;
-        }
-
-        if (!jsonDoc.isObject())
-        {
-            qDebug() << "[ERROR] Invalid waypoints JSON file structure (not an object)";
-            return;
-        }
-
-        QJsonObject rootObject = jsonDoc.object();
-        if (!rootObject.contains("waypoints") || !rootObject["waypoints"].isArray())
-        {
-            qDebug() << "[ERROR] Invalid waypoints JSON file (missing waypoints array)";
-            return;
-        }
-
-        QJsonArray waypointArray = rootObject["waypoints"].toArray();
+        QByteArray fileData = file.readAll();
+        QJsonDocument doc = QJsonDocument::fromJson(fileData);
+        QJsonArray waypointsArray = doc.array();
 
         waypointList.clear();
-
         int validWaypoints = 0;
 
-        for (const QJsonValue &value : waypointArray)
+        for (const QJsonValue& value : waypointsArray)
         {
-            if (!value.isObject())
-                continue;
-
             QJsonObject wpObject = value.toObject();
 
-            // Cek field yang diperlukan
-            if (!wpObject.contains("lat") || !wpObject.contains("lon"))
-                continue;
-
             Waypoint wp;
-            wp.label = wpObject.contains("label") ? wpObject["label"].toString() :
-                           QString("WP%1").arg(validWaypoints + 1, 3, 10, QChar('0'));
+            wp.label = wpObject.contains("label") ?
+                       wpObject["label"].toString() :
+                       QString("WP%1").arg(validWaypoints + 1, 3, 10, QChar('0'));
             wp.lat = wpObject["lat"].toDouble();
             wp.lon = wpObject["lon"].toDouble();
             wp.remark = wpObject.contains("remark") ? wpObject["remark"].toString() : "";
             wp.turningRadius = wpObject.contains("turningRadius") ? wpObject["turningRadius"].toDouble() : 10.0;
             wp.active = wpObject.contains("active") ? wpObject["active"].toBool() : true;
+
+            // featureHandle akan invalid setelah load dari file
+            wp.featureHandle.id = EC_NOCELLID;
+            wp.featureHandle.offset = 0;
 
             waypointList.append(wp);
             validWaypoints++;
@@ -3577,6 +3570,30 @@ void EcWidget::loadWaypoints()
                 }
             }
 
+            // Recreate SevenCs waypoints dari data yang dimuat
+            qDebug() << "[INFO] Recreating SevenCs waypoints from loaded data...";
+
+            double range = GetRange(currentScale);
+            double pickRadius = 0.03 * range;
+
+            for (int i = 0; i < waypointList.size(); i++)
+            {
+                Waypoint& wp = waypointList[i];
+
+                EcFeature wpFeature = EcRouteAddWaypoint(udoCid, dictInfo, wp.lat, wp.lon, pickRadius, wp.turningRadius);
+
+                if (ECOK(wpFeature))
+                {
+                    wp.featureHandle = wpFeature;
+                    qDebug() << "[DEBUG] Recreated waypoint" << i << "in SevenCs";
+                }
+                else
+                {
+                    qDebug() << "[ERROR] Failed to recreate waypoint" << i << "in SevenCs";
+                }
+            }
+
+            qDebug() << "[INFO] Finished recreating waypoints in SevenCs";
             Draw();
         }
     }
@@ -3638,8 +3655,23 @@ void EcWidget::clearWaypoints()
 
     if (msgBox.exec() == QMessageBox::Yes)
     {
+        qDebug() << "[INFO] Clearing all waypoints";
+
+        // 🎯 Hapus waypoint menggunakan SevenCs jika handle valid
+        for (int i = waypointList.size() - 1; i >= 0; i--)
+        {
+            if (waypointList[i].isValid())
+            {
+                Bool result = EcRouteDeleteWaypoint(dictInfo, waypointList[i].featureHandle);
+                if (!result) {
+                    qDebug() << "[WARNING] Failed to delete waypoint" << i << "from SevenCs";
+                }
+            }
+        }
+
         waypointList.clear();
         saveWaypoints(); // Save empty list to file
+        drawWaypointCell();
         Draw(); // Redraw without waypoints
 
         QMessageBox::information(this, tr("Waypoints Cleared"),
