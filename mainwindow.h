@@ -105,6 +105,7 @@ protected slots:
     void onGrid(bool);
 
     void onAIS(bool);
+    void onTrack(bool);
 
     void onSearch();
 
@@ -189,7 +190,7 @@ protected:
     QString      impPath;
 
     int lookupTable, displayCategory;
-    bool showLights, showText, showNationalText, showSoundings, showGrid, showAIS;
+    bool showLights, showText, showNationalText, showSoundings, showGrid, showAIS, trackShip, showDangerTarget;
 
     QActionGroup *dencActionGroup;
     QAction *autoProjectionAction, *mercatorAction, *gnomonicAction, *stereographicAction;

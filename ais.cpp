@@ -380,6 +380,126 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
     }
 }
 
+
+// Fungsi khusus untuk handle ownship update
+void Ais::handleOwnShipUpdate(EcAISTargetInfo *ti)
+{
+    // DEBUG COMMENT TEMP
+    //qDebug() << "Processing OWNSHIP update - MMSI:" << ti->mmsi;
+
+    if (ti->ownShip != True) return;
+
+    if (abs(ti->latitude) < 90 * 60 * 10000 &&
+        abs(ti->longitude) < 180 * 60 * 10000)
+    {
+        _oLat = ((double)ti->latitude / 10000) / 60;
+        _oLon = ((double)ti->longitude / 10000) / 60;
+
+        ownShipLat = _oLat;
+        ownShipLon = _oLon;
+        ownShipCog = ti->cog / 10;
+        ownShipSog = ti->sog;
+
+        _myAis->setOwnShipPos(ownShipLat, ownShipLon);
+
+        // ⭐ SIMPEN DATA OS UTK PANEL
+        AISTargetData dataOS;
+        dataOS.lat = _oLat;
+        dataOS.lon = _oLon;
+        dataOS.cog = ti->cog / 10.0;        // Course over ground
+        dataOS.sog = ti->sog;               // Speed over ground
+        dataOS.heading = ti->heading;       // ⭐ TAMBAHAN: True heading dari compass
+        dataOS.cpaCalculatedAt = QDateTime::currentDateTime();
+
+        Ais::instance()->_aisOwnShip = dataOS;
+
+        // DEBUG COMMENT TEMP
+        //qDebug() << "Ownship data updated - COG:" << dataOS.cog << "Heading:" << dataOS.heading;
+    }
+}
+
+// Fungsi khusus untuk handle AIS targets (bukan ownship)
+void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
+{
+    if (ti->ownShip == True) return; // Skip jika ini ownship
+
+    EcCoordinate ownShipLat = 0, ownShipLon = 0;
+    double ownShipSog = _dSpeed, ownShipCog = _dCourse;
+
+    double dist = 0, bear = 0;
+    double lat = ((double)ti->latitude / 10000.0) / 60.0;
+    double lon = ((double)ti->longitude / 10000.0) / 60.0;
+
+    _myAis->getOwnShipPos(ownShipLat, ownShipLon);
+    EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84, lat, lon, ownShipLat, ownShipLon, &dist, &bear);
+
+    // Process only targets which are further away than 48 nm or no own ship position exists yet
+    if (dist < 48 || (ownShipLat == 0 && ownShipLon == 0))
+    {
+        // Filter the ais targets which shall be displayed
+        if (abs(ti->latitude) < 90 * 60 * 10000 &&
+            abs(ti->longitude) < 180 * 60 * 10000 &&
+            ti->navStatus != eNavS_baseStation)
+        {
+            EcAISTrackingStatus aisTrkStatus = EcAISCalcTargetTrackingStatus(ti, ownShipLat, ownShipLon, ownShipSog, ownShipCog, _dWarnDist, _dWarnCPA, _iWarnTCPA, _iTimeOut);
+            EcFeature feat = EcAISFindTargetObject(_cid, _dictInfo, ti);
+
+            // if there is no feature yet create one
+            if (!ECOK(feat) && aisTrkStatus != aisLost)
+            {
+                if (EcAISCreateTargetObject(_cid, _dictInfo, ti, &feat))
+                {
+                    EcAISSetTargetActivationStatus(feat, _dictInfo, aisSleeping, NULL);
+                    _bSymbolize = True;
+                }
+                else
+                {
+                    addLogFileEntry(QString("EcAISCreateTargetObject() failed! New target object could not be created."));
+                }
+            }
+
+            // Set the status of the ais target to active if it is located within a certain distance
+            if (dist < 4)
+                EcAISSetTargetActivationStatus(feat, _dictInfo, aisActivated, NULL);
+
+            // Set the tracking status of the ais target feature
+            // EcAISSetTargetTrackingStatus(feat, _dictInfo, aisTrkStatus, NULL);
+
+            // Set the remaining attributes of the ais target feature
+            EcAISSetTargetObjectData(feat, _dictInfo, ti, &_bSymbolize);
+
+            _myAis->setTargetPos(lat, lon);
+
+            // SIMPEN DATA AIS TARGET
+            if (ti && ti->mmsi != 0)
+            {
+                AISTargetData data;
+                data.mmsi = QString::number(ti->mmsi);
+                data.lat = lat;
+                data.lon = lon;
+                data.cog = ti->cog / 10.0;
+                data.sog = ti->sog;
+                data.lastUpdate = QDateTime::currentDateTime();
+                data.currentRange = dist;
+                data.relativeBearing = bear;
+                data.cpaCalculatedAt = QDateTime::currentDateTime();
+                data.feat = feat;
+                data._dictInfo = _dictInfo;
+                data.isDangerous = (aisTrkStatus == aisDangerous);
+
+                Ais::instance()->_aisTargetMap[ti->mmsi] = data;
+                Ais::instance()->_aisTargetInfoMap[ti->mmsi] = *ti;
+            }
+        }
+    }
+
+    // Emit signal untuk refresh chart display
+    EcCoordinate ownLat, ownLon;
+    _myAis->getOwnShipPos(ownLat, ownLon);
+    _myAis->emitSignal(ownLat, ownLon);
+}
+
+
 void Ais::emitSignal( double lat, double lon )
 {
   emit signalRefreshChartDisplay( lat, lon );
@@ -885,124 +1005,6 @@ EcAISTargetInfo* Ais::getTargetInfo(unsigned int mmsi)
         return &_aisTargetInfoMap[mmsi];
     }
     return nullptr;
-}
-
-// Fungsi khusus untuk handle ownship update
-void Ais::handleOwnShipUpdate(EcAISTargetInfo *ti)
-{
-    // DEBUG COMMENT TEMP
-    //qDebug() << "Processing OWNSHIP update - MMSI:" << ti->mmsi;
-
-    if (ti->ownShip != True) return;
-
-    if (abs(ti->latitude) < 90 * 60 * 10000 &&
-        abs(ti->longitude) < 180 * 60 * 10000)
-    {
-        _oLat = ((double)ti->latitude / 10000) / 60;
-        _oLon = ((double)ti->longitude / 10000) / 60;
-
-        ownShipLat = _oLat;
-        ownShipLon = _oLon;
-        ownShipCog = ti->cog / 10;
-        ownShipSog = ti->sog;
-
-        _myAis->setOwnShipPos(ownShipLat, ownShipLon);
-
-        // ⭐ SIMPEN DATA AIS OWNSHIP DENGAN HEADING
-        AISTargetData dataOS;
-        dataOS.lat = _oLat;
-        dataOS.lon = _oLon;
-        dataOS.cog = ti->cog / 10.0;        // Course over ground
-        dataOS.sog = ti->sog;               // Speed over ground
-        dataOS.heading = ti->heading;       // ⭐ TAMBAHAN: True heading dari compass
-        dataOS.cpaCalculatedAt = QDateTime::currentDateTime();
-
-        Ais::instance()->_aisOwnShip = dataOS;
-
-        // DEBUG COMMENT TEMP
-        //qDebug() << "Ownship data updated - COG:" << dataOS.cog << "Heading:" << dataOS.heading;
-    }
-}
-
-// Fungsi khusus untuk handle AIS targets (bukan ownship)
-void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
-{
-    if (ti->ownShip == True) return; // Skip jika ini ownship
-
-    EcCoordinate ownShipLat = 0, ownShipLon = 0;
-    double ownShipSog = _dSpeed, ownShipCog = _dCourse;
-
-    double dist = 0, bear = 0;
-    double lat = ((double)ti->latitude / 10000.0) / 60.0;
-    double lon = ((double)ti->longitude / 10000.0) / 60.0;
-
-    _myAis->getOwnShipPos(ownShipLat, ownShipLon);
-    EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84, lat, lon, ownShipLat, ownShipLon, &dist, &bear);
-
-    // Process only targets which are further away than 48 nm or no own ship position exists yet
-    if (dist < 48 || (ownShipLat == 0 && ownShipLon == 0))
-    {
-        // Filter the ais targets which shall be displayed
-        if (abs(ti->latitude) < 90 * 60 * 10000 &&
-            abs(ti->longitude) < 180 * 60 * 10000 &&
-            ti->navStatus != eNavS_baseStation)
-        {
-            EcAISTrackingStatus aisTrkStatus = EcAISCalcTargetTrackingStatus(ti, ownShipLat, ownShipLon, ownShipSog, ownShipCog, _dWarnDist, _dWarnCPA, _iWarnTCPA, _iTimeOut);
-            EcFeature feat = EcAISFindTargetObject(_cid, _dictInfo, ti);
-
-            // if there is no feature yet create one
-            if (!ECOK(feat) && aisTrkStatus != aisLost)
-            {
-                if (EcAISCreateTargetObject(_cid, _dictInfo, ti, &feat))
-                {
-                    EcAISSetTargetActivationStatus(feat, _dictInfo, aisSleeping, NULL);
-                    _bSymbolize = True;
-                }
-                else
-                {
-                    addLogFileEntry(QString("EcAISCreateTargetObject() failed! New target object could not be created."));
-                }
-            }
-
-            // Set the status of the ais target to active if it is located within a certain distance
-            if (dist < 4)
-                EcAISSetTargetActivationStatus(feat, _dictInfo, aisActivated, NULL);
-
-            // Set the tracking status of the ais target feature
-            // EcAISSetTargetTrackingStatus(feat, _dictInfo, aisTrkStatus, NULL);
-
-            // Set the remaining attributes of the ais target feature
-            EcAISSetTargetObjectData(feat, _dictInfo, ti, &_bSymbolize);
-
-            _myAis->setTargetPos(lat, lon);
-
-            // SIMPEN DATA AIS TARGET
-            if (ti && ti->mmsi != 0)
-            {
-                AISTargetData data;
-                data.mmsi = QString::number(ti->mmsi);
-                data.lat = lat;
-                data.lon = lon;
-                data.cog = ti->cog / 10.0;
-                data.sog = ti->sog;
-                data.lastUpdate = QDateTime::currentDateTime();
-                data.currentRange = dist;
-                data.relativeBearing = bear;
-                data.cpaCalculatedAt = QDateTime::currentDateTime();
-                data.feat = feat;
-                data._dictInfo = _dictInfo;
-                data.isDangerous = (aisTrkStatus == aisDangerous);
-
-                Ais::instance()->_aisTargetMap[ti->mmsi] = data;
-                Ais::instance()->_aisTargetInfoMap[ti->mmsi] = *ti;
-            }
-        }
-    }
-
-    // Emit signal untuk refresh chart display
-    EcCoordinate ownLat, ownLon;
-    _myAis->getOwnShipPos(ownLat, ownLon);
-    _myAis->emitSignal(ownLat, ownLon);
 }
 
 // Fungsi untuk menghapus feature object ownship lama

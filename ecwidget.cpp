@@ -56,8 +56,8 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
 {
   denc              = NULL;
   dictInfo          = dict;
-  currentLat        = 0;
-  currentLon        = 0;
+  currentLat        = qQNaN();
+  currentLon        = qQNaN();
   currentHeading    = 0.0;
   currentScale      = 42000;
   projectionMode    = MercatorProjection;
@@ -608,6 +608,16 @@ void EcWidget::ShowAIS(bool on)
 
 void EcWidget::TrackTarget(QString mmsi){
     trackTarget = mmsi;
+}
+
+void EcWidget::TrackShip(bool on)
+{
+  trackShip = on;
+}
+
+void EcWidget::ShowDangerTarget(bool on)
+{
+  showDangerTarget = on;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2877,40 +2887,40 @@ void EcWidget::drawAISCell()
 
 
   // DRAWING OWNSHIP CUSTOM
-      if (showCustomOwnShip) {
-          AISTargetData ownShipData = Ais::instance()->getOwnShipVar();
+  if (showCustomOwnShip) {
+      AISTargetData ownShipData = Ais::instance()->getOwnShipVar();
 
-          // Untuk simulasi, gunakan data simulasi
-          if (simulationActive && ownShipInSimulation) {
-              ownShipData.lat = ownShip.lat;
-              ownShipData.lon = ownShip.lon;
-              ownShipData.cog = ownShip.cog;          // ⭐ Gunakan COG dari simulasi
-              ownShipData.heading = ownShip.heading;  // ⭐ Gunakan heading dari simulasi
-              ownShipData.sog = ownShip.sog;
-          }
+      // Untuk simulasi, gunakan data simulasi
+      if (simulationActive && ownShipInSimulation) {
+          ownShipData.lat = ownShip.lat;
+          ownShipData.lon = ownShip.lon;
+          ownShipData.cog = ownShip.cog;          // ⭐ Gunakan COG dari simulasi
+          ownShipData.heading = ownShip.heading;  // ⭐ Gunakan heading dari simulasi
+          ownShipData.sog = ownShip.sog;
+      }
 
-          if (ownShipData.lat != 0.0 && ownShipData.lon != 0.0) {
-              int x, y;
-              if (LatLonToXy(ownShipData.lat, ownShipData.lon, x, y)) {
+      if (ownShipData.lat != 0.0 && ownShipData.lon != 0.0) {
+          int x, y;
+          if (LatLonToXy(ownShipData.lat, ownShipData.lon, x, y)) {
 
-                  QPainter painter(&drawPixmap);
-                  painter.setRenderHint(QPainter::Antialiasing, true);
+              QPainter painter(&drawPixmap);
+              painter.setRenderHint(QPainter::Antialiasing, true);
 
-                  // ⭐ Pastikan COG dan heading dalam range 0-360
-                  double cog = ownShipData.cog;
-                  while (cog < 0) cog += 360;
-                  while (cog >= 360) cog -= 360;
+              // ⭐ Pastikan COG dan heading dalam range 0-360
+              double cog = ownShipData.cog;
+              while (cog < 0) cog += 360;
+              while (cog >= 360) cog -= 360;
 
-                  double heading = ownShipData.heading;
-                  while (heading < 0) heading += 360;
-                  while (heading >= 360) heading -= 360;
+              double heading = ownShipData.heading;
+              while (heading < 0) heading += 360;
+              while (heading >= 360) heading -= 360;
 
-                  // ⭐ PANGGIL DENGAN PARAMETER BARU: COG, Heading, SOG
-                  drawOwnShipIcon(painter, x, y, cog, heading, ownShipData.sog);
-                  painter.end();
-              }
+              // ⭐ PANGGIL DENGAN PARAMETER BARU: COG, Heading, SOG
+              drawOwnShipIcon(painter, x, y, cog, heading, ownShipData.sog);
+              painter.end();
           }
       }
+  }
 
   update();
 
@@ -2997,7 +3007,7 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon )
 
     if((lat != 0 && lon != 0) && (fabs(currentLat - lat) > maxDist || fabs(currentLon - lon) > maxDist))
     {
-        if (trackTarget.isEmpty()){
+        if (trackTarget.isEmpty() && trackShip){
             SetCenter( lat, lon );
         }
         draw(true);
@@ -3027,8 +3037,10 @@ void EcWidget::slotRefreshCenter( double lat, double lon )
 
     if(lat != 0 && lon != 0)
     {
-      SetCenter( lat, lon );
-      draw(true);
+        if (trackShip){
+            SetCenter( lat, lon );
+        }
+        draw(true);
     }
     slotUpdateAISTargets( true );
   }
@@ -7088,40 +7100,42 @@ void EcWidget::drawTestGuardSquare(QPainter& painter)
 
     const double cornerLength = 10.0; // panjang garis sudut dalam pixel
 
-    for (const AISTargetData& target : dangerousAISList) {
-        double centerLat = target.lat;
-        double centerLon = target.lon;
+    if (showDangerTarget == true){
+        for (const AISTargetData& target : dangerousAISList) {
+            double centerLat = target.lat;
+            double centerLon = target.lon;
 
-        int centerX, centerY;
-        if (!LatLonToXy(centerLat, centerLon, centerX, centerY)) {
-            continue;
+            int centerX, centerY;
+            if (!LatLonToXy(centerLat, centerLon, centerX, centerY)) {
+                continue;
+            }
+
+            // Ukuran pixel konstan * skala
+            double radiusInPixels = 20.0 * scaleFactor;
+            double left = centerX - radiusInPixels;
+            double right = centerX + radiusInPixels;
+            double top = centerY - radiusInPixels;
+            double bottom = centerY + radiusInPixels;
+
+            // Sudut kiri atas
+            painter.drawLine(QPointF(left, top), QPointF(left + cornerLength, top));           // horizontal
+            painter.drawLine(QPointF(left, top), QPointF(left, top + cornerLength));           // vertical
+
+            // Sudut kanan atas
+            painter.drawLine(QPointF(right, top), QPointF(right - cornerLength, top));         // horizontal
+            painter.drawLine(QPointF(right, top), QPointF(right, top + cornerLength));         // vertical
+
+            // Sudut kiri bawah
+            painter.drawLine(QPointF(left, bottom), QPointF(left + cornerLength, bottom));     // horizontal
+            painter.drawLine(QPointF(left, bottom), QPointF(left, bottom - cornerLength));     // vertical
+
+            // Sudut kanan bawah
+            painter.drawLine(QPointF(right, bottom), QPointF(right - cornerLength, bottom));   // horizontal
+            painter.drawLine(QPointF(right, bottom), QPointF(right, bottom - cornerLength));   // vertical
+
+            // Titik tengah
+            painter.drawPoint(centerX, centerY);
         }
-
-        // Ukuran pixel konstan * skala
-        double radiusInPixels = 20.0 * scaleFactor;
-        double left = centerX - radiusInPixels;
-        double right = centerX + radiusInPixels;
-        double top = centerY - radiusInPixels;
-        double bottom = centerY + radiusInPixels;
-
-        // Sudut kiri atas
-        painter.drawLine(QPointF(left, top), QPointF(left + cornerLength, top));           // horizontal
-        painter.drawLine(QPointF(left, top), QPointF(left, top + cornerLength));           // vertical
-
-        // Sudut kanan atas
-        painter.drawLine(QPointF(right, top), QPointF(right - cornerLength, top));         // horizontal
-        painter.drawLine(QPointF(right, top), QPointF(right, top + cornerLength));         // vertical
-
-        // Sudut kiri bawah
-        painter.drawLine(QPointF(left, bottom), QPointF(left + cornerLength, bottom));     // horizontal
-        painter.drawLine(QPointF(left, bottom), QPointF(left, bottom - cornerLength));     // vertical
-
-        // Sudut kanan bawah
-        painter.drawLine(QPointF(right, bottom), QPointF(right - cornerLength, bottom));   // horizontal
-        painter.drawLine(QPointF(right, bottom), QPointF(right, bottom - cornerLength));   // vertical
-
-        // Titik tengah
-        painter.drawPoint(centerX, centerY);
     }
 
     // Gambar kotak khusus untuk target yang sedang di-follow

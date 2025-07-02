@@ -522,6 +522,8 @@ MainWindow::MainWindow(QWidget *parent)
   showSoundings = false;
   showGrid = false;
   showAIS = true;
+  trackShip = true;
+  showDangerTarget = true;
   ecchart->SetLookupTable(lookupTable);
   ecchart->SetDisplayCategory(displayCategory);
   ecchart->ShowLights(showLights);
@@ -529,6 +531,8 @@ MainWindow::MainWindow(QWidget *parent)
   ecchart->ShowSoundings(showSoundings);
   ecchart->ShowGrid(showGrid);
   ecchart->ShowAIS(showAIS);
+  ecchart->TrackShip(trackShip);
+  ecchart->ShowDangerTarget(showDangerTarget);
   setDisplay();
 
   // Create the window for the pick report
@@ -721,6 +725,11 @@ MainWindow::MainWindow(QWidget *parent)
   aisAction->setChecked(showAIS);
   connect(aisAction, SIGNAL(toggled(bool)), this, SLOT(onAIS(bool)));
 
+  QAction *trackAction = viewMenu->addAction("Track Ship");
+  trackAction->setCheckable(true);
+  trackAction->setChecked(trackShip);
+  connect(trackAction, SIGNAL(toggled(bool)), this, SLOT(onTrack(bool)));
+
   viewMenu->addSeparator();
 
   // QAction *searchAction = viewMenu->addAction("Search");
@@ -870,7 +879,7 @@ MainWindow::MainWindow(QWidget *parent)
 
   QAction *showCPATargetsAction = cpaMenu->addAction("Show CPA Targets");
   showCPATargetsAction->setCheckable(true);
-  showCPATargetsAction->setChecked(false);
+  showCPATargetsAction->setChecked(true);
   connect(showCPATargetsAction, SIGNAL(triggered(bool)), this, SLOT(onShowCPATargets(bool)));
 
   QAction *showTCPAInfoAction = cpaMenu->addAction("Show TCPA Info");
@@ -924,6 +933,17 @@ MainWindow::MainWindow(QWidget *parent)
   m_cpaUpdateTimer->start();
 
   qDebug() << "CPA/TCPA system initialized with update interval:" << interval << "ms";
+
+  connect(m_cpatcpaDock, &QDockWidget::visibilityChanged, this, [=](bool visible) {
+      // Jika dock ditutup (visibility = false), lakukan sesuatu
+      if (!visible) {
+          showCPATargetsAction->setChecked(false);
+          ecchart->ShowDangerTarget(false);
+      }
+      else {
+          showCPATargetsAction->setChecked(true);
+      }
+  });
 
 #ifdef _DEBUG
       // Testing menu hanya untuk debug build
@@ -1253,6 +1273,12 @@ void MainWindow::onAIS(bool on)
 {
   ecchart->ShowAIS(on);
   DrawChart();
+}
+
+void MainWindow::onTrack(bool on)
+{
+    ecchart->TrackShip(on);
+    DrawChart();
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2689,6 +2715,8 @@ void MainWindow::onCPASettings()
 void MainWindow::onShowCPATargets(bool enabled)
 {
     qDebug() << "Show CPA Targets:" << enabled;
+
+    ecchart->ShowDangerTarget(enabled);
 
     if (m_cpatcpaDock) {
         m_cpatcpaDock->setVisible(enabled);
