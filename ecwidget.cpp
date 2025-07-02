@@ -836,45 +836,45 @@ void EcWidget::draw(bool upd)
   {
     // Draw chart to chartPixmap
     EcCatList *catList = EcDENCGetCatalogueList(denc);
-#ifdef _WIN32
-    HPALETTE oldPal = SelectPalette (hdc, hPalette, true);
+    #ifdef _WIN32
+        HPALETTE oldPal = SelectPalette (hdc, hPalette, true);
 
-    // Temporarily unassign the AIS overlay cell from the view to get a pure chart image
-    aisCellId = _aisObj->getAISCell();
-    if( aisCellId != EC_NOCELLID )
-      EcChartUnAssignCellFromView(view, aisCellId);
+        // Temporarily unassign the AIS overlay cell from the view to get a pure chart image
+        aisCellId = _aisObj->getAISCell();
+        if( aisCellId != EC_NOCELLID )
+          EcChartUnAssignCellFromView(view, aisCellId);
 
-    // Draw the charts
-    EcDrawNTDrawChart (view, hdc, NULL, dictInfo, catList, currentLat, currentLon, GetRange(currentScale), currentHeading);
+        // Draw the charts
+        EcDrawNTDrawChart (view, hdc, NULL, dictInfo, catList, currentLat, currentLon, GetRange(currentScale), currentHeading);
 
-    // Assign the AIS overlay cell again
-    if( aisCellId != EC_NOCELLID )
-      EcChartAssignCellToView(view, aisCellId);
+        // Assign the AIS overlay cell again
+        if( aisCellId != EC_NOCELLID )
+          EcChartAssignCellToView(view, aisCellId);
 
-    if(showGrid)
-      EcDrawNTDrawGrid (view, hdc, chartPixmap.width(), chartPixmap.height(), 8, 8, True);
+        if(showGrid)
+          EcDrawNTDrawGrid (view, hdc, chartPixmap.width(), chartPixmap.height(), 8, 8, True);
 
-    chartPixmap = QtWin::fromHBITMAP(hBitmap);
-    drawPixmap = chartPixmap;
-    SelectPalette (hdc, oldPal, false);
-#else
-#if QT_VERSION > 0x040400
-    EcDrawX11DrawChart (view, drawGC, x11pixmap, dictInfo, catList, currentLat, currentLon, GetRange(currentScale), currentHeading);
+        chartPixmap = QtWin::fromHBITMAP(hBitmap);
+        drawPixmap = chartPixmap;
+        SelectPalette (hdc, oldPal, false);
+    #else
+        #if QT_VERSION > 0x040400
+            EcDrawX11DrawChart (view, drawGC, x11pixmap, dictInfo, catList, currentLat, currentLon, GetRange(currentScale), currentHeading);
 
-    if(showGrid)
-      EcDrawX11DrawGrid (view, drawGC, x11pixmap, chartPixmap.width(), chartPixmap.height(), 8, 8, True);
+            if(showGrid)
+              EcDrawX11DrawGrid (view, drawGC, x11pixmap, chartPixmap.width(), chartPixmap.height(), 8, 8, True);
 
-    chartPixmap = QPixmap::fromX11Pixmap(x11pixmap);
-    drawPixmap = chartPixmap;
-#else
-    EcDrawX11DrawChart (view, drawGC, chartPixmap.handle(), dictInfo, catList, currentLat, currentLon, GetRange(currentScale), currentHeading);
+            chartPixmap = QPixmap::fromX11Pixmap(x11pixmap);
+            drawPixmap = chartPixmap;
+        #else
+            EcDrawX11DrawChart (view, drawGC, chartPixmap.handle(), dictInfo, catList, currentLat, currentLon, GetRange(currentScale), currentHeading);
 
-    if(showGrid)
-      EcDrawX11DrawGrid (view, drawGC, chartPixmap.handle(), chartPixmap.width(), chartPixmap.height(), 8, 8, True);
+            if(showGrid)
+              EcDrawX11DrawGrid (view, drawGC, chartPixmap.handle(), chartPixmap.width(), chartPixmap.height(), 8, 8, True);
 
-    drawPixmap = chartPixmap;
-#endif
-#endif
+            drawPixmap = chartPixmap;
+        #endif
+    #endif
   }
   else
   {
