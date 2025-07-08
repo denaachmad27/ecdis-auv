@@ -4861,40 +4861,20 @@ bool EcWidget::checkTargetsInGuardZone()
                      << "inZone:" << inGuardZone;
         }
         else if (activeGuardZone->shape == GUARD_ZONE_POLYGON && activeGuardZone->latLons.size() >= 6) {
-            // ========== IMPROVED POLYGON CHECK ==========
+            qDebug() << "[REAL-AIS-CHECK] Checking polygon GuardZone";
+            qDebug() << "[REAL-AIS-CHECK] Polygon vertices:" << (activeGuardZone->latLons.size() / 2);
 
-            // Method 1: Geographic point-in-polygon (more accurate)
-            bool inPolygonGeo = isPointInPolygon(aisTarget.lat, aisTarget.lon, activeGuardZone->latLons);
-
-            // Method 2: Screen coordinate point-in-polygon (backup)
-            bool inPolygonScreen = false;
-            int targetX, targetY;
-            if (LatLonToXy(aisTarget.lat, aisTarget.lon, targetX, targetY)) {
-                QPolygon poly;
-                for (int j = 0; j < activeGuardZone->latLons.size(); j += 2) {
-                    int x, y;
-                    if (LatLonToXy(activeGuardZone->latLons[j], activeGuardZone->latLons[j+1], x, y)) {
-                        poly.append(QPoint(x, y));
-                    }
-                }
-
-                if (poly.size() >= 3) {
-                    inPolygonScreen = poly.containsPoint(QPoint(targetX, targetY), Qt::OddEvenFill);
-                }
-
-                qDebug() << "[REAL-AIS-CHECK] Target" << aisTarget.mmsi << "screen coords:" << targetX << "," << targetY;
-                qDebug() << "[REAL-AIS-CHECK] Polygon screen points:" << poly.size();
-                qDebug() << "[REAL-AIS-CHECK] Screen polygon check:" << inPolygonScreen;
+            // Debug polygon coordinates (hanya untuk troubleshooting)
+            for (int i = 0; i < activeGuardZone->latLons.size() && i < 10; i += 2) { // Limit debug output
+                qDebug() << "[REAL-AIS-CHECK] Vertex" << (i/2) << ":"
+                         << activeGuardZone->latLons[i] << "," << activeGuardZone->latLons[i+1];
             }
 
-            // Use geographic method as primary, screen as backup verification
-            inGuardZone = inPolygonGeo;
+            // Use improved polygon detection
+            inGuardZone = isPointInPolygon(aisTarget.lat, aisTarget.lon, activeGuardZone->latLons);
 
             qDebug() << "[REAL-AIS-CHECK] Target" << aisTarget.mmsi
-                     << "Geographic polygon check:" << inPolygonGeo
-                     << "Screen polygon check:" << inPolygonScreen
-                     << "Final result:" << inGuardZone;
-            // ==========================================
+                     << "polygon check result:" << inGuardZone;
         }
 
         // Jika target di dalam guardzone, tambahkan ke alert
@@ -7963,24 +7943,126 @@ void EcWidget::setGuardZoneCheckInterval(int intervalMs)
 bool EcWidget::isPointInPolygon(double lat, double lon, const QVector<double>& polygonLatLons)
 {
     if (polygonLatLons.size() < 6) { // Minimum 3 points = 6 coordinates
+        qDebug() << "[POLYGON-CHECK] Insufficient polygon points:" << polygonLatLons.size();
         return false;
     }
 
-    int numVertices = polygonLatLons.size() / 2;
-    bool inside = false;
+    // Method 1: Improved Geographic Point-in-Polygon menggunakan Winding Number Algorithm
+    bool inPolygonGeo = checkPointInPolygonGeographic(lat, lon, polygonLatLons);
 
-    // Ray casting algorithm
-    for (int i = 0, j = numVertices - 1; i < numVertices; j = i++) {
+    // Method 2: Screen Coordinate Point-in-Polygon sebagai backup verification
+    bool inPolygonScreen = checkPointInPolygonScreen(lat, lon, polygonLatLons);
+
+    qDebug() << "[POLYGON-CHECK] Point (" << lat << "," << lon << ")";
+    qDebug() << "[POLYGON-CHECK] Geographic method:" << inPolygonGeo;
+    qDebug() << "[POLYGON-CHECK] Screen method:" << inPolygonScreen;
+
+    // Clean decision logic: prioritize screen method for display accuracy
+    // Geographic method untuk validasi tambahan
+    if (inPolygonGeo == inPolygonScreen) {
+        // Kedua method setuju - confident result
+        return inPolygonGeo;
+    } else {
+        // Methods disagree - gunakan screen method (lebih reliable untuk visual display)
+        qDebug() << "[POLYGON-CHECK] WARNING: Methods disagree! Using screen method for reliability.";
+        return inPolygonScreen;
+    }
+}
+
+bool EcWidget::checkPointInPolygonGeographic(double lat, double lon, const QVector<double>& polygonLatLons)
+{
+    int numVertices = polygonLatLons.size() / 2;
+    int windingNumber = 0;
+
+    for (int i = 0; i < numVertices; i++) {
+        int j = (i + 1) % numVertices; // Next vertex (wrap around)
+
         double lat1 = polygonLatLons[i * 2];
         double lon1 = polygonLatLons[i * 2 + 1];
         double lat2 = polygonLatLons[j * 2];
         double lon2 = polygonLatLons[j * 2 + 1];
 
-        if (((lat1 > lat) != (lat2 > lat)) &&
-            (lon < (lon2 - lon1) * (lat - lat1) / (lat2 - lat1) + lon1)) {
-            inside = !inside;
+        // Handle longitude wraparound crossing (±180° meridian)
+        double deltaLon = lon2 - lon1;
+        if (deltaLon > 180.0) {
+            deltaLon -= 360.0;
+        } else if (deltaLon < -180.0) {
+            deltaLon += 360.0;
+        }
+        lon2 = lon1 + deltaLon;
+
+        // Winding number calculation for geographic coordinates
+        if (lat1 <= lat) {
+            if (lat2 > lat) { // Upward crossing
+                if (calculateCrossProduct(lat, lon, lat1, lon1, lat2, lon2) > 0) {
+                    windingNumber++;
+                }
+            }
+        } else {
+            if (lat2 <= lat) { // Downward crossing
+                if (calculateCrossProduct(lat, lon, lat1, lon1, lat2, lon2) < 0) {
+                    windingNumber--;
+                }
+            }
         }
     }
 
-    return inside;
+    return windingNumber != 0;
+}
+
+bool EcWidget::checkPointInPolygonScreen(double lat, double lon, const QVector<double>& polygonLatLons)
+{
+    // Convert target point to screen coordinates
+    int targetX, targetY;
+    if (!LatLonToXy(lat, lon, targetX, targetY)) {
+        qDebug() << "[POLYGON-CHECK] Failed to convert target coordinates to screen";
+        return false;
+    }
+
+    // Convert polygon vertices to screen coordinates
+    QPolygon screenPolygon;
+    int validPoints = 0;
+
+    for (int i = 0; i < polygonLatLons.size(); i += 2) {
+        int x, y;
+        if (LatLonToXy(polygonLatLons[i], polygonLatLons[i+1], x, y)) {
+            screenPolygon.append(QPoint(x, y));
+            validPoints++;
+        } else {
+            qDebug() << "[POLYGON-CHECK] WARNING: Failed to convert polygon vertex" << (i/2) << "to screen coords";
+        }
+    }
+
+    // Require minimum 3 valid points for a polygon
+    if (validPoints < 3) {
+        qDebug() << "[POLYGON-CHECK] ERROR: Insufficient valid screen coordinates:" << validPoints;
+        return false;
+    }
+
+    // Use Qt's robust polygon containment check
+    bool result = screenPolygon.containsPoint(QPoint(targetX, targetY), Qt::OddEvenFill);
+
+    qDebug() << "[POLYGON-CHECK] Target screen coords: (" << targetX << "," << targetY << ")";
+    qDebug() << "[POLYGON-CHECK] Valid polygon screen points:" << validPoints;
+
+    return result;
+}
+
+double EcWidget::calculateCrossProduct(double pointLat, double pointLon,
+                                      double lat1, double lon1, double lat2, double lon2)
+{
+    // Convert to simple Mercator-like projection untuk cross product
+    // Ini cukup akurat untuk deteksi polygon dalam area regional
+    const double DEG_TO_RAD = M_PI / 180.0;
+
+    // Simple cylindrical projection (good enough for regional areas)
+    double x1 = lon1 * DEG_TO_RAD;
+    double y1 = log(tan(M_PI_4 + lat1 * DEG_TO_RAD / 2.0));
+    double x2 = lon2 * DEG_TO_RAD;
+    double y2 = log(tan(M_PI_4 + lat2 * DEG_TO_RAD / 2.0));
+    double px = pointLon * DEG_TO_RAD;
+    double py = log(tan(M_PI_4 + pointLat * DEG_TO_RAD / 2.0));
+
+    // Cross product: (v2-v1) × (point-v1)
+    return ((x2 - x1) * (py - y1) - (y2 - y1) * (px - x1));
 }

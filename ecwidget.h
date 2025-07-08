@@ -737,6 +737,9 @@ private:
   QPointF guardZoneCenter;  // Titik pusat untuk mode lingkaran
   double pixelsPerNauticalMile;  // Rasio pixel per nautical mile
   bool isPointInPolygon(double lat, double lon, const QVector<double>& polygonLatLons);
+  bool checkPointInPolygonGeographic(double lat, double lon, const QVector<double>& polygonLatLons);
+  bool checkPointInPolygonScreen(double lat, double lon, const QVector<double>& polygonLatLons);
+  double calculateCrossProduct(double pointLat, double pointLon, double lat1, double lon1, double lat2, double lon2);
 
   GuardZoneManager* guardZoneManager;
   QList<GuardZone> guardZones;
