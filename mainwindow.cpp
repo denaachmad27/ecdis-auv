@@ -840,6 +840,19 @@ MainWindow::MainWindow(QWidget *parent)
 
   guardZoneMenu->addAction("Check Ship Guardian Now", this, SLOT(onCheckShipGuardianNow()));
 
+  guardZoneMenu->addSeparator();
+  // Auto-check menu items
+  QAction *autoCheckAction = guardZoneMenu->addAction("Enable Auto-Check");
+  autoCheckAction->setCheckable(true);
+  autoCheckAction->setChecked(false);
+  connect(autoCheckAction, &QAction::toggled, this, &MainWindow::onToggleGuardZoneAutoCheck);
+
+  QAction *configAutoCheckAction = guardZoneMenu->addAction("Configure Auto-Check...");
+  connect(configAutoCheckAction, &QAction::triggered, this, &MainWindow::onConfigureGuardZoneAutoCheck);
+
+  guardZoneMenu->addSeparator();
+  QAction *realTimeStatusAction = guardZoneMenu->addAction("Show Real-Time Status");
+  connect(realTimeStatusAction, &QAction::triggered, this, &MainWindow::onShowGuardZoneStatus);
 
 
   QMenu *simulationMenu = menuBar()->addMenu("&Simulation");
@@ -849,9 +862,9 @@ MainWindow::MainWindow(QWidget *parent)
 
   simulationMenu->addSeparator();
 
-  QAction *autoCheckAction = simulationMenu->addAction("Auto-Check GuardZone");
-  autoCheckAction->setCheckable(true);
-  connect(autoCheckAction, SIGNAL(toggled(bool)), this, SLOT(onAutoCheckGuardZone(bool)));
+  // QAction *autoCheckAction = simulationMenu->addAction("Auto-Check GuardZone");
+  // autoCheckAction->setCheckable(true);
+  // connect(autoCheckAction, SIGNAL(toggled(bool)), this, SLOT(onAutoCheckGuardZone(bool)));
 
   // DVR
   QMenu *dvrMenu = menuBar()->addMenu("&AIS DVR");
@@ -1732,12 +1745,25 @@ void MainWindow::onCreatePolygonGuardZone()
 
 void MainWindow::onCheckGuardZone()
 {
-    qDebug() << "onCheckGuardZone called";
-    if (ecchart) {
-        qDebug() << "ecchart exists, calling checkGuardZone()";
-        ecchart->checkGuardZone();
+    if (!ecchart) {
+        qDebug() << "[CHECK-GZ] EcChart not available";
+        return;
+    }
+
+    qDebug() << "[CHECK-GZ] Manual GuardZone check initiated";
+
+    // Debug AIS targets terlebih dahulu
+    ecchart->debugAISTargets();
+
+    // Jalankan check guardzone
+    bool threatsDetected = ecchart->checkTargetsInGuardZone();
+
+    if (threatsDetected) {
+        statusBar()->showMessage("Threats detected in GuardZone!", 5000);
+        qDebug() << "[CHECK-GZ] Threats detected";
     } else {
-        qDebug() << "ecchart is NULL";
+        statusBar()->showMessage("No threats detected in GuardZone", 3000);
+        qDebug() << "[CHECK-GZ] No threats detected";
     }
 }
 
@@ -3054,4 +3080,76 @@ void MainWindow::onCheckShipGuardianNow()
             statusBar()->showMessage(tr("Ship Guardian check completed - no obstacles"), 3000);
         }
     }
+}
+
+void MainWindow::onToggleGuardZoneAutoCheck(bool enabled)
+{
+    if (!ecchart) return;
+
+    ecchart->setGuardZoneAutoCheck(enabled);
+
+    QString status = enabled ? "enabled" : "disabled";
+    statusBar()->showMessage(tr("GuardZone auto-check %1").arg(status), 3000);
+
+    qDebug() << "GuardZone auto-check toggled:" << enabled;
+}
+
+void MainWindow::onConfigureGuardZoneAutoCheck()
+{
+    if (!ecchart) return;
+
+    bool ok;
+    int currentInterval = ecchart->getGuardZoneCheckInterval() / 1000; // Convert to seconds
+
+    int newInterval = QInputDialog::getInt(this,
+                                           tr("Configure Auto-Check"),
+                                           tr("Check interval (seconds):"),
+                                           currentInterval, 1, 300, 1, &ok);
+
+    if (ok) {
+        ecchart->setGuardZoneCheckInterval(newInterval * 1000); // Convert to milliseconds
+        statusBar()->showMessage(tr("Auto-check interval set to %1 seconds").arg(newInterval), 3000);
+
+        qDebug() << "GuardZone auto-check interval configured:" << newInterval << "seconds";
+    }
+}
+
+void MainWindow::onShowGuardZoneStatus()
+{
+    if (!ecchart) return;
+
+    QStringList statusInfo;
+    statusInfo << "=== GuardZone Real-Time Status ===";
+    statusInfo << "";
+
+    // System status
+    statusInfo << QString("System Active: %1").arg(ecchart->isGuardZoneActive() ? "YES" : "NO");
+    statusInfo << QString("Auto-Check: %1").arg(ecchart->isGuardZoneAutoCheckEnabled() ? "ENABLED" : "DISABLED");
+    statusInfo << QString("Check Interval: %1 seconds").arg(ecchart->getGuardZoneCheckInterval() / 1000);
+    statusInfo << "";
+
+    // GuardZone list
+    QList<GuardZone>& guardZones = ecchart->getGuardZones();
+    statusInfo << QString("Total GuardZones: %1").arg(guardZones.size());
+
+    for (const GuardZone& gz : guardZones) {
+        QString shapeStr = (gz.shape == GUARD_ZONE_CIRCLE) ? "Circle" : "Polygon";
+        QString attachStr = gz.attachedToShip ? " (Ship-attached)" : " (Static)";
+        QString activeStr = gz.active ? "ACTIVE" : "inactive";
+
+        statusInfo << QString("- %1: %2%3 [%4]").arg(gz.name).arg(shapeStr).arg(attachStr).arg(activeStr);
+
+        if (gz.shape == GUARD_ZONE_CIRCLE) {
+            statusInfo << QString("  Center: %1, %2  Radius: %3 NM")
+            .arg(gz.centerLat, 0, 'f', 6)
+                .arg(gz.centerLon, 0, 'f', 6)
+                .arg(gz.radius, 0, 'f', 2);
+        }
+    }
+
+    statusInfo << "";
+    statusInfo << "Real-time monitoring will detect AIS targets";
+    statusInfo << "entering/exiting active GuardZones automatically.";
+
+    QMessageBox::information(this, tr("GuardZone Status"), statusInfo.join("\n"));
 }

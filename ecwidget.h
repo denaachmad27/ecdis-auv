@@ -223,6 +223,9 @@ public:
   void createAttachedGuardZone();
   void removeAttachedGuardZone();
 
+  bool isGuardZoneAutoCheckEnabled() const { return guardZoneAutoCheckEnabled; }
+  int getGuardZoneCheckInterval() const { return guardZoneCheckInterval; }
+
   struct DetectedObstacle {
       QString type;
       QString name;
@@ -540,6 +543,11 @@ public slots:
   // waypoint
   void createWaypointAt(EcCoordinate lat, EcCoordinate lon);
 
+  // Guardzone
+  void performAutoGuardZoneCheck();
+  void setGuardZoneAutoCheck(bool enabled);
+  void setGuardZoneCheckInterval(int intervalMs);
+
 signals:
   // Drawing signals
   void mouseMove(EcCoordinate, EcCoordinate);
@@ -556,6 +564,8 @@ signals:
 
   // GuardZone Signals
   void statusMessage(const QString &message);
+  void debugAISTargets();
+  void guardZoneTargetDetected(int guardZoneId, int targetCount);
 
   // GuardZone signals untuk panel
   void guardZoneCreated();
@@ -726,6 +736,7 @@ private:
   int guardZoneWarningLevel;   // Level peringatan
   QPointF guardZoneCenter;  // Titik pusat untuk mode lingkaran
   double pixelsPerNauticalMile;  // Rasio pixel per nautical mile
+  bool isPointInPolygon(double lat, double lon, const QVector<double>& polygonLatLons);
 
   GuardZoneManager* guardZoneManager;
   QList<GuardZone> guardZones;
@@ -762,6 +773,15 @@ private:
 
   int attachedGuardZoneId;           // ID guardzone untuk "Attach to Ship"
   QString attachedGuardZoneName;     // Nama guardzone
+
+  // Auto-check timer untuk real-time detection
+  QTimer *guardZoneAutoCheckTimer;
+  bool guardZoneAutoCheckEnabled;
+  int guardZoneCheckInterval; // dalam milliseconds
+
+  // Cache untuk tracking target status
+  QSet<unsigned int> previousTargetsInZone;
+  QDateTime lastGuardZoneCheck;
 
   // End Guardzone
 

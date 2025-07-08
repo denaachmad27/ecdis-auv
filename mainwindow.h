@@ -217,6 +217,11 @@ private slots:
     void onAutoCheckShipGuardian(bool enabled);
     void onCheckShipGuardianNow();
 
+    // GuardZone auto-check slots
+    void onToggleGuardZoneAutoCheck(bool enabled);
+    void onConfigureGuardZoneAutoCheck();
+    void onShowGuardZoneStatus();
+
 private:
     GuardZonePanel* guardZonePanel;
     QDockWidget* guardZoneDock;

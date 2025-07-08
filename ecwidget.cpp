@@ -121,6 +121,17 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
       testGuardZoneRadius = 2.0;  // default 2 nautical miles
       testGuardZoneColor = QColor(255, 165, 0, 128);  // orange semi-transparent
 
+  // Initialize auto-check system
+  guardZoneAutoCheckTimer = new QTimer(this);
+  guardZoneAutoCheckEnabled = false;
+  guardZoneCheckInterval = 5000; // 5 detik default
+  lastGuardZoneCheck = QDateTime::currentDateTime();
+
+  connect(guardZoneAutoCheckTimer, &QTimer::timeout,
+          this, &EcWidget::performAutoGuardZoneCheck);
+
+  qDebug() << "GuardZone auto-check system initialized";
+
   // Initialize Ship Guardian Circle
   redDotTrackerEnabled = false;
   redDotAttachedToShip = false;
@@ -3905,6 +3916,12 @@ void EcWidget::enableGuardZone(bool enable)
         guardZoneLatLons.clear();
 
         qDebug() << "GuardZone system disabled and legacy variables cleared";
+
+        if (guardZoneAutoCheckTimer->isActive()) {
+                guardZoneAutoCheckTimer->stop();
+                previousTargetsInZone.clear();
+                qDebug() << "Auto-check stopped with GuardZone deactivation";
+            }
     } else {
         // PERBAIKAN: Jangan ubah status active dari guardzone individual
         // Hanya set legacy variables untuk backward compatibility
@@ -3946,6 +3963,13 @@ void EcWidget::enableGuardZone(bool enable)
 
             qDebug() << "GuardZone system enabled with" << guardZones.size() << "guardzones";
         }
+
+        if (guardZoneAutoCheckEnabled) {
+                guardZoneAutoCheckTimer->start(guardZoneCheckInterval);
+                qDebug() << "Auto-check resumed with GuardZone activation";
+            }
+
+            qDebug() << "GuardZone system enabled with" << guardZones.size() << "guardzones";
     }
 
     qDebug() << "guardZoneActive now" << guardZoneActive;
@@ -4755,13 +4779,27 @@ void EcWidget::generateRandomAISTargets(int count)
 
 bool EcWidget::checkTargetsInGuardZone()
 {
-    if (!guardZoneActive || simulatedTargets.isEmpty())
+    if (!guardZoneActive) {
+        qDebug() << "[REAL-AIS-CHECK] No active GuardZone";
         return false;
+    }
 
-    // ========== PERBAIKAN: GUNAKAN GUARDZONE AKTIF ==========
+    if (!Ais::instance()) {
+        qDebug() << "[REAL-AIS-CHECK] AIS instance not available";
+        return false;
+    }
+
+    QMap<unsigned int, AISTargetData>& aisTargetMap = Ais::instance()->getTargetMap();
+
+    if (aisTargetMap.isEmpty()) {
+        qDebug() << "[REAL-AIS-CHECK] No AIS targets available";
+        return false;
+    }
+
+    qDebug() << "[REAL-AIS-CHECK] Processing" << aisTargetMap.size() << "real AIS targets";
+
+    // Cari guardzone aktif
     GuardZone* activeGuardZone = nullptr;
-
-    // Cari guardzone aktif yang sama seperti di simulasi
     for (GuardZone& gz : guardZones) {
         if (gz.active) {
             activeGuardZone = &gz;
@@ -4769,105 +4807,121 @@ bool EcWidget::checkTargetsInGuardZone()
         }
     }
 
-    // Jika tidak ada guardzone aktif, return false
     if (!activeGuardZone) {
-        qDebug() << "[AUTO-CHECK] No active GuardZone found for checking";
+        qDebug() << "[REAL-AIS-CHECK] No active GuardZone found";
         return false;
     }
-    // ======================================================
+
+    // ========== DEBUG GUARDZONE INFO ==========
+    qDebug() << "[REAL-AIS-CHECK] Active GuardZone:" << activeGuardZone->name;
+    qDebug() << "[REAL-AIS-CHECK] Shape:" << (activeGuardZone->shape == GUARD_ZONE_CIRCLE ? "CIRCLE" : "POLYGON");
+
+    if (activeGuardZone->shape == GUARD_ZONE_POLYGON) {
+        qDebug() << "[REAL-AIS-CHECK] Polygon coordinates count:" << activeGuardZone->latLons.size();
+        qDebug() << "[REAL-AIS-CHECK] Polygon vertices:" << (activeGuardZone->latLons.size() / 2);
+
+        // Debug polygon coordinates
+        for (int i = 0; i < activeGuardZone->latLons.size(); i += 2) {
+            qDebug() << "[REAL-AIS-CHECK] Vertex" << (i/2) << ":"
+                     << activeGuardZone->latLons[i] << "," << activeGuardZone->latLons[i+1];
+        }
+    }
+    // ========================================
 
     bool foundNewDanger = false;
     QString alertMessages;
     int alertCount = 0;
 
-    for (int i = 0; i < simulatedTargets.size(); ++i) {
+    for (auto it = aisTargetMap.begin(); it != aisTargetMap.end(); ++it) {
+        const AISTargetData& aisTarget = it.value();
+
+        // Skip invalid targets
+        if (aisTarget.mmsi.isEmpty() || aisTarget.lat == 0.0 || aisTarget.lon == 0.0) {
+            continue;
+        }
+
+        qDebug() << "[REAL-AIS-CHECK] Checking target" << aisTarget.mmsi
+                 << "at" << aisTarget.lat << "," << aisTarget.lon;
+
         bool inGuardZone = false;
 
-        // ========== GUNAKAN DATA DARI GUARDZONE AKTIF ==========
+        // Check apakah target di dalam guardzone
         if (activeGuardZone->shape == GUARD_ZONE_CIRCLE) {
-            // Hitung jarak ke pusat guardzone aktif
             double distance, bearing;
             EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
                                                    activeGuardZone->centerLat,
                                                    activeGuardZone->centerLon,
-                                                   simulatedTargets[i].lat,
-                                                   simulatedTargets[i].lon,
+                                                   aisTarget.lat, aisTarget.lon,
                                                    &distance, &bearing);
 
-            // Jika jarak kurang dari radius guardzone aktif, target ada di dalam
             inGuardZone = (distance <= activeGuardZone->radius);
 
-            qDebug() << "[AUTO-CHECK] Target" << simulatedTargets[i].mmsi
+            qDebug() << "[REAL-AIS-CHECK] Target" << aisTarget.mmsi
                      << "distance:" << distance << "vs radius:" << activeGuardZone->radius
                      << "inZone:" << inGuardZone;
         }
         else if (activeGuardZone->shape == GUARD_ZONE_POLYGON && activeGuardZone->latLons.size() >= 6) {
-            // Konversi titik ke koordinat layar
+            // ========== IMPROVED POLYGON CHECK ==========
+
+            // Method 1: Geographic point-in-polygon (more accurate)
+            bool inPolygonGeo = isPointInPolygon(aisTarget.lat, aisTarget.lon, activeGuardZone->latLons);
+
+            // Method 2: Screen coordinate point-in-polygon (backup)
+            bool inPolygonScreen = false;
             int targetX, targetY;
-            if (LatLonToXy(simulatedTargets[i].lat, simulatedTargets[i].lon, targetX, targetY)) {
+            if (LatLonToXy(aisTarget.lat, aisTarget.lon, targetX, targetY)) {
                 QPolygon poly;
                 for (int j = 0; j < activeGuardZone->latLons.size(); j += 2) {
                     int x, y;
-                    LatLonToXy(activeGuardZone->latLons[j], activeGuardZone->latLons[j+1], x, y);
-                    poly.append(QPoint(x, y));
+                    if (LatLonToXy(activeGuardZone->latLons[j], activeGuardZone->latLons[j+1], x, y)) {
+                        poly.append(QPoint(x, y));
+                    }
                 }
 
-                inGuardZone = poly.containsPoint(QPoint(targetX, targetY), Qt::OddEvenFill);
+                if (poly.size() >= 3) {
+                    inPolygonScreen = poly.containsPoint(QPoint(targetX, targetY), Qt::OddEvenFill);
+                }
 
-                qDebug() << "[AUTO-CHECK] Target" << simulatedTargets[i].mmsi
-                         << "polygon check - inZone:" << inGuardZone;
+                qDebug() << "[REAL-AIS-CHECK] Target" << aisTarget.mmsi << "screen coords:" << targetX << "," << targetY;
+                qDebug() << "[REAL-AIS-CHECK] Polygon screen points:" << poly.size();
+                qDebug() << "[REAL-AIS-CHECK] Screen polygon check:" << inPolygonScreen;
             }
+
+            // Use geographic method as primary, screen as backup verification
+            inGuardZone = inPolygonGeo;
+
+            qDebug() << "[REAL-AIS-CHECK] Target" << aisTarget.mmsi
+                     << "Geographic polygon check:" << inPolygonGeo
+                     << "Screen polygon check:" << inPolygonScreen
+                     << "Final result:" << inGuardZone;
+            // ==========================================
         }
-        // =====================================================
 
-        // Jika target baru masuk guardzone, tandai sebagai berbahaya dan tambahkan ke pesan
-        if (inGuardZone && !simulatedTargets[i].dangerous) {
+        // Jika target di dalam guardzone, tambahkan ke alert
+        if (inGuardZone) {
             foundNewDanger = true;
-            simulatedTargets[i].dangerous = true;
 
-            alertMessages += tr("Target %1: Speed %2 knots, Course %3°\n")
-                                 .arg(simulatedTargets[i].mmsi)
-                                 .arg(simulatedTargets[i].sog, 0, 'f', 1)
-                                 .arg(simulatedTargets[i].cog, 0, 'f', 0);
+            alertMessages += tr("AIS Target %1: Speed %2 knots, Course %3°\n")
+                                .arg(aisTarget.mmsi)
+                                .arg(aisTarget.sog, 0, 'f', 1)
+                                .arg(aisTarget.cog, 0, 'f', 0);
             alertCount++;
 
-            qDebug() << "[AUTO-CHECK] ⚠️ NEW DANGER:" << simulatedTargets[i].mmsi
-                     << "entered GuardZone" << activeGuardZone->name;
-        } else if (!inGuardZone) {
-            // Jika target keluar dari guardzone, tandai sebagai tidak berbahaya
-            if (simulatedTargets[i].dangerous) {
-                qDebug() << "[AUTO-CHECK] ✅ Target" << simulatedTargets[i].mmsi
-                         << "left GuardZone" << activeGuardZone->name;
-            }
-            simulatedTargets[i].dangerous = false;
+            qDebug() << "[REAL-AIS-CHECK] ⚠️ DANGER: AIS Target" << aisTarget.mmsi
+                     << "entered GuardZone" << activeGuardZone->name
+                     << "SOG:" << aisTarget.sog << "COG:" << aisTarget.cog;
         }
     }
 
-    // ============= ALERT SYSTEM INTEGRATION =============
-    // Hanya tampilkan peringatan jika ada target baru yang masuk
+    // Show alert jika ada target dalam guardzone
     if (foundNewDanger && alertCount > 0) {
-
-        // ===== ENHANCED ALERT MESSAGE =====
         QString title = tr("Guard Zone Alert - %1 Target(s) in %2").arg(alertCount).arg(activeGuardZone->name);
-
-        // ===== ORIGINAL QMessageBox =====
         QMessageBox::warning(this, title, alertMessages);
 
-        // ===== NEW ALERT SYSTEM INTEGRATION =====
-        if (alertSystem) {
-            // Trigger alert through alert system with guardzone info
-            QString alertDetails = tr("%1 target(s) detected in GuardZone '%2':\n%3")
-                                       .arg(alertCount)
-                                       .arg(activeGuardZone->name)
-                                       .arg(alertMessages.trimmed());
-            triggerGuardZoneAlert(activeGuardZone->id, alertDetails);
-        }
-        // ====================================
+        qDebug() << "[REAL-AIS-CHECK] Alert shown for" << alertCount << "targets";
+    } else {
+        qDebug() << "[REAL-AIS-CHECK] No targets detected in GuardZone";
     }
-    // ==================================================
-
-    // Redraw untuk memperbarui warna target
-    drawSimulatedTargets();
 
     return foundNewDanger;
 }
@@ -7737,4 +7791,196 @@ void EcWidget::triggerShipGuardianAlert(const QList<DetectedObstacle>& obstacles
     }
 
     msgBox.exec();
+}
+
+// void EcWidget::debugAISTargets()
+// {
+//     if (!Ais::instance()) {
+//         qDebug() << "[AIS-DEBUG] AIS instance not available";
+//         return;
+//     }
+
+//     QMap<unsigned int, AISTargetData>& aisTargetMap = Ais::instance()->getTargetMap();
+
+//     qDebug() << "[AIS-DEBUG] ========== AIS TARGETS DEBUG ==========";
+//     qDebug() << "[AIS-DEBUG] Total targets:" << aisTargetMap.size();
+
+//     int i = 0;
+//     for (auto it = aisTargetMap.begin(); it != aisTargetMap.end(); ++it, ++i) {
+//         const AISTargetData& target = it.value();
+
+//         qDebug() << "[AIS-DEBUG] Target" << i << ":";
+//         qDebug() << "  MMSI:" << target.mmsi;
+//         qDebug() << "  Lat:" << target.lat;
+//         qDebug() << "  Lon:" << target.lon;
+//         qDebug() << "  SOG:" << target.sog << "knots";
+//         qDebug() << "  COG:" << target.cog << "degrees";
+//         qDebug() << "  Last Update:" << target.lastUpdate.toString();
+//         qDebug() << "  Dangerous:" << target.isDangerous;
+//     }
+//     qDebug() << "[AIS-DEBUG] =======================================";
+// }
+
+void EcWidget::performAutoGuardZoneCheck()
+{
+    if (!guardZoneActive || !Ais::instance()) {
+        return;
+    }
+
+    // Throttle untuk avoid excessive checking
+    QDateTime now = QDateTime::currentDateTime();
+    if (lastGuardZoneCheck.msecsTo(now) < 1000) { // Minimum 1 detik interval
+        return;
+    }
+    lastGuardZoneCheck = now;
+
+    qDebug() << "[AUTO-CHECK] Performing automatic GuardZone check";
+
+    // ========== GUNAKAN AIS CLASS YANG SUDAH ADA ==========
+    QMap<unsigned int, AISTargetData>& aisTargetMap = Ais::instance()->getTargetMap();
+
+    if (aisTargetMap.isEmpty()) {
+        return;
+    }
+
+    // Cari guardzone aktif
+    GuardZone* activeGuardZone = nullptr;
+    for (GuardZone& gz : guardZones) {
+        if (gz.active) {
+            activeGuardZone = &gz;
+            break;
+        }
+    }
+
+    if (!activeGuardZone) {
+        return;
+    }
+
+    QSet<unsigned int> currentTargetsInZone;
+    QStringList newTargetAlerts;
+
+    // ========== CHECK SEMUA AIS TARGETS DARI AIS CLASS ==========
+    for (auto it = aisTargetMap.begin(); it != aisTargetMap.end(); ++it) {
+        unsigned int mmsi = it.key();
+        const AISTargetData& aisTarget = it.value();
+
+        // Skip invalid targets
+        if (aisTarget.mmsi.isEmpty() || aisTarget.lat == 0.0 || aisTarget.lon == 0.0) {
+            continue;
+        }
+
+        bool inGuardZone = false;
+
+        // Check guardzone berdasarkan shape
+        if (activeGuardZone->shape == GUARD_ZONE_CIRCLE) {
+            double distance, bearing;
+            EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
+                                                   activeGuardZone->centerLat,
+                                                   activeGuardZone->centerLon,
+                                                   aisTarget.lat, aisTarget.lon,
+                                                   &distance, &bearing);
+            inGuardZone = (distance <= activeGuardZone->radius);
+        }
+        else if (activeGuardZone->shape == GUARD_ZONE_POLYGON && activeGuardZone->latLons.size() >= 6) {
+            int targetX, targetY;
+            if (LatLonToXy(aisTarget.lat, aisTarget.lon, targetX, targetY)) {
+                QPolygon poly;
+                for (int j = 0; j < activeGuardZone->latLons.size(); j += 2) {
+                    int x, y;
+                    LatLonToXy(activeGuardZone->latLons[j], activeGuardZone->latLons[j+1], x, y);
+                    poly.append(QPoint(x, y));
+                }
+                inGuardZone = poly.containsPoint(QPoint(targetX, targetY), Qt::OddEvenFill);
+            }
+        }
+
+        if (inGuardZone) {
+            currentTargetsInZone.insert(mmsi);
+
+            // Check jika ini target baru yang masuk zone
+            if (!previousTargetsInZone.contains(mmsi)) {
+                newTargetAlerts.append(tr("NEW: AIS %1 entered zone - SOG: %2kts, COG: %3°")
+                                      .arg(aisTarget.mmsi)
+                                      .arg(aisTarget.sog, 0, 'f', 1)
+                                      .arg(aisTarget.cog, 0, 'f', 0));
+
+                qDebug() << "[AUTO-CHECK] 🚨 NEW TARGET ENTERED:" << aisTarget.mmsi;
+            }
+        }
+    }
+    // ===============================================
+
+    // Check targets yang keluar dari zone
+    for (unsigned int mmsi : previousTargetsInZone) {
+        if (!currentTargetsInZone.contains(mmsi)) {
+            qDebug() << "[AUTO-CHECK] ✅ TARGET EXITED:" << mmsi;
+        }
+    }
+
+    // Update cache
+    previousTargetsInZone = currentTargetsInZone;
+
+    // Show alert untuk new targets
+    if (!newTargetAlerts.isEmpty()) {
+        QString alertMessage = tr("GuardZone Alert (%1):\n%2")
+                              .arg(activeGuardZone->name)
+                              .arg(newTargetAlerts.join("\n"));
+
+        // Show QMessageBox alert
+        QMessageBox::warning(this, tr("GuardZone Auto-Check Alert"), alertMessage);
+
+        // Emit signal untuk alert system jika ada
+        emit guardZoneTargetDetected(activeGuardZone->id, newTargetAlerts.size());
+
+        qDebug() << "[AUTO-CHECK] Alert triggered for" << newTargetAlerts.size() << "new targets";
+    }
+}
+
+void EcWidget::setGuardZoneAutoCheck(bool enabled)
+{
+    guardZoneAutoCheckEnabled = enabled;
+
+    if (enabled && guardZoneActive) {
+        guardZoneAutoCheckTimer->start(guardZoneCheckInterval);
+        qDebug() << "[AUTO-CHECK] GuardZone auto-check ENABLED with interval:" << guardZoneCheckInterval << "ms";
+    } else {
+        guardZoneAutoCheckTimer->stop();
+        previousTargetsInZone.clear(); // Clear cache
+        qDebug() << "[AUTO-CHECK] GuardZone auto-check DISABLED";
+    }
+}
+
+void EcWidget::setGuardZoneCheckInterval(int intervalMs)
+{
+    guardZoneCheckInterval = qMax(1000, intervalMs); // Minimum 1 detik
+
+    if (guardZoneAutoCheckTimer->isActive()) {
+        guardZoneAutoCheckTimer->setInterval(guardZoneCheckInterval);
+        qDebug() << "[AUTO-CHECK] Interval updated to:" << guardZoneCheckInterval << "ms";
+    }
+}
+
+bool EcWidget::isPointInPolygon(double lat, double lon, const QVector<double>& polygonLatLons)
+{
+    if (polygonLatLons.size() < 6) { // Minimum 3 points = 6 coordinates
+        return false;
+    }
+
+    int numVertices = polygonLatLons.size() / 2;
+    bool inside = false;
+
+    // Ray casting algorithm
+    for (int i = 0, j = numVertices - 1; i < numVertices; j = i++) {
+        double lat1 = polygonLatLons[i * 2];
+        double lon1 = polygonLatLons[i * 2 + 1];
+        double lat2 = polygonLatLons[j * 2];
+        double lon2 = polygonLatLons[j * 2 + 1];
+
+        if (((lat1 > lat) != (lat2 > lat)) &&
+            (lon < (lon2 - lon1) * (lat - lat1) / (lat2 - lat1) + lon1)) {
+            inside = !inside;
+        }
+    }
+
+    return inside;
 }
