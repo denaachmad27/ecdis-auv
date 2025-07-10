@@ -11,6 +11,7 @@
 #include "guardzonepanel.h"
 #include "alertpanel.h"
 #include "alertsystem.h"
+#include "aistargetpanel.h"
 
 #include <QPluginLoader>
 
@@ -104,6 +105,7 @@ protected slots:
 
     void onGrid(bool);
 
+    void onAIS();
     void onAIS(bool);
     void onTrack(bool);
 
@@ -225,7 +227,10 @@ private slots:
 private:
     GuardZonePanel* guardZonePanel;
     QDockWidget* guardZoneDock;
+    AISTargetPanel* aisTargetPanel;
+    QDockWidget* aisTargetDock;
     void setupGuardZonePanel();
+    void setupAISTargetPanel();
     void setupTestingMenu();
 
     // Alert Panel

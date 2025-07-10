@@ -79,6 +79,7 @@ public:
     
     // Public helper methods for filtering
     ShipTypeFilter getShipTypeFromAIS(int aisShipType) const;
+    QString getShipTypeDisplayName(ShipTypeFilter shipType) const;
 
 public slots:
     void refreshGuardZoneList();           // Refresh semua guardzone
@@ -169,7 +170,6 @@ private:
 
     // ========== HELPER FUNCTIONS FOR SHIP TYPE DETECTION ==========
     bool shouldTriggerAlert(const GuardZone& gz, bool isEntering) const;
-    QString getShipTypeDisplayName(ShipTypeFilter shipType) const;
     QString getAlertDirectionDisplayName(AlertDirection direction) const;
     // ==============================================================
     bool isShipInGuardZone(const EcAISTargetInfo& ship, const GuardZone& gz) const;

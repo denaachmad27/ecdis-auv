@@ -55,6 +55,7 @@ HEADERS += mainwindow.h ecwidget.h pickwindow.h ais.h \
     searchwindow.h \
     alertsystem.h \
     alertpanel.h \
+    aistargetpanel.h \
 
 SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     PluginManager.cpp \
@@ -76,6 +77,7 @@ SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     searchwindow.cpp \
     alertsystem.cpp \
     alertpanel.cpp \
+    aistargetpanel.cpp \
 
 RESOURCES += \
     resources.qrc

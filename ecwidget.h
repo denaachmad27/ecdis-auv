@@ -566,6 +566,7 @@ signals:
   void statusMessage(const QString &message);
   void debugAISTargets();
   void guardZoneTargetDetected(int guardZoneId, int targetCount);
+  void aisTargetDetected(int guardZoneId, int mmsi, const QString& message);
 
   // GuardZone signals untuk panel
   void guardZoneCreated();

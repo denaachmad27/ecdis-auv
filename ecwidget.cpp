@@ -7941,6 +7941,14 @@ void EcWidget::performAutoGuardZoneCheck()
                                               .arg(aisTarget.cog, 0, 'f', 0));
 
                     qDebug() << "[AUTO-CHECK] 🚨 NEW TARGET ENTERED:" << aisTarget.mmsi << "in GuardZone" << activeGuardZone->id << "(" << activeGuardZone->name << ")";
+                    
+                    // Emit signal untuk AISTargetPanel dengan format yang sama seperti GuardZoneManager
+                    QString alertMessage = QString("Ship %1 entered GuardZone '%2'")
+                                         .arg(aisTarget.mmsi)
+                                         .arg(activeGuardZone->name);
+                    
+                    // Emit signal dari EcWidget untuk AISTargetPanel
+                    emit aisTargetDetected(activeGuardZone->id, aisTarget.mmsi.toUInt(), alertMessage);
                 }
             }
         }
@@ -7965,6 +7973,14 @@ void EcWidget::performAutoGuardZoneCheck()
                 // Note: Ship type filter tidak diterapkan untuk exit events 
                 // karena EcAISTargetInfo mungkin sudah tidak tersedia
                 qDebug() << "[AUTO-CHECK] ✅ TARGET EXITED:" << mmsi << "from GuardZone" << activeGuardZone->id << "(" << activeGuardZone->name << ")";
+                
+                // Emit signal untuk AISTargetPanel dengan format yang sama seperti GuardZoneManager
+                QString alertMessage = QString("Ship %1 exited GuardZone '%2'")
+                                     .arg(mmsi)
+                                     .arg(activeGuardZone->name);
+                
+                // Emit signal dari EcWidget untuk AISTargetPanel
+                emit aisTargetDetected(activeGuardZone->id, mmsi, alertMessage);
             }
         }
     }
@@ -7978,8 +7994,8 @@ void EcWidget::performAutoGuardZoneCheck()
                               .arg(allNewTargetAlerts.size())
                               .arg(allNewTargetAlerts.join("\n"));
 
-        // Show QMessageBox alert
-        QMessageBox::warning(this, tr("GuardZone Auto-Check Alert"), alertMessage);
+        // Show QMessageBox alert - DISABLED to remove popup
+        // QMessageBox::warning(this, tr("GuardZone Auto-Check Alert"), alertMessage);
 
         // Emit signal untuk alert system jika ada - untuk semua guardzone yang terdeteksi
         for (GuardZone* gz : activeGuardZones) {
