@@ -6892,9 +6892,19 @@ void EcWidget::leaveEvent(QEvent *event)
 QString EcWidget::getShipTypeString(int shipType)
 {
     switch(shipType) {
-        case 80: return "Vessel - Towing";
-        case 70: return "Cargo";
-        case 60: return "Passenger";
+        //case 80: return "Vessel - Towing";
+        case 0:   return "Not available / Not applicable";
+        case 30:  return "Fishing vessel";
+        case 35:  return "Military operations";
+        case 36:  return "Sailing";
+        case 37:  return "Pleasure craft";
+        case 60:  return "Passenger ship";
+        case 61:  return "Passenger ship (carrying DG, HS, or MP)";
+        case 70:  return "Cargo ship";
+        case 71:  return "Cargo ship (carrying DG, HS, or MP)";
+        case 80:  return "Tanker ship";
+        case 8:  return "Tanker ship (carrying DG, HS, or MP)";
+        case 255:  return "Invalid (EC_AIS_INVALID_SHIP_TYPE)";
         default: return "unknown";
     }
 }
