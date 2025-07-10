@@ -14,6 +14,7 @@
 #include "PluginManager.h"
 #include "aisdecoder.h"
 #include "guardzone.h"
+#include "guardzonemanager.h"
 #include "alertpanel.h"
 #include "alertsystem.h"
 #include "cpatcpasettingsdialog.h"
@@ -361,6 +362,11 @@ void MainWindow::openSettingsDialog() {
     if (dlg.exec() == QDialog::Accepted) {
         dlg.saveSettings();
         setDisplay();
+        
+        // Apply default guardzone filters to existing guardzones
+        if (ecchart && ecchart->getGuardZoneManager()) {
+            ecchart->getGuardZoneManager()->applyDefaultFiltersToExistingGuardZones();
+        }
     }
 }
 

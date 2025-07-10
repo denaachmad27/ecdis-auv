@@ -783,7 +783,8 @@ private:
   int guardZoneCheckInterval; // dalam milliseconds
 
   // Cache untuk tracking target status
-  QSet<unsigned int> previousTargetsInZone;
+  QSet<unsigned int> previousTargetsInZone; // Legacy - untuk backward compatibility
+  QMap<int, QSet<unsigned int>> previousTargetsPerZone; // Per guardzone tracking
   QDateTime lastGuardZoneCheck;
 
   // End Guardzone

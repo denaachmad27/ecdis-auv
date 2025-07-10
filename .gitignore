@@ -98,3 +98,4 @@ rules.ninja
 InstallationPass.txt
 object_script.ecdis.Debug
 object_script.ecdis.Release
+.claude/settings.local.json

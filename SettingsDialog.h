@@ -7,6 +7,7 @@
 class QLineEdit;
 class QComboBox;
 class QLabel;
+class QButtonGroup;
 
 class SettingsDialog : public QDialog {
     Q_OBJECT
@@ -37,6 +38,10 @@ private:
 
     // Display
     QComboBox *displayModeCombo;
+
+    // GuardZone
+    QButtonGroup *shipTypeButtonGroup;
+    QButtonGroup *alertDirectionButtonGroup;
 };
 
 #endif // SETTINGSDIALOG_H

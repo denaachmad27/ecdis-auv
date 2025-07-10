@@ -10,6 +10,8 @@ struct SettingsData {
     QString aisIp;
     QString aisLogFile;
     QString displayMode;
+    int defaultShipTypeFilter;
+    int defaultAlertDirection;
 };
 
 #endif // SETTINGSDATA_H

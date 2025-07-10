@@ -73,6 +73,12 @@ public:
     void showGuardZoneProperties(int guardZoneId);
     void deleteGuardZone(int guardZoneId);
     void refreshHandlePositions();
+    
+    // Settings integration
+    void applyDefaultFiltersToExistingGuardZones();
+    
+    // Public helper methods for filtering
+    ShipTypeFilter getShipTypeFromAIS(int aisShipType) const;
 
 public slots:
     void refreshGuardZoneList();           // Refresh semua guardzone
@@ -162,7 +168,6 @@ private:
     double distanceToLineSegment(const QPoint& point, const QPoint& lineStart, const QPoint& lineEnd);
 
     // ========== HELPER FUNCTIONS FOR SHIP TYPE DETECTION ==========
-    ShipTypeFilter getShipTypeFromAIS(int aisShipType) const;
     bool shouldTriggerAlert(const GuardZone& gz, bool isEntering) const;
     QString getShipTypeDisplayName(ShipTypeFilter shipType) const;
     QString getAlertDirectionDisplayName(AlertDirection direction) const;

@@ -1,5 +1,6 @@
 #include "guardzonemanager.h"
 #include "ecwidget.h"
+#include "SettingsManager.h"
 
 #include <QMenu>
 #include <QAction>
@@ -329,90 +330,6 @@ void GuardZoneManager::showGuardZoneContextMenu(const QPoint &pos, int guardZone
 
     contextMenu.addSeparator();
 
-    // ========== TAMBAHAN: SUBMENU FILTER ==========
-    QMenu* filterMenu = contextMenu.addMenu(tr("Filter"));
-
-    // Submenu untuk Ship Type Filter
-    QMenu* shipTypeMenu = filterMenu->addMenu(tr("Ship Type"));
-
-    QActionGroup* shipTypeGroup = new QActionGroup(shipTypeMenu);
-    shipTypeGroup->setExclusive(true);
-
-    QAction* shipAllAction = shipTypeMenu->addAction(tr("All Ships"));
-    shipAllAction->setCheckable(true);
-    shipAllAction->setChecked(targetGuardZone->shipTypeFilter == SHIP_TYPE_ALL);
-    shipAllAction->setData(static_cast<int>(SHIP_TYPE_ALL));
-    shipTypeGroup->addAction(shipAllAction);
-
-    QAction* shipCargoAction = shipTypeMenu->addAction(tr("Cargo Ships"));
-    shipCargoAction->setCheckable(true);
-    shipCargoAction->setChecked(targetGuardZone->shipTypeFilter == SHIP_TYPE_CARGO);
-    shipCargoAction->setData(static_cast<int>(SHIP_TYPE_CARGO));
-    shipTypeGroup->addAction(shipCargoAction);
-
-    QAction* shipTankerAction = shipTypeMenu->addAction(tr("Tanker Ships"));
-    shipTankerAction->setCheckable(true);
-    shipTankerAction->setChecked(targetGuardZone->shipTypeFilter == SHIP_TYPE_TANKER);
-    shipTankerAction->setData(static_cast<int>(SHIP_TYPE_TANKER));
-    shipTypeGroup->addAction(shipTankerAction);
-
-    QAction* shipPassengerAction = shipTypeMenu->addAction(tr("Passenger Ships"));
-    shipPassengerAction->setCheckable(true);
-    shipPassengerAction->setChecked(targetGuardZone->shipTypeFilter == SHIP_TYPE_PASSENGER);
-    shipPassengerAction->setData(static_cast<int>(SHIP_TYPE_PASSENGER));
-    shipTypeGroup->addAction(shipPassengerAction);
-
-    QAction* shipFishingAction = shipTypeMenu->addAction(tr("Fishing Vessels"));
-    shipFishingAction->setCheckable(true);
-    shipFishingAction->setChecked(targetGuardZone->shipTypeFilter == SHIP_TYPE_FISHING);
-    shipFishingAction->setData(static_cast<int>(SHIP_TYPE_FISHING));
-    shipTypeGroup->addAction(shipFishingAction);
-
-    QAction* shipMilitaryAction = shipTypeMenu->addAction(tr("Military Vessels"));
-    shipMilitaryAction->setCheckable(true);
-    shipMilitaryAction->setChecked(targetGuardZone->shipTypeFilter == SHIP_TYPE_MILITARY);
-    shipMilitaryAction->setData(static_cast<int>(SHIP_TYPE_MILITARY));
-    shipTypeGroup->addAction(shipMilitaryAction);
-
-    QAction* shipPleasureAction = shipTypeMenu->addAction(tr("Pleasure Craft"));
-    shipPleasureAction->setCheckable(true);
-    shipPleasureAction->setChecked(targetGuardZone->shipTypeFilter == SHIP_TYPE_PLEASURE);
-    shipPleasureAction->setData(static_cast<int>(SHIP_TYPE_PLEASURE));
-    shipTypeGroup->addAction(shipPleasureAction);
-
-    QAction* shipOtherAction = shipTypeMenu->addAction(tr("Other Vessels"));
-    shipOtherAction->setCheckable(true);
-    shipOtherAction->setChecked(targetGuardZone->shipTypeFilter == SHIP_TYPE_OTHER);
-    shipOtherAction->setData(static_cast<int>(SHIP_TYPE_OTHER));
-    shipTypeGroup->addAction(shipOtherAction);
-
-    // Submenu untuk Alert Direction
-    QMenu* alertMenu = filterMenu->addMenu(tr("Alert Direction"));
-
-    QActionGroup* alertGroup = new QActionGroup(alertMenu);
-    alertGroup->setExclusive(true);
-
-    QAction* alertBothAction = alertMenu->addAction(tr("Alert In & Out"));
-    alertBothAction->setCheckable(true);
-    alertBothAction->setChecked(targetGuardZone->alertDirection == ALERT_BOTH);
-    alertBothAction->setData(static_cast<int>(ALERT_BOTH));
-    alertGroup->addAction(alertBothAction);
-
-    QAction* alertInAction = alertMenu->addAction(tr("Alert In Only"));
-    alertInAction->setCheckable(true);
-    alertInAction->setChecked(targetGuardZone->alertDirection == ALERT_IN_ONLY);
-    alertInAction->setData(static_cast<int>(ALERT_IN_ONLY));
-    alertGroup->addAction(alertInAction);
-
-    QAction* alertOutAction = alertMenu->addAction(tr("Alert Out Only"));
-    alertOutAction->setCheckable(true);
-    alertOutAction->setChecked(targetGuardZone->alertDirection == ALERT_OUT_ONLY);
-    alertOutAction->setData(static_cast<int>(ALERT_OUT_ONLY));
-    alertGroup->addAction(alertOutAction);
-
-    contextMenu.addSeparator();
-    // ============================================
-
     QAction* deleteAction = contextMenu.addAction(QIcon(), tr("Delete GuardZone"));
 
     // Show menu dan handle response
@@ -445,28 +362,6 @@ void GuardZoneManager::showGuardZoneContextMenu(const QPoint &pos, int guardZone
         else if (selectedAction == deleteAction) {
             // Handle delete
         }
-        // ========== HANDLE FILTER ACTIONS ==========
-        else if (shipTypeGroup->actions().contains(selectedAction)) {
-            // Handle ship type filter change
-            int newShipType = selectedAction->data().toInt();
-            targetGuardZone->shipTypeFilter = static_cast<ShipTypeFilter>(newShipType);
-
-            // Save changes
-            ecWidget->saveGuardZones();
-
-            qDebug() << "GuardZone" << guardZoneId << "ship type filter changed to:" << newShipType;
-        }
-        else if (alertGroup->actions().contains(selectedAction)) {
-            // Handle alert direction change
-            int newAlertDirection = selectedAction->data().toInt();
-            targetGuardZone->alertDirection = static_cast<AlertDirection>(newAlertDirection);
-
-            // Save changes
-            ecWidget->saveGuardZones();
-
-            qDebug() << "GuardZone" << guardZoneId << "alert direction changed to:" << newAlertDirection;
-        }
-        // =========================================
     }
 }
 
@@ -1723,12 +1618,20 @@ void GuardZoneManager::checkShipInGuardZone(const EcAISTargetInfo& ship, bool wa
     for (GuardZone& gz : guardZones) {
         if (!gz.active) continue;  // Skip inactive guardzones
 
-        // Check if ship is in this guardzone
+        // Check if ship is in this specific guardzone
         bool shipInThisZone = isShipInGuardZone(ship, gz);
+        
+        // Track previous state for this specific guardzone
+        static QMap<QPair<int, int>, bool> previousStatePerGuardZone; // <MMSI, GuardZoneID> -> wasInside
+        QPair<int, int> key(ship.mmsi, gz.id);
+        bool wasInThisZone = previousStatePerGuardZone.value(key, false);
+        
+        // Update state for next check
+        previousStatePerGuardZone[key] = shipInThisZone;
 
-        // Determine if this is an entry or exit event
-        bool isEntering = !wasInside && shipInThisZone;
-        bool isExiting = wasInside && !shipInThisZone;
+        // Determine if this is an entry or exit event for THIS guardzone
+        bool isEntering = !wasInThisZone && shipInThisZone;
+        bool isExiting = wasInThisZone && !shipInThisZone;
 
         if (isEntering || isExiting) {
             // ========== APPLY SHIP TYPE FILTER ==========
@@ -1742,6 +1645,9 @@ void GuardZoneManager::checkShipInGuardZone(const EcAISTargetInfo& ship, bool wa
 
             // ========== APPLY ALERT DIRECTION FILTER ==========
             if (!shouldTriggerAlert(gz, isEntering)) {
+                qDebug() << "Alert filtered out for GuardZone" << gz.id 
+                         << "- Direction:" << getAlertDirectionDisplayName(gz.alertDirection)
+                         << "Event:" << (isEntering ? "ENTERING" : "EXITING");
                 continue;  // Skip this event, doesn't match alert direction
             }
             // ================================================
@@ -1763,9 +1669,41 @@ void GuardZoneManager::checkShipInGuardZone(const EcAISTargetInfo& ship, bool wa
             // Emit alert
             emit guardZoneAlert(gz.id, ship.mmsi, alertMessage);
 
-            qDebug() << "GuardZone Alert:" << alertMessage;
-            qDebug() << "Filter - Ship Type:" << getShipTypeDisplayName(gz.shipTypeFilter)
+            qDebug() << "GuardZone Alert [ID:" << gz.id << "]:" << alertMessage;
+            qDebug() << "Applied Filters - Ship Type:" << getShipTypeDisplayName(gz.shipTypeFilter)
+                     << "| Alert Direction:" << getAlertDirectionDisplayName(gz.alertDirection);
+        }
+    }
+}
+
+void GuardZoneManager::applyDefaultFiltersToExistingGuardZones()
+{
+    if (!ecWidget) return;
+    
+    const SettingsData& settings = SettingsManager::instance().data();
+    QList<GuardZone>& guardZones = ecWidget->getGuardZones();
+    
+    bool hasChanges = false;
+    for (auto& gz : guardZones) {
+        // Update all guardzones with new default settings
+        ShipTypeFilter newShipType = static_cast<ShipTypeFilter>(settings.defaultShipTypeFilter);
+        AlertDirection newAlertDirection = static_cast<AlertDirection>(settings.defaultAlertDirection);
+        
+        // Only update if values actually change
+        if (gz.shipTypeFilter != newShipType || gz.alertDirection != newAlertDirection) {
+            gz.shipTypeFilter = newShipType;
+            gz.alertDirection = newAlertDirection;
+            hasChanges = true;
+            
+            qDebug() << "Applied default filters to GuardZone" << gz.id << ": "
+                     << "Ship Type:" << getShipTypeDisplayName(gz.shipTypeFilter)
                      << "Alert Direction:" << getAlertDirectionDisplayName(gz.alertDirection);
         }
+    }
+    
+    if (hasChanges) {
+        ecWidget->saveGuardZones();
+        ecWidget->update();
+        qDebug() << "Default filters applied to existing GuardZones";
     }
 }

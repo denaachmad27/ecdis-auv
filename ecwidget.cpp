@@ -5304,6 +5304,11 @@ void EcWidget::createCircularGuardZoneNew(double centerLat, double centerLon, do
     newGuardZone.centerLat = centerLat;
     newGuardZone.centerLon = centerLon;
     newGuardZone.radius = radiusNM;
+    
+    // Apply default filter settings from SettingsManager
+    const SettingsData& settings = SettingsManager::instance().data();
+    newGuardZone.shipTypeFilter = static_cast<ShipTypeFilter>(settings.defaultShipTypeFilter);
+    newGuardZone.alertDirection = static_cast<AlertDirection>(settings.defaultAlertDirection);
 
     // Add to guardzone list
     guardZones.append(newGuardZone);
@@ -5389,6 +5394,11 @@ void EcWidget::createPolygonGuardZoneNew()
     newGuardZone.attachedToShip = false;
     newGuardZone.color = Qt::red;
     newGuardZone.latLons = latLons;
+    
+    // Apply default filter settings from SettingsManager
+    const SettingsData& settings = SettingsManager::instance().data();
+    newGuardZone.shipTypeFilter = static_cast<ShipTypeFilter>(settings.defaultShipTypeFilter);
+    newGuardZone.alertDirection = static_cast<AlertDirection>(settings.defaultAlertDirection);
 
     // Add to guardzone list
     guardZones.append(newGuardZone);
@@ -5762,6 +5772,11 @@ void EcWidget::loadGuardZones()
         // PERBAIKAN: Trigger update hanya jika ada data
         if (!guardZones.isEmpty()) {
             update();
+            
+            // Apply default filters to loaded guardzones if they have default values
+            if (guardZoneManager) {
+                guardZoneManager->applyDefaultFiltersToExistingGuardZones();
+            }
         }
     } else {
         qDebug() << "[ERROR] Failed to open guardzones file:" << file.errorString();
@@ -7833,96 +7848,147 @@ void EcWidget::performAutoGuardZoneCheck()
         return;
     }
 
-    // Cari guardzone aktif
-    GuardZone* activeGuardZone = nullptr;
+    // Cari semua guardzone aktif
+    QList<GuardZone*> activeGuardZones;
     for (GuardZone& gz : guardZones) {
         if (gz.active) {
-            activeGuardZone = &gz;
-            break;
+            activeGuardZones.append(&gz);
         }
     }
 
-    if (!activeGuardZone) {
+    if (activeGuardZones.isEmpty()) {
         return;
     }
 
-    QSet<unsigned int> currentTargetsInZone;
-    QStringList newTargetAlerts;
+    // Track targets per guardzone
+    QMap<int, QSet<unsigned int>> currentTargetsPerZone;
+    QStringList allNewTargetAlerts;
 
     // ========== CHECK SEMUA AIS TARGETS DARI AIS CLASS ==========
+    QMap<unsigned int, EcAISTargetInfo>& targetInfoMap = Ais::instance()->getTargetInfoMap();
+    
+    // Check setiap AIS target terhadap setiap guardzone aktif
     for (auto it = aisTargetMap.begin(); it != aisTargetMap.end(); ++it) {
         unsigned int mmsi = it.key();
         const AISTargetData& aisTarget = it.value();
+        
+        // Get corresponding EcAISTargetInfo for ship type filtering
+        EcAISTargetInfo* targetInfo = nullptr;
+        if (targetInfoMap.contains(mmsi)) {
+            targetInfo = &targetInfoMap[mmsi];
+        }
 
         // Skip invalid targets
         if (aisTarget.mmsi.isEmpty() || aisTarget.lat == 0.0 || aisTarget.lon == 0.0) {
             continue;
         }
 
-        bool inGuardZone = false;
+        // Check terhadap setiap guardzone aktif
+        for (GuardZone* activeGuardZone : activeGuardZones) {
+            bool inGuardZone = false;
 
-        // Check guardzone berdasarkan shape
-        if (activeGuardZone->shape == GUARD_ZONE_CIRCLE) {
-            double distance, bearing;
-            EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
-                                                   activeGuardZone->centerLat,
-                                                   activeGuardZone->centerLon,
-                                                   aisTarget.lat, aisTarget.lon,
-                                                   &distance, &bearing);
-            inGuardZone = (distance <= activeGuardZone->radius);
-        }
-        else if (activeGuardZone->shape == GUARD_ZONE_POLYGON && activeGuardZone->latLons.size() >= 6) {
-            int targetX, targetY;
-            if (LatLonToXy(aisTarget.lat, aisTarget.lon, targetX, targetY)) {
-                QPolygon poly;
-                for (int j = 0; j < activeGuardZone->latLons.size(); j += 2) {
-                    int x, y;
-                    LatLonToXy(activeGuardZone->latLons[j], activeGuardZone->latLons[j+1], x, y);
-                    poly.append(QPoint(x, y));
-                }
-                inGuardZone = poly.containsPoint(QPoint(targetX, targetY), Qt::OddEvenFill);
+            // Check guardzone berdasarkan shape
+            if (activeGuardZone->shape == GUARD_ZONE_CIRCLE) {
+                double distance, bearing;
+                EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
+                                                       activeGuardZone->centerLat,
+                                                       activeGuardZone->centerLon,
+                                                       aisTarget.lat, aisTarget.lon,
+                                                       &distance, &bearing);
+                inGuardZone = (distance <= activeGuardZone->radius);
             }
-        }
+            else if (activeGuardZone->shape == GUARD_ZONE_POLYGON && activeGuardZone->latLons.size() >= 6) {
+                int targetX, targetY;
+                if (LatLonToXy(aisTarget.lat, aisTarget.lon, targetX, targetY)) {
+                    QPolygon poly;
+                    for (int j = 0; j < activeGuardZone->latLons.size(); j += 2) {
+                        int x, y;
+                        LatLonToXy(activeGuardZone->latLons[j], activeGuardZone->latLons[j+1], x, y);
+                        poly.append(QPoint(x, y));
+                    }
+                    inGuardZone = poly.containsPoint(QPoint(targetX, targetY), Qt::OddEvenFill);
+                }
+            }
 
-        if (inGuardZone) {
-            currentTargetsInZone.insert(mmsi);
+            if (inGuardZone) {
+                // Track target untuk guardzone ini
+                currentTargetsPerZone[activeGuardZone->id].insert(mmsi);
 
-            // Check jika ini target baru yang masuk zone
-            if (!previousTargetsInZone.contains(mmsi)) {
-                newTargetAlerts.append(tr("NEW: AIS %1 entered zone - SOG: %2kts, COG: %3°")
-                                      .arg(aisTarget.mmsi)
-                                      .arg(aisTarget.sog, 0, 'f', 1)
-                                      .arg(aisTarget.cog, 0, 'f', 0));
+                // Check jika ini target baru yang masuk zone untuk guardzone ini
+                QSet<unsigned int>& previousTargetsForThisZone = previousTargetsPerZone[activeGuardZone->id];
+                if (!previousTargetsForThisZone.contains(mmsi)) {
+                    // ========== APPLY SHIP TYPE FILTER ==========
+                    if (activeGuardZone->shipTypeFilter != SHIP_TYPE_ALL && targetInfo) {
+                        ShipTypeFilter shipType = guardZoneManager->getShipTypeFromAIS(targetInfo->shipType);
+                        if (shipType != activeGuardZone->shipTypeFilter) {
+                            continue;  // Skip this ship, doesn't match filter
+                        }
+                    }
+                    // ==========================================
+                    
+                    // ========== APPLY ALERT DIRECTION FILTER ==========
+                    // For ENTERING events
+                    if (activeGuardZone->alertDirection == ALERT_OUT_ONLY) {
+                        qDebug() << "[AUTO-CHECK] Alert filtered out - OUT_ONLY mode, ignoring ENTER event for:" << aisTarget.mmsi << "in GuardZone" << activeGuardZone->id;
+                        continue;  // Skip entering events if set to OUT_ONLY
+                    }
+                    // ================================================
+                    
+                    allNewTargetAlerts.append(tr("NEW: AIS %1 entered GuardZone '%2' - SOG: %3kts, COG: %4°")
+                                              .arg(aisTarget.mmsi)
+                                              .arg(activeGuardZone->name)
+                                              .arg(aisTarget.sog, 0, 'f', 1)
+                                              .arg(aisTarget.cog, 0, 'f', 0));
 
-                qDebug() << "[AUTO-CHECK] 🚨 NEW TARGET ENTERED:" << aisTarget.mmsi;
+                    qDebug() << "[AUTO-CHECK] 🚨 NEW TARGET ENTERED:" << aisTarget.mmsi << "in GuardZone" << activeGuardZone->id << "(" << activeGuardZone->name << ")";
+                }
             }
         }
     }
     // ===============================================
 
-    // Check targets yang keluar dari zone
-    for (unsigned int mmsi : previousTargetsInZone) {
-        if (!currentTargetsInZone.contains(mmsi)) {
-            qDebug() << "[AUTO-CHECK] ✅ TARGET EXITED:" << mmsi;
+    // Check targets yang keluar dari setiap guardzone
+    for (GuardZone* activeGuardZone : activeGuardZones) {
+        QSet<unsigned int>& previousTargetsForThisZone = previousTargetsPerZone[activeGuardZone->id];
+        QSet<unsigned int>& currentTargetsForThisZone = currentTargetsPerZone[activeGuardZone->id];
+        
+        for (unsigned int mmsi : previousTargetsForThisZone) {
+            if (!currentTargetsForThisZone.contains(mmsi)) {
+                // ========== APPLY ALERT DIRECTION FILTER ==========
+                // For EXITING events
+                if (activeGuardZone->alertDirection == ALERT_IN_ONLY) {
+                    qDebug() << "[AUTO-CHECK] Alert filtered out - IN_ONLY mode, ignoring EXIT event for:" << mmsi << "from GuardZone" << activeGuardZone->id;
+                    continue;  // Skip exiting events if set to IN_ONLY
+                }
+                // ================================================
+                
+                // Note: Ship type filter tidak diterapkan untuk exit events 
+                // karena EcAISTargetInfo mungkin sudah tidak tersedia
+                qDebug() << "[AUTO-CHECK] ✅ TARGET EXITED:" << mmsi << "from GuardZone" << activeGuardZone->id << "(" << activeGuardZone->name << ")";
+            }
         }
     }
 
-    // Update cache
-    previousTargetsInZone = currentTargetsInZone;
+    // Update cache untuk setiap guardzone
+    previousTargetsPerZone = currentTargetsPerZone;
 
     // Show alert untuk new targets
-    if (!newTargetAlerts.isEmpty()) {
-        QString alertMessage = tr("GuardZone Alert (%1):\n%2")
-                              .arg(activeGuardZone->name)
-                              .arg(newTargetAlerts.join("\n"));
+    if (!allNewTargetAlerts.isEmpty()) {
+        QString alertMessage = tr("GuardZone Alert (%1 targets detected):\n%2")
+                              .arg(allNewTargetAlerts.size())
+                              .arg(allNewTargetAlerts.join("\n"));
 
         // Show QMessageBox alert
         QMessageBox::warning(this, tr("GuardZone Auto-Check Alert"), alertMessage);
 
-        // Emit signal untuk alert system jika ada
-        emit guardZoneTargetDetected(activeGuardZone->id, newTargetAlerts.size());
+        // Emit signal untuk alert system jika ada - untuk semua guardzone yang terdeteksi
+        for (GuardZone* gz : activeGuardZones) {
+            if (currentTargetsPerZone[gz->id].size() > 0) {
+                emit guardZoneTargetDetected(gz->id, currentTargetsPerZone[gz->id].size());
+            }
+        }
 
-        qDebug() << "[AUTO-CHECK] Alert triggered for" << newTargetAlerts.size() << "new targets";
+        qDebug() << "[AUTO-CHECK] Alert triggered for" << allNewTargetAlerts.size() << "new targets across" << activeGuardZones.size() << "guardzones";
     }
 }
 
