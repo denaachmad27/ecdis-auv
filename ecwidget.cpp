@@ -954,6 +954,73 @@ void EcWidget::paintEvent (QPaintEvent *e)
   // }
   // =======================================
 
+  EcCoordinate lat, lon;
+  _aisObj->getOwnShipPos(lat, lon);
+
+  if (!getTrackMMSI().isEmpty() && trackShip)
+  {
+      QFont font("Segoe UI", 10, QFont::Bold);
+      painter.setFont(font);
+
+      QString mmsiText = QString("Tracking AIS Target MMSI: %1").arg(getTrackMMSI());
+      QRect chartRect = contentsRect();
+      int margin = 10;
+
+      // Hitung posisi kanan atas
+      QFontMetrics fm(font);
+      int textWidth = fm.horizontalAdvance(mmsiText);
+      int textHeight = fm.height();
+
+      QPoint topRight(chartRect.right() - margin, chartRect.top() + margin + textHeight);
+      QPoint textPos(topRight.x() - textWidth, topRight.y());
+
+      // Buat path dari teks
+      QPainterPath path;
+      path.addText(textPos, font, mmsiText);
+
+      // Outline putih
+      painter.setRenderHint(QPainter::Antialiasing);
+      painter.setPen(QPen(Qt::white, 1.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+      painter.setBrush(Qt::NoBrush);
+      painter.drawPath(path);
+
+      // Isi merah
+      painter.setPen(Qt::NoPen);
+      painter.setBrush(Qt::red);
+      painter.drawPath(path);
+  }
+  else if (!qIsNaN(lat) && !qIsNaN(lon)) {
+      QFont font("Segoe UI", 10, QFont::Bold);
+      painter.setFont(font);
+
+      QString mmsiText = "Tracking Ownship";
+      QRect chartRect = contentsRect();
+      int margin = 10;
+
+      // Hitung posisi kanan atas
+      QFontMetrics fm(font);
+      int textWidth = fm.horizontalAdvance(mmsiText);
+      int textHeight = fm.height();
+
+      QPoint topRight(chartRect.right() - margin, chartRect.top() + margin + textHeight);
+      QPoint textPos(topRight.x() - textWidth, topRight.y());
+
+      // Buat path dari teks
+      QPainterPath path;
+      path.addText(textPos, font, mmsiText);
+
+      // Outline putih
+      painter.setRenderHint(QPainter::Antialiasing);
+      painter.setPen(QPen(Qt::white, 1.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+      painter.setBrush(Qt::NoBrush);
+      painter.drawPath(path);
+
+      // Isi merah
+      painter.setPen(Qt::NoPen);
+      painter.setBrush(Qt::red);
+      painter.drawPath(path);
+  }
+
   // Draw red box around dangerous AIS targets
   if (_aisObj) {
       QPainter painter(this);
@@ -1911,7 +1978,7 @@ void EcWidget::InitAIS( EcDictInfo *dict)
     ownShip.sog, ownShip.cog, dWarnDist, dWarnCPA,
     iWarnTCPA, strAisLib, iTimeOut, bInternalGPS, &bAISSymbolize, strErrLogAis );
 
-  QObject::connect( _aisObj, SIGNAL( signalRefreshChartDisplay( double, double ) ), this, SLOT( slotRefreshChartDisplay( double, double ) ) );
+  QObject::connect( _aisObj, SIGNAL( signalRefreshChartDisplay( double, double, double ) ), this, SLOT( slotRefreshChartDisplay( double, double, double ) ) );
   QObject::connect( _aisObj, SIGNAL( signalRefreshCenter( double, double ) ), this, SLOT( slotRefreshCenter( double, double ) ) );
 }
 
@@ -2836,6 +2903,8 @@ void EcWidget::slotUpdateAISTargets( Bool bSymbolize )
   if(showAIS)
     drawAISCell();
   qApp->processEvents( QEventLoop::ExcludeSocketNotifiers );
+
+  draw(true);
 }
 
 // Draw AIS overlay cell on chart pixmap.
@@ -2907,11 +2976,11 @@ void EcWidget::drawAISCell()
               painter.setRenderHint(QPainter::Antialiasing, true);
 
               // ⭐ Pastikan COG dan heading dalam range 0-360
-              double cog = ownShipData.cog;
+              double cog = ownShipData.cog - GetHeading();
               while (cog < 0) cog += 360;
               while (cog >= 360) cog -= 360;
 
-              double heading = ownShipData.heading;
+              double heading = ownShipData.heading - GetHeading();
               while (heading < 0) heading += 360;
               while (heading >= 360) heading -= 360;
 
@@ -2919,6 +2988,13 @@ void EcWidget::drawAISCell()
               drawOwnShipIcon(painter, x, y, cog, heading, ownShipData.sog);
               painter.end();
           }
+      }
+
+      if (displayOrientation == HeadUp){
+          SetHeading(ownShipData.heading);
+      }
+      else if (displayOrientation == NorthUp){
+          SetHeading(0);
       }
   }
 
@@ -2996,10 +3072,11 @@ bool EcWidget::deleteAISCell()
 
 // Update the chart display with AIS targets.
 /////////////////////////////////////////////
-void EcWidget::slotRefreshChartDisplay( double lat, double lon )
+void EcWidget::slotRefreshChartDisplay( double lat, double lon, double head )
 {
   //qDebug() << "slotRefreshChartDisplay called with lat:" << lat << "lon:" << lon;
 
+    /*
   if(showAIS)
   {
     // check if center position is out of defined frame, requires drawing of chart as well
@@ -3014,6 +3091,45 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon )
     }
     slotUpdateAISTargets( true );
   }
+  */
+
+    if (showAIS)
+    {
+        if ((lat != 0 && lon != 0) && trackTarget.isEmpty())
+        {
+            if (osCentering == LookAhead) // ⭐ Look-Ahead mode
+            {
+                double offsetNM = GetRange(currentScale) * 0.5;
+                if (displayOrientation == HeadUp){
+                    double headingRad = head * M_PI / 180.0;
+                    double offsetLat = offsetNM * cos(headingRad) / 60.0;
+                    double offsetLon = offsetNM * sin(headingRad) / (60.0 * cos(lat * M_PI / 180.0));
+
+                    double centerLat = lat + offsetLat;
+                    double centerLon = lon + offsetLon;
+
+                    SetCenter(centerLat, centerLon);
+                }
+                else {
+                    double headingRad = head * M_PI / 180.0;
+                    double offsetLat = offsetNM * cos(headingRad) / 60.0;
+                    double offsetLon = offsetNM * sin(headingRad) / (60.0 * cos(lat * M_PI / 180.0));
+
+                    double centerLat = lat + offsetLat;
+                    double centerLon = lon + offsetLon;
+
+                    SetCenter(centerLat, centerLon);
+                }
+            }
+            else if (osCentering == Centered)
+            {
+                SetCenter(lat, lon);
+            }
+        }
+
+        draw(true);
+        slotUpdateAISTargets(true);
+    }
 
   // ========== TAMBAHAN UNTUK RED DOT TRACKER ==========
   // Update red dot position if attached to ship
@@ -3037,11 +3153,11 @@ void EcWidget::slotRefreshCenter( double lat, double lon )
 
     if(lat != 0 && lon != 0)
     {
-        if (trackShip){
+        if (trackShip && !trackTarget.isEmpty()){
             SetCenter( lat, lon );
         }
-        draw(true);
     }
+    draw(true);
     slotUpdateAISTargets( true );
   }
 }

@@ -65,6 +65,7 @@ public:
     void readAISLogfile( const QString& );
     void readAISLogfileWDelay(const QString &logFile, int delayMs, std::atomic<bool>* stopFlag);
     void readAISVariable( const QStringList& );
+    void nmeaSelection(const QString &line, QString &outNmea);
 
     void extractNMEA(QString nmea);
 
@@ -73,7 +74,7 @@ public:
     void setAISCell( EcCellId cid );
     void stopAnimation();  
     void closeLogFile();
-    void emitSignal( double, double );
+    void emitSignal( double, double, double );
     void emitSignalTarget( double, double );
     void setOwnShipPos(EcCoordinate lat, EcCoordinate lon);
     void getOwnShipPos(EcCoordinate & lat, EcCoordinate & lon) const;
@@ -103,7 +104,7 @@ public:
     EcAISTargetInfo* getTargetInfo(unsigned int mmsi);
 
 signals:
-    void signalRefreshChartDisplay( double, double );
+    void signalRefreshChartDisplay( double, double, double );
     void signalRefreshCenter( double, double );
 
 private slots:

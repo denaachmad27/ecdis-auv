@@ -211,6 +211,16 @@ private slots:
     void onShowTCPAInfo(bool enabled);
     void onCPATCPAAlarms(bool enabled);
 
+    // ORIENTATION MODE
+    void onNorthUp(bool);
+    void onHeadUp(bool);
+    void onCourseUp(bool);
+
+    // OS CENTERING MODE
+    void onCentered(bool);
+    void onLookAhead(bool);
+    void onManual(bool);
+
     // test guardzone
     void onTestGuardZone(bool enabled);
 
