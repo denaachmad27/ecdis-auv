@@ -73,6 +73,13 @@ public:
     void showGuardZoneProperties(int guardZoneId);
     void deleteGuardZone(int guardZoneId);
     void refreshHandlePositions();
+    
+    // Settings integration
+    void applyDefaultFiltersToExistingGuardZones();
+    
+    // Public helper methods for filtering
+    ShipTypeFilter getShipTypeFromAIS(int aisShipType) const;
+    QString getShipTypeDisplayName(ShipTypeFilter shipType) const;
 
 public slots:
     void refreshGuardZoneList();           // Refresh semua guardzone
@@ -82,6 +89,7 @@ signals:
     void editModeChanged(bool isEditing);
     void guardZoneModified(int guardZoneId);
     void statusMessage(const QString &message);
+    void guardZoneAlert(int guardZoneId, int mmsi, const QString& message);
 
 private:
     // ========== ADVANCED EDIT FEATURES ==========
@@ -159,6 +167,14 @@ private:
     int findEdgeAt(const QPoint& pos);
     void addVertexToPolygon(int edgeIndex, const QPoint& pos);
     double distanceToLineSegment(const QPoint& point, const QPoint& lineStart, const QPoint& lineEnd);
+
+    // ========== HELPER FUNCTIONS FOR SHIP TYPE DETECTION ==========
+    bool shouldTriggerAlert(const GuardZone& gz, bool isEntering) const;
+    QString getAlertDirectionDisplayName(AlertDirection direction) const;
+    // ==============================================================
+    bool isShipInGuardZone(const EcAISTargetInfo& ship, const GuardZone& gz) const;
+    void checkShipInGuardZone(const EcAISTargetInfo& ship, bool wasInside, bool isInside);
+
 };
 
 #endif // GUARDZONEMANAGER_H

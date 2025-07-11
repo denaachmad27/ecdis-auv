@@ -121,6 +121,17 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
       testGuardZoneRadius = 2.0;  // default 2 nautical miles
       testGuardZoneColor = QColor(255, 165, 0, 128);  // orange semi-transparent
 
+  // Initialize auto-check system
+  guardZoneAutoCheckTimer = new QTimer(this);
+  guardZoneAutoCheckEnabled = false;
+  guardZoneCheckInterval = 5000; // 5 detik default
+  lastGuardZoneCheck = QDateTime::currentDateTime();
+
+  connect(guardZoneAutoCheckTimer, &QTimer::timeout,
+          this, &EcWidget::performAutoGuardZoneCheck);
+
+  qDebug() << "GuardZone auto-check system initialized";
+
   // Initialize Ship Guardian Circle
   redDotTrackerEnabled = false;
   redDotAttachedToShip = false;
@@ -1834,60 +1845,6 @@ void EcWidget::SetWaypointPos(EcCoordinate lat, EcCoordinate lon)
     wplon = lon;
 }
 
-void EcWidget::CreateWaypoint(ActiveFunction active)
-{
-    // if(udoCid == EC_NOCELLID){
-    //     if( createUdoCell() == false )
-    //     {
-    //         QMessageBox::warning( this, tr( "error showroute" ), tr( "Could not create udo cell. Please restart the program." ) );
-    //         return;
-    //     }
-    // }
-
-    activeFunction = active;
-    // qDebug() << "Active function" << activeFunction;
-    // range = (int)GetRange(currentScale);
-    // qDebug() << "Range: " << range;
-    // double pickRadius = (0.03 * range);
-    // qDebug() << "Rad" << pickRadius;
-    // // add a new waypoint object to the udo cell
-    // wp1 = EcRouteAddWaypoint(udoCid, dictInfo, wplat, wplon, pickRadius, 5);
-    // if (!ECOK(wp1))
-    //     QMessageBox::warning(this, tr ("error showroute"), tr("Waypoint could not be created"));
-    // else
-    // {
-    //     // symbolize and redraw the udo cell
-    //     drawUdo();
-    //     // InvalidateRect(hWnd, NULL,0);
-    // }
-
-    createWaypointCell();
-}
-
-void EcWidget::createWaypoint()
-{
-    qDebug() << "Active function" << activeFunction;
-    range = (int)GetRange(currentScale);
-    qDebug() << "Range: " << range;
-    double pickRadius = (0.03 * range);
-    qDebug() << "Rad" << pickRadius;
-    qDebug() << wplat << wplon;
-    qDebug() << "udoCid" << udoCid;
-
-    // add a new waypoint object to the udo cell
-    wp1 = EcRouteAddWaypoint(udoCid, dictInfo, wplat, wplon, pickRadius, 5);
-    if (!ECOK(wp1))
-        QMessageBox::warning(this, tr ("error showroute"), tr("Waypoint could not be created"));
-    else
-    {
-        // symbolize and redraw the udo cell
-        drawWaypointCell();
-        // InvalidateRect(hWnd, NULL,0);
-        Draw();
-
-    }
-}
-
 
 /* draw the user defined cell */
 
@@ -3301,6 +3258,46 @@ void EcWidget::drawOverlayCell()
     qDebug() << "[DEBUG] Update() called after overlay.";
 }
 
+// waypoint
+
+void EcWidget::createWaypointAt(EcCoordinate lat, EcCoordinate lon)
+{
+    double range = GetRange(currentScale);
+    double pickRadius = 0.03 * range;
+
+    qDebug() << "[DEBUG] Creating waypoint at" << lat << lon << "with pickRadius:" << pickRadius;
+
+    // 🎯 Buat waypoint dengan EcRouteAddWaypoint
+    EcFeature wp = EcRouteAddWaypoint(udoCid, dictInfo, lat, lon, pickRadius, 5.0);
+
+    if (!ECOK(wp))
+    {
+        QMessageBox::warning(this, tr("Error"), tr("Waypoint could not be created"));
+        qDebug() << "[ERROR] EcRouteAddWaypoint failed";
+        return;
+    }
+
+    // 🎯 Buat struct Waypoint dan simpan EcFeature handle
+    Waypoint newWaypoint;
+    newWaypoint.featureHandle = wp;  // Simpan handle dari SevenCs
+    newWaypoint.lat = lat;
+    newWaypoint.lon = lon;
+    newWaypoint.label = QString("WP%1").arg(waypointList.size() + 1, 3, 10, QChar('0'));
+    newWaypoint.remark = "";
+    newWaypoint.turningRadius = 5.0;  // Sesuai dengan parameter EcRouteAddWaypoint
+    newWaypoint.active = true;
+
+    // 🎯 Tambahkan ke list dan simpan
+    waypointList.append(newWaypoint);
+    saveWaypoints();
+
+    // Symbolize dan redraw
+    drawWaypointCell();
+    Draw();
+
+    qDebug() << "[INFO] Waypoint created with SevenCs handle. Total waypoints:" << waypointList.size();
+}
+
 void EcWidget::drawWaypointMarker(double lat, double lon)
 {
     int x, y;
@@ -3435,25 +3432,44 @@ void EcWidget::removeWaypointAt(int x, int y)
         int wx, wy;
         if (LatLonToXy(waypointList[i].lat, waypointList[i].lon, wx, wy))
         {
-            if (qAbs(x - wx) <= 10 && qAbs(y - wy) <= 10) // Radius klik 10 pixel
+            if (qAbs(x - wx) <= 10 && qAbs(y - wy) <= 10)
             {
+                Waypoint& wp = waypointList[i];
+                QString waypointLabel = wp.label; // Simpan label sebelum dihapus
+
+                // 🎯 Cek validitas handle SevenCs dan gunakan yang sesuai
+                if (wp.isValid()) {
+                    qDebug() << "[DEBUG] Removing waypoint using SevenCs";
+                    Bool result = EcRouteDeleteWaypoint(dictInfo, wp.featureHandle);
+
+                    if (!result) {
+                        qDebug() << "[WARNING] EcRouteDeleteWaypoint failed, removing from list anyway";
+                    } else {
+                        qDebug() << "[INFO] Waypoint removed using SevenCs";
+                    }
+                } else {
+                    qDebug() << "[WARNING] Removing waypoint from list only (invalid SevenCs handle)";
+                }
+
+                // Hapus dari list lokal (untuk kedua kasus)
                 waypointList.removeAt(i);
-                saveWaypoints(); // Save waypoint baru
-                Draw(); // Redraw semua waypoint
-                qDebug() << "[DEBUG] Waypoint removed.";
+                saveWaypoints();
+                Draw();
+
+                QMessageBox::information(this, tr("Waypoint Removed"),
+                                         tr("Waypoint '%1' has been removed.").arg(waypointLabel));
                 return;
             }
         }
     }
-
-    qDebug() << "[DEBUG] No waypoint clicked.";
+    qDebug() << "[DEBUG] No waypoint found at click position for removal.";
 }
 
 void EcWidget::moveWaypointAt(int x, int y)
 {
     if (moveSelectedIndex == -1)
     {
-        // Klik pertama: cari waypoint yang mau dipindah
+        // Klik pertama: pilih waypoint untuk dipindah
         for (int i = 0; i < waypointList.size(); ++i)
         {
             int wx, wy;
@@ -3462,13 +3478,12 @@ void EcWidget::moveWaypointAt(int x, int y)
                 if (qAbs(x - wx) <= 10 && qAbs(y - wy) <= 10)
                 {
                     moveSelectedIndex = i;
-                    QMessageBox::information(this, "Info", "Set new position of waypoint");
-                    qDebug() << "[DEBUG] Waypoint selected to move: index " << i;
+                    qDebug() << "[DEBUG] Waypoint selected for moving:" << i;
                     return;
                 }
             }
         }
-        qDebug() << "[DEBUG] No waypoint selected.";
+        qDebug() << "[DEBUG] No waypoint found at click position";
     }
     else
     {
@@ -3476,12 +3491,35 @@ void EcWidget::moveWaypointAt(int x, int y)
         EcCoordinate newLat, newLon;
         if (XyToLatLon(x, y, newLat, newLon))
         {
-            waypointList[moveSelectedIndex].lat = newLat;
-            waypointList[moveSelectedIndex].lon = newLon;
+            Waypoint& wp = waypointList[moveSelectedIndex];
+
+            // 🎯 Cek validitas handle SevenCs dan gunakan yang sesuai
+            if (wp.isValid()) {
+                // Gunakan EcRouteMoveWaypoint dari SevenCs
+                double range = GetRange(currentScale);
+                double pickRadius = 0.03 * range;
+
+                qDebug() << "[DEBUG] Moving waypoint using SevenCs";
+                Bool result = EcRouteMoveWaypoint(udoCid, dictInfo, EC_GEO_DATUM_WGS84,
+                                                  wp.featureHandle, newLat, newLon, pickRadius);
+
+                if (!result) {
+                    QMessageBox::warning(this, tr("Error"), tr("Failed to move waypoint using SevenCs"));
+                    qDebug() << "[ERROR] EcRouteMoveWaypoint failed";
+                    return;
+                }
+                qDebug() << "[INFO] Waypoint moved successfully using SevenCs";
+            } else {
+                qDebug() << "[WARNING] Using manual coordinate update (invalid SevenCs handle)";
+            }
+
+            // Update koordinat di struct waypoint (untuk kedua kasus)
+            wp.lat = newLat;
+            wp.lon = newLon;
             saveWaypoints();
             Draw();
 
-            // 🎯 Tampilkan Pick Report setelah pindah waypoint
+            // Tampilkan Pick Report setelah pindah waypoint
             QList<EcFeature> pickedList;
             GetPickedFeaturesSubs(pickedList, newLat, newLon);
             PickWindow *pw = new PickWindow(this, dictInfo, denc);
@@ -3607,72 +3645,38 @@ void EcWidget::loadWaypoints()
     QString filePath = getWaypointFilePath();
     QFile file(filePath);
 
-    // Cek lokasi utama
     if (!file.exists())
     {
-        // Coba lokasi cadangan
-        QFile fallbackFile("waypoints.json");
-        if (fallbackFile.exists()) {
-            file.setFileName("waypoints.json");
-            filePath = "waypoints.json";
-        } else {
-            qDebug() << "[INFO] No waypoints file found at" << filePath << "or in current directory";
-            return;
-        }
+        qDebug() << "[INFO] Waypoints file not found. Starting with empty list.";
+        return;
     }
 
-    if (file.open(QIODevice::ReadOnly | QIODevice::Text))
+    if (file.open(QIODevice::ReadOnly))
     {
-        QByteArray jsonData = file.readAll();
-        file.close();
-
-        QJsonParseError parseError;
-        QJsonDocument jsonDoc = QJsonDocument::fromJson(jsonData, &parseError);
-
-        if (parseError.error != QJsonParseError::NoError)
-        {
-            qDebug() << "[ERROR] JSON parse error at" << parseError.offset << ":" << parseError.errorString();
-            return;
-        }
-
-        if (!jsonDoc.isObject())
-        {
-            qDebug() << "[ERROR] Invalid waypoints JSON file structure (not an object)";
-            return;
-        }
-
-        QJsonObject rootObject = jsonDoc.object();
-        if (!rootObject.contains("waypoints") || !rootObject["waypoints"].isArray())
-        {
-            qDebug() << "[ERROR] Invalid waypoints JSON file (missing waypoints array)";
-            return;
-        }
-
-        QJsonArray waypointArray = rootObject["waypoints"].toArray();
+        QByteArray fileData = file.readAll();
+        QJsonDocument doc = QJsonDocument::fromJson(fileData);
+        QJsonArray waypointsArray = doc.array();
 
         waypointList.clear();
-
         int validWaypoints = 0;
 
-        for (const QJsonValue &value : waypointArray)
+        for (const QJsonValue& value : waypointsArray)
         {
-            if (!value.isObject())
-                continue;
-
             QJsonObject wpObject = value.toObject();
 
-            // Cek field yang diperlukan
-            if (!wpObject.contains("lat") || !wpObject.contains("lon"))
-                continue;
-
             Waypoint wp;
-            wp.label = wpObject.contains("label") ? wpObject["label"].toString() :
-                           QString("WP%1").arg(validWaypoints + 1, 3, 10, QChar('0'));
+            wp.label = wpObject.contains("label") ?
+                       wpObject["label"].toString() :
+                       QString("WP%1").arg(validWaypoints + 1, 3, 10, QChar('0'));
             wp.lat = wpObject["lat"].toDouble();
             wp.lon = wpObject["lon"].toDouble();
             wp.remark = wpObject.contains("remark") ? wpObject["remark"].toString() : "";
             wp.turningRadius = wpObject.contains("turningRadius") ? wpObject["turningRadius"].toDouble() : 10.0;
             wp.active = wpObject.contains("active") ? wpObject["active"].toBool() : true;
+
+            // featureHandle akan invalid setelah load dari file
+            wp.featureHandle.id = EC_NOCELLID;
+            wp.featureHandle.offset = 0;
 
             waypointList.append(wp);
             validWaypoints++;
@@ -3693,6 +3697,30 @@ void EcWidget::loadWaypoints()
                 }
             }
 
+            // Recreate SevenCs waypoints dari data yang dimuat
+            qDebug() << "[INFO] Recreating SevenCs waypoints from loaded data...";
+
+            double range = GetRange(currentScale);
+            double pickRadius = 0.03 * range;
+
+            for (int i = 0; i < waypointList.size(); i++)
+            {
+                Waypoint& wp = waypointList[i];
+
+                EcFeature wpFeature = EcRouteAddWaypoint(udoCid, dictInfo, wp.lat, wp.lon, pickRadius, wp.turningRadius);
+
+                if (ECOK(wpFeature))
+                {
+                    wp.featureHandle = wpFeature;
+                    qDebug() << "[DEBUG] Recreated waypoint" << i << "in SevenCs";
+                }
+                else
+                {
+                    qDebug() << "[ERROR] Failed to recreate waypoint" << i << "in SevenCs";
+                }
+            }
+
+            qDebug() << "[INFO] Finished recreating waypoints in SevenCs";
             Draw();
         }
     }
@@ -3754,8 +3782,23 @@ void EcWidget::clearWaypoints()
 
     if (msgBox.exec() == QMessageBox::Yes)
     {
+        qDebug() << "[INFO] Clearing all waypoints";
+
+        // 🎯 Hapus waypoint menggunakan SevenCs jika handle valid
+        for (int i = waypointList.size() - 1; i >= 0; i--)
+        {
+            if (waypointList[i].isValid())
+            {
+                Bool result = EcRouteDeleteWaypoint(dictInfo, waypointList[i].featureHandle);
+                if (!result) {
+                    qDebug() << "[WARNING] Failed to delete waypoint" << i << "from SevenCs";
+                }
+            }
+        }
+
         waypointList.clear();
         saveWaypoints(); // Save empty list to file
+        drawWaypointCell();
         Draw(); // Redraw without waypoints
 
         QMessageBox::information(this, tr("Waypoints Cleared"),
@@ -3989,6 +4032,12 @@ void EcWidget::enableGuardZone(bool enable)
         guardZoneLatLons.clear();
 
         qDebug() << "GuardZone system disabled and legacy variables cleared";
+
+        if (guardZoneAutoCheckTimer->isActive()) {
+                guardZoneAutoCheckTimer->stop();
+                previousTargetsInZone.clear();
+                qDebug() << "Auto-check stopped with GuardZone deactivation";
+            }
     } else {
         // PERBAIKAN: Jangan ubah status active dari guardzone individual
         // Hanya set legacy variables untuk backward compatibility
@@ -4030,6 +4079,13 @@ void EcWidget::enableGuardZone(bool enable)
 
             qDebug() << "GuardZone system enabled with" << guardZones.size() << "guardzones";
         }
+
+        if (guardZoneAutoCheckEnabled) {
+                guardZoneAutoCheckTimer->start(guardZoneCheckInterval);
+                qDebug() << "Auto-check resumed with GuardZone activation";
+            }
+
+            qDebug() << "GuardZone system enabled with" << guardZones.size() << "guardzones";
     }
 
     qDebug() << "guardZoneActive now" << guardZoneActive;
@@ -4839,13 +4895,27 @@ void EcWidget::generateRandomAISTargets(int count)
 
 bool EcWidget::checkTargetsInGuardZone()
 {
-    if (!guardZoneActive || simulatedTargets.isEmpty())
+    if (!guardZoneActive) {
+        qDebug() << "[REAL-AIS-CHECK] No active GuardZone";
         return false;
+    }
 
-    // ========== PERBAIKAN: GUNAKAN GUARDZONE AKTIF ==========
+    if (!Ais::instance()) {
+        qDebug() << "[REAL-AIS-CHECK] AIS instance not available";
+        return false;
+    }
+
+    QMap<unsigned int, AISTargetData>& aisTargetMap = Ais::instance()->getTargetMap();
+
+    if (aisTargetMap.isEmpty()) {
+        qDebug() << "[REAL-AIS-CHECK] No AIS targets available";
+        return false;
+    }
+
+    qDebug() << "[REAL-AIS-CHECK] Processing" << aisTargetMap.size() << "real AIS targets";
+
+    // Cari guardzone aktif
     GuardZone* activeGuardZone = nullptr;
-
-    // Cari guardzone aktif yang sama seperti di simulasi
     for (GuardZone& gz : guardZones) {
         if (gz.active) {
             activeGuardZone = &gz;
@@ -4853,105 +4923,101 @@ bool EcWidget::checkTargetsInGuardZone()
         }
     }
 
-    // Jika tidak ada guardzone aktif, return false
     if (!activeGuardZone) {
-        qDebug() << "[AUTO-CHECK] No active GuardZone found for checking";
+        qDebug() << "[REAL-AIS-CHECK] No active GuardZone found";
         return false;
     }
-    // ======================================================
+
+    // ========== DEBUG GUARDZONE INFO ==========
+    qDebug() << "[REAL-AIS-CHECK] Active GuardZone:" << activeGuardZone->name;
+    qDebug() << "[REAL-AIS-CHECK] Shape:" << (activeGuardZone->shape == GUARD_ZONE_CIRCLE ? "CIRCLE" : "POLYGON");
+
+    if (activeGuardZone->shape == GUARD_ZONE_POLYGON) {
+        qDebug() << "[REAL-AIS-CHECK] Polygon coordinates count:" << activeGuardZone->latLons.size();
+        qDebug() << "[REAL-AIS-CHECK] Polygon vertices:" << (activeGuardZone->latLons.size() / 2);
+
+        // Debug polygon coordinates
+        for (int i = 0; i < activeGuardZone->latLons.size(); i += 2) {
+            qDebug() << "[REAL-AIS-CHECK] Vertex" << (i/2) << ":"
+                     << activeGuardZone->latLons[i] << "," << activeGuardZone->latLons[i+1];
+        }
+    }
+    // ========================================
 
     bool foundNewDanger = false;
     QString alertMessages;
     int alertCount = 0;
 
-    for (int i = 0; i < simulatedTargets.size(); ++i) {
+    for (auto it = aisTargetMap.begin(); it != aisTargetMap.end(); ++it) {
+        const AISTargetData& aisTarget = it.value();
+
+        // Skip invalid targets
+        if (aisTarget.mmsi.isEmpty() || aisTarget.lat == 0.0 || aisTarget.lon == 0.0) {
+            continue;
+        }
+
+        qDebug() << "[REAL-AIS-CHECK] Checking target" << aisTarget.mmsi
+                 << "at" << aisTarget.lat << "," << aisTarget.lon;
+
         bool inGuardZone = false;
 
-        // ========== GUNAKAN DATA DARI GUARDZONE AKTIF ==========
+        // Check apakah target di dalam guardzone
         if (activeGuardZone->shape == GUARD_ZONE_CIRCLE) {
-            // Hitung jarak ke pusat guardzone aktif
             double distance, bearing;
             EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
                                                    activeGuardZone->centerLat,
                                                    activeGuardZone->centerLon,
-                                                   simulatedTargets[i].lat,
-                                                   simulatedTargets[i].lon,
+                                                   aisTarget.lat, aisTarget.lon,
                                                    &distance, &bearing);
 
-            // Jika jarak kurang dari radius guardzone aktif, target ada di dalam
             inGuardZone = (distance <= activeGuardZone->radius);
 
-            qDebug() << "[AUTO-CHECK] Target" << simulatedTargets[i].mmsi
+            qDebug() << "[REAL-AIS-CHECK] Target" << aisTarget.mmsi
                      << "distance:" << distance << "vs radius:" << activeGuardZone->radius
                      << "inZone:" << inGuardZone;
         }
         else if (activeGuardZone->shape == GUARD_ZONE_POLYGON && activeGuardZone->latLons.size() >= 6) {
-            // Konversi titik ke koordinat layar
-            int targetX, targetY;
-            if (LatLonToXy(simulatedTargets[i].lat, simulatedTargets[i].lon, targetX, targetY)) {
-                QPolygon poly;
-                for (int j = 0; j < activeGuardZone->latLons.size(); j += 2) {
-                    int x, y;
-                    LatLonToXy(activeGuardZone->latLons[j], activeGuardZone->latLons[j+1], x, y);
-                    poly.append(QPoint(x, y));
-                }
+            qDebug() << "[REAL-AIS-CHECK] Checking polygon GuardZone";
+            qDebug() << "[REAL-AIS-CHECK] Polygon vertices:" << (activeGuardZone->latLons.size() / 2);
 
-                inGuardZone = poly.containsPoint(QPoint(targetX, targetY), Qt::OddEvenFill);
-
-                qDebug() << "[AUTO-CHECK] Target" << simulatedTargets[i].mmsi
-                         << "polygon check - inZone:" << inGuardZone;
+            // Debug polygon coordinates (hanya untuk troubleshooting)
+            for (int i = 0; i < activeGuardZone->latLons.size() && i < 10; i += 2) { // Limit debug output
+                qDebug() << "[REAL-AIS-CHECK] Vertex" << (i/2) << ":"
+                         << activeGuardZone->latLons[i] << "," << activeGuardZone->latLons[i+1];
             }
+
+            // Use improved polygon detection
+            inGuardZone = isPointInPolygon(aisTarget.lat, aisTarget.lon, activeGuardZone->latLons);
+
+            qDebug() << "[REAL-AIS-CHECK] Target" << aisTarget.mmsi
+                     << "polygon check result:" << inGuardZone;
         }
-        // =====================================================
 
-        // Jika target baru masuk guardzone, tandai sebagai berbahaya dan tambahkan ke pesan
-        if (inGuardZone && !simulatedTargets[i].dangerous) {
+        // Jika target di dalam guardzone, tambahkan ke alert
+        if (inGuardZone) {
             foundNewDanger = true;
-            simulatedTargets[i].dangerous = true;
 
-            alertMessages += tr("Target %1: Speed %2 knots, Course %3°\n")
-                                 .arg(simulatedTargets[i].mmsi)
-                                 .arg(simulatedTargets[i].sog, 0, 'f', 1)
-                                 .arg(simulatedTargets[i].cog, 0, 'f', 0);
+            alertMessages += tr("AIS Target %1: Speed %2 knots, Course %3°\n")
+                                .arg(aisTarget.mmsi)
+                                .arg(aisTarget.sog, 0, 'f', 1)
+                                .arg(aisTarget.cog, 0, 'f', 0);
             alertCount++;
 
-            qDebug() << "[AUTO-CHECK] ⚠️ NEW DANGER:" << simulatedTargets[i].mmsi
-                     << "entered GuardZone" << activeGuardZone->name;
-        } else if (!inGuardZone) {
-            // Jika target keluar dari guardzone, tandai sebagai tidak berbahaya
-            if (simulatedTargets[i].dangerous) {
-                qDebug() << "[AUTO-CHECK] ✅ Target" << simulatedTargets[i].mmsi
-                         << "left GuardZone" << activeGuardZone->name;
-            }
-            simulatedTargets[i].dangerous = false;
+            qDebug() << "[REAL-AIS-CHECK] ⚠️ DANGER: AIS Target" << aisTarget.mmsi
+                     << "entered GuardZone" << activeGuardZone->name
+                     << "SOG:" << aisTarget.sog << "COG:" << aisTarget.cog;
         }
     }
 
-    // ============= ALERT SYSTEM INTEGRATION =============
-    // Hanya tampilkan peringatan jika ada target baru yang masuk
+    // Show alert jika ada target dalam guardzone
     if (foundNewDanger && alertCount > 0) {
-
-        // ===== ENHANCED ALERT MESSAGE =====
         QString title = tr("Guard Zone Alert - %1 Target(s) in %2").arg(alertCount).arg(activeGuardZone->name);
-
-        // ===== ORIGINAL QMessageBox =====
         QMessageBox::warning(this, title, alertMessages);
 
-        // ===== NEW ALERT SYSTEM INTEGRATION =====
-        if (alertSystem) {
-            // Trigger alert through alert system with guardzone info
-            QString alertDetails = tr("%1 target(s) detected in GuardZone '%2':\n%3")
-                                       .arg(alertCount)
-                                       .arg(activeGuardZone->name)
-                                       .arg(alertMessages.trimmed());
-            triggerGuardZoneAlert(activeGuardZone->id, alertDetails);
-        }
-        // ====================================
+        qDebug() << "[REAL-AIS-CHECK] Alert shown for" << alertCount << "targets";
+    } else {
+        qDebug() << "[REAL-AIS-CHECK] No targets detected in GuardZone";
     }
-    // ==================================================
-
-    // Redraw untuk memperbarui warna target
-    drawSimulatedTargets();
 
     return foundNewDanger;
 }
@@ -5354,6 +5420,11 @@ void EcWidget::createCircularGuardZoneNew(double centerLat, double centerLon, do
     newGuardZone.centerLat = centerLat;
     newGuardZone.centerLon = centerLon;
     newGuardZone.radius = radiusNM;
+    
+    // Apply default filter settings from SettingsManager
+    const SettingsData& settings = SettingsManager::instance().data();
+    newGuardZone.shipTypeFilter = static_cast<ShipTypeFilter>(settings.defaultShipTypeFilter);
+    newGuardZone.alertDirection = static_cast<AlertDirection>(settings.defaultAlertDirection);
 
     // Add to guardzone list
     guardZones.append(newGuardZone);
@@ -5439,6 +5510,11 @@ void EcWidget::createPolygonGuardZoneNew()
     newGuardZone.attachedToShip = false;
     newGuardZone.color = Qt::red;
     newGuardZone.latLons = latLons;
+    
+    // Apply default filter settings from SettingsManager
+    const SettingsData& settings = SettingsManager::instance().data();
+    newGuardZone.shipTypeFilter = static_cast<ShipTypeFilter>(settings.defaultShipTypeFilter);
+    newGuardZone.alertDirection = static_cast<AlertDirection>(settings.defaultAlertDirection);
 
     // Add to guardzone list
     guardZones.append(newGuardZone);
@@ -5812,6 +5888,11 @@ void EcWidget::loadGuardZones()
         // PERBAIKAN: Trigger update hanya jika ada data
         if (!guardZones.isEmpty()) {
             update();
+            
+            // Apply default filters to loaded guardzones if they have default values
+            if (guardZoneManager) {
+                guardZoneManager->applyDefaultFiltersToExistingGuardZones();
+            }
         }
     } else {
         qDebug() << "[ERROR] Failed to open guardzones file:" << file.errorString();
@@ -6942,9 +7023,19 @@ void EcWidget::leaveEvent(QEvent *event)
 QString EcWidget::getShipTypeString(int shipType)
 {
     switch(shipType) {
-        case 80: return "Vessel - Towing";
-        case 70: return "Cargo";
-        case 60: return "Passenger";
+        //case 80: return "Vessel - Towing";
+        case 0:   return "Not available / Not applicable";
+        case 30:  return "Fishing vessel";
+        case 35:  return "Military operations";
+        case 36:  return "Sailing";
+        case 37:  return "Pleasure craft";
+        case 60:  return "Passenger ship";
+        case 61:  return "Passenger ship (carrying DG, HS, or MP)";
+        case 70:  return "Cargo ship";
+        case 71:  return "Cargo ship (carrying DG, HS, or MP)";
+        case 80:  return "Tanker ship";
+        case 8:  return "Tanker ship (carrying DG, HS, or MP)";
+        case 255:  return "Invalid (EC_AIS_INVALID_SHIP_TYPE)";
         default: return "unknown";
     }
 }
@@ -7821,4 +7912,365 @@ void EcWidget::triggerShipGuardianAlert(const QList<DetectedObstacle>& obstacles
     }
 
     msgBox.exec();
+}
+
+// void EcWidget::debugAISTargets()
+// {
+//     if (!Ais::instance()) {
+//         qDebug() << "[AIS-DEBUG] AIS instance not available";
+//         return;
+//     }
+
+//     QMap<unsigned int, AISTargetData>& aisTargetMap = Ais::instance()->getTargetMap();
+
+//     qDebug() << "[AIS-DEBUG] ========== AIS TARGETS DEBUG ==========";
+//     qDebug() << "[AIS-DEBUG] Total targets:" << aisTargetMap.size();
+
+//     int i = 0;
+//     for (auto it = aisTargetMap.begin(); it != aisTargetMap.end(); ++it, ++i) {
+//         const AISTargetData& target = it.value();
+
+//         qDebug() << "[AIS-DEBUG] Target" << i << ":";
+//         qDebug() << "  MMSI:" << target.mmsi;
+//         qDebug() << "  Lat:" << target.lat;
+//         qDebug() << "  Lon:" << target.lon;
+//         qDebug() << "  SOG:" << target.sog << "knots";
+//         qDebug() << "  COG:" << target.cog << "degrees";
+//         qDebug() << "  Last Update:" << target.lastUpdate.toString();
+//         qDebug() << "  Dangerous:" << target.isDangerous;
+//     }
+//     qDebug() << "[AIS-DEBUG] =======================================";
+// }
+
+void EcWidget::performAutoGuardZoneCheck()
+{
+    if (!guardZoneActive || !Ais::instance()) {
+        return;
+    }
+
+    // Throttle untuk avoid excessive checking
+    QDateTime now = QDateTime::currentDateTime();
+    if (lastGuardZoneCheck.msecsTo(now) < 1000) { // Minimum 1 detik interval
+        return;
+    }
+    lastGuardZoneCheck = now;
+
+    qDebug() << "[AUTO-CHECK] Performing automatic GuardZone check";
+
+    // ========== GUNAKAN AIS CLASS YANG SUDAH ADA ==========
+    QMap<unsigned int, AISTargetData>& aisTargetMap = Ais::instance()->getTargetMap();
+
+    if (aisTargetMap.isEmpty()) {
+        return;
+    }
+
+    // Cari semua guardzone aktif
+    QList<GuardZone*> activeGuardZones;
+    for (GuardZone& gz : guardZones) {
+        if (gz.active) {
+            activeGuardZones.append(&gz);
+        }
+    }
+
+    if (activeGuardZones.isEmpty()) {
+        return;
+    }
+
+    // Track targets per guardzone
+    QMap<int, QSet<unsigned int>> currentTargetsPerZone;
+    QStringList allNewTargetAlerts;
+
+    // ========== CHECK SEMUA AIS TARGETS DARI AIS CLASS ==========
+    QMap<unsigned int, EcAISTargetInfo>& targetInfoMap = Ais::instance()->getTargetInfoMap();
+    
+    // Check setiap AIS target terhadap setiap guardzone aktif
+    for (auto it = aisTargetMap.begin(); it != aisTargetMap.end(); ++it) {
+        unsigned int mmsi = it.key();
+        const AISTargetData& aisTarget = it.value();
+        
+        // Get corresponding EcAISTargetInfo for ship type filtering
+        EcAISTargetInfo* targetInfo = nullptr;
+        if (targetInfoMap.contains(mmsi)) {
+            targetInfo = &targetInfoMap[mmsi];
+        }
+
+        // Skip invalid targets
+        if (aisTarget.mmsi.isEmpty() || aisTarget.lat == 0.0 || aisTarget.lon == 0.0) {
+            continue;
+        }
+
+        // Check terhadap setiap guardzone aktif
+        for (GuardZone* activeGuardZone : activeGuardZones) {
+            bool inGuardZone = false;
+
+            // Check guardzone berdasarkan shape
+            if (activeGuardZone->shape == GUARD_ZONE_CIRCLE) {
+                double distance, bearing;
+                EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
+                                                       activeGuardZone->centerLat,
+                                                       activeGuardZone->centerLon,
+                                                       aisTarget.lat, aisTarget.lon,
+                                                       &distance, &bearing);
+                inGuardZone = (distance <= activeGuardZone->radius);
+            }
+            else if (activeGuardZone->shape == GUARD_ZONE_POLYGON && activeGuardZone->latLons.size() >= 6) {
+                int targetX, targetY;
+                if (LatLonToXy(aisTarget.lat, aisTarget.lon, targetX, targetY)) {
+                    QPolygon poly;
+                    for (int j = 0; j < activeGuardZone->latLons.size(); j += 2) {
+                        int x, y;
+                        LatLonToXy(activeGuardZone->latLons[j], activeGuardZone->latLons[j+1], x, y);
+                        poly.append(QPoint(x, y));
+                    }
+                    inGuardZone = poly.containsPoint(QPoint(targetX, targetY), Qt::OddEvenFill);
+                }
+            }
+
+            if (inGuardZone) {
+                // Track target untuk guardzone ini
+                currentTargetsPerZone[activeGuardZone->id].insert(mmsi);
+
+                // Check jika ini target baru yang masuk zone untuk guardzone ini
+                QSet<unsigned int>& previousTargetsForThisZone = previousTargetsPerZone[activeGuardZone->id];
+                if (!previousTargetsForThisZone.contains(mmsi)) {
+                    // ========== APPLY SHIP TYPE FILTER ==========
+                    if (activeGuardZone->shipTypeFilter != SHIP_TYPE_ALL && targetInfo) {
+                        ShipTypeFilter shipType = guardZoneManager->getShipTypeFromAIS(targetInfo->shipType);
+                        if (shipType != activeGuardZone->shipTypeFilter) {
+                            continue;  // Skip this ship, doesn't match filter
+                        }
+                    }
+                    // ==========================================
+                    
+                    // ========== APPLY ALERT DIRECTION FILTER ==========
+                    // For ENTERING events
+                    if (activeGuardZone->alertDirection == ALERT_OUT_ONLY) {
+                        qDebug() << "[AUTO-CHECK] Alert filtered out - OUT_ONLY mode, ignoring ENTER event for:" << aisTarget.mmsi << "in GuardZone" << activeGuardZone->id;
+                        continue;  // Skip entering events if set to OUT_ONLY
+                    }
+                    // ================================================
+                    
+                    allNewTargetAlerts.append(tr("NEW: AIS %1 entered GuardZone '%2' - SOG: %3kts, COG: %4°")
+                                              .arg(aisTarget.mmsi)
+                                              .arg(activeGuardZone->name)
+                                              .arg(aisTarget.sog, 0, 'f', 1)
+                                              .arg(aisTarget.cog, 0, 'f', 0));
+
+                    qDebug() << "[AUTO-CHECK] 🚨 NEW TARGET ENTERED:" << aisTarget.mmsi << "in GuardZone" << activeGuardZone->id << "(" << activeGuardZone->name << ")";
+                    
+                    // Emit signal untuk AISTargetPanel dengan format yang sama seperti GuardZoneManager
+                    QString alertMessage = QString("Ship %1 entered GuardZone '%2'")
+                                         .arg(aisTarget.mmsi)
+                                         .arg(activeGuardZone->name);
+                    
+                    // Emit signal dari EcWidget untuk AISTargetPanel
+                    emit aisTargetDetected(activeGuardZone->id, aisTarget.mmsi.toUInt(), alertMessage);
+                }
+            }
+        }
+    }
+    // ===============================================
+
+    // Check targets yang keluar dari setiap guardzone
+    for (GuardZone* activeGuardZone : activeGuardZones) {
+        QSet<unsigned int>& previousTargetsForThisZone = previousTargetsPerZone[activeGuardZone->id];
+        QSet<unsigned int>& currentTargetsForThisZone = currentTargetsPerZone[activeGuardZone->id];
+        
+        for (unsigned int mmsi : previousTargetsForThisZone) {
+            if (!currentTargetsForThisZone.contains(mmsi)) {
+                // ========== APPLY ALERT DIRECTION FILTER ==========
+                // For EXITING events
+                if (activeGuardZone->alertDirection == ALERT_IN_ONLY) {
+                    qDebug() << "[AUTO-CHECK] Alert filtered out - IN_ONLY mode, ignoring EXIT event for:" << mmsi << "from GuardZone" << activeGuardZone->id;
+                    continue;  // Skip exiting events if set to IN_ONLY
+                }
+                // ================================================
+                
+                // Note: Ship type filter tidak diterapkan untuk exit events 
+                // karena EcAISTargetInfo mungkin sudah tidak tersedia
+                qDebug() << "[AUTO-CHECK] ✅ TARGET EXITED:" << mmsi << "from GuardZone" << activeGuardZone->id << "(" << activeGuardZone->name << ")";
+                
+                // Emit signal untuk AISTargetPanel dengan format yang sama seperti GuardZoneManager
+                QString alertMessage = QString("Ship %1 exited GuardZone '%2'")
+                                     .arg(mmsi)
+                                     .arg(activeGuardZone->name);
+                
+                // Emit signal dari EcWidget untuk AISTargetPanel
+                emit aisTargetDetected(activeGuardZone->id, mmsi, alertMessage);
+            }
+        }
+    }
+
+    // Update cache untuk setiap guardzone
+    previousTargetsPerZone = currentTargetsPerZone;
+
+    // Show alert untuk new targets
+    if (!allNewTargetAlerts.isEmpty()) {
+        QString alertMessage = tr("GuardZone Alert (%1 targets detected):\n%2")
+                              .arg(allNewTargetAlerts.size())
+                              .arg(allNewTargetAlerts.join("\n"));
+
+        // Show QMessageBox alert - DISABLED to remove popup
+        // QMessageBox::warning(this, tr("GuardZone Auto-Check Alert"), alertMessage);
+
+        // Emit signal untuk alert system jika ada - untuk semua guardzone yang terdeteksi
+        for (GuardZone* gz : activeGuardZones) {
+            if (currentTargetsPerZone[gz->id].size() > 0) {
+                emit guardZoneTargetDetected(gz->id, currentTargetsPerZone[gz->id].size());
+            }
+        }
+
+        qDebug() << "[AUTO-CHECK] Alert triggered for" << allNewTargetAlerts.size() << "new targets across" << activeGuardZones.size() << "guardzones";
+    }
+}
+
+void EcWidget::setGuardZoneAutoCheck(bool enabled)
+{
+    guardZoneAutoCheckEnabled = enabled;
+
+    if (enabled && guardZoneActive) {
+        guardZoneAutoCheckTimer->start(guardZoneCheckInterval);
+        qDebug() << "[AUTO-CHECK] GuardZone auto-check ENABLED with interval:" << guardZoneCheckInterval << "ms";
+    } else {
+        guardZoneAutoCheckTimer->stop();
+        previousTargetsInZone.clear(); // Clear cache
+        qDebug() << "[AUTO-CHECK] GuardZone auto-check DISABLED";
+    }
+}
+
+void EcWidget::setGuardZoneCheckInterval(int intervalMs)
+{
+    guardZoneCheckInterval = qMax(1000, intervalMs); // Minimum 1 detik
+
+    if (guardZoneAutoCheckTimer->isActive()) {
+        guardZoneAutoCheckTimer->setInterval(guardZoneCheckInterval);
+        qDebug() << "[AUTO-CHECK] Interval updated to:" << guardZoneCheckInterval << "ms";
+    }
+}
+
+bool EcWidget::isPointInPolygon(double lat, double lon, const QVector<double>& polygonLatLons)
+{
+    if (polygonLatLons.size() < 6) { // Minimum 3 points = 6 coordinates
+        qDebug() << "[POLYGON-CHECK] Insufficient polygon points:" << polygonLatLons.size();
+        return false;
+    }
+
+    // Method 1: Improved Geographic Point-in-Polygon menggunakan Winding Number Algorithm
+    bool inPolygonGeo = checkPointInPolygonGeographic(lat, lon, polygonLatLons);
+
+    // Method 2: Screen Coordinate Point-in-Polygon sebagai backup verification
+    bool inPolygonScreen = checkPointInPolygonScreen(lat, lon, polygonLatLons);
+
+    qDebug() << "[POLYGON-CHECK] Point (" << lat << "," << lon << ")";
+    qDebug() << "[POLYGON-CHECK] Geographic method:" << inPolygonGeo;
+    qDebug() << "[POLYGON-CHECK] Screen method:" << inPolygonScreen;
+
+    // Clean decision logic: prioritize screen method for display accuracy
+    // Geographic method untuk validasi tambahan
+    if (inPolygonGeo == inPolygonScreen) {
+        // Kedua method setuju - confident result
+        return inPolygonGeo;
+    } else {
+        // Methods disagree - gunakan screen method (lebih reliable untuk visual display)
+        qDebug() << "[POLYGON-CHECK] WARNING: Methods disagree! Using screen method for reliability.";
+        return inPolygonScreen;
+    }
+}
+
+bool EcWidget::checkPointInPolygonGeographic(double lat, double lon, const QVector<double>& polygonLatLons)
+{
+    int numVertices = polygonLatLons.size() / 2;
+    int windingNumber = 0;
+
+    for (int i = 0; i < numVertices; i++) {
+        int j = (i + 1) % numVertices; // Next vertex (wrap around)
+
+        double lat1 = polygonLatLons[i * 2];
+        double lon1 = polygonLatLons[i * 2 + 1];
+        double lat2 = polygonLatLons[j * 2];
+        double lon2 = polygonLatLons[j * 2 + 1];
+
+        // Handle longitude wraparound crossing (±180° meridian)
+        double deltaLon = lon2 - lon1;
+        if (deltaLon > 180.0) {
+            deltaLon -= 360.0;
+        } else if (deltaLon < -180.0) {
+            deltaLon += 360.0;
+        }
+        lon2 = lon1 + deltaLon;
+
+        // Winding number calculation for geographic coordinates
+        if (lat1 <= lat) {
+            if (lat2 > lat) { // Upward crossing
+                if (calculateCrossProduct(lat, lon, lat1, lon1, lat2, lon2) > 0) {
+                    windingNumber++;
+                }
+            }
+        } else {
+            if (lat2 <= lat) { // Downward crossing
+                if (calculateCrossProduct(lat, lon, lat1, lon1, lat2, lon2) < 0) {
+                    windingNumber--;
+                }
+            }
+        }
+    }
+
+    return windingNumber != 0;
+}
+
+bool EcWidget::checkPointInPolygonScreen(double lat, double lon, const QVector<double>& polygonLatLons)
+{
+    // Convert target point to screen coordinates
+    int targetX, targetY;
+    if (!LatLonToXy(lat, lon, targetX, targetY)) {
+        qDebug() << "[POLYGON-CHECK] Failed to convert target coordinates to screen";
+        return false;
+    }
+
+    // Convert polygon vertices to screen coordinates
+    QPolygon screenPolygon;
+    int validPoints = 0;
+
+    for (int i = 0; i < polygonLatLons.size(); i += 2) {
+        int x, y;
+        if (LatLonToXy(polygonLatLons[i], polygonLatLons[i+1], x, y)) {
+            screenPolygon.append(QPoint(x, y));
+            validPoints++;
+        } else {
+            qDebug() << "[POLYGON-CHECK] WARNING: Failed to convert polygon vertex" << (i/2) << "to screen coords";
+        }
+    }
+
+    // Require minimum 3 valid points for a polygon
+    if (validPoints < 3) {
+        qDebug() << "[POLYGON-CHECK] ERROR: Insufficient valid screen coordinates:" << validPoints;
+        return false;
+    }
+
+    // Use Qt's robust polygon containment check
+    bool result = screenPolygon.containsPoint(QPoint(targetX, targetY), Qt::OddEvenFill);
+
+    qDebug() << "[POLYGON-CHECK] Target screen coords: (" << targetX << "," << targetY << ")";
+    qDebug() << "[POLYGON-CHECK] Valid polygon screen points:" << validPoints;
+
+    return result;
+}
+
+double EcWidget::calculateCrossProduct(double pointLat, double pointLon,
+                                      double lat1, double lon1, double lat2, double lon2)
+{
+    // Convert to simple Mercator-like projection untuk cross product
+    // Ini cukup akurat untuk deteksi polygon dalam area regional
+    const double DEG_TO_RAD = M_PI / 180.0;
+
+    // Simple cylindrical projection (good enough for regional areas)
+    double x1 = lon1 * DEG_TO_RAD;
+    double y1 = log(tan(M_PI_4 + lat1 * DEG_TO_RAD / 2.0));
+    double x2 = lon2 * DEG_TO_RAD;
+    double y2 = log(tan(M_PI_4 + lat2 * DEG_TO_RAD / 2.0));
+    double px = pointLon * DEG_TO_RAD;
+    double py = log(tan(M_PI_4 + pointLat * DEG_TO_RAD / 2.0));
+
+    // Cross product: (v2-v1) × (point-v1)
+    return ((x2 - x1) * (py - y1) - (y2 - y1) * (px - x1));
 }

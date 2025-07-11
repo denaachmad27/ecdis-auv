@@ -14,6 +14,7 @@
 #include "PluginManager.h"
 #include "aisdecoder.h"
 #include "guardzone.h"
+#include "guardzonemanager.h"
 #include "alertpanel.h"
 #include "alertsystem.h"
 #include "cpatcpasettingsdialog.h"
@@ -36,7 +37,6 @@ void MainWindow::createDockWindows()
     addDockWidget(Qt::LeftDockWidgetArea, dock);
     viewMenu->addAction(dock->toggleViewAction());
 
-    //QMenu* viewMenu = menuBar()->addMenu(tr("&Sidebar"));
     dock = new QDockWidget(tr("NMEA Received"), this);
     dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::TopDockWidgetArea | Qt::BottomDockWidgetArea);
     nmeaText = new QTextEdit(dock);
@@ -47,7 +47,6 @@ void MainWindow::createDockWindows()
     viewMenu->addAction(dock->toggleViewAction());
     dock->hide();
 
-    //QMenu* viewMenu = menuBar()->addMenu(tr("&Sidebar"));
     dock = new QDockWidget(tr("Ownship Info"), this);
     dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::TopDockWidgetArea | Qt::BottomDockWidgetArea);
     ownShipText = new QTextEdit(dock);
@@ -404,6 +403,11 @@ void MainWindow::openSettingsDialog() {
     if (dlg.exec() == QDialog::Accepted) {
         dlg.saveSettings();
         setDisplay();
+        
+        // Apply default guardzone filters to existing guardzones
+        if (ecchart && ecchart->getGuardZoneManager()) {
+            ecchart->getGuardZoneManager()->applyDefaultFiltersToExistingGuardZones();
+        }
     }
 }
 
@@ -820,6 +824,13 @@ MainWindow::MainWindow(QWidget *parent)
 
   // SIDEBAR
   createDockWindows();
+  
+  // Setup CPA/TCPA Panel after createDockWindows
+  setupCPATCPAPanel();
+  if (m_cpatcpaPanel) {
+      ecchart->setCPAPanelToAIS(m_cpatcpaPanel);
+  }
+  
   createActions();
 
   // GuardZone
@@ -883,6 +894,19 @@ MainWindow::MainWindow(QWidget *parent)
 
   guardZoneMenu->addAction("Check Ship Guardian Now", this, SLOT(onCheckShipGuardianNow()));
 
+  guardZoneMenu->addSeparator();
+  // Auto-check menu items
+  QAction *autoCheckAction = guardZoneMenu->addAction("Enable Auto-Check");
+  autoCheckAction->setCheckable(true);
+  autoCheckAction->setChecked(false);
+  connect(autoCheckAction, &QAction::toggled, this, &MainWindow::onToggleGuardZoneAutoCheck);
+
+  QAction *configAutoCheckAction = guardZoneMenu->addAction("Configure Auto-Check...");
+  connect(configAutoCheckAction, &QAction::triggered, this, &MainWindow::onConfigureGuardZoneAutoCheck);
+
+  guardZoneMenu->addSeparator();
+  QAction *realTimeStatusAction = guardZoneMenu->addAction("Show Real-Time Status");
+  connect(realTimeStatusAction, &QAction::triggered, this, &MainWindow::onShowGuardZoneStatus);
 
 
   QMenu *simulationMenu = menuBar()->addMenu("&Simulation");
@@ -892,9 +916,9 @@ MainWindow::MainWindow(QWidget *parent)
 
   simulationMenu->addSeparator();
 
-  QAction *autoCheckAction = simulationMenu->addAction("Auto-Check GuardZone");
-  autoCheckAction->setCheckable(true);
-  connect(autoCheckAction, SIGNAL(toggled(bool)), this, SLOT(onAutoCheckGuardZone(bool)));
+  // QAction *autoCheckAction = simulationMenu->addAction("Auto-Check GuardZone");
+  // autoCheckAction->setCheckable(true);
+  // connect(autoCheckAction, SIGNAL(toggled(bool)), this, SLOT(onAutoCheckGuardZone(bool)));
 
   // DVR
   QMenu *dvrMenu = menuBar()->addMenu("&AIS DVR");
@@ -1009,6 +1033,7 @@ MainWindow::MainWindow(QWidget *parent)
     // qDebug() << userpermit;
 
   setupGuardZonePanel();
+  setupAISTargetPanel();
   //setupAlertPanel();
   //setupTestingMenu();
 
@@ -1017,9 +1042,9 @@ MainWindow::MainWindow(QWidget *parent)
   m_cpaUpdateTimer = new QTimer(this);
   connect(m_cpaUpdateTimer, SIGNAL(timeout()), this, SLOT(updateCPATCPAForAllTargets()));
 
-  // Setup CPA/TCPA Panel
-  setupCPATCPAPanel();
-  ecchart->setCPAPanelToAIS(m_cpatcpaPanel);
+  // Setup CPA/TCPA Panel - will be called after createDockWindows
+  //setupCPATCPAPanel();
+  //ecchart->setCPAPanelToAIS(m_cpatcpaPanel);
 
   // Connect to settings changes
   connect(&CPATCPASettings::instance(), &CPATCPASettings::settingsChanged, this, [this]() {
@@ -1367,6 +1392,13 @@ void MainWindow::onGrid(bool on)
 }
 
 /*---------------------------------------------------------------------------*/
+
+void MainWindow::onAIS()
+{
+  // Simple toggle action for AIS
+  ecchart->ShowAIS(true);
+  DrawChart();
+}
 
 void MainWindow::onAIS(bool on)
 {
@@ -1817,12 +1849,25 @@ void MainWindow::onCreatePolygonGuardZone()
 
 void MainWindow::onCheckGuardZone()
 {
-    qDebug() << "onCheckGuardZone called";
-    if (ecchart) {
-        qDebug() << "ecchart exists, calling checkGuardZone()";
-        ecchart->checkGuardZone();
+    if (!ecchart) {
+        qDebug() << "[CHECK-GZ] EcChart not available";
+        return;
+    }
+
+    qDebug() << "[CHECK-GZ] Manual GuardZone check initiated";
+
+    // Debug AIS targets terlebih dahulu
+    ecchart->debugAISTargets();
+
+    // Jalankan check guardzone
+    bool threatsDetected = ecchart->checkTargetsInGuardZone();
+
+    if (threatsDetected) {
+        statusBar()->showMessage("Threats detected in GuardZone!", 5000);
+        qDebug() << "[CHECK-GZ] Threats detected";
     } else {
-        qDebug() << "ecchart is NULL";
+        statusBar()->showMessage("No threats detected in GuardZone", 3000);
+        qDebug() << "[CHECK-GZ] No threats detected";
     }
 }
 
@@ -1965,6 +2010,100 @@ void MainWindow::setupGuardZonePanel()
         qDebug() << "Unknown critical error setting up GuardZone panel";
         QMessageBox::critical(this, tr("Setup Error"),
                               tr("Unknown error occurred while setting up GuardZone panel"));
+    }
+}
+
+// ========== SETUP AIS TARGET PANEL ==========
+void MainWindow::setupAISTargetPanel()
+{
+    if (!ecchart) {
+        qDebug() << "Cannot setup AIS Target panel: ecchart is null";
+        return;
+    }
+
+    try {
+        // Create AIS Target panel
+        aisTargetPanel = new AISTargetPanel(ecchart, ecchart->getGuardZoneManager(), this);
+
+        // Create dock widget
+        aisTargetDock = new QDockWidget(tr("AIS Target Manager"), this);
+        aisTargetDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
+        aisTargetDock->setWidget(aisTargetPanel);
+
+        // Add to right dock area
+        addDockWidget(Qt::RightDockWidgetArea, aisTargetDock);
+
+        // Add to view menu
+        QList<QAction*> actions = menuBar()->actions();
+        bool sidebarFound = false;
+        for (QAction* action : actions) {
+            if (action->menu() && action->menu()->title() == tr("&Sidebar")) {
+                action->menu()->addAction(aisTargetDock->toggleViewAction());
+                qDebug() << "AIS Target Panel added to Sidebar menu successfully";
+                sidebarFound = true;
+                break;
+            }
+        }
+        if (!sidebarFound) {
+            qDebug() << "[MAIN] Warning: Sidebar menu not found for AIS Target Panel";
+        }
+
+        // Signal connections
+        if (ecchart->getGuardZoneManager()) {
+            connect(ecchart->getGuardZoneManager(), &GuardZoneManager::guardZoneAlert,
+                    aisTargetPanel, &AISTargetPanel::onGuardZoneAlert,
+                    Qt::QueuedConnection);
+        }
+        
+        // Connect signal dari EcWidget auto-check system
+        connect(ecchart, &EcWidget::aisTargetDetected,
+                aisTargetPanel, &AISTargetPanel::onGuardZoneAlert,
+                Qt::QueuedConnection);
+
+        // Connect from EcWidget auto-check signals if available
+        connect(ecchart, &EcWidget::guardZoneTargetDetected,
+                [this](int guardZoneId, int targetCount) {
+                    if (aisTargetPanel) {
+                        aisTargetPanel->refreshTargetList();
+                    }
+                });
+
+        // Delayed initial refresh
+        QTimer::singleShot(500, [this]() {
+            if (aisTargetPanel) {
+                aisTargetPanel->refreshTargetList();
+                qDebug() << "AIS Target panel initial refresh completed";
+            }
+        });
+
+        // ========== TABIFY WITH GUARDZONE AND CPA/TCPA PANELS ==========
+        if (guardZoneDock && aisTargetDock) {
+            // Create tabbed interface - GuardZone Manager as base, AIS Target Manager as tab
+            tabifyDockWidget(guardZoneDock, aisTargetDock);
+            
+            // Add CPA/TCPA panel to the tabbed interface if available
+            if (m_cpatcpaDock) {
+                tabifyDockWidget(guardZoneDock, m_cpatcpaDock);
+                qDebug() << "Added CPA/TCPA Manager to tabbed interface";
+            }
+            
+            // Set GuardZone Manager as the default active tab
+            guardZoneDock->raise();
+            
+            qDebug() << "Created tabbed dock interface: GuardZone Manager + AIS Target Manager + CPA/TCPA Manager";
+        }
+        // =================================================
+
+        qDebug() << "AIS Target panel setup completed successfully";
+
+    } catch (const std::exception& e) {
+        qDebug() << "Critical error setting up AIS Target panel:" << e.what();
+        QMessageBox::critical(this, tr("Setup Error"),
+                              tr("Failed to setup AIS Target panel: %1").arg(e.what()));
+    } catch (...) {
+        qDebug() << "Unknown critical error setting up AIS Target panel";
+        QMessageBox::critical(this, tr("Setup Error"),
+                              tr("Unknown error occurred while setting up AIS Target panel"));
     }
 }
 
@@ -3085,36 +3224,22 @@ void MainWindow::setupCPATCPAPanel()
     // Add dock to main window
     addDockWidget(Qt::RightDockWidgetArea, m_cpatcpaDock);
 
-    // Add toggle action to View menu
-    QMenu* viewMenu = menuBar()->findChild<QMenu*>();
-    if (!viewMenu) {
-        // Jika belum ada view menu, cari menu yang ada
-        QList<QMenu*> menus = menuBar()->findChildren<QMenu*>();
-        for (QMenu* menu : menus) {
-            if (menu->title().contains("View") || menu->title().contains("&View")) {
-                viewMenu = menu;
-                break;
-            }
+    // Add CPA/TCPA Monitor to Sidebar menu
+    QMenu* sidebarMenu = nullptr;
+    QList<QMenu*> menus = menuBar()->findChildren<QMenu*>();
+    for (QMenu* menu : menus) {
+        if (menu->title().contains("Sidebar") || menu->title().contains("&Sidebar")) {
+            sidebarMenu = menu;
+            break;
         }
     }
 
-    // Jika masih belum ada, buat menu view baru
-    if (!viewMenu) {
-        viewMenu = menuBar()->addMenu("&View");
-    }
-
-    // Add toggle action ke menu
-    if (viewMenu) {
-        viewMenu->addSeparator();
-        QAction* toggleCPATCPAAction = m_cpatcpaDock->toggleViewAction();
-        toggleCPATCPAAction->setText("CPA/TCPA Monitor");
-        viewMenu->addAction(toggleCPATCPAAction);
+    if (sidebarMenu) {
+        sidebarMenu->addAction(m_cpatcpaDock->toggleViewAction());
     }
 
     // Set initial visibility
     m_cpatcpaDock->setVisible(true);
-
-    qDebug() << "CPA/TCPA panel setup completed";
 }
 
 void MainWindow::onEnableRedDotTracker(bool enabled)
@@ -3196,4 +3321,76 @@ void MainWindow::onCheckShipGuardianNow()
             statusBar()->showMessage(tr("Ship Guardian check completed - no obstacles"), 3000);
         }
     }
+}
+
+void MainWindow::onToggleGuardZoneAutoCheck(bool enabled)
+{
+    if (!ecchart) return;
+
+    ecchart->setGuardZoneAutoCheck(enabled);
+
+    QString status = enabled ? "enabled" : "disabled";
+    statusBar()->showMessage(tr("GuardZone auto-check %1").arg(status), 3000);
+
+    qDebug() << "GuardZone auto-check toggled:" << enabled;
+}
+
+void MainWindow::onConfigureGuardZoneAutoCheck()
+{
+    if (!ecchart) return;
+
+    bool ok;
+    int currentInterval = ecchart->getGuardZoneCheckInterval() / 1000; // Convert to seconds
+
+    int newInterval = QInputDialog::getInt(this,
+                                           tr("Configure Auto-Check"),
+                                           tr("Check interval (seconds):"),
+                                           currentInterval, 1, 300, 1, &ok);
+
+    if (ok) {
+        ecchart->setGuardZoneCheckInterval(newInterval * 1000); // Convert to milliseconds
+        statusBar()->showMessage(tr("Auto-check interval set to %1 seconds").arg(newInterval), 3000);
+
+        qDebug() << "GuardZone auto-check interval configured:" << newInterval << "seconds";
+    }
+}
+
+void MainWindow::onShowGuardZoneStatus()
+{
+    if (!ecchart) return;
+
+    QStringList statusInfo;
+    statusInfo << "=== GuardZone Real-Time Status ===";
+    statusInfo << "";
+
+    // System status
+    statusInfo << QString("System Active: %1").arg(ecchart->isGuardZoneActive() ? "YES" : "NO");
+    statusInfo << QString("Auto-Check: %1").arg(ecchart->isGuardZoneAutoCheckEnabled() ? "ENABLED" : "DISABLED");
+    statusInfo << QString("Check Interval: %1 seconds").arg(ecchart->getGuardZoneCheckInterval() / 1000);
+    statusInfo << "";
+
+    // GuardZone list
+    QList<GuardZone>& guardZones = ecchart->getGuardZones();
+    statusInfo << QString("Total GuardZones: %1").arg(guardZones.size());
+
+    for (const GuardZone& gz : guardZones) {
+        QString shapeStr = (gz.shape == GUARD_ZONE_CIRCLE) ? "Circle" : "Polygon";
+        QString attachStr = gz.attachedToShip ? " (Ship-attached)" : " (Static)";
+        QString activeStr = gz.active ? "ACTIVE" : "inactive";
+
+        statusInfo << QString("- %1: %2%3 [%4]").arg(gz.name).arg(shapeStr).arg(attachStr).arg(activeStr);
+
+        if (gz.shape == GUARD_ZONE_CIRCLE) {
+            statusInfo << QString("  Center: %1, %2  Radius: %3 NM")
+            .arg(gz.centerLat, 0, 'f', 6)
+                .arg(gz.centerLon, 0, 'f', 6)
+                .arg(gz.radius, 0, 'f', 2);
+        }
+    }
+
+    statusInfo << "";
+    statusInfo << "Real-time monitoring will detect AIS targets";
+    statusInfo << "entering/exiting active GuardZones automatically.";
+
+    QMessageBox::information(this, tr("GuardZone Status"), statusInfo.join("\n"));
 }

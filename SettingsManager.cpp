@@ -17,6 +17,9 @@ void SettingsManager::load() {
     m_data.aisLogFile = settings.value("AIS/log_file", "").toString();
 
     m_data.displayMode = settings.value("Display/mode", "Day").toString();
+    
+    m_data.defaultShipTypeFilter = settings.value("GuardZone/default_ship_type", 0).toInt();
+    m_data.defaultAlertDirection = settings.value("GuardZone/default_alert_direction", 0).toInt();
 }
 
 void SettingsManager::save(const SettingsData& data) {
@@ -29,6 +32,8 @@ void SettingsManager::save(const SettingsData& data) {
     settings.setValue("AIS/ip", data.aisIp);
     settings.setValue("AIS/log_file", data.aisLogFile);
     settings.setValue("Display/mode", data.displayMode);
+    settings.setValue("GuardZone/default_ship_type", data.defaultShipTypeFilter);
+    settings.setValue("GuardZone/default_alert_direction", data.defaultAlertDirection);
 }
 
 const SettingsData& SettingsManager::data() const {

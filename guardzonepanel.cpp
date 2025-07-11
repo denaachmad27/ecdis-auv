@@ -1437,6 +1437,7 @@ void GuardZonePanel::validatePanelState()
         }
     }
 
+
     if (stateChanged) {
         qDebug() << "[VALIDATION] Panel state corrected - updating info labels";
         updateInfoLabels();

@@ -12,6 +12,10 @@
 #include <QDialogButtonBox>
 #include <QSettings>
 #include <QSizePolicy>
+#include <QTabWidget>
+#include <QRadioButton>
+#include <QButtonGroup>
+#include <QGroupBox>
 
 SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
     setupUI();
@@ -83,9 +87,72 @@ void SettingsDialog::setupUI() {
     displayLayout->addRow("Display Mode:", displayModeCombo);
     displayTab->setLayout(displayLayout);
 
+    // GuardZone tab
+    QWidget *guardzoneTab = new QWidget;
+    QVBoxLayout *guardzoneLayout = new QVBoxLayout;
+    
+    // Ship Type Filter Group
+    QGroupBox *shipTypeGroup = new QGroupBox(tr("Ship Type Filter"));
+    QVBoxLayout *shipTypeLayout = new QVBoxLayout;
+    
+    shipTypeButtonGroup = new QButtonGroup(this);
+    
+    QRadioButton *shipAllRadio = new QRadioButton(tr("All Ships"));
+    QRadioButton *shipCargoRadio = new QRadioButton(tr("Cargo Ships"));
+    QRadioButton *shipTankerRadio = new QRadioButton(tr("Tanker Ships"));
+    QRadioButton *shipPassengerRadio = new QRadioButton(tr("Passenger Ships"));
+    QRadioButton *shipFishingRadio = new QRadioButton(tr("Fishing Vessels"));
+    QRadioButton *shipMilitaryRadio = new QRadioButton(tr("Military Vessels"));
+    QRadioButton *shipPleasureRadio = new QRadioButton(tr("Pleasure Craft"));
+    QRadioButton *shipOtherRadio = new QRadioButton(tr("Other Vessels"));
+    
+    shipTypeButtonGroup->addButton(shipAllRadio, 0);
+    shipTypeButtonGroup->addButton(shipCargoRadio, 1);
+    shipTypeButtonGroup->addButton(shipTankerRadio, 2);
+    shipTypeButtonGroup->addButton(shipPassengerRadio, 3);
+    shipTypeButtonGroup->addButton(shipFishingRadio, 4);
+    shipTypeButtonGroup->addButton(shipMilitaryRadio, 5);
+    shipTypeButtonGroup->addButton(shipPleasureRadio, 6);
+    shipTypeButtonGroup->addButton(shipOtherRadio, 7);
+    
+    shipTypeLayout->addWidget(shipAllRadio);
+    shipTypeLayout->addWidget(shipCargoRadio);
+    shipTypeLayout->addWidget(shipTankerRadio);
+    shipTypeLayout->addWidget(shipPassengerRadio);
+    shipTypeLayout->addWidget(shipFishingRadio);
+    shipTypeLayout->addWidget(shipMilitaryRadio);
+    shipTypeLayout->addWidget(shipPleasureRadio);
+    shipTypeLayout->addWidget(shipOtherRadio);
+    shipTypeGroup->setLayout(shipTypeLayout);
+    
+    // Alert Direction Group
+    QGroupBox *alertDirectionGroup = new QGroupBox(tr("Alert Direction"));
+    QVBoxLayout *alertDirectionLayout = new QVBoxLayout;
+    
+    alertDirectionButtonGroup = new QButtonGroup(this);
+    
+    QRadioButton *alertBothRadio = new QRadioButton(tr("Alert In & Out"));
+    QRadioButton *alertInRadio = new QRadioButton(tr("Alert In Only"));
+    QRadioButton *alertOutRadio = new QRadioButton(tr("Alert Out Only"));
+    
+    alertDirectionButtonGroup->addButton(alertBothRadio, 0);
+    alertDirectionButtonGroup->addButton(alertInRadio, 1);
+    alertDirectionButtonGroup->addButton(alertOutRadio, 2);
+    
+    alertDirectionLayout->addWidget(alertBothRadio);
+    alertDirectionLayout->addWidget(alertInRadio);
+    alertDirectionLayout->addWidget(alertOutRadio);
+    alertDirectionGroup->setLayout(alertDirectionLayout);
+    
+    guardzoneLayout->addWidget(shipTypeGroup);
+    guardzoneLayout->addWidget(alertDirectionGroup);
+    guardzoneLayout->addStretch();
+    guardzoneTab->setLayout(guardzoneLayout);
+
     tabWidget->addTab(moosTab, "MOOSDB");
     tabWidget->addTab(aisTab, "AIS");
     tabWidget->addTab(displayTab, "Display");
+    tabWidget->addTab(guardzoneTab, "GuardZone");
 
     mainLayout->addWidget(tabWidget);
 
@@ -126,6 +193,21 @@ void SettingsDialog::loadSettings() {
     } else {
         displayModeCombo->setCurrentIndex(0); // fallback default
     }
+
+    // GuardZone
+    int defaultShipType = settings.value("GuardZone/default_ship_type", 0).toInt();
+    if (shipTypeButtonGroup->button(defaultShipType)) {
+        shipTypeButtonGroup->button(defaultShipType)->setChecked(true);
+    } else {
+        shipTypeButtonGroup->button(0)->setChecked(true); // fallback to "All Ships"
+    }
+
+    int defaultAlertDirection = settings.value("GuardZone/default_alert_direction", 0).toInt();
+    if (alertDirectionButtonGroup->button(defaultAlertDirection)) {
+        alertDirectionButtonGroup->button(defaultAlertDirection)->setChecked(true);
+    } else {
+        alertDirectionButtonGroup->button(0)->setChecked(true); // fallback to "Alert In & Out"
+    }
 }
 
 void SettingsDialog::saveSettings() {
@@ -142,6 +224,10 @@ void SettingsDialog::saveSettings() {
 
     // Display
     settings.setValue("Display/mode", displayModeCombo->currentText());
+
+    // GuardZone
+    settings.setValue("GuardZone/default_ship_type", shipTypeButtonGroup->checkedId());
+    settings.setValue("GuardZone/default_alert_direction", alertDirectionButtonGroup->checkedId());
 }
 
 void SettingsDialog::updateAisWidgetsVisibility(const QString &text) {
@@ -169,6 +255,8 @@ SettingsData SettingsDialog::loadSettingsFromFile(const QString &filePath) {
     data.aisLogFile = settings.value("AIS/log_file", "").toString();
 
     data.displayMode = settings.value("Display/mode", "Day").toString();
+    data.defaultShipTypeFilter = settings.value("GuardZone/default_ship_type", 0).toInt();
+    data.defaultAlertDirection = settings.value("GuardZone/default_alert_direction", 0).toInt();
 
     return data;
 }
@@ -181,6 +269,8 @@ void SettingsDialog::accept() {
     data.aisIp = ipAisLineEdit->text();
     data.aisLogFile = logFileLineEdit->text();
     data.displayMode = displayModeCombo->currentText();
+    data.defaultShipTypeFilter = shipTypeButtonGroup->checkedId();
+    data.defaultAlertDirection = alertDirectionButtonGroup->checkedId();
 
     SettingsManager::instance().save(data);
 

@@ -1,5 +1,6 @@
 #include "guardzonemanager.h"
 #include "ecwidget.h"
+#include "SettingsManager.h"
 
 #include <QMenu>
 #include <QAction>
@@ -309,7 +310,7 @@ void GuardZoneManager::showGuardZoneContextMenu(const QPoint &pos, int guardZone
     // Create context menu
     QMenu contextMenu(ecWidget);
 
-    // Menu items
+    // Menu items yang sudah ada
     QAction* editAction = contextMenu.addAction(QIcon(), tr("Edit GuardZone"));
     QAction* renameAction = contextMenu.addAction(QIcon(), tr("Rename GuardZone"));
     QAction* changeColorAction = contextMenu.addAction(QIcon(), tr("Change Color"));
@@ -323,52 +324,44 @@ void GuardZoneManager::showGuardZoneContextMenu(const QPoint &pos, int guardZone
         toggleActiveAction = contextMenu.addAction(QIcon(), tr("Enable GuardZone"));
     }
 
-    QAction* attachToShipAction;
-    if (targetGuardZone->attachedToShip) {
-        attachToShipAction = contextMenu.addAction(QIcon(), tr("Detach from Ship"));
-    } else {
-        attachToShipAction = contextMenu.addAction(QIcon(), tr("Attach to Ship"));
-    }
-
-    contextMenu.addSeparator();
-
+    QAction* attachToShipAction = contextMenu.addAction(QIcon(), tr("Attach to Ship"));
     QAction* checkAction = contextMenu.addAction(QIcon(), tr("Check GuardZone"));
     QAction* propertiesAction = contextMenu.addAction(QIcon(), tr("Properties"));
 
     contextMenu.addSeparator();
 
     QAction* deleteAction = contextMenu.addAction(QIcon(), tr("Delete GuardZone"));
-    deleteAction->setIcon(QIcon(":/images/delete.png")); // Jika ada icon
 
-    // Execute menu
+    // Show menu dan handle response
     QAction* selectedAction = contextMenu.exec(ecWidget->mapToGlobal(pos));
 
-    if (!selectedAction) return;
-
-    // Handle selected action
-    if (selectedAction == editAction) {
-        startEditGuardZone(guardZoneId);
-    }
-    else if (selectedAction == renameAction) {
-        renameGuardZone(guardZoneId);
-    }
-    else if (selectedAction == changeColorAction) {
-        changeGuardZoneColor(guardZoneId);
-    }
-    else if (selectedAction == toggleActiveAction) {
-        toggleGuardZoneActive(guardZoneId);
-    }
-    else if (selectedAction == attachToShipAction) {
-        toggleGuardZoneAttachToShip(guardZoneId);
-    }
-    else if (selectedAction == checkAction) {
-        checkGuardZone(guardZoneId);
-    }
-    else if (selectedAction == propertiesAction) {
-        showGuardZoneProperties(guardZoneId);
-    }
-    else if (selectedAction == deleteAction) {
-        deleteGuardZone(guardZoneId);
+    if (selectedAction) {
+        // Handle existing actions
+        if (selectedAction == editAction) {
+            startEditGuardZone(guardZoneId);
+        }
+        else if (selectedAction == renameAction) {
+            // Handle rename
+        }
+        else if (selectedAction == changeColorAction) {
+            // Handle color change
+        }
+        else if (selectedAction == toggleActiveAction) {
+            targetGuardZone->active = !targetGuardZone->active;
+            ecWidget->update();
+        }
+        else if (selectedAction == attachToShipAction) {
+            // Handle attach to ship
+        }
+        else if (selectedAction == checkAction) {
+            // Handle check guardzone
+        }
+        else if (selectedAction == propertiesAction) {
+            // Handle properties
+        }
+        else if (selectedAction == deleteAction) {
+            // Handle delete
+        }
     }
 }
 
@@ -1483,4 +1476,234 @@ void GuardZoneManager::updateGuardZoneInList(int guardZoneId)
     emit guardZoneModified(guardZoneId);
 
     qDebug() << "GuardZone" << guardZoneId << "updated in list";
+}
+
+ShipTypeFilter GuardZoneManager::getShipTypeFromAIS(int aisShipType) const
+{
+    // Berdasarkan ITU-R M.1371-5 Ship and Cargo Type codes
+    // Menggunakan logic yang sudah ada di sistem untuk mapping AIS ship type
+
+    if (aisShipType >= 70 && aisShipType <= 79) {
+        return SHIP_TYPE_CARGO;           // Cargo ships
+    }
+    else if (aisShipType >= 80 && aisShipType <= 89) {
+        return SHIP_TYPE_TANKER;          // Tanker ships
+    }
+    else if (aisShipType >= 60 && aisShipType <= 69) {
+        return SHIP_TYPE_PASSENGER;       // Passenger ships
+    }
+    else if (aisShipType == 30) {
+        return SHIP_TYPE_FISHING;         // Fishing vessels
+    }
+    else if (aisShipType >= 35 && aisShipType <= 39) {
+        return SHIP_TYPE_MILITARY;        // Military vessels
+    }
+    else if (aisShipType >= 36 && aisShipType <= 37) {
+        return SHIP_TYPE_PLEASURE;        // Pleasure craft
+    }
+    else if (aisShipType >= 40 && aisShipType <= 49) {
+        return SHIP_TYPE_OTHER;           // High speed craft
+    }
+    else if (aisShipType >= 50 && aisShipType <= 59) {
+        return SHIP_TYPE_OTHER;           // Pilot vessels, SAR, etc.
+    }
+    else {
+        return SHIP_TYPE_OTHER;           // Unknown or other types
+    }
+}
+
+bool GuardZoneManager::shouldTriggerAlert(const GuardZone& gz, bool isEntering) const
+{
+    // Check alert direction setting
+    switch (gz.alertDirection) {
+    case ALERT_BOTH:
+        return true;                  // Alert untuk masuk dan keluar
+
+    case ALERT_IN_ONLY:
+        return isEntering;            // Alert hanya saat masuk
+
+    case ALERT_OUT_ONLY:
+        return !isEntering;           // Alert hanya saat keluar
+
+    default:
+        return true;                  // Default: alert untuk semua
+    }
+}
+
+QString GuardZoneManager::getShipTypeDisplayName(ShipTypeFilter shipType) const
+{
+    switch (shipType) {
+    case SHIP_TYPE_ALL:
+        return tr("All Ships");
+    case SHIP_TYPE_CARGO:
+        return tr("Cargo Ships");
+    case SHIP_TYPE_TANKER:
+        return tr("Tanker Ships");
+    case SHIP_TYPE_PASSENGER:
+        return tr("Passenger Ships");
+    case SHIP_TYPE_FISHING:
+        return tr("Fishing Vessels");
+    case SHIP_TYPE_MILITARY:
+        return tr("Military Vessels");
+    case SHIP_TYPE_PLEASURE:
+        return tr("Pleasure Craft");
+    case SHIP_TYPE_OTHER:
+        return tr("Other Vessels");
+    default:
+        return tr("Unknown");
+    }
+}
+
+QString GuardZoneManager::getAlertDirectionDisplayName(AlertDirection direction) const
+{
+    switch (direction) {
+    case ALERT_BOTH:
+        return tr("In & Out");
+    case ALERT_IN_ONLY:
+        return tr("In Only");
+    case ALERT_OUT_ONLY:
+        return tr("Out Only");
+    default:
+        return tr("Both");
+    }
+}
+
+bool GuardZoneManager::isShipInGuardZone(const EcAISTargetInfo& ship, const GuardZone& gz) const
+{
+    if (!ecWidget) return false;
+
+    // Convert AIS coordinates (1/10000 minutes) to degrees
+    double shipLat = ship.latitude / 600000.0;  // Convert to degrees
+    double shipLon = ship.longitude / 600000.0; // Convert to degrees
+
+    if (gz.shape == GUARD_ZONE_CIRCLE) {
+        // Calculate distance from ship to guardzone center
+        double distance, bearing;
+        EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
+                                               gz.centerLat, gz.centerLon,
+                                               shipLat, shipLon,
+                                               &distance, &bearing);
+
+        return (distance <= gz.radius);
+    }
+    else if (gz.shape == GUARD_ZONE_POLYGON && gz.latLons.size() >= 6) {
+        // Point-in-polygon algorithm for polygon guardzone
+        bool inside = false;
+        int npoints = gz.latLons.size() / 2;
+
+        for (int i = 0, j = npoints - 1; i < npoints; j = i++) {
+            double xi = gz.latLons[i * 2];
+            double yi = gz.latLons[i * 2 + 1];
+            double xj = gz.latLons[j * 2];
+            double yj = gz.latLons[j * 2 + 1];
+
+            if (((yi > shipLon) != (yj > shipLon)) &&
+                (shipLat < (xj - xi) * (shipLon - yi) / (yj - yi) + xi)) {
+                inside = !inside;
+            }
+        }
+
+        return inside;
+    }
+
+    return false;
+}
+
+void GuardZoneManager::checkShipInGuardZone(const EcAISTargetInfo& ship, bool wasInside, bool isInside)
+{
+    if (!ecWidget) return;
+
+    QList<GuardZone>& guardZones = ecWidget->getGuardZones();
+
+    for (GuardZone& gz : guardZones) {
+        if (!gz.active) continue;  // Skip inactive guardzones
+
+        // Check if ship is in this specific guardzone
+        bool shipInThisZone = isShipInGuardZone(ship, gz);
+        
+        // Track previous state for this specific guardzone
+        static QMap<QPair<int, int>, bool> previousStatePerGuardZone; // <MMSI, GuardZoneID> -> wasInside
+        QPair<int, int> key(ship.mmsi, gz.id);
+        bool wasInThisZone = previousStatePerGuardZone.value(key, false);
+        
+        // Update state for next check
+        previousStatePerGuardZone[key] = shipInThisZone;
+
+        // Determine if this is an entry or exit event for THIS guardzone
+        bool isEntering = !wasInThisZone && shipInThisZone;
+        bool isExiting = wasInThisZone && !shipInThisZone;
+
+        if (isEntering || isExiting) {
+            // ========== APPLY SHIP TYPE FILTER ==========
+            if (gz.shipTypeFilter != SHIP_TYPE_ALL) {
+                ShipTypeFilter shipType = getShipTypeFromAIS(ship.shipType);
+                if (shipType != gz.shipTypeFilter) {
+                    continue;  // Skip this ship, doesn't match filter
+                }
+            }
+            // ==========================================
+
+            // ========== APPLY ALERT DIRECTION FILTER ==========
+            if (!shouldTriggerAlert(gz, isEntering)) {
+                qDebug() << "Alert filtered out for GuardZone" << gz.id 
+                         << "- Direction:" << getAlertDirectionDisplayName(gz.alertDirection)
+                         << "Event:" << (isEntering ? "ENTERING" : "EXITING");
+                continue;  // Skip this event, doesn't match alert direction
+            }
+            // ================================================
+
+            // Generate alert
+            QString alertMessage;
+            if (isEntering) {
+                alertMessage = tr("Ship %1 (%2) entered GuardZone '%3'")
+                .arg(QString(ship.shipName).isEmpty() ? QString::number(ship.mmsi) : QString(ship.shipName))
+                    .arg(getShipTypeDisplayName(getShipTypeFromAIS(ship.shipType)))
+                    .arg(gz.name);
+            } else {
+                alertMessage = tr("Ship %1 (%2) exited GuardZone '%3'")
+                .arg(QString(ship.shipName).isEmpty() ? QString::number(ship.mmsi) : QString(ship.shipName))
+                    .arg(getShipTypeDisplayName(getShipTypeFromAIS(ship.shipType)))
+                    .arg(gz.name);
+            }
+
+            // Emit alert
+            emit guardZoneAlert(gz.id, ship.mmsi, alertMessage);
+
+            qDebug() << "GuardZone Alert [ID:" << gz.id << "]:" << alertMessage;
+            qDebug() << "Applied Filters - Ship Type:" << getShipTypeDisplayName(gz.shipTypeFilter)
+                     << "| Alert Direction:" << getAlertDirectionDisplayName(gz.alertDirection);
+        }
+    }
+}
+
+void GuardZoneManager::applyDefaultFiltersToExistingGuardZones()
+{
+    if (!ecWidget) return;
+    
+    const SettingsData& settings = SettingsManager::instance().data();
+    QList<GuardZone>& guardZones = ecWidget->getGuardZones();
+    
+    bool hasChanges = false;
+    for (auto& gz : guardZones) {
+        // Update all guardzones with new default settings
+        ShipTypeFilter newShipType = static_cast<ShipTypeFilter>(settings.defaultShipTypeFilter);
+        AlertDirection newAlertDirection = static_cast<AlertDirection>(settings.defaultAlertDirection);
+        
+        // Only update if values actually change
+        if (gz.shipTypeFilter != newShipType || gz.alertDirection != newAlertDirection) {
+            gz.shipTypeFilter = newShipType;
+            gz.alertDirection = newAlertDirection;
+            hasChanges = true;
+            
+            qDebug() << "Applied default filters to GuardZone" << gz.id << ": "
+                     << "Ship Type:" << getShipTypeDisplayName(gz.shipTypeFilter)
+                     << "Alert Direction:" << getAlertDirectionDisplayName(gz.alertDirection);
+        }
+    }
+    
+    if (hasChanges) {
+        ecWidget->saveGuardZones();
+        ecWidget->update();
+        qDebug() << "Default filters applied to existing GuardZones";
+    }
 }
