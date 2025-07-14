@@ -7850,15 +7850,21 @@ void EcWidget::performAutoGuardZoneCheck()
 
     // Cari semua guardzone aktif
     QList<GuardZone*> activeGuardZones;
+    int attachedCount = 0;
     for (GuardZone& gz : guardZones) {
         if (gz.active) {
             activeGuardZones.append(&gz);
+            if (gz.attachedToShip) {
+                attachedCount++;
+            }
         }
     }
 
     if (activeGuardZones.isEmpty()) {
         return;
     }
+    
+    qDebug() << "[AUTO-CHECK] Processing" << activeGuardZones.size() << "active guardzones," << attachedCount << "attached to ship";
 
     // Track targets per guardzone
     QMap<int, QSet<unsigned int>> currentTargetsPerZone;
@@ -7890,14 +7896,24 @@ void EcWidget::performAutoGuardZoneCheck()
             // Check guardzone berdasarkan shape
             if (activeGuardZone->shape == GUARD_ZONE_CIRCLE) {
                 double distance, bearing;
+                
+                // Use ownship position if guardzone is attached to ship
+                double centerLat = activeGuardZone->attachedToShip ? ownShip.lat : activeGuardZone->centerLat;
+                double centerLon = activeGuardZone->attachedToShip ? ownShip.lon : activeGuardZone->centerLon;
+                
                 EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
-                                                       activeGuardZone->centerLat,
-                                                       activeGuardZone->centerLon,
+                                                       centerLat,
+                                                       centerLon,
                                                        aisTarget.lat, aisTarget.lon,
                                                        &distance, &bearing);
                 inGuardZone = (distance <= activeGuardZone->radius);
             }
             else if (activeGuardZone->shape == GUARD_ZONE_POLYGON && activeGuardZone->latLons.size() >= 6) {
+                // Note: Polygon guardzones attached to ship are not fully supported for auto-check
+                // The polygon coordinates are stored as absolute positions, not relative to ship
+                // For now, we use the stored coordinates as-is for compatibility
+                // TODO: Implement polygon transformation for ship-attached guardzones
+                
                 int targetX, targetY;
                 if (LatLonToXy(aisTarget.lat, aisTarget.lon, targetX, targetY)) {
                     QPolygon poly;
@@ -7940,7 +7956,8 @@ void EcWidget::performAutoGuardZoneCheck()
                                               .arg(aisTarget.sog, 0, 'f', 1)
                                               .arg(aisTarget.cog, 0, 'f', 0));
 
-                    qDebug() << "[AUTO-CHECK] 🚨 NEW TARGET ENTERED:" << aisTarget.mmsi << "in GuardZone" << activeGuardZone->id << "(" << activeGuardZone->name << ")";
+                    QString attachmentInfo = activeGuardZone->attachedToShip ? " [ATTACHED TO SHIP]" : "";
+                    qDebug() << "[AUTO-CHECK] 🚨 NEW TARGET ENTERED:" << aisTarget.mmsi << "in GuardZone" << activeGuardZone->id << "(" << activeGuardZone->name << ")" << attachmentInfo;
                     
                     // Emit signal untuk AISTargetPanel dengan format yang sama seperti GuardZoneManager
                     QString alertMessage = QString("Ship %1 entered GuardZone '%2'")
@@ -7972,7 +7989,8 @@ void EcWidget::performAutoGuardZoneCheck()
                 
                 // Note: Ship type filter tidak diterapkan untuk exit events 
                 // karena EcAISTargetInfo mungkin sudah tidak tersedia
-                qDebug() << "[AUTO-CHECK] ✅ TARGET EXITED:" << mmsi << "from GuardZone" << activeGuardZone->id << "(" << activeGuardZone->name << ")";
+                QString attachmentInfo = activeGuardZone->attachedToShip ? " [ATTACHED TO SHIP]" : "";
+                qDebug() << "[AUTO-CHECK] ✅ TARGET EXITED:" << mmsi << "from GuardZone" << activeGuardZone->id << "(" << activeGuardZone->name << ")" << attachmentInfo;
                 
                 // Emit signal untuk AISTargetPanel dengan format yang sama seperti GuardZoneManager
                 QString alertMessage = QString("Ship %1 exited GuardZone '%2'")
