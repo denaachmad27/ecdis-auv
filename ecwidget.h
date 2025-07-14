@@ -118,6 +118,18 @@ public:
       EDIT_WAYP
   };
 
+  enum DisplayOrientationMode {
+      NorthUp,
+      HeadUp,
+      CourseUp
+  };
+
+  enum OSCenteringMode {
+      LookAhead,
+      Centered,
+      Manual
+  };
+
   struct Waypoint
   {
       // Data SevenCs native
@@ -163,6 +175,8 @@ public:
   bool importWaypointsFromFile(const QString &filename);
   bool initializeWaypointSystem();
 
+  DisplayOrientationMode displayOrientation = NorthUp;
+  OSCenteringMode osCentering = Centered;
 
   // End Waypoint
   //////////////////////////////////////////////////////////////////////
@@ -580,7 +594,7 @@ signals:
 
 private slots:
   void slotUpdateAISTargets( Bool bSymbolize );
-  void slotRefreshChartDisplay( double lat, double lon );
+  void slotRefreshChartDisplay( double lat, double lon, double head );
   void slotRefreshCenter( double lat, double lon );
 
   // Alert Systems
@@ -932,7 +946,6 @@ private:
   QTimer* shipGuardianCheckTimer;
   bool shipGuardianAutoCheck;
   QDateTime lastShipGuardianCheck;
-
 }; // EcWidget
 
 #endif // _ec_widget_h_

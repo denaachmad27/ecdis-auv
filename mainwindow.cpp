@@ -19,7 +19,9 @@
 #include "alertsystem.h"
 #include "cpatcpasettingsdialog.h"
 #include "cpatcpasettings.h"
-#include "moosdb.h";
+#include "moosdb.h"
+
+#include "aisdecoder.h"
 
 QTextEdit *informationText;
 
@@ -288,6 +290,7 @@ void MainWindow::nmeaDecode(){
     // qDebug() << "Pos Accuracy: " << AisDecoder::decodeAisOption(nmea, "posAccuracy", "!AIVDM");
     // qDebug() << "Heading: " << AisDecoder::decodeAisOption(nmea, "heading", "!AIVDM");
 
+    /*
     // OWNSHIP
     double lat = -7.19806403;
     double lon = 112.8;
@@ -340,12 +343,52 @@ void MainWindow::nmeaDecode(){
         lata = lata - 0.00012858;
         lona = lona + 0.0004085541;
     }
+    */
 
     // QStringList *nmea = new QStringList();
     // nmea->append(AIVDOEncoder::encodeAIVDO(0, lat, lon, sog, cog));
     // nmea->append(AIVDOEncoder::encodeAIVDM(366996240, latx, lonx, sogx, cogx));
 
     // ecchart->ReadAISVariable(*nmea);
+
+    QString string = "!AIVDM,1,1,,B,17lcMBwP00`4313spL<=hgwP2@Lk,0*52";
+
+    AisDecoded decoded = AIVDOEncoder::decodeNMEALine(string);
+
+    qDebug() << "Source:" << decoded.source;
+    qDebug() << "Message Type:" << decoded.type;
+    qDebug() << "MMSI:" << decoded.mmsi;
+    qDebug() << "Latitude:" << decoded.data.latitude;
+    qDebug() << "Longitude:" << decoded.data.longitude;
+    qDebug() << "COG:" << decoded.data.cog;
+    qDebug() << "SOG:" << decoded.data.sog;
+    qDebug() << "Heading:" << decoded.data.heading;
+
+    QString encoded;
+
+    if (decoded.type == 1 || decoded.type == 2 || decoded.type == 3) {
+        encoded = AIVDOEncoder::encodeAIVDM(
+            decoded.type,
+            decoded.mmsi,
+            decoded.data.navStatus,
+            decoded.data.rot,
+            decoded.data.sog,
+            decoded.data.posAcc ? 1 : 0,
+            decoded.data.latitude,
+            decoded.data.longitude,
+            decoded.data.cog,
+            decoded.data.heading,
+            decoded.data.timestamp,
+            decoded.data.maneuverIndicator,
+            decoded.data.raim,
+            decoded.data.radioStatus
+            );
+    }
+
+    QStringList *nmea = new QStringList();
+    nmea->append(encoded);
+
+    ecchart->ReadAISVariable(*nmea);
 }
 
 void MainWindow::onNmeaReceived(const QString& line) {
@@ -918,6 +961,64 @@ MainWindow::MainWindow(QWidget *parent)
   cpaTcpaAlarmsAction->setChecked(true);
   connect(cpaTcpaAlarmsAction, SIGNAL(triggered(bool)), this, SLOT(onCPATCPAAlarms(bool)));
 
+
+
+  // DISPLAY ORIENTATION
+  QMenu *displayOrientationMenu = menuBar()->addMenu("&Chart Orientation");
+
+  // Buat grup eksklusif
+  QActionGroup *orientationGroup = new QActionGroup(this);
+  orientationGroup->setExclusive(true); // Hanya satu yang bisa aktif
+
+  // NORTH UP
+  QAction *northUpAction = displayOrientationMenu->addAction("North-Up Mode");
+  northUpAction->setCheckable(true);
+  northUpAction->setChecked(true);
+  orientationGroup->addAction(northUpAction);
+  connect(northUpAction, SIGNAL(triggered(bool)), this, SLOT(onNorthUp(bool)));
+
+  // HEAD UP
+  QAction *headUpAction = displayOrientationMenu->addAction("Head-Up Mode");
+  headUpAction->setCheckable(true);
+  headUpAction->setChecked(false);
+  orientationGroup->addAction(headUpAction);
+  connect(headUpAction, SIGNAL(triggered(bool)), this, SLOT(onHeadUp(bool)));
+
+  // COURSE UP
+  QAction *courseUpAction = displayOrientationMenu->addAction("Course-Up Mode");
+  courseUpAction->setCheckable(true);
+  courseUpAction->setChecked(false);
+  orientationGroup->addAction(courseUpAction);
+  connect(courseUpAction, SIGNAL(triggered(bool)), this, SLOT(onCourseUp(bool)));
+
+  // DISPLAY ORIENTATION
+  QMenu *osCenteringMenu = menuBar()->addMenu("&Ownship Centering");
+
+  // Buat grup eksklusif
+  QActionGroup *centeringGroup = new QActionGroup(this);
+  centeringGroup->setExclusive(true); // Hanya satu yang bisa aktif
+
+  // HEAD UP
+  QAction *centeringAction = osCenteringMenu->addAction("Centering Mode");
+  centeringAction->setCheckable(true);
+  centeringAction->setChecked(true);
+  centeringGroup->addAction(centeringAction);
+  connect(centeringAction, SIGNAL(triggered(bool)), this, SLOT(onCentered(bool)));
+
+  // NORTH UP
+  QAction *lookAheadAction = osCenteringMenu->addAction("Look-Ahead Mode");
+  lookAheadAction->setCheckable(true);
+  lookAheadAction->setChecked(false);
+  centeringGroup->addAction(lookAheadAction);
+  connect(lookAheadAction, SIGNAL(triggered(bool)), this, SLOT(onLookAhead(bool)));
+
+  // COURSE UP
+  QAction *manualAction = osCenteringMenu->addAction("Manual Offset Mode");
+  manualAction->setCheckable(true);
+  manualAction->setChecked(false);
+  centeringGroup->addAction(manualAction);
+  connect(manualAction, SIGNAL(triggered(bool)), this, SLOT(onManual(bool)));
+
   // Load Plugin
   // loadPluginAis();
 
@@ -959,19 +1060,14 @@ MainWindow::MainWindow(QWidget *parent)
 
   qDebug() << "CPA/TCPA system initialized with update interval:" << interval << "ms";
 
-  // Connect CPA dock visibility
-  if (m_cpatcpaDock) {
-      connect(m_cpatcpaDock, &QDockWidget::visibilityChanged, this, [=](bool visible) {
-          // Jika dock ditutup (visibility = false), lakukan sesuatu
-          if (!visible) {
-              showCPATargetsAction->setChecked(false);
-              ecchart->ShowDangerTarget(false);
-          }
-          else {
-              showCPATargetsAction->setChecked(true);
-          }
-      });
-  }
+  connect(m_cpatcpaDock, &QDockWidget::visibilityChanged, this, [=](bool visible) {
+      if (!visible) {
+          showCPATargetsAction->setChecked(false);
+      }
+      else {
+          showCPATargetsAction->setChecked(true);
+      }
+  });
 
 #ifdef _DEBUG
       // Testing menu hanya untuk debug build
@@ -1402,6 +1498,8 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
 
     pickWindow->fill(pickedFeatureList);
 
+    //pickWindow->fillJson(pickedFeatureList);
+
     if (!aisTemp->toPlainText().trimmed().isEmpty()){
         aisText->setHtml(aisTemp->toHtml());
     }
@@ -1516,6 +1614,8 @@ void MainWindow::runAis()
 
     ecchart->ReadAISLogfile( strLogFile );
     //ecchart->ReadAISLogfileWDelay(strLogFile);
+
+    ecchart->Draw();
 }
 
 void MainWindow::slotLoadAisVariable()
@@ -1532,27 +1632,9 @@ void MainWindow::slotLoadAisVariable()
     //          << "$GPGGA,074028.569,0711.988,S,11247.835,E,1,12,1.0,0.0,M,0.0,M,,*71"
     //          << "$GPGSA,A,3,01,02,03,04,05,06,07,08,09,10,11,12,1.0,1.0,1.0*30";
 
-    nmeaData << "$GPGGA,111000,2924.2304,N,09444.9053,W,2,8,1.5,-18,M,,M,,*70"
-             << "$GPHDT,226.7,T*34"
-             << "$GPROT,0.0,A*31"
-             << "$GPVTG,198.7,T,195.4,M,0.1,N,0.1,K*40"
-             << "$GPGGA,111001,2924.2304,N,09444.9053,W,2,8,1.5,-18,M,,M,,*71"
-             << "!AIVDO,1,1,,,15Mw0k0001q>Ac6@lk@Gio6005H`,0*37"
-             << "!AIVDO,1,1,,,15Mw0k0001q>Ac6@lk@7ho6205H`,0*44"
-             << "$GPHDT,226.8,T*3B"
-             << "$GPROT,0.0,A*31"
-             << "$GPVTG,199.6,T,196.3,M,0.1,N,0.1,K*44"
-             << "$GPGGA,111002,2924.2304,N,09444.9054,W,2,8,1.5,-17,M,,M,,*7A"
-             << "$GPHDT,226.8,T*3B"
-             << "$GPROT,0.0,A*31"
-             << "$GPVTG,198.8,T,195.5,M,0.1,N,0.1,K*4E"
-             << "$GPGGA,111003,2924.2304,N,09444.9054,W,2,8,1.5,-17,M,,M,,*7B"
-             << "!AIVDO,1,1,,,15Mw0k0001q>Ac6@lk@7k76405H`,0*19"
-             << "$GPHDT,226.8,T*3B"
-             << "$GPROT,0.0,A*31"
-             << "$GPVTG,201.4,T,198.1,M,0.1,N,0.1,K*48";
+    nmeaData << "!AIVDM,1,1,,,17ldh0P007`41mispEcV2ll00000,0*46";
 
-    nmeaData << aivdo;
+    //nmeaData << aivdo;
 
 
     ecchart->ReadAISVariable( nmeaData );
@@ -2896,6 +2978,63 @@ void MainWindow::onCPATCPAAlarms(bool enabled)
     } else {
         addTextToBar("CPA/TCPA Alarms disabled");
         m_cpaUpdateTimer->stop();
+    }
+}
+
+// ORIENTATION DISPLAY MODE
+void MainWindow::onNorthUp(bool checked) {
+    if (checked) {
+        ecchart->displayOrientation = EcWidget::NorthUp;
+        update();
+        DrawChart();
+        DrawChart();
+    }
+}
+
+void MainWindow::onHeadUp(bool checked) {
+    if (checked) {
+        ecchart->displayOrientation = EcWidget::HeadUp;
+        update();
+        DrawChart();
+        DrawChart();
+    }
+}
+
+void MainWindow::onCourseUp(bool checked) {
+    if (checked) {
+        ecchart->displayOrientation = EcWidget::CourseUp;
+        ecchart->SetHeading(0);
+        update();
+        DrawChart();
+        DrawChart();
+    }
+}
+
+// OWNSHIP CENTERING MODE
+void MainWindow::onCentered(bool checked) {
+    if (checked) {
+        ecchart->osCentering = EcWidget::Centered;
+        update();
+        DrawChart();
+        DrawChart();
+    }
+}
+
+void MainWindow::onLookAhead(bool checked) {
+    if (checked) {
+        ecchart->osCentering = EcWidget::LookAhead;
+        update();
+        DrawChart();
+        DrawChart();
+    }
+}
+
+void MainWindow::onManual(bool checked) {
+    if (checked) {
+        ecchart->osCentering = EcWidget::Manual;
+        update();
+        DrawChart();
+        DrawChart();
     }
 }
 

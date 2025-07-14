@@ -222,7 +222,7 @@ void Ais::AISTargetUpdateCallbackOld( EcAISTargetInfo *ti )
         EcAISSetTargetActivationStatus( feat, _dictInfo, aisActivated, NULL );
 
       // Set the tracking status of the ais target feature
-      // EcAISSetTargetTrackingStatus( feat, _dictInfo, aisTrkStatusManual, NULL );
+      EcAISSetTargetTrackingStatus( feat, _dictInfo, aisTrkStatus, NULL );
 
       // Set the remaining attributes of the ais target feature
       EcAISSetTargetObjectData( feat, _dictInfo, ti, &_bSymbolize );
@@ -308,7 +308,7 @@ void Ais::AISTargetUpdateCallbackOld( EcAISTargetInfo *ti )
 
   // The callback informs the application to refresh the chart display with AIS target by sending an event.
   /////////////////////////////////////////////////////////////////////////////////////////////////////////
-  _myAis->emitSignal( ownShipLat, ownShipLon );
+  _myAis->emitSignal( ownShipLat, ownShipLon, ti->heading );
 }
 
 void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
@@ -318,16 +318,11 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
     // 1. Handle ownship update terlebih dahulu
     if (ti->ownShip == True) {
         _myAis->handleOwnShipUpdate(ti);
-        // KURANGI emit signal - hanya emit sekali per detik atau sesuai kebutuhan
-        static QDateTime lastEmit = QDateTime::currentDateTime();
-        if (lastEmit.msecsTo(QDateTime::currentDateTime()) > 3000) {
 
-            EcCoordinate ownLat, ownLon;
-            _myAis->getOwnShipPos(ownLat, ownLon);
-            _myAis->emitSignal(ownLat, ownLon);
+        EcCoordinate ownLat, ownLon;
+        _myAis->getOwnShipPos(ownLat, ownLon);
+        _myAis->emitSignal(ownLat, ownLon, ti->heading);
 
-            lastEmit = QDateTime::currentDateTime();
-        }
         return;
     }
 
@@ -359,10 +354,10 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
         // =========== CARA 2: SET KE CENTER TERUS ADA ATAU PUN TIADA PERUBAHAN DATA ===========
         AISTargetData ais;
         _myAis->getAISTrack(ais);
+        _myAis->emitSignalTarget(ais.lat, ais.lon);
 
         if (!ais.mmsi.isEmpty())
         {
-            _myAis->emitSignalTarget(ais.lat, ais.lon);
 
             if (ais.mmsi == QString::number(ti->mmsi)){
                 EcCoordinate ownLat, ownLon;
@@ -434,7 +429,7 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
     EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84, lat, lon, ownShipLat, ownShipLon, &dist, &bear);
 
     // Process only targets which are further away than 48 nm or no own ship position exists yet
-    if (dist < 48 || (ownShipLat == 0 && ownShipLon == 0))
+    if (true)
     {
         // Filter the ais targets which shall be displayed
         if (abs(ti->latitude) < 90 * 60 * 10000 &&
@@ -494,15 +489,15 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
     }
 
     // Emit signal untuk refresh chart display
-    EcCoordinate ownLat, ownLon;
-    _myAis->getOwnShipPos(ownLat, ownLon);
-    _myAis->emitSignal(ownLat, ownLon);
+    //EcCoordinate ownLat, ownLon;
+    //_myAis->getTargetPos(ownLat, ownLon);
+    //_myAis->emitSignalTarget(ownLat, ownLon);
 }
 
 
-void Ais::emitSignal( double lat, double lon )
+void Ais::emitSignal( double lat, double lon, double head )
 {
-  emit signalRefreshChartDisplay( lat, lon );
+  emit signalRefreshChartDisplay( lat, lon, head );
 }
 
 void Ais::emitSignalTarget( double lat, double lon )
@@ -655,6 +650,47 @@ void Ais::readAISLogfile( const QString &logFile )
     iLineNo++;
   }
 }
+
+void Ais::nmeaSelection(const QString &line, QString &outNmea) {
+    outNmea.clear();
+
+    if (line.contains("!AIVDM") || line.contains("!AIVDO")) {
+        outNmea = line.trimmed();
+        return;
+    }
+
+    // Coba parse JSON
+    QJsonParseError err;
+    QJsonDocument doc = QJsonDocument::fromJson(line.toUtf8(), &err);
+    if (err.error != QJsonParseError::NoError || !doc.isObject()) return;
+
+    QJsonObject obj = doc.object();
+    bool hasNav = false;
+
+    if (obj.contains("NAV_LAT")) {
+        navShip.lat = obj["NAV_LAT"].toDouble();
+        hasNav = true;
+    }
+    if (obj.contains("NAV_LONG")) {
+        navShip.lon = obj["NAV_LONG"].toDouble();
+        hasNav = true;
+    }
+    if (obj.contains("NAV_HEADING")) {
+        navShip.heading = obj["NAV_HEADING"].toDouble();
+        hasNav = true;
+    }
+    if (obj.contains("NAV_HEADING_OVER_GROUND")) {
+        navShip.cog = obj["NAV_HEADING_OVER_GROUND"].toDouble();
+        hasNav = true;
+    }
+    if (obj.contains("NAV_SPEED")) {
+        navShip.sog = obj["NAV_SPEED"].toDouble();
+        hasNav = true;
+    }
+
+    return hasNav;
+}
+
 
 void Ais::readAISLogfileWDelay(const QString &logFile, int delayMs, std::atomic<bool>* stopFlag)
 {
