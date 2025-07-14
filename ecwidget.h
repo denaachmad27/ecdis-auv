@@ -586,6 +586,7 @@ signals:
   void guardZoneCreated();
   void guardZoneModified();
   void guardZoneDeleted();
+  void attachToShipStateChanged(bool attached);
 
   // Alert system signals
   void alertTriggered(const AlertData& alert);

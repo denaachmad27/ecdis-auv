@@ -651,45 +651,45 @@ void Ais::readAISLogfile( const QString &logFile )
   }
 }
 
-void Ais::nmeaSelection(const QString &line, QString &outNmea) {
-    outNmea.clear();
+// void Ais::nmeaSelection(const QString &line, QString &outNmea) {
+//     outNmea.clear();
 
-    if (line.contains("!AIVDM") || line.contains("!AIVDO")) {
-        outNmea = line.trimmed();
-        return;
-    }
+//     if (line.contains("!AIVDM") || line.contains("!AIVDO")) {
+//         outNmea = line.trimmed();
+//         return;
+//     }
 
-    // Coba parse JSON
-    QJsonParseError err;
-    QJsonDocument doc = QJsonDocument::fromJson(line.toUtf8(), &err);
-    if (err.error != QJsonParseError::NoError || !doc.isObject()) return;
+//     // Coba parse JSON
+//     QJsonParseError err;
+//     QJsonDocument doc = QJsonDocument::fromJson(line.toUtf8(), &err);
+//     if (err.error != QJsonParseError::NoError || !doc.isObject()) return;
 
-    QJsonObject obj = doc.object();
-    bool hasNav = false;
+//     QJsonObject obj = doc.object();
+//     bool hasNav = false;
 
-    if (obj.contains("NAV_LAT")) {
-        navShip.lat = obj["NAV_LAT"].toDouble();
-        hasNav = true;
-    }
-    if (obj.contains("NAV_LONG")) {
-        navShip.lon = obj["NAV_LONG"].toDouble();
-        hasNav = true;
-    }
-    if (obj.contains("NAV_HEADING")) {
-        navShip.heading = obj["NAV_HEADING"].toDouble();
-        hasNav = true;
-    }
-    if (obj.contains("NAV_HEADING_OVER_GROUND")) {
-        navShip.cog = obj["NAV_HEADING_OVER_GROUND"].toDouble();
-        hasNav = true;
-    }
-    if (obj.contains("NAV_SPEED")) {
-        navShip.sog = obj["NAV_SPEED"].toDouble();
-        hasNav = true;
-    }
+//     if (obj.contains("NAV_LAT")) {
+//         navShip.lat = obj["NAV_LAT"].toDouble();
+//         hasNav = true;
+//     }
+//     if (obj.contains("NAV_LONG")) {
+//         navShip.lon = obj["NAV_LONG"].toDouble();
+//         hasNav = true;
+//     }
+//     if (obj.contains("NAV_HEADING")) {
+//         navShip.heading = obj["NAV_HEADING"].toDouble();
+//         hasNav = true;
+//     }
+//     if (obj.contains("NAV_HEADING_OVER_GROUND")) {
+//         navShip.cog = obj["NAV_HEADING_OVER_GROUND"].toDouble();
+//         hasNav = true;
+//     }
+//     if (obj.contains("NAV_SPEED")) {
+//         navShip.sog = obj["NAV_SPEED"].toDouble();
+//         hasNav = true;
+//     }
 
-    return hasNav;
-}
+//     return hasNav;
+// }
 
 
 void Ais::readAISLogfileWDelay(const QString &logFile, int delayMs, std::atomic<bool>* stopFlag)
