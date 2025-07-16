@@ -327,7 +327,7 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
     }
 
     // 2. Handle AIS targets (bukan ownship)
-    if (ti->ownShip == False) {
+    else if (ti->ownShip == False) {
         _myAis->handleAISTargetUpdate(ti);
 
         // KURANGI emit signal - hanya emit sekali per detik atau sesuai kebutuhan
@@ -615,8 +615,11 @@ void Ais::readAISLogfile( const QString &logFile )
     QString sLine = in.readLine();
     sLine = sLine.append( "\r\n" );
 
-    nmeaText->append(sLine);
-    extractNMEA(sLine);
+    QString nmea;
+    nmeaSelection(sLine, nmea);
+
+    nmeaText->append(nmea);
+    extractNMEA(nmea);
 
     // OWNSHIP NMEA
     PickWindow *pickWindow = new PickWindow(parentWidget, dictInfo, denc);
@@ -628,7 +631,7 @@ void Ais::readAISLogfile( const QString &logFile )
     IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
 
     if (dvr && dvr->isRecording()) {
-        dvr->recordRawNmea(sLine);
+        dvr->recordRawNmea(nmea);
     }
 
     // OWNSHIP RIGHT PANEL
@@ -636,9 +639,9 @@ void Ais::readAISLogfile( const QString &logFile )
         _cpaPanel->updateOwnShipInfo(navShip.lat, navShip.lon, navShip.speed_og, navShip.heading_og);
     }
 
-    //qDebug() << sLine;
+    //qDebug() << nmea;
 
-    if( EcAISAddTransponderOutput( _transponder, (unsigned char*)sLine.toStdString().c_str(), sLine.count() ) == False )
+    if( EcAISAddTransponderOutput( _transponder, (unsigned char*)nmea.toStdString().c_str(), nmea.count() ) == False )
     {
       addLogFileEntry( QString( "Error in readAISLogfile(): EcAISAddTransponderOutput() failed in input line %1" ).arg( iLineNo ) );
       break;
@@ -655,9 +658,11 @@ void Ais::nmeaSelection(const QString &line, QString &outNmea) {
     outNmea.clear();
 
     if (line.contains("!AIVDM") || line.contains("!AIVDO")) {
-        outNmea = line.trimmed();
+        outNmea = line;
         return;
     }
+
+    //qDebug() << line;
 
     // Coba parse JSON
     QJsonParseError err;
@@ -665,30 +670,25 @@ void Ais::nmeaSelection(const QString &line, QString &outNmea) {
     if (err.error != QJsonParseError::NoError || !doc.isObject()) return;
 
     QJsonObject obj = doc.object();
-    bool hasNav = false;
 
-    if (obj.contains("NAV_LAT")) {
-        navShip.lat = obj["NAV_LAT"].toDouble();
-        hasNav = true;
-    }
-    if (obj.contains("NAV_LONG")) {
-        navShip.lon = obj["NAV_LONG"].toDouble();
-        hasNav = true;
-    }
-    if (obj.contains("NAV_HEADING")) {
-        navShip.heading = obj["NAV_HEADING"].toDouble();
-        hasNav = true;
-    }
-    if (obj.contains("NAV_HEADING_OVER_GROUND")) {
-        navShip.cog = obj["NAV_HEADING_OVER_GROUND"].toDouble();
-        hasNav = true;
-    }
-    if (obj.contains("NAV_SPEED")) {
-        navShip.sog = obj["NAV_SPEED"].toDouble();
-        hasNav = true;
-    }
+    if (obj.contains("NAV_LAT") && obj["NAV_LAT"].toDouble() != 0){ navShip.lat = obj["NAV_LAT"].toDouble();}
+    if (obj.contains("NAV_LONG") && obj["NAV_LONG"].toDouble() != 0){ navShip.lon = obj["NAV_LONG"].toDouble();}
+    if (obj.contains("NAV_DEPTH")){ navShip.depth = obj["NAV_DEPTH"].toDouble();}
+    if (obj.contains("NAV_HEADING")){ navShip.heading = obj["NAV_HEADING"].toDouble();}
+    if (obj.contains("NAV_HEADING_OVER_GROUND")){ navShip.heading_og = obj["NAV_HEADING_OVER_GROUND"].toDouble();}
+    if (obj.contains("NAV_SPEED")){ navShip.speed = obj["NAV_SPEED"].toDouble();}
+    if (obj.contains("NAV_SPEED_OVER_GROUND")){ navShip.speed_og = obj["NAV_SPEED_OVER_GROUND"].toDouble();}
+    if (obj.contains("NAV_YAW")){ navShip.yaw = obj["NAV_YAW"].toDouble();}
+    if (obj.contains("NAV_Z")){ navShip.z = obj["NAV_Z"].toDouble();}
 
-    return hasNav;
+    //qDebug() << "LAT: " << navShip.lat;
+
+    if (navShip.lat == 0) { qDebug() << line; }
+
+    qDebug() << QString("%1, %2, %3, %4").arg(navShip.lat).arg(navShip.lon).arg(navShip.speed).arg(navShip.heading_og);
+
+    //outNmea = AIVDOEncoder::encodeAIVDO(0, navShip.lat, navShip.lon, navShip.speed, navShip.heading_og);
+    outNmea = AIVDOEncoder::encodeAIVDO1(navShip.lat, navShip.lon, navShip.heading_og, navShip.speed_og, navShip.heading, 0, 1);
 }
 
 
@@ -765,10 +765,12 @@ void Ais::readAISLogfileWDelay(const QString &logFile, int delayMs, std::atomic<
 
 
 void Ais::extractNMEA(QString nmea){
-    navShip.lat = AisDecoder::decodeAisOption(nmea, "latitude", "!AIVDO");
-    navShip.lon = AisDecoder::decodeAisOption(nmea, "longitude", "!AIVDO");
-    navShip.speed_og = AisDecoder::decodeAisOption(nmea, "sog", "!AIVDO");
-    navShip.heading_og = AisDecoder::decodeAisOption(nmea, "cog", "!AIVDO") / 10;
+    if (nmea.contains("!AIVDO")){
+        navShip.lat = AisDecoder::decodeAisOption(nmea, "latitude", "!AIVDO");
+        navShip.lon = AisDecoder::decodeAisOption(nmea, "longitude", "!AIVDO");
+        navShip.speed_og = AisDecoder::decodeAisOption(nmea, "sog", "!AIVDO");
+        navShip.heading_og = AisDecoder::decodeAisOption(nmea, "cog", "!AIVDO") / 10;
+    }
 }
 
 // Read AIS variable.
@@ -815,6 +817,8 @@ void Ais::readAISVariable( const QStringList &dataLines )
         QString line = sLine + "\r\n";
         nmeaText->append(sLine);
         extractNMEA(sLine);
+
+        qDebug() << sLine;
 
         // OWNSHIP PANEL
         PickWindow *pickWindow = new PickWindow(parentWidget, dictInfo, denc);

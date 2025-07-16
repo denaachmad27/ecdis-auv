@@ -2,6 +2,8 @@
 #define SETTINGSDIALOG_H
 
 #include <QDialog>
+#include <QSpinBox>
+#include <QDebug>
 #include "SettingsData.h"
 
 class QLineEdit;
@@ -17,6 +19,9 @@ public:
     void loadSettings();
     void saveSettings();
     SettingsData loadSettingsFromFile(const QString &filePath = "config.ini");
+
+    EcWidget::DisplayOrientationMode orientation(const QString &str);
+    EcWidget::OSCenteringMode centering(const QString &str);
 
 private slots:
     void updateAisWidgetsVisibility(const QString &text);
@@ -42,6 +47,12 @@ private:
     // GuardZone
     QButtonGroup *shipTypeButtonGroup;
     QButtonGroup *alertDirectionButtonGroup;
+
+    // OWNSHIP
+    QComboBox *orientationCombo;
+    QComboBox *centeringCombo;
+    QSpinBox *headingSpin;
+    QLabel *headingLabel;
 };
 
 #endif // SETTINGSDIALOG_H

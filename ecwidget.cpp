@@ -10,6 +10,7 @@
 #include "ais.h"
 #include "pickwindow.h"
 #include "aistooltip.h"
+#include "mainwindow.h"
 
 // Waypoint
 #include "SettingsManager.h"
@@ -2060,7 +2061,7 @@ QString EcWidget::StartReadAISSubscribe ()
             if (jsonData.contains("NAV_LAT") && jsonData.contains("NAV_LONG")) {
 
                 navShip.lon = jsonData["NAV_LONG"].toDouble();
-
+                navShip.lat = jsonData["NAV_LAT"].toDouble();
 
                 // ================ FORMAT JSON =============== //
                 // qDebug().noquote() << "Received JSON:\n" << QJsonDocument(jsonData).toJson(QJsonDocument::Indented);
@@ -2259,7 +2260,12 @@ void EcWidget::connectToMOOSDB(EcWidget *ecchart) {
     });
 
     QObject::connect(socketAIS, &QTcpSocket::readyRead, [this, ecchart]() {
-        processAISDataHybrid(socketAIS, ecchart);
+        try {
+            // Proses data dari MOOSDB
+            processAISDataHybrid(socketAIS, ecchart);
+        } catch (const std::exception &e) {
+            qCritical() << "[ERROR] Exception caught in AIS processing:" << e.what();
+        }
         // Update posisi kapal
         // navShip.lat = jsonData["NAV_LAT"].toDouble();
         // navShip.lon = jsonData["NAV_LONG"].toDouble();
@@ -2348,9 +2354,26 @@ void EcWidget::processAISData(QTcpSocket* socket) {
 
 void EcWidget::processAISDataHybrid(QTcpSocket* socket, EcWidget *ecchart) {
     QByteArray data = socket->readAll();
+
+    data = data.simplified();     // Hilangkan \n, \r berlebihan
+    data = data.trimmed();        // Potong space dan newline awal-akhir
+    data.replace("\r", "");       // Hilangkan carriage return (Windows style newline)
+
+    if (data.isEmpty()) {
+        qWarning() << "Socket kosong, tidak ada data diterima";
+        return;
+    }
+
+    QJsonParseError err;
     QJsonDocument jsonDoc = QJsonDocument::fromJson(data);
+    if (err.error != QJsonParseError::NoError || !jsonDoc.isObject()) {
+        qCritical() << "Invalid JSON received: " << jsonDoc.toJson();
+        return;
+    }
+
     QJsonObject jsonData = jsonDoc.object();
 
+    // REQUEST INFO MAP
     if (jsonData.contains("MAP_INFO_REQ")) {
         QString mapInfoString = jsonData.value("MAP_INFO_REQ").toString();
 
@@ -2386,43 +2409,48 @@ void EcWidget::processAISDataHybrid(QTcpSocket* socket, EcWidget *ecchart) {
             QApplication::restoreOverrideCursor();
 
             QMetaObject::invokeMethod(this, [this, lat, lon]() {
-                QList<EcFeature> pickedFeatureList;
-                GetPickedFeaturesSubs(pickedFeatureList, lat, lon);
+                try {
+                    QList<EcFeature> pickedFeatureList;
+                    GetPickedFeaturesSubs(pickedFeatureList, lat, lon);
 
-                PickWindow *pickWindow = new PickWindow(this, dictInfo, denc);;
-                QJsonObject mapInfo;
+                    PickWindow *pickWindow = new PickWindow(this, dictInfo, denc);;
+                    QJsonObject mapInfo;
 
-                mapInfo = pickWindow->fillJsonSubs(pickedFeatureList);
+                    mapInfo = pickWindow->fillJsonSubs(pickedFeatureList);
 
-                mapInfo.insert("latitude", lat);
-                mapInfo.insert("longitude", lon);
+                    mapInfo.insert("latitude", lat);
+                    mapInfo.insert("longitude", lon);
 
-                QJsonObject jsonDataOut {
-                    {"MAP_INFO", mapInfo}
-                };
-                QJsonDocument jsonDocOut(jsonDataOut);
-                //QByteArray sendData = jsonDocOut.toJson();
+                    QJsonObject jsonDataOut {
+                        {"MAP_INFO", mapInfo}
+                    };
+                    QJsonDocument jsonDocOut(jsonDataOut);
+                    //QByteArray sendData = jsonDocOut.toJson();
 
-                QString strJson(jsonDocOut.toJson(QJsonDocument::Compact));
-                QByteArray sendData = strJson.toUtf8();
+                    QString strJson(jsonDocOut.toJson(QJsonDocument::Compact));
+                    QByteArray sendData = strJson.toUtf8();
 
-                //qDebug() << "\n";
-                //qDebug().noquote() << "[INFO] SENDING DATA: \n" << jsonDocOut.toJson(QJsonDocument::Indented);
-                //qDebug().noquote() << strJson;
+                    //qDebug() << "\n";
+                    //qDebug().noquote() << "[INFO] SENDING DATA: \n" << jsonDocOut.toJson(QJsonDocument::Indented);
+                    //qDebug().noquote() << strJson;
 
-                // Kirim data ke server Ubuntu (port 5003)
-                QTcpSocket* sendSocket = new QTcpSocket();
-                sendSocket->connectToHost(SettingsManager::instance().data().moosIp, 5001);
-                if (sendSocket->waitForConnected(3000)) {
-                    sendSocket->write(sendData);
-                    sendSocket->waitForBytesWritten(3000);
-                    sendSocket->disconnectFromHost();
+                    // Kirim data ke server Ubuntu (port 5003)
+                    QTcpSocket* sendSocket = new QTcpSocket();
+                    sendSocket->connectToHost(SettingsManager::instance().data().moosIp, 5001);
+                    if (sendSocket->waitForConnected(3000)) {
+                        sendSocket->write(sendData);
+                        sendSocket->waitForBytesWritten(3000);
+                        sendSocket->disconnectFromHost();
+                    }
+                    else {
+                        qCritical() << "Could not connect to data server.";
+                    }
+
+                    sendSocket->deleteLater();
                 }
-                else {
-                    qDebug() << "[ERROR] Could not connect to data server.";
+                catch (Exception e){
+                    qCritical() << "Exception in MAP_INFO_REQ handler";
                 }
-
-                sendSocket->deleteLater();
             }, Qt::QueuedConnection);
         }
         // ============= ALERT SYSTEM INTEGRATION =============
@@ -2435,156 +2463,122 @@ void EcWidget::processAISDataHybrid(QTcpSocket* socket, EcWidget *ecchart) {
     // RECORD NMEA
     IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
 
+    // BIKIN IF DI SINI UNTUK MENAMPILKAN DATA SUBS SISANYA
     if (jsonData.contains("NAV_LAT") && jsonData.contains("NAV_LONG")) {
         QJsonValue latValue = jsonData["NAV_LAT"];
         QJsonValue lonValue = jsonData["NAV_LONG"];
 
         if(latValue.isDouble() && lonValue.isDouble()){
-            navShip.lat = jsonData["NAV_LAT"].toDouble();
-            navShip.lon = jsonData["NAV_LONG"].toDouble();
+            navShip.lat = jsonData["NAV_LAT"].toDouble(0.0);
+            navShip.lon = jsonData["NAV_LONG"].toDouble(0.0);
         }
         else {
             navShip.lat = jsonData["NAV_LAT"].toString().toDouble();
             navShip.lon = jsonData["NAV_LONG"].toString().toDouble();
         }
-
-        double lat = navShip.lat;
-        double lon = navShip.lon;
-        QMetaObject::invokeMethod(this, [this, lat, lon, dvr]() {
-            aivdo = AIVDOEncoder::encodeAIVDO(0, lat, lon, 0, 0);
-
-            QStringList nmeaData;
-            nmeaData << aivdo;
-            _aisObj->readAISVariable(nmeaData);
-
-            if (dvr && dvr->isRecording() && !nmeaData.isEmpty()) {
-                dvr->recordRawNmea(aivdo);
-            }
-
-            QList<EcFeature> pickedFeatureList;
-            GetPickedFeaturesSubs(pickedFeatureList, lat, lon);
-
-            PickWindow *pickWindow = new PickWindow(this, dictInfo, denc);
-            QJsonObject navInfo;
-
-            navInfo = pickWindow->fillJsonSubs(pickedFeatureList);
-
-            navInfo.insert("latitude", lat);
-            navInfo.insert("longitude", lon);
-
-            QJsonObject jsonDataOut {
-                {"NAV_INFO", navInfo}
-            };
-            QJsonDocument jsonDocOut(jsonDataOut);
-            //QByteArray sendData = jsonDocOut.toJson();
-
-            QString strJson(jsonDocOut.toJson(QJsonDocument::Compact));
-            QByteArray sendData = strJson.toUtf8();
-
-            //qDebug().noquote() << "[INFO] Sending Data: \n" << jsonDocOut.toJson(QJsonDocument::Indented);
-
-            // Kirim data ke server Ubuntu (port 5001)
-            QTcpSocket* sendSocket = new QTcpSocket();
-            sendSocket->connectToHost(SettingsManager::instance().data().moosIp, 5001);
-            if (sendSocket->waitForConnected(3000)) {
-                sendSocket->write(sendData);
-                sendSocket->waitForBytesWritten(3000);
-                sendSocket->disconnectFromHost();
-            }
-            else {
-                qDebug() << "[ERROR] Could not connect to data server.";
-            }
-
-            sendSocket->deleteLater();
-
-            // OWNSHIP PANEL
-            ownShipText->setHtml(pickWindow->ownShipAutoFill());
-        }, Qt::QueuedConnection);
     }
 
-    if (jsonData.contains("WAIS_NMEA")) {
-        QJsonValue aisValue = jsonData["WAIS_NMEA"];
-
+    if (jsonData.contains("WAIS_NMEA") && jsonData["WAIS_NMEA"].isString()) {
         QString ais = jsonData["WAIS_NMEA"].toString();
 
         QMetaObject::invokeMethod(this, [this, ais, dvr]() {
-            nmea = ais;
+            try {
+                nmea = ais;
+                QStringList nmeaData{ais};
 
-            QStringList nmeaData;
-            nmeaData << nmea;
+                if (dvr && dvr->isRecording() && !ais.isEmpty()) {
+                    dvr->recordRawNmea(nmea);
+                }
 
-            if (dvr && dvr->isRecording() && !ais.isEmpty()) {
-                dvr->recordRawNmea(nmea);
+                _aisObj->readAISVariable(nmeaData);
             }
+            catch (Exception e){
+                qCritical() << "Exception in WAIS_NMEA handler";
+            }
+        }, Qt::QueuedConnection);
+    }
 
-            _aisObj->readAISVariable(nmeaData);
+    auto parseNavValue = [](QJsonObject& obj, const QString& key, double& target) {
+        if (obj.contains(key)) {
+            QJsonValue val = obj[key];
+            if (val.isDouble()) target = val.toDouble(0.0);
+            else target = val.toString().toDouble();
+        }
+    };
+
+    parseNavValue(jsonData, "NAV_SPEED_OVER_GROUND", navShip.speed_og);
+    parseNavValue(jsonData, "NAV_HEADING_OVER_GROUND", navShip.heading_og);
+    parseNavValue(jsonData, "NAV_HEADING", navShip.heading);
+    parseNavValue(jsonData, "NAV_DEPTH", navShip.depth);
+    parseNavValue(jsonData, "NAV_SPEED", navShip.speed);
+    parseNavValue(jsonData, "NAV_YAW", navShip.yaw);
+    parseNavValue(jsonData, "NAV_Z", navShip.z);
+
+    if (navShip.lat != 0 && navShip.lon != 0) {
+        double lat = navShip.lat;
+        double lon = navShip.lon;
+        double sog = navShip.speed_og / 10;
+        double cog = navShip.heading_og;
+        double hdg = navShip.heading;
+
+        QMetaObject::invokeMethod(this, [this, lat, lon, dvr, sog, cog, hdg]() {
+            try {
+                aivdo = AIVDOEncoder::encodeAIVDO1(lat, lon, cog, sog, hdg, 0, 1);
+
+                QStringList nmeaData;
+                nmeaData << aivdo;
+                _aisObj->readAISVariable(nmeaData);
+
+                if (dvr && dvr->isRecording() && !nmeaData.isEmpty()) {
+                    dvr->recordRawNmea(aivdo);
+                }
+
+                QList<EcFeature> pickedFeatureList;
+                GetPickedFeaturesSubs(pickedFeatureList, lat, lon);
+
+                PickWindow *pickWindow = new PickWindow(this, dictInfo, denc);
+                QJsonObject navInfo;
+
+                navInfo = pickWindow->fillJsonSubs(pickedFeatureList);
+
+                navInfo.insert("latitude", lat);
+                navInfo.insert("longitude", lon);
+
+                QJsonObject jsonDataOut {
+                    {"NAV_INFO", navInfo}
+                };
+                QJsonDocument jsonDocOut(jsonDataOut);
+                //QByteArray sendData = jsonDocOut.toJson();
+
+                QString strJson(jsonDocOut.toJson(QJsonDocument::Compact));
+                QByteArray sendData = strJson.toUtf8();
+
+                //qDebug().noquote() << "[INFO] Sending Data: \n" << jsonDocOut.toJson(QJsonDocument::Indented);
+
+                // Kirim data ke server Ubuntu (port 5001)
+                QTcpSocket* sendSocket = new QTcpSocket();
+                sendSocket->connectToHost(SettingsManager::instance().data().moosIp, 5001);
+                if (sendSocket->waitForConnected(3000)) {
+                    sendSocket->write(sendData);
+                    sendSocket->waitForBytesWritten(3000);
+                    sendSocket->disconnectFromHost();
+                }
+                else {
+                    qCritical() << "Could not connect to data server.";
+                }
+
+                sendSocket->deleteLater();
+
+                // OWNSHIP PANEL
+                ownShipText->setHtml(pickWindow->ownShipAutoFill());
+            }
+            catch (Exception e){
+                qCritical() << "Exception in NAV update block";
+            }
         }, Qt::QueuedConnection);
     }
 
 
-    // BIKIN IF DI SINI UNTUK MENAMPILKAN DATA SUBS SISANYA
-    if (jsonData.contains("NAV_DEPTH")) {
-        QJsonValue depValue = jsonData["NAV_DEPTH"];
-        if (depValue.isDouble()) {
-            navShip.depth = depValue.toDouble();
-        } else {
-            navShip.depth = depValue.toString().toDouble();
-        }
-    }
-
-    if (jsonData.contains("NAV_HEADING")) {
-        QJsonValue headValue = jsonData["NAV_HEADING"];
-        if (headValue.isDouble()) {
-            navShip.heading = headValue.toDouble();
-        } else {
-            navShip.heading = headValue.toString().toDouble();
-        }
-    }
-
-    if (jsonData.contains("NAV_HEADING_OVER_GROUND")) {
-        QJsonValue headogValue = jsonData["NAV_HEADING_OVER_GROUND"];
-        if (headogValue.isDouble()) {
-            navShip.heading_og = headogValue.toDouble();
-        } else {
-            navShip.heading_og = headogValue.toString().toDouble();
-        }
-    }
-
-    if (jsonData.contains("NAV_SPEED")) {
-        QJsonValue speValue = jsonData["NAV_SPEED"];
-        if (speValue.isDouble()) {
-            navShip.speed = speValue.toDouble();
-        } else {
-            navShip.speed = speValue.toString().toDouble();
-        }
-    }
-
-    if (jsonData.contains("NAV_SPEED_OVER_GROUND")) {
-        QJsonValue speogValue = jsonData["NAV_SPEED_OVER_GROUND"];
-        if (speogValue.isDouble()) {
-            navShip.speed_og = speogValue.toDouble();
-        } else {
-            navShip.speed_og = speogValue.toString().toDouble();
-        }
-    }
-
-    if (jsonData.contains("NAV_YAW")) {
-        QJsonValue yawValue = jsonData["NAV_YAW"];
-        if (yawValue.isDouble()) {
-            navShip.yaw = yawValue.toDouble();
-        } else {
-            navShip.yaw = yawValue.toString().toDouble();
-        }
-    }
-
-    if (jsonData.contains("NAV_Z")) {
-        QJsonValue zValue = jsonData["NAV_Z"];
-        if (zValue.isDouble()) {
-            navShip.z = zValue.toDouble();
-        } else {
-            navShip.z = zValue.toString().toDouble();
-        }
-    }
 
     // ============= ALERT SYSTEM INTEGRATION =============
     // Update alert system with new position (TAMBAHAN BARU)
@@ -2861,7 +2855,7 @@ void EcWidget::slotUpdateAISTargets( Bool bSymbolize )
     drawAISCell();
   qApp->processEvents( QEventLoop::ExcludeSocketNotifiers );
 
-  draw(true);
+  //draw(true);
 }
 
 // Draw AIS overlay cell on chart pixmap.
@@ -2911,7 +2905,6 @@ void EcWidget::drawAISCell()
   // Draw red dot tracker overlay
   drawRedDotTracker();
 
-
   // DRAWING OWNSHIP CUSTOM
   if (showCustomOwnShip) {
       AISTargetData ownShipData = Ais::instance()->getOwnShipVar();
@@ -2947,10 +2940,15 @@ void EcWidget::drawAISCell()
           }
       }
 
-      if (displayOrientation == HeadUp){
+      if (SettingsManager::instance().data().orientationMode == HeadUp){
           SetHeading(ownShipData.heading);
+          mainWindow->oriEditSetText(ownShipData.heading);
       }
-      else if (displayOrientation == NorthUp){
+      else if (SettingsManager::instance().data().orientationMode == CourseUp){
+          SetHeading(SettingsManager::instance().data().courseUpHeading);
+          mainWindow->oriEditSetText(SettingsManager::instance().data().courseUpHeading);
+      }
+      else {
           SetHeading(0);
       }
   }
@@ -2959,6 +2957,10 @@ void EcWidget::drawAISCell()
 
   emit projection();
   emit scale( currentScale );
+}
+
+void EcWidget::setMainWindow(MainWindow *mw) {
+    mainWindow = mw;
 }
 
 // Create AIS overlay cell in RAM.
@@ -3054,31 +3056,19 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon, double head )
     {
         if ((lat != 0 && lon != 0) && trackTarget.isEmpty())
         {
-            if (osCentering == LookAhead) // ⭐ Look-Ahead mode
+            if (SettingsManager::instance().data().centeringMode == LookAhead) // ⭐ Look-Ahead mode
             {
                 double offsetNM = GetRange(currentScale) * 0.5;
-                if (displayOrientation == HeadUp){
-                    double headingRad = head * M_PI / 180.0;
-                    double offsetLat = offsetNM * cos(headingRad) / 60.0;
-                    double offsetLon = offsetNM * sin(headingRad) / (60.0 * cos(lat * M_PI / 180.0));
+                double headingRad = head * M_PI / 180.0;
+                double offsetLat = offsetNM * cos(headingRad) / 60.0;
+                double offsetLon = offsetNM * sin(headingRad) / (60.0 * cos(lat * M_PI / 180.0));
 
-                    double centerLat = lat + offsetLat;
-                    double centerLon = lon + offsetLon;
+                double centerLat = lat + offsetLat;
+                double centerLon = lon + offsetLon;
 
-                    SetCenter(centerLat, centerLon);
-                }
-                else {
-                    double headingRad = head * M_PI / 180.0;
-                    double offsetLat = offsetNM * cos(headingRad) / 60.0;
-                    double offsetLon = offsetNM * sin(headingRad) / (60.0 * cos(lat * M_PI / 180.0));
-
-                    double centerLat = lat + offsetLat;
-                    double centerLon = lon + offsetLon;
-
-                    SetCenter(centerLat, centerLon);
-                }
+                SetCenter(centerLat, centerLon);
             }
-            else if (osCentering == Centered)
+            else if (SettingsManager::instance().data().centeringMode == Centered)
             {
                 SetCenter(lat, lon);
             }
@@ -3114,6 +3104,7 @@ void EcWidget::slotRefreshCenter( double lat, double lon )
             SetCenter( lat, lon );
         }
     }
+
     draw(true);
     slotUpdateAISTargets( true );
   }
@@ -7101,7 +7092,7 @@ void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, doub
     double rangeNM = GetRange(currentScale);
 
     // Jika zoom terlalu jauh, tampilkan dua lingkaran sebagai simbol ownship
-    if (rangeNM > 10.0) {
+    if (rangeNM > 2.0) {
         painter.save();
         painter.setPen(QPen(Qt::black, 2));
 
@@ -7180,7 +7171,6 @@ void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, doub
     // Gambar vektor COG/SOG di luar rotasi
     drawOwnShipVectors(painter, x, y, cog, heading, sog);
 }
-
 
 void EcWidget::drawOwnShipVectors(QPainter& painter, int x, int y, double cog, double heading, double sog)
 {

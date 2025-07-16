@@ -2,6 +2,7 @@
 #define SETTINGSMANAGER_H
 
 #include "SettingsData.h"
+#include <QDebug>
 
 class SettingsManager {
 public:

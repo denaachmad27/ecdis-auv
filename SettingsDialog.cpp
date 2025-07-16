@@ -38,6 +38,39 @@ void SettingsDialog::setupUI() {
     //moosLayout->addRow("MOOSDB Port:", moosPortLineEdit);
     moosTab->setLayout(moosLayout);
 
+
+    // --- Own Ship Tab ---
+    QWidget *ownShipTab = new QWidget;
+    QFormLayout *ownShipLayout = new QFormLayout;
+
+    centeringCombo = new QComboBox;
+    centeringCombo->addItem("Centered", "Centered");
+    centeringCombo->addItem("Look Ahead", "LookAhead");
+    centeringCombo->addItem("Manual Offset", "Manual");
+    ownShipLayout->addRow("Centering Mode:", centeringCombo);
+
+    orientationCombo = new QComboBox;
+    orientationCombo->addItem("North Up", "NorthUp");
+    orientationCombo->addItem("Head Up", "HeadUp");
+    orientationCombo->addItem("Course Up", "CourseUp");
+    ownShipLayout->addRow("Orientation Mode:", orientationCombo);
+
+    headingLabel = new QLabel("Course-Up Heading:");
+    headingSpin = new QSpinBox;
+    headingSpin->setRange(0, 359);
+    headingSpin->setSuffix("°");
+    headingLabel->setVisible(false);
+    headingSpin->setVisible(false);
+    ownShipLayout->addRow(headingLabel, headingSpin);
+
+    connect(orientationCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int) {
+        bool isCourseUp = (orientationCombo->currentData().toString() == "CourseUp");
+        headingLabel->setVisible(isCourseUp);
+        headingSpin->setVisible(isCourseUp);
+    });
+
+    ownShipTab->setLayout(ownShipLayout);
+
     // --- AIS Tab ---
     QWidget *aisTab = new QWidget;
     QFormLayout *aisLayout = new QFormLayout;
@@ -150,6 +183,7 @@ void SettingsDialog::setupUI() {
     guardzoneTab->setLayout(guardzoneLayout);
 
     tabWidget->addTab(moosTab, "MOOSDB");
+    tabWidget->addTab(ownShipTab, "Own Ship");
     tabWidget->addTab(aisTab, "AIS");
     tabWidget->addTab(displayTab, "Display");
     tabWidget->addTab(guardzoneTab, "GuardZone");
@@ -208,6 +242,24 @@ void SettingsDialog::loadSettings() {
     } else {
         alertDirectionButtonGroup->button(0)->setChecked(true); // fallback to "Alert In & Out"
     }
+
+    // Own Ship
+    QString ori = settings.value("OwnShip/orientation", "NorthUp").toString();
+    QString cent = settings.value("OwnShip/centering", "Centered").toString();
+    int heading = settings.value("OwnShip/course_heading", 0).toInt();
+
+    int oriIndex = orientationCombo->findData(ori);
+    if (oriIndex >= 0) orientationCombo->setCurrentIndex(oriIndex);
+    else orientationCombo->setCurrentIndex(0);
+
+    int centIndex = centeringCombo->findData(cent);
+    if (centIndex >= 0) centeringCombo->setCurrentIndex(centIndex);
+    else centeringCombo->setCurrentIndex(0);
+
+    headingSpin->setValue(heading);
+    bool isCourseUp = (ori == "CourseUp");
+    headingLabel->setVisible(isCourseUp);
+    headingSpin->setVisible(isCourseUp);
 }
 
 void SettingsDialog::saveSettings() {
@@ -228,6 +280,16 @@ void SettingsDialog::saveSettings() {
     // GuardZone
     settings.setValue("GuardZone/default_ship_type", shipTypeButtonGroup->checkedId());
     settings.setValue("GuardZone/default_alert_direction", alertDirectionButtonGroup->checkedId());
+
+    // Own Ship
+    settings.setValue("OwnShip/orientation", orientationCombo->currentData().toString());
+    settings.setValue("OwnShip/centering", centeringCombo->currentData().toString());
+
+    if (orientationCombo->currentData().toString() == "CourseUp") {
+        settings.setValue("OwnShip/course_heading", headingSpin->value());
+    } else {
+        settings.remove("OwnShip/course_heading"); // bersihkan jika tidak relevan
+    }
 }
 
 void SettingsDialog::updateAisWidgetsVisibility(const QString &text) {
@@ -247,32 +309,65 @@ SettingsData SettingsDialog::loadSettingsFromFile(const QString &filePath) {
 
     QSettings settings(filePath, QSettings::IniFormat);
 
+    // MOOSDB
     data.moosIp = settings.value("MOOSDB/ip", "127.0.0.1").toString();
     //data.moosPort = settings.value("MOOSDB/port", "9000").toString();
 
+    // AIS
     data.aisSource = settings.value("AIS/source", "log").toString();
     data.aisIp = settings.value("AIS/ip", "").toString();
     data.aisLogFile = settings.value("AIS/log_file", "").toString();
 
+    // Guardzone
     data.displayMode = settings.value("Display/mode", "Day").toString();
     data.defaultShipTypeFilter = settings.value("GuardZone/default_ship_type", 0).toInt();
     data.defaultAlertDirection = settings.value("GuardZone/default_alert_direction", 0).toInt();
+
+    // Own Ship
+    data.orientationMode = orientation(settings.value("OwnShip/orientation", "NorthUp").toString());
+    data.centeringMode = centering(settings.value("OwnShip/centering", "Centered").toString());
+    data.courseUpHeading = settings.value("OwnShip/course_heading", 0).toInt();
 
     return data;
 }
 
 void SettingsDialog::accept() {
     SettingsData data;
+
+    // MOOSDB
     data.moosIp = moosIpLineEdit->text();
     //data.moosPort = moosPortLineEdit->text();
+
+    // AIS
     data.aisSource = aisSourceCombo->currentText();
     data.aisIp = ipAisLineEdit->text();
     data.aisLogFile = logFileLineEdit->text();
+
+    // Display
     data.displayMode = displayModeCombo->currentText();
+
+    // Guardzone
     data.defaultShipTypeFilter = shipTypeButtonGroup->checkedId();
     data.defaultAlertDirection = alertDirectionButtonGroup->checkedId();
+
+    // Own Ship settings
+    data.orientationMode = orientation(orientationCombo->currentData().toString());
+    data.centeringMode = centering(centeringCombo->currentData().toString());
+    data.courseUpHeading = (data.orientationMode == EcWidget::CourseUp) ? headingSpin->value() : -1;
 
     SettingsManager::instance().save(data);
 
     QDialog::accept();
+}
+
+EcWidget::DisplayOrientationMode SettingsDialog::orientation(const QString &str) {
+    if (str == "HeadUp") return EcWidget::HeadUp;
+    if (str == "CourseUp") return EcWidget::CourseUp;
+    return EcWidget::NorthUp;
+}
+
+EcWidget::OSCenteringMode SettingsDialog::centering(const QString &str) {
+    if (str == "Centered") return EcWidget::Centered;
+    if (str == "LookAhead") return EcWidget::LookAhead;
+    return EcWidget::Manual;
 }

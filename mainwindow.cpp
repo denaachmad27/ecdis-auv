@@ -506,6 +506,7 @@ MainWindow::MainWindow(QWidget *parent)
   try
   {
     ecchart = new EcWidget(dict, &libStr, this);
+    ecchart->setMainWindow(this);
   }
   catch (EcWidget::Exception & e)
   {
@@ -621,6 +622,14 @@ MainWindow::MainWindow(QWidget *parent)
   wi = QFontMetrics(rngEdit->font()).horizontalAdvance("2000");
   rngEdit->setFixedWidth(wi + 10);
 
+  oriEdit = new QLineEdit(statusBar());
+  oriEdit->setReadOnly(true);
+  wi = QFontMetrics(oriEdit->font()).horizontalAdvance("2000");
+  oriEdit->setFixedWidth(wi + 10);
+  oriEdit->setText("0°");
+
+  statusBar()->addPermanentWidget(new QLabel("Chart Rotation:", statusBar()));
+  statusBar()->addPermanentWidget(oriEdit, 0);
   statusBar()->addPermanentWidget(new QLabel("Range:", statusBar()));
   statusBar()->addPermanentWidget(rngEdit, 0);
   statusBar()->addPermanentWidget(new QLabel("Scale:", statusBar()));
@@ -1032,8 +1041,12 @@ MainWindow::MainWindow(QWidget *parent)
 
     // qDebug() << userpermit;
 
+  // PLEASE WAIT, TURN OFF FOR A MOMENT
+  /*
   setupGuardZonePanel();
   setupAISTargetPanel();
+  */
+
   //setupAlertPanel();
   //setupTestingMenu();
 
@@ -1068,6 +1081,8 @@ MainWindow::MainWindow(QWidget *parent)
           showCPATargetsAction->setChecked(true);
       }
   });
+
+
 
 #ifdef _DEBUG
       // Testing menu hanya untuk debug build
@@ -1298,7 +1313,13 @@ void MainWindow::onRotateCW()
   hdg += 10;
   if (hdg >= 360) hdg -= 360.0;
   ecchart->SetHeading(hdg);
+  oriEdit->setText(QString("%1°").arg(hdg));
+
   DrawChart();
+}
+
+void MainWindow::oriEditSetText(const double &txt){
+    oriEdit->setText(QString("%1°").arg(txt));
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1309,6 +1330,8 @@ void MainWindow::onRotateCCW()
   hdg -= 10;
   if (hdg < 0) hdg += 360.0;
   ecchart->SetHeading(hdg);
+  oriEdit->setText(QString("%1°").arg(hdg));
+
   DrawChart();
 }
 
@@ -1632,7 +1655,118 @@ void MainWindow::slotLoadAisVariable()
     //          << "$GPGGA,074028.569,0711.988,S,11247.835,E,1,12,1.0,0.0,M,0.0,M,,*71"
     //          << "$GPGSA,A,3,01,02,03,04,05,06,07,08,09,10,11,12,1.0,1.0,1.0*30";
 
-    nmeaData << "!AIVDM,1,1,,,17ldh0P007`41mispEcV2ll00000,0*46";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
+    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
 
     //nmeaData << aivdo;
 

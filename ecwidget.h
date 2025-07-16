@@ -81,6 +81,7 @@ extern QString bottomBarText;
 // forward declerations1
 class PickWindow;
 class Ais;
+class MainWindow;
 
 struct OwnShipStruct
 {
@@ -550,6 +551,8 @@ public:
   QString getTrackMMSI();
   void setAISTrack(AISTargetData aisTrack);
 
+  void setMainWindow(MainWindow*);
+
 public slots:
   void updateAISTargetsList();
   void addOrUpdateAISTarget(const AISTargetData& target);
@@ -727,6 +730,8 @@ protected:
   void leaveEvent(QEvent *event) override;
 
 private:
+  MainWindow *mainWindow = nullptr;
+
   bool asciiToByte(const char *keyAscii, unsigned char keyByte[]);
   bool initColors();
   bool createOverlayCellinRam();
@@ -845,9 +850,11 @@ private:
 
   // End
 
-  QThread* threadAIS;
+  //QThread* threadAIS;
   QTcpSocket* socketAIS;
   std::atomic<bool> stopThread;
+
+  QThread* threadAIS = nullptr;
 
   QThread* threadAISMAP;
   QTcpSocket* socketAISMAP;

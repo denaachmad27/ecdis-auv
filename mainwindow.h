@@ -69,6 +69,7 @@ public:
     void loadPlugin();
     void loadPluginAis();
     void onNmeaReceived(const QString&);
+    void oriEditSetText(const double&);
 
 public slots:
     void onEnableRedDotTracker(bool enabled);
@@ -186,7 +187,7 @@ protected:
 
     EcDictInfo  *dict;
     EcWidget    *ecchart;
-    QLineEdit   *rngEdit, *posEdit, *proEdit, *sclEdit;
+    QLineEdit   *rngEdit, *posEdit, *proEdit, *sclEdit, *oriEdit;
 
     QString      dencPath;
     QString      impPath;

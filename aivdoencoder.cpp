@@ -11,24 +11,26 @@ const QString AIS_CHARSET = "@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^- !\"#$%&'()*+,-./0
 
 // Fungsi menghitung checksum NMEA
 QString AIVDOEncoder::calculateNMEAChecksum(const QString &sentence) {
-    quint8 checksum = 0;
+    int checksum = 0;
     for (int i = 1; i < sentence.length(); ++i) {
-        checksum ^= static_cast<quint8>(sentence[i].toLatin1());
+        checksum ^= sentence[i].toLatin1();
     }
-    return QString("*%1").arg(checksum, 2, 16, QLatin1Char('0')).toUpper();
+    return QString("*%1\r\n").arg(checksum, 2, 16, QLatin1Char('0')).toUpper();
 }
 
 // Fungsi mengonversi bitstream ke 6-bit ASCII AIS
 QString AIVDOEncoder::binaryToAIS6Bit(const QString &bitstream) {
+    QString padded = bitstream.leftJustified(168, '0');
+
     QString encoded;
-    for (int i = 0; i < bitstream.length(); i += 6) {
-        bool ok;
-        int value = bitstream.mid(i, 6).toInt(&ok, 2);
-        if (!ok) continue; // Cegah error parsing
-        value += 48;  // Offset ASCII sesuai ITU-R M.1371
-        if (value > 87) value += 8;  // Koreksi karakter di atas 87
+    for (int i = 0; i < 168; i += 6) {
+        QString chunk = padded.mid(i, 6);
+        int value = chunk.toInt(nullptr, 2);
+        value += 48;
+        if (value > 87) value += 8;
         encoded += QChar(value);
     }
+
     return encoded;
 }
 
@@ -160,12 +162,22 @@ QString AIVDOEncoder::encodeAIVDO1(double _lat, double _lon, double _cog, double
     // Radio Status
     bitstream += QString::number(0, 2).rightJustified(19, '0'); // Dummy
 
+    bitstream = bitstream.leftJustified(168, '0');  // fix: pastikan 168 bit
+
     // Encode to 6-bit ASCII
     QString payload = binaryToAIS6Bit(bitstream);
 
     // Buat !AIVDO message
     QString msg = QString("!AIVDO,1,1,,A,%1,0").arg(payload);
     msg += calculateNMEAChecksum(msg);
+
+    // CATATAN PENTING: QT TIDAK BISA PRINT KARAKTER < DAN >, SEHINGGA DI DEBUG TIDAK AKAN TERBACA
+    /*
+    QString visible = payload;
+    visible.replace("<", "[LT]");
+    visible.replace(">", "[GT]");
+    qDebug().noquote() << "payload:" << visible;
+    */
 
     return msg;
 }
