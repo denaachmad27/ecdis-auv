@@ -160,6 +160,7 @@ protected slots:
     void onCreatePolygonGuardZone();
     void onCheckGuardZone();
     void onAttachGuardZoneToShip(bool attached);
+    void onAttachToShipStateChanged(bool attached);
 
     // GuardZone Panel slots
     void onGuardZoneSelected(int guardZoneId);
@@ -204,6 +205,7 @@ protected:
 
     QAction* startAisRecAction;
     QAction* stopAisRecAction;
+    QAction* attachToShipAction;
 
     IAisDvrPlugin* aisDvr;
 

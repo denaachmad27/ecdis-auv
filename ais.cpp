@@ -1,4 +1,3 @@
-\
 #include "ais.h"
 #include "IAisDvrPlugin.h"
 #include "PluginManager.h"

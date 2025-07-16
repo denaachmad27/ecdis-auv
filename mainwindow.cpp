@@ -515,6 +515,7 @@ MainWindow::MainWindow(QWidget *parent)
   setCentralWidget(ecchart);
 
   connect(ecchart, SIGNAL(waypointCreated()), this, SLOT(onWaypointCreated()));
+  connect(ecchart, SIGNAL(attachToShipStateChanged(bool)), this, SLOT(onAttachToShipStateChanged(bool)));
 
 
   // Define the DENC path
@@ -872,6 +873,7 @@ MainWindow::MainWindow(QWidget *parent)
 
   QAction *enableGuardZoneAction = guardZoneMenu->addAction("Enable GuardZone");
   enableGuardZoneAction->setCheckable(true);
+  enableGuardZoneAction->setChecked(true);  // PERBAIKAN: Default checked
   connect(enableGuardZoneAction, SIGNAL(toggled(bool)), this, SLOT(onEnableGuardZone(bool)));
 
   guardZoneMenu->addSeparator();
@@ -883,7 +885,7 @@ MainWindow::MainWindow(QWidget *parent)
 
   guardZoneMenu->addAction("Check for Threats", this, SLOT(onCheckGuardZone()));
 
-  QAction *attachToShipAction = guardZoneMenu->addAction("Attach to Ship");
+  attachToShipAction = guardZoneMenu->addAction("Attach to Ship");
   attachToShipAction->setCheckable(true);
   connect(attachToShipAction, SIGNAL(toggled(bool)), this, SLOT(onAttachGuardZoneToShip(bool)));
 
@@ -907,7 +909,7 @@ MainWindow::MainWindow(QWidget *parent)
   // Auto-check menu items
   QAction *autoCheckAction = guardZoneMenu->addAction("Enable Auto-Check");
   autoCheckAction->setCheckable(true);
-  autoCheckAction->setChecked(false);
+  autoCheckAction->setChecked(true);  // PERBAIKAN: Default checked sesuai dengan backend setting
   connect(autoCheckAction, &QAction::toggled, this, &MainWindow::onToggleGuardZoneAutoCheck);
 
   QAction *configAutoCheckAction = guardZoneMenu->addAction("Configure Auto-Check...");
@@ -1088,6 +1090,17 @@ MainWindow::MainWindow(QWidget *parent)
       // Testing menu hanya untuk debug build
       setupTestingMenu();
 #endif
+
+  // PERBAIKAN: Pastikan menu states sinkron dengan backend states saat startup
+  if (ecchart) {
+      // Inisialisasi GuardZone sesuai default checkbox (true)
+      ecchart->enableGuardZone(true);
+      
+      // Inisialisasi Auto-Check sesuai default checkbox (true) - sudah diset di EcWidget constructor
+      // ecchart->setGuardZoneAutoCheck(true); // Tidak perlu karena sudah default true di EcWidget
+      
+      qDebug() << "[STARTUP] Menu states synchronized with backend: GuardZone=true, AutoCheck=true";
+  }
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2027,6 +2040,16 @@ void MainWindow::onAttachGuardZoneToShip(bool attached)
     }
 }
 
+void MainWindow::onAttachToShipStateChanged(bool attached)
+{
+    // Update checkbox untuk sinkronisasi dengan backend state
+    if (attachToShipAction) {
+        attachToShipAction->blockSignals(true); // Block signal untuk prevent infinite loop
+        attachToShipAction->setChecked(attached);
+        attachToShipAction->blockSignals(false);
+        qDebug() << "[UI-SYNC] Attach to ship checkbox updated to:" << attached;
+    }
+}
 
 // AIS Simulation
 void MainWindow::onStartSimulation()

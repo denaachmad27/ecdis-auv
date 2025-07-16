@@ -99,3 +99,5 @@ InstallationPass.txt
 object_script.ecdis.Debug
 object_script.ecdis.Release
 .claude/settings.local.json
+EC2007_ProgrammingGuide.pdf
+eckernel.h

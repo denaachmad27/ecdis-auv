@@ -7,9 +7,28 @@
 #include "SettingsManager.h"
 #include "PluginManager.h"
 
+// PERBAIKAN: Message filter untuk menghilangkan HANYA warning debug messages Qt
+void messageFilter(QtMsgType type, const QMessageLogContext &context, const QString &msg)
+{
+    // Filter out ONLY specific warning debug messages, not QPainter functionality
+    if (type == QtWarningMsg && 
+        (msg.contains("WARNING: QWidget::paintEngine") || 
+         msg.contains("WARNING: QPainter::") ||
+         msg.contains("QWidget::paintEngine"))) {
+        return; // Ignore these specific warning messages only
+    }
+    
+    // Let ALL other messages through (including debug, info, critical)
+    QTextStream stream(stdout);
+    stream << msg << Qt::endl;
+}
+
 int main( int argc, char ** argv ) 
 {
   QApplication a( argc, argv );
+  
+  // PERBAIKAN: Install message filter
+  qInstallMessageHandler(messageFilter);
 
   // LOAD CONFIG.INI
   SettingsManager::instance().load();
