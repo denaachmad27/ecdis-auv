@@ -701,12 +701,33 @@ void GuardZonePanel::onDeleteSelected()
         if (!ecWidget) return;
 
         QList<GuardZone>& guardZones = ecWidget->getGuardZones();
+        
+        // PERBAIKAN: Check jika ada attached guardzone yang akan dihapus
+        bool deletingAttachedGuardzone = false;
+        for (const int& id : selectedIds) {
+            for (const GuardZone& gz : guardZones) {
+                if (gz.id == id && gz.attachedToShip && 
+                    !gz.name.contains("Ship Guardian Circle") && 
+                    !gz.name.contains("Red Dot Guardian")) {
+                    deletingAttachedGuardzone = true;
+                    break;
+                }
+            }
+            if (deletingAttachedGuardzone) break;
+        }
 
         // Remove in reverse order to maintain indices
         for (int i = guardZones.size() - 1; i >= 0; --i) {
             if (selectedIds.contains(guardZones[i].id)) {
                 guardZones.removeAt(i);
             }
+        }
+        
+        // PERBAIKAN: Jika attached guardzone dihapus, cleanup state dan emit signal
+        if (deletingAttachedGuardzone) {
+            // Reset attached guardzone ID di EcWidget
+            ecWidget->setRedDotAttachedToShip(false);
+            qDebug() << "[GUARDZONE-PANEL] Attached guardzone deleted, updating UI state";
         }
 
         ecWidget->saveGuardZones();
@@ -937,7 +958,19 @@ void GuardZonePanel::deleteGuardZone(int guardZoneId)
                 QMessageBox::No);
 
             if (reply == QMessageBox::Yes) {
+                // PERBAIKAN: Check jika guardzone yang dihapus adalah attached guardzone
+                bool isAttachedGuardzone = guardZones[i].attachedToShip && 
+                    !guardZones[i].name.contains("Ship Guardian Circle") && 
+                    !guardZones[i].name.contains("Red Dot Guardian");
+                
                 guardZones.removeAt(i);
+                
+                // PERBAIKAN: Jika attached guardzone dihapus, cleanup state dan emit signal
+                if (isAttachedGuardzone) {
+                    // Reset attached guardzone ID di EcWidget
+                    ecWidget->setRedDotAttachedToShip(false);
+                    qDebug() << "[GUARDZONE-PANEL] Attached guardzone deleted, updating UI state";
+                }
 
                 // Update GuardZone system
                 if (guardZones.isEmpty()) {

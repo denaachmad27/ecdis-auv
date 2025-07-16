@@ -237,6 +237,7 @@ public:
 
   void createAttachedGuardZone();
   void removeAttachedGuardZone();
+  void cleanupDuplicateAttachedGuardZones();
 
   bool isGuardZoneAutoCheckEnabled() const { return guardZoneAutoCheckEnabled; }
   int getGuardZoneCheckInterval() const { return guardZoneCheckInterval; }
@@ -438,6 +439,7 @@ public:
   void setRedDotAttachedToShip(bool attached);
   bool isRedDotTrackerEnabled() const;
   bool isRedDotAttachedToShip() const;
+  bool hasAttachedGuardZone() const;
 
   // Transforms device coordinates from this widget to geodetic coordinates (WGS84)
   virtual bool XyToLatLon (int x, int y, EcCoordinate & lat, EcCoordinate & lon);

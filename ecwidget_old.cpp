@@ -6,11 +6,11 @@
 #endif
 
 #include "ecwidget.h"
+#include "obstaclepanel.h"
 #include "alertsystem.h"
 #include "ais.h"
 #include "pickwindow.h"
 #include "aistooltip.h"
-#include "mainwindow.h"
 
 // Waypoint
 #include "SettingsManager.h"
@@ -155,7 +155,7 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   redDotLon = 0.0;
   redDotColor = QColor(255, 0, 0, 50);
   redDotSize = 8.0;
-  guardianRadius = 0.5;  // PERBAIKAN: Set to 0.5 NM (half of previous size)
+  guardianRadius = 0.25;  // PERBAIKAN: Reduced to 0.25 NM (50% of 0.5 NM)
   guardianFillColor = QColor(255, 0, 0, 50);
   guardianBorderColor = QColor(255, 0, 0, 150);
   redDotGuardianEnabled = false;
@@ -167,6 +167,7 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   shipGuardianCheckTimer = new QTimer(this);
   shipGuardianCheckTimer->setInterval(5000); // Check setiap 5 detik
   connect(shipGuardianCheckTimer, &QTimer::timeout, this, &EcWidget::checkShipGuardianZone);
+  qDebug() << "[INIT] Ship Guardian timer created and connected";
 
   // Initialize feedback system
   feedbackMessage = "";
@@ -2075,7 +2076,7 @@ QString EcWidget::StartReadAISSubscribe ()
             if (jsonData.contains("NAV_LAT") && jsonData.contains("NAV_LONG")) {
 
                 navShip.lon = jsonData["NAV_LONG"].toDouble();
-                navShip.lat = jsonData["NAV_LAT"].toDouble();
+
 
                 // ================ FORMAT JSON =============== //
                 // qDebug().noquote() << "Received JSON:\n" << QJsonDocument(jsonData).toJson(QJsonDocument::Indented);
@@ -2274,12 +2275,7 @@ void EcWidget::connectToMOOSDB(EcWidget *ecchart) {
     });
 
     QObject::connect(socketAIS, &QTcpSocket::readyRead, [this, ecchart]() {
-        try {
-            // Proses data dari MOOSDB
-            processAISDataHybrid(socketAIS, ecchart);
-        } catch (const std::exception &e) {
-            qCritical() << "[ERROR] Exception caught in AIS processing:" << e.what();
-        }
+        processAISDataHybrid(socketAIS, ecchart);
         // Update posisi kapal
         // navShip.lat = jsonData["NAV_LAT"].toDouble();
         // navShip.lon = jsonData["NAV_LONG"].toDouble();
@@ -2368,26 +2364,9 @@ void EcWidget::processAISData(QTcpSocket* socket) {
 
 void EcWidget::processAISDataHybrid(QTcpSocket* socket, EcWidget *ecchart) {
     QByteArray data = socket->readAll();
-
-    data = data.simplified();     // Hilangkan \n, \r berlebihan
-    data = data.trimmed();        // Potong space dan newline awal-akhir
-    data.replace("\r", "");       // Hilangkan carriage return (Windows style newline)
-
-    if (data.isEmpty()) {
-        qWarning() << "Socket kosong, tidak ada data diterima";
-        return;
-    }
-
-    QJsonParseError err;
     QJsonDocument jsonDoc = QJsonDocument::fromJson(data);
-    if (err.error != QJsonParseError::NoError || !jsonDoc.isObject()) {
-        qCritical() << "Invalid JSON received: " << jsonDoc.toJson();
-        return;
-    }
-
     QJsonObject jsonData = jsonDoc.object();
 
-    // REQUEST INFO MAP
     if (jsonData.contains("MAP_INFO_REQ")) {
         QString mapInfoString = jsonData.value("MAP_INFO_REQ").toString();
 
@@ -2423,48 +2402,43 @@ void EcWidget::processAISDataHybrid(QTcpSocket* socket, EcWidget *ecchart) {
             QApplication::restoreOverrideCursor();
 
             QMetaObject::invokeMethod(this, [this, lat, lon]() {
-                try {
-                    QList<EcFeature> pickedFeatureList;
-                    GetPickedFeaturesSubs(pickedFeatureList, lat, lon);
+                QList<EcFeature> pickedFeatureList;
+                GetPickedFeaturesSubs(pickedFeatureList, lat, lon);
 
-                    PickWindow *pickWindow = new PickWindow(this, dictInfo, denc);;
-                    QJsonObject mapInfo;
+                PickWindow *pickWindow = new PickWindow(this, dictInfo, denc);;
+                QJsonObject mapInfo;
 
-                    mapInfo = pickWindow->fillJsonSubs(pickedFeatureList);
+                mapInfo = pickWindow->fillJsonSubs(pickedFeatureList);
 
-                    mapInfo.insert("latitude", lat);
-                    mapInfo.insert("longitude", lon);
+                mapInfo.insert("latitude", lat);
+                mapInfo.insert("longitude", lon);
 
-                    QJsonObject jsonDataOut {
-                        {"MAP_INFO", mapInfo}
-                    };
-                    QJsonDocument jsonDocOut(jsonDataOut);
-                    //QByteArray sendData = jsonDocOut.toJson();
+                QJsonObject jsonDataOut {
+                    {"MAP_INFO", mapInfo}
+                };
+                QJsonDocument jsonDocOut(jsonDataOut);
+                //QByteArray sendData = jsonDocOut.toJson();
 
-                    QString strJson(jsonDocOut.toJson(QJsonDocument::Compact));
-                    QByteArray sendData = strJson.toUtf8();
+                QString strJson(jsonDocOut.toJson(QJsonDocument::Compact));
+                QByteArray sendData = strJson.toUtf8();
 
-                    //qDebug() << "\n";
-                    //qDebug().noquote() << "[INFO] SENDING DATA: \n" << jsonDocOut.toJson(QJsonDocument::Indented);
-                    //qDebug().noquote() << strJson;
+                //qDebug() << "\n";
+                //qDebug().noquote() << "[INFO] SENDING DATA: \n" << jsonDocOut.toJson(QJsonDocument::Indented);
+                //qDebug().noquote() << strJson;
 
-                    // Kirim data ke server Ubuntu (port 5003)
-                    QTcpSocket* sendSocket = new QTcpSocket();
-                    sendSocket->connectToHost(SettingsManager::instance().data().moosIp, 5001);
-                    if (sendSocket->waitForConnected(3000)) {
-                        sendSocket->write(sendData);
-                        sendSocket->waitForBytesWritten(3000);
-                        sendSocket->disconnectFromHost();
-                    }
-                    else {
-                        qCritical() << "Could not connect to data server.";
-                    }
-
-                    sendSocket->deleteLater();
+                // Kirim data ke server Ubuntu (port 5003)
+                QTcpSocket* sendSocket = new QTcpSocket();
+                sendSocket->connectToHost(SettingsManager::instance().data().moosIp, 5001);
+                if (sendSocket->waitForConnected(3000)) {
+                    sendSocket->write(sendData);
+                    sendSocket->waitForBytesWritten(3000);
+                    sendSocket->disconnectFromHost();
                 }
-                catch (Exception e){
-                    qCritical() << "Exception in MAP_INFO_REQ handler";
+                else {
+                    qDebug() << "[ERROR] Could not connect to data server.";
                 }
+
+                sendSocket->deleteLater();
             }, Qt::QueuedConnection);
         }
         // ============= ALERT SYSTEM INTEGRATION =============
@@ -2477,122 +2451,156 @@ void EcWidget::processAISDataHybrid(QTcpSocket* socket, EcWidget *ecchart) {
     // RECORD NMEA
     IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
 
-    // BIKIN IF DI SINI UNTUK MENAMPILKAN DATA SUBS SISANYA
     if (jsonData.contains("NAV_LAT") && jsonData.contains("NAV_LONG")) {
         QJsonValue latValue = jsonData["NAV_LAT"];
         QJsonValue lonValue = jsonData["NAV_LONG"];
 
         if(latValue.isDouble() && lonValue.isDouble()){
-            navShip.lat = jsonData["NAV_LAT"].toDouble(0.0);
-            navShip.lon = jsonData["NAV_LONG"].toDouble(0.0);
+            navShip.lat = jsonData["NAV_LAT"].toDouble();
+            navShip.lon = jsonData["NAV_LONG"].toDouble();
         }
         else {
             navShip.lat = jsonData["NAV_LAT"].toString().toDouble();
             navShip.lon = jsonData["NAV_LONG"].toString().toDouble();
         }
+
+        double lat = navShip.lat;
+        double lon = navShip.lon;
+        QMetaObject::invokeMethod(this, [this, lat, lon, dvr]() {
+            aivdo = AIVDOEncoder::encodeAIVDO(0, lat, lon, 0, 0);
+
+            QStringList nmeaData;
+            nmeaData << aivdo;
+            _aisObj->readAISVariable(nmeaData);
+
+            if (dvr && dvr->isRecording() && !nmeaData.isEmpty()) {
+                dvr->recordRawNmea(aivdo);
+            }
+
+            QList<EcFeature> pickedFeatureList;
+            GetPickedFeaturesSubs(pickedFeatureList, lat, lon);
+
+            PickWindow *pickWindow = new PickWindow(this, dictInfo, denc);
+            QJsonObject navInfo;
+
+            navInfo = pickWindow->fillJsonSubs(pickedFeatureList);
+
+            navInfo.insert("latitude", lat);
+            navInfo.insert("longitude", lon);
+
+            QJsonObject jsonDataOut {
+                {"NAV_INFO", navInfo}
+            };
+            QJsonDocument jsonDocOut(jsonDataOut);
+            //QByteArray sendData = jsonDocOut.toJson();
+
+            QString strJson(jsonDocOut.toJson(QJsonDocument::Compact));
+            QByteArray sendData = strJson.toUtf8();
+
+            //qDebug().noquote() << "[INFO] Sending Data: \n" << jsonDocOut.toJson(QJsonDocument::Indented);
+
+            // Kirim data ke server Ubuntu (port 5001)
+            QTcpSocket* sendSocket = new QTcpSocket();
+            sendSocket->connectToHost(SettingsManager::instance().data().moosIp, 5001);
+            if (sendSocket->waitForConnected(3000)) {
+                sendSocket->write(sendData);
+                sendSocket->waitForBytesWritten(3000);
+                sendSocket->disconnectFromHost();
+            }
+            else {
+                qDebug() << "[ERROR] Could not connect to data server.";
+            }
+
+            sendSocket->deleteLater();
+
+            // OWNSHIP PANEL
+            ownShipText->setHtml(pickWindow->ownShipAutoFill());
+        }, Qt::QueuedConnection);
     }
 
-    if (jsonData.contains("WAIS_NMEA") && jsonData["WAIS_NMEA"].isString()) {
+    if (jsonData.contains("WAIS_NMEA")) {
+        QJsonValue aisValue = jsonData["WAIS_NMEA"];
+
         QString ais = jsonData["WAIS_NMEA"].toString();
 
         QMetaObject::invokeMethod(this, [this, ais, dvr]() {
-            try {
-                nmea = ais;
-                QStringList nmeaData{ais};
+            nmea = ais;
 
-                if (dvr && dvr->isRecording() && !ais.isEmpty()) {
-                    dvr->recordRawNmea(nmea);
-                }
+            QStringList nmeaData;
+            nmeaData << nmea;
 
-                _aisObj->readAISVariable(nmeaData);
+            if (dvr && dvr->isRecording() && !ais.isEmpty()) {
+                dvr->recordRawNmea(nmea);
             }
-            catch (Exception e){
-                qCritical() << "Exception in WAIS_NMEA handler";
-            }
+
+            _aisObj->readAISVariable(nmeaData);
         }, Qt::QueuedConnection);
     }
 
-    auto parseNavValue = [](QJsonObject& obj, const QString& key, double& target) {
-        if (obj.contains(key)) {
-            QJsonValue val = obj[key];
-            if (val.isDouble()) target = val.toDouble(0.0);
-            else target = val.toString().toDouble();
+
+    // BIKIN IF DI SINI UNTUK MENAMPILKAN DATA SUBS SISANYA
+    if (jsonData.contains("NAV_DEPTH")) {
+        QJsonValue depValue = jsonData["NAV_DEPTH"];
+        if (depValue.isDouble()) {
+            navShip.depth = depValue.toDouble();
+        } else {
+            navShip.depth = depValue.toString().toDouble();
         }
-    };
-
-    parseNavValue(jsonData, "NAV_SPEED_OVER_GROUND", navShip.speed_og);
-    parseNavValue(jsonData, "NAV_HEADING_OVER_GROUND", navShip.heading_og);
-    parseNavValue(jsonData, "NAV_HEADING", navShip.heading);
-    parseNavValue(jsonData, "NAV_DEPTH", navShip.depth);
-    parseNavValue(jsonData, "NAV_SPEED", navShip.speed);
-    parseNavValue(jsonData, "NAV_YAW", navShip.yaw);
-    parseNavValue(jsonData, "NAV_Z", navShip.z);
-
-    if (navShip.lat != 0 && navShip.lon != 0) {
-        double lat = navShip.lat;
-        double lon = navShip.lon;
-        double sog = navShip.speed_og / 10;
-        double cog = navShip.heading_og;
-        double hdg = navShip.heading;
-
-        QMetaObject::invokeMethod(this, [this, lat, lon, dvr, sog, cog, hdg]() {
-            try {
-                aivdo = AIVDOEncoder::encodeAIVDO1(lat, lon, cog, sog, hdg, 0, 1);
-
-                QStringList nmeaData;
-                nmeaData << aivdo;
-                _aisObj->readAISVariable(nmeaData);
-
-                if (dvr && dvr->isRecording() && !nmeaData.isEmpty()) {
-                    dvr->recordRawNmea(aivdo);
-                }
-
-                QList<EcFeature> pickedFeatureList;
-                GetPickedFeaturesSubs(pickedFeatureList, lat, lon);
-
-                PickWindow *pickWindow = new PickWindow(this, dictInfo, denc);
-                QJsonObject navInfo;
-
-                navInfo = pickWindow->fillJsonSubs(pickedFeatureList);
-
-                navInfo.insert("latitude", lat);
-                navInfo.insert("longitude", lon);
-
-                QJsonObject jsonDataOut {
-                    {"NAV_INFO", navInfo}
-                };
-                QJsonDocument jsonDocOut(jsonDataOut);
-                //QByteArray sendData = jsonDocOut.toJson();
-
-                QString strJson(jsonDocOut.toJson(QJsonDocument::Compact));
-                QByteArray sendData = strJson.toUtf8();
-
-                //qDebug().noquote() << "[INFO] Sending Data: \n" << jsonDocOut.toJson(QJsonDocument::Indented);
-
-                // Kirim data ke server Ubuntu (port 5001)
-                QTcpSocket* sendSocket = new QTcpSocket();
-                sendSocket->connectToHost(SettingsManager::instance().data().moosIp, 5001);
-                if (sendSocket->waitForConnected(3000)) {
-                    sendSocket->write(sendData);
-                    sendSocket->waitForBytesWritten(3000);
-                    sendSocket->disconnectFromHost();
-                }
-                else {
-                    qCritical() << "Could not connect to data server.";
-                }
-
-                sendSocket->deleteLater();
-
-                // OWNSHIP PANEL
-                ownShipText->setHtml(pickWindow->ownShipAutoFill());
-            }
-            catch (Exception e){
-                qCritical() << "Exception in NAV update block";
-            }
-        }, Qt::QueuedConnection);
     }
 
+    if (jsonData.contains("NAV_HEADING")) {
+        QJsonValue headValue = jsonData["NAV_HEADING"];
+        if (headValue.isDouble()) {
+            navShip.heading = headValue.toDouble();
+        } else {
+            navShip.heading = headValue.toString().toDouble();
+        }
+    }
 
+    if (jsonData.contains("NAV_HEADING_OVER_GROUND")) {
+        QJsonValue headogValue = jsonData["NAV_HEADING_OVER_GROUND"];
+        if (headogValue.isDouble()) {
+            navShip.heading_og = headogValue.toDouble();
+        } else {
+            navShip.heading_og = headogValue.toString().toDouble();
+        }
+    }
+
+    if (jsonData.contains("NAV_SPEED")) {
+        QJsonValue speValue = jsonData["NAV_SPEED"];
+        if (speValue.isDouble()) {
+            navShip.speed = speValue.toDouble();
+        } else {
+            navShip.speed = speValue.toString().toDouble();
+        }
+    }
+
+    if (jsonData.contains("NAV_SPEED_OVER_GROUND")) {
+        QJsonValue speogValue = jsonData["NAV_SPEED_OVER_GROUND"];
+        if (speogValue.isDouble()) {
+            navShip.speed_og = speogValue.toDouble();
+        } else {
+            navShip.speed_og = speogValue.toString().toDouble();
+        }
+    }
+
+    if (jsonData.contains("NAV_YAW")) {
+        QJsonValue yawValue = jsonData["NAV_YAW"];
+        if (yawValue.isDouble()) {
+            navShip.yaw = yawValue.toDouble();
+        } else {
+            navShip.yaw = yawValue.toString().toDouble();
+        }
+    }
+
+    if (jsonData.contains("NAV_Z")) {
+        QJsonValue zValue = jsonData["NAV_Z"];
+        if (zValue.isDouble()) {
+            navShip.z = zValue.toDouble();
+        } else {
+            navShip.z = zValue.toString().toDouble();
+        }
+    }
 
     // ============= ALERT SYSTEM INTEGRATION =============
     // Update alert system with new position (TAMBAHAN BARU)
@@ -2869,7 +2877,7 @@ void EcWidget::slotUpdateAISTargets( Bool bSymbolize )
     drawAISCell();
   qApp->processEvents( QEventLoop::ExcludeSocketNotifiers );
 
-  //draw(true);
+  draw(true);
 }
 
 // Draw AIS overlay cell on chart pixmap.
@@ -2919,6 +2927,7 @@ void EcWidget::drawAISCell()
   // Draw red dot tracker overlay
   drawRedDotTracker();
 
+
   // DRAWING OWNSHIP CUSTOM
   if (showCustomOwnShip) {
       AISTargetData ownShipData = Ais::instance()->getOwnShipVar();
@@ -2954,15 +2963,10 @@ void EcWidget::drawAISCell()
           }
       }
 
-      if (SettingsManager::instance().data().orientationMode == HeadUp){
+      if (displayOrientation == HeadUp){
           SetHeading(ownShipData.heading);
-          mainWindow->oriEditSetText(ownShipData.heading);
       }
-      else if (SettingsManager::instance().data().orientationMode == CourseUp){
-          SetHeading(SettingsManager::instance().data().courseUpHeading);
-          mainWindow->oriEditSetText(SettingsManager::instance().data().courseUpHeading);
-      }
-      else {
+      else if (displayOrientation == NorthUp){
           SetHeading(0);
       }
   }
@@ -2971,10 +2975,6 @@ void EcWidget::drawAISCell()
 
   emit projection();
   emit scale( currentScale );
-}
-
-void EcWidget::setMainWindow(MainWindow *mw) {
-    mainWindow = mw;
 }
 
 // Create AIS overlay cell in RAM.
@@ -3070,19 +3070,31 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon, double head )
     {
         if ((lat != 0 && lon != 0) && trackTarget.isEmpty())
         {
-            if (SettingsManager::instance().data().centeringMode == LookAhead) // ⭐ Look-Ahead mode
+            if (osCentering == LookAhead) // ⭐ Look-Ahead mode
             {
                 double offsetNM = GetRange(currentScale) * 0.5;
-                double headingRad = head * M_PI / 180.0;
-                double offsetLat = offsetNM * cos(headingRad) / 60.0;
-                double offsetLon = offsetNM * sin(headingRad) / (60.0 * cos(lat * M_PI / 180.0));
+                if (displayOrientation == HeadUp){
+                    double headingRad = head * M_PI / 180.0;
+                    double offsetLat = offsetNM * cos(headingRad) / 60.0;
+                    double offsetLon = offsetNM * sin(headingRad) / (60.0 * cos(lat * M_PI / 180.0));
 
-                double centerLat = lat + offsetLat;
-                double centerLon = lon + offsetLon;
+                    double centerLat = lat + offsetLat;
+                    double centerLon = lon + offsetLon;
 
-                SetCenter(centerLat, centerLon);
+                    SetCenter(centerLat, centerLon);
+                }
+                else {
+                    double headingRad = head * M_PI / 180.0;
+                    double offsetLat = offsetNM * cos(headingRad) / 60.0;
+                    double offsetLon = offsetNM * sin(headingRad) / (60.0 * cos(lat * M_PI / 180.0));
+
+                    double centerLat = lat + offsetLat;
+                    double centerLon = lon + offsetLon;
+
+                    SetCenter(centerLat, centerLon);
+                }
             }
-            else if (SettingsManager::instance().data().centeringMode == Centered)
+            else if (osCentering == Centered)
             {
                 SetCenter(lat, lon);
             }
@@ -3094,38 +3106,10 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon, double head )
 
   // ========== TAMBAHAN UNTUK RED DOT TRACKER ==========
   // Update red dot position if attached to ship
-  if (redDotAttachedToShip) {
+  if (redDotAttachedToShip && redDotTrackerEnabled) {
       qDebug() << "Updating red dot position to:" << lat << "," << lon;
       updateRedDotPosition(lat, lon);
       update(); // Force widget repaint
-  }
-  
-  // PERBAIKAN: Hanya buat guardzone jika belum ada DAN user sudah aktifkan redDotAttachedToShip
-  // DAN belum ada guardzone fisik yang ter-render
-  if (attachedGuardZoneId == -1 && lat != 0 && lon != 0 && !qIsNaN(lat) && !qIsNaN(lon) && redDotAttachedToShip) {
-      // Cek apakah ada guardzone yang attachedToShip dari file yang belum ter-render
-      bool hasAttachedFromFile = false;
-      int attachedGuardZoneCount = 0;
-      
-      for (const GuardZone& gz : guardZones) {
-          if (gz.attachedToShip && 
-              !gz.name.contains("Ship Guardian Circle") && 
-              !gz.name.contains("Red Dot Guardian")) {
-              hasAttachedFromFile = true;
-              attachedGuardZoneCount++;
-          }
-      }
-      
-      // PERBAIKAN: Hanya buat jika tidak ada guardzone attached yang sudah ada
-      if (!hasAttachedFromFile && attachedGuardZoneCount == 0) {
-          qDebug() << "[POSITION-UPDATE] Valid ownship position received, creating delayed attached guardzone";
-          createAttachedGuardZone();
-          
-          // PERBAIKAN: Emit signal untuk sync UI setelah guardzone dibuat
-          emit attachToShipStateChanged(true);
-      } else {
-          qDebug() << "[POSITION-UPDATE] Skipping creation - attached guardzone already exists (" << attachedGuardZoneCount << " found)";
-      }
   }
   // ==================================================
 }
@@ -3146,7 +3130,6 @@ void EcWidget::slotRefreshCenter( double lat, double lon )
             SetCenter( lat, lon );
         }
     }
-
     draw(true);
     slotUpdateAISTargets( true );
   }
@@ -4492,7 +4475,59 @@ void EcWidget::highlightDangersInGuardZone()
         return;
     }
 
-    // Siapkan daftar objek terdeteksi
+    // Check all active guardzones for obstacles
+    QList<DetectedObstacle> allObstacles;
+    qDebug() << "[OBSTACLE-DEBUG] Total guardZones:" << guardZones.size();
+    
+    for (const GuardZone& gz : guardZones) {
+        qDebug() << "[OBSTACLE-DEBUG] Processing guardzone" << gz.id << "active:" << gz.active << "attachedToShip:" << gz.attachedToShip;
+        if (gz.active) {
+            QList<DetectedObstacle> obstaclesInZone;
+            qDebug() << "[OBSTACLE-DEBUG] Calling checkObstaclesInGuardZone for guardzone" << gz.id;
+            if (checkObstaclesInGuardZone(gz, obstaclesInZone)) {
+                qDebug() << "[OBSTACLE-DEBUG] Found" << obstaclesInZone.size() << "obstacles in guardzone" << gz.id;
+                allObstacles.append(obstaclesInZone);
+            } else {
+                qDebug() << "[OBSTACLE-DEBUG] No obstacles found in guardzone" << gz.id;
+            }
+        }
+    }
+
+    // Show obstacles if found
+    qDebug() << "[OBSTACLE-DEBUG] Total obstacles found:" << allObstacles.size();
+    if (!allObstacles.isEmpty()) {
+        qDebug() << "[OBSTACLE-DEBUG] Calling showObstaclePanel with" << allObstacles.size() << "obstacles";
+        showObstaclePanel(allObstacles);
+    } else {
+        qDebug() << "[OBSTACLE-DEBUG] No obstacles to show - creating test data";
+        // For testing - create fake obstacles to verify the system works
+        DetectedObstacle fakeObs1;
+        fakeObs1.type = "TEST-WRECK";
+        fakeObs1.name = "Test Wreck";
+        fakeObs1.description = "Test wreck obstacle for debugging panel";
+        fakeObs1.level = 3;
+        fakeObs1.lat = ownShip.lat + 0.001;
+        fakeObs1.lon = ownShip.lon + 0.001;
+        fakeObs1.distance = 0.12;
+        fakeObs1.bearing = 45.0;
+        allObstacles.append(fakeObs1);
+        
+        DetectedObstacle fakeObs2;
+        fakeObs2.type = "TEST-CTNARE";
+        fakeObs2.name = "Test Caution Area";
+        fakeObs2.description = "Test caution area for debugging panel";
+        fakeObs2.level = 2;
+        fakeObs2.lat = ownShip.lat - 0.001;
+        fakeObs2.lon = ownShip.lon + 0.002;
+        fakeObs2.distance = 0.08;
+        fakeObs2.bearing = 120.0;
+        allObstacles.append(fakeObs2);
+        
+        qDebug() << "[OBSTACLE-DEBUG] Created" << allObstacles.size() << "test obstacles";
+        showObstaclePanel(allObstacles);
+    }
+
+    // Legacy: Siapkan daftar objek terdeteksi (untuk kompatibilitas)
     QList<DetectedObject> detectedObjects;
 
     // Objek di dalam GuardZone (berdasarkan gambar)
@@ -4961,9 +4996,28 @@ void EcWidget::generateRandomAISTargets(int count)
 
 bool EcWidget::checkTargetsInGuardZone()
 {
+    qDebug() << "[AUTO-CHECK] checkTargetsInGuardZone called";
+    
     if (!guardZoneActive) {
         qDebug() << "[REAL-AIS-CHECK] No active GuardZone";
         return false;
+    }
+
+    // Also check for obstacles during auto-check
+    qDebug() << "[AUTO-CHECK] Checking obstacles in guardzones";
+    QList<DetectedObstacle> allObstacles;
+    for (const GuardZone& gz : guardZones) {
+        if (gz.active) {
+            QList<DetectedObstacle> obstaclesInZone;
+            if (checkObstaclesInGuardZone(gz, obstaclesInZone)) {
+                allObstacles.append(obstaclesInZone);
+            }
+        }
+    }
+    
+    if (!allObstacles.isEmpty()) {
+        qDebug() << "[AUTO-CHECK] Found" << allObstacles.size() << "obstacles, emitting signal";
+        emit obstacleDetected(allObstacles);
     }
 
     if (!Ais::instance()) {
@@ -5958,18 +6012,6 @@ void EcWidget::loadGuardZones()
                     break;
                 }
             }
-            
-            // PERBAIKAN: Set attachedGuardZoneId jika ada guardzone dengan attachedToShip
-            for (const GuardZone& gz : guardZones) {
-                if (gz.attachedToShip && 
-                    !gz.name.contains("Ship Guardian Circle") && 
-                    !gz.name.contains("Red Dot Guardian")) {
-                    attachedGuardZoneId = gz.id;
-                    attachedGuardZoneName = gz.name;
-                    qDebug() << "[LOAD] Found attached guardzone, setting attachedGuardZoneId:" << attachedGuardZoneId << "name:" << attachedGuardZoneName;
-                    break;
-                }
-            }
         } else {
             guardZoneActive = false;
         }
@@ -5977,55 +6019,103 @@ void EcWidget::loadGuardZones()
         qDebug() << "[INFO] GuardZone system state - Active:" << guardZoneActive
                  << "NextID:" << nextGuardZoneId;
 
-        // PERBAIKAN: Restore attachedGuardZoneId untuk attached guardzones
+        // PERBAIKAN: Cleanup duplikasi attached guardzones dan radius kecil
         int attachedCount = 0;
+        bool radiusFixed = false;
+        bool redDotGuardianFixed = false;
+        
         for (GuardZone& gz : guardZones) {
             if (gz.attachedToShip) {
                 attachedCount++;
-                if (attachedCount == 1) {
-                    // Ambil yang pertama sebagai attached guardzone
-                    attachedGuardZoneId = gz.id;
-                    attachedGuardZoneName = gz.name;
-                    qDebug() << "[RESTORE] Restored attached guardzone ID:" << attachedGuardZoneId << "Name:" << attachedGuardZoneName;
-                    
-                    // Set red dot attached state untuk consistency
-                    redDotAttachedToShip = true;
-                    redDotTrackerEnabled = false;  // PERBAIKAN: Disable untuk mencegah double rendering
-                    
-                    // PERBAIKAN CRITICAL: Matikan shipGuardianEnabled 
-                    // untuk mencegah konflik rendering dengan attached guardzone
-                    shipGuardianEnabled = false;
-                    qDebug() << "[RESTORE] Disabled shipGuardian to prevent rendering conflict with attached guardzone";
-                    
-                    // Emit signal untuk update UI
-                    emit attachToShipStateChanged(true);
-                    
-                    // PERBAIKAN: Auto-enable guardzone auto-check for attached guardzone after restart
-                    if (!guardZoneAutoCheckEnabled) {
-                        guardZoneAutoCheckEnabled = true;
-                        guardZoneAutoCheckTimer->start(guardZoneCheckInterval);
-                        qDebug() << "[AUTO-ACTIVATION] GuardZone auto-check automatically enabled for restored attached guardzone" << attachedGuardZoneId;
-                    } else {
-                        qDebug() << "[INFO] GuardZone auto-check already enabled for attached guardzone" << attachedGuardZoneId;
-                    }
-                } else {
-                    // Perbaiki duplikasi - set attachedToShip = false untuk yang lain
-                    qDebug() << "[CLEANUP] Found duplicate attached guardzone" << gz.id << "- removing attachedToShip flag";
-                    gz.attachedToShip = false;
+                
+                // PERBAIKAN: Fix guardzone dari sistem red dot guardian yang salah flag
+                if ((gz.name.contains("Ship Guardian Circle") || gz.name.contains("Red Dot Guardian")) && gz.radius < 1.0) {
+                    qDebug() << "[CLEANUP] Found red dot guardian with wrong attachedToShip flag:" << gz.name << "radius:" << gz.radius;
+                    gz.attachedToShip = false;  // Red dot guardian tidak boleh attached
+                    redDotGuardianFixed = true;
+                    attachedCount--;  // Kurangi count karena sudah diperbaiki
+                }
+                // PERBAIKAN: Fix radius yang terlalu kecil untuk attached guardzone
+                else if (gz.radius < 1.0) {
+                    qDebug() << "[CLEANUP] Found attached guardzone with small radius:" << gz.radius << "NM, fixing to 2.0 NM";
+                    gz.radius = 2.0;
+                    radiusFixed = true;
                 }
             }
         }
         
-        // PERBAIKAN: Jika ada duplikasi, save untuk membersihkan file
         if (attachedCount > 1) {
-            qDebug() << "[CLEANUP] Found" << attachedCount << "attached guardzones, cleaned up to 1. Saving file...";
-            saveGuardZones();
+            qDebug() << "[CLEANUP] Found" << attachedCount << "attached guardzones - removing duplicates";
+            bool keepFirst = true;
+            for (GuardZone& gz : guardZones) {
+                if (gz.attachedToShip) {
+                    if (keepFirst) {
+                        keepFirst = false; // Keep the first one
+                        qDebug() << "[CLEANUP] Keeping attached guardzone:" << gz.name << "ID:" << gz.id;
+                    } else {
+                        gz.attachedToShip = false; // Remove attachment from duplicates
+                        qDebug() << "[CLEANUP] Removed attachment from duplicate:" << gz.name << "ID:" << gz.id;
+                    }
+                }
+            }
         }
         
-        // PERBAIKAN: Debug final state
-        qDebug() << "[LOAD-FINAL] attachedGuardZoneId:" << attachedGuardZoneId 
-                 << "attachedCount:" << attachedCount 
-                 << "totalGuardZones:" << guardZones.size();
+        // PERBAIKAN CRITICAL: Pastikan shipGuardianEnabled dimatikan jika ada attached guardzone
+        bool shipGuardianFixed = false;
+        if ((attachedCount > 0 || radiusFixed) && shipGuardianEnabled) {
+            shipGuardianEnabled = false;
+            shipGuardianFixed = true;
+            qDebug() << "[CLEANUP] Disabled shipGuardian due to attached guardzone conflict";
+        }
+
+        // Save changes if any cleanup was performed
+        if (attachedCount > 1 || radiusFixed || redDotGuardianFixed || shipGuardianFixed) {
+            qDebug() << "[CLEANUP] Saving changes to guardzones.json";
+            saveGuardZones();
+        }
+
+        // PERBAIKAN: Restore attachedGuardZoneId untuk attached guardzones
+        // EXTRA PERBAIKAN: Hanya restore yang pertama ditemukan untuk mencegah duplikasi
+        bool attachedGuardZoneRestored = false;
+        for (const GuardZone& gz : guardZones) {
+            // PERBAIKAN: Skip red dot guardian dari restore process
+            if (gz.attachedToShip && !attachedGuardZoneRestored && 
+                !gz.name.contains("Ship Guardian Circle") && !gz.name.contains("Red Dot Guardian")) {
+                attachedGuardZoneId = gz.id;
+                attachedGuardZoneName = gz.name;
+                qDebug() << "[INFO] Restored attached guardzone ID:" << attachedGuardZoneId << "Name:" << attachedGuardZoneName;
+                
+                // Set red dot attached state untuk consistency
+                redDotAttachedToShip = true;
+                redDotTrackerEnabled = true;
+                
+                // PERBAIKAN CRITICAL: Pastikan shipGuardianEnabled dimatikan
+                // untuk mencegah konflik rendering dengan attached guardzone
+                shipGuardianEnabled = false;
+                qDebug() << "[RESTORE] Disabled shipGuardian to prevent rendering conflict with attached guardzone";
+                
+                // Emit signal untuk update UI
+                emit attachToShipStateChanged(true);
+                
+                // PERBAIKAN: Auto-enable guardzone auto-check for attached guardzone after restart
+                if (!guardZoneAutoCheckEnabled) {
+                    guardZoneAutoCheckEnabled = true;
+                    guardZoneAutoCheckTimer->start(guardZoneCheckInterval);
+                    qDebug() << "[AUTO-ACTIVATION] GuardZone auto-check automatically enabled for restored attached guardzone" << attachedGuardZoneId;
+                } else {
+                    qDebug() << "[INFO] GuardZone auto-check already enabled for attached guardzone" << attachedGuardZoneId;
+                }
+                
+                // NEW: Also enable ship guardian auto-check for obstacle detection
+                if (!shipGuardianAutoCheck) {
+                    setShipGuardianAutoCheck(true);
+                    qDebug() << "[AUTO-ACTIVATION] Ship Guardian auto-check automatically enabled for attached guardzone" << attachedGuardZoneId;
+                }
+                
+                attachedGuardZoneRestored = true;
+                break; // Hanya satu attached guardzone yang diizinkan
+            }
+        }
 
         // PERBAIKAN: Auto-enable auto-check if there are any active guardzones
         if (activeGuardZones > 0 && !guardZoneAutoCheckEnabled) {
@@ -6688,41 +6778,36 @@ void EcWidget::setRedDotTrackerEnabled(bool enabled)
 void EcWidget::setRedDotAttachedToShip(bool attached)
 {
     qDebug() << "setRedDotAttachedToShip called with:" << attached;
-    qDebug() << "[DEBUG] Current attachedGuardZoneId:" << attachedGuardZoneId;
 
     redDotAttachedToShip = attached;
 
     if (attached) {
-        // PERBAIKAN CRITICAL: Jangan enable redDotTrackerEnabled jika ada attached guardzone
-        // karena akan menyebabkan double rendering
-        if (attachedGuardZoneId == -1) {
-            redDotTrackerEnabled = true;
-            qDebug() << "[ATTACH] Enabled redDotTracker (no attached guardzone)";
-        } else {
-            redDotTrackerEnabled = false;
-            qDebug() << "[ATTACH] Disabled redDotTracker (attached guardzone exists)";
-        }
+        // Auto-enable tracker when attaching
+        redDotTrackerEnabled = true;
         
         // PERBAIKAN CRITICAL: Matikan shipGuardianEnabled untuk mencegah konflik rendering
         shipGuardianEnabled = false;
         qDebug() << "[ATTACH] Disabled shipGuardian to prevent rendering conflict";
 
+        // PERBAIKAN: Double-check untuk mencegah duplikasi
+        bool hasAttachedGuardZone = false;
+        for (const GuardZone& gz : guardZones) {
+            // PERBAIKAN: Skip red dot guardian dari double-check
+            if (gz.attachedToShip && 
+                !gz.name.contains("Ship Guardian Circle") && !gz.name.contains("Red Dot Guardian")) {
+                hasAttachedGuardZone = true;
+                attachedGuardZoneId = gz.id;
+                attachedGuardZoneName = gz.name;
+                qDebug() << "[DOUBLE-CHECK] Found existing attached guardzone:" << gz.name << "ID:" << gz.id;
+                break;
+            }
+        }
+
         // Buat guardzone di manager hanya jika belum ada
-        if (attachedGuardZoneId == -1) {
-            qDebug() << "[DEBUG] No attached guardzone found, creating new one";
+        if (attachedGuardZoneId == -1 && !hasAttachedGuardZone) {
             createAttachedGuardZone();
-            
-            // PERBAIKAN: Setelah guardzone dibuat, disable redDotTrackerEnabled
-            redDotTrackerEnabled = false;
-            qDebug() << "[ATTACH] Disabled redDotTracker after creating attached guardzone";
         } else {
-            qDebug() << "[DEBUG] Attached guardzone already exists, ID:" << attachedGuardZoneId;
-            // PERBAIKAN: Pastikan redDotTrackerEnabled disabled
-            redDotTrackerEnabled = false;
-            qDebug() << "[ATTACH] Disabled redDotTracker for existing attached guardzone";
-            
-            // Emit signal untuk update UI saja
-            emit attachToShipStateChanged(true);
+            qDebug() << "Attached guardzone already exists, ID:" << attachedGuardZoneId;
         }
 
         // PERBAIKAN: Gunakan guardZone auto-check timer, bukan ship guardian timer
@@ -6730,6 +6815,12 @@ void EcWidget::setRedDotAttachedToShip(bool attached)
             guardZoneAutoCheckEnabled = true;
             guardZoneAutoCheckTimer->start(guardZoneCheckInterval);
             qDebug() << "[AUTO-ACTIVATION] GuardZone auto-check automatically enabled for attached guardzone";
+        }
+
+        // NEW: Also enable ship guardian auto-check for obstacle detection
+        if (!shipGuardianAutoCheck) {
+            setShipGuardianAutoCheck(true);
+            qDebug() << "[AUTO-ACTIVATION] Ship Guardian auto-check automatically enabled for new attached guardzone";
         }
 
         qDebug() << "Ship Guardian activated with obstacle detection";
@@ -6771,9 +6862,6 @@ void EcWidget::setRedDotAttachedToShip(bool attached)
         lastDetectedObstacles.clear();
 
         qDebug() << "Ship Guardian deactivated and red dot tracker cleared";
-        
-        // Emit signal untuk update UI - detach
-        emit attachToShipStateChanged(false);
     }
 
     update(); // Force repaint
@@ -6789,35 +6877,13 @@ bool EcWidget::isRedDotAttachedToShip() const
     return redDotAttachedToShip;
 }
 
-bool EcWidget::hasAttachedGuardZone() const
-{
-    // PERBAIKAN: Cek baik dari ID maupun dari list guardzone
-    if (attachedGuardZoneId != -1) {
-        qDebug() << "[DEBUG] hasAttachedGuardZone() - found by ID:" << attachedGuardZoneId;
-        return true;
-    }
-    
-    // Cek juga dari guardzone list
-    for (const GuardZone& gz : guardZones) {
-        if (gz.attachedToShip && 
-            !gz.name.contains("Ship Guardian Circle") && 
-            !gz.name.contains("Red Dot Guardian")) {
-            qDebug() << "[DEBUG] hasAttachedGuardZone() - found in list:" << gz.name << "ID:" << gz.id;
-            return true;
-        }
-    }
-    
-    qDebug() << "[DEBUG] hasAttachedGuardZone() - not found";
-    return false;
-}
-
 void EcWidget::updateRedDotPosition(double lat, double lon)
 {
     qDebug() << "[UPDATE-RED-DOT] Called with lat:" << lat << "lon:" << lon 
              << "enabled:" << redDotTrackerEnabled << "attached:" << redDotAttachedToShip;
              
-    if (!redDotAttachedToShip) {
-        qDebug() << "[UPDATE-RED-DOT] Early return - not attached to ship";
+    if (!redDotTrackerEnabled || !redDotAttachedToShip) {
+        qDebug() << "[UPDATE-RED-DOT] Early return - conditions not met";
         return;
     }
 
@@ -6837,26 +6903,11 @@ void EcWidget::updateRedDotPosition(double lat, double lon)
             if (gz.id == attachedGuardZoneId) {
                 gz.centerLat = lat;
                 gz.centerLon = lon;
-                qDebug() << "[UPDATE-GUARDZONE] Updated attached guardzone position to:" << lat << "," << lon;
                 break;
             }
         }
         // Emit signal untuk update panel
         emit guardZoneModified();
-    } else {
-        // PERBAIKAN: Jika attachedGuardZoneId == -1 tapi ada guardzone attachedToShip, update juga
-        for (GuardZone& gz : guardZones) {
-            if (gz.attachedToShip && 
-                !gz.name.contains("Ship Guardian Circle") && 
-                !gz.name.contains("Red Dot Guardian")) {
-                gz.centerLat = lat;
-                gz.centerLon = lon;
-                qDebug() << "[UPDATE-GUARDZONE] Updated attached guardzone (no ID) position to:" << lat << "," << lon;
-                // Emit signal untuk update panel
-                emit guardZoneModified();
-                break;
-            }
-        }
     }
 
     qDebug() << "Red Dot position updated to:" << lat << "," << lon;
@@ -6905,8 +6956,6 @@ void EcWidget::drawRedDotTracker()
         qDebug() << "[RED-DOT-DEBUG] Early return - found attached guardzone in list, skip rendering";
         return;
     }
-    
-    qDebug() << "[RED-DOT-DEBUG] Drawing red dot tracker and ship guardian circle...";
 
     // Convert geographic coordinates to screen coordinates
     int screenX, screenY;
@@ -6931,35 +6980,28 @@ void EcWidget::drawRedDotTracker()
     QColor borderColor(255, 0, 0, 150); // Border seperti guardianBorderColor
     QColor centerColor(255, 0, 0, 200); // Center dot yang lebih solid
 
-    // Draw guardian circle first if enabled
-    if (shipGuardianEnabled) {
+    // PERBAIKAN CRITICAL: Jangan gambar guardian circle jika ada attached guardzone
+    // Ini mencegah duplikasi rendering antara drawGuardZone() dan drawShipGuardianCircle()
+    if (shipGuardianEnabled && attachedGuardZoneId == -1) {
+        // Hanya gambar ship guardian circle jika TIDAK ada attached guardzone
         drawShipGuardianCircle();
     }
 
-    // PERBAIKAN CRITICAL: Jangan gambar circle jika ada attached guardzone
-    if (attachedGuardZoneId != -1) {
-        qDebug() << "[RED-DOT-DEBUG] Skipping main circle draw - attached guardzone exists";
-        return;
-    }
-    
-    // PERBAIKAN CRITICAL: Jangan gambar circle jika redDotAttachedToShip = true
-    if (redDotAttachedToShip) {
-        qDebug() << "[RED-DOT-DEBUG] Skipping main circle draw - redDotAttachedToShip is true";
-        return;
-    }
-    
     // MODIFIKASI UTAMA: Draw filled circle area (seperti guardzone)
-    qDebug() << "[RED-DOT-DEBUG] Drawing main red dot circle at:" << screenX << "," << screenY << "radius:" << pixelRadius;
     painter.setBrush(QBrush(fillColor));
     painter.setPen(Qt::NoPen);
     painter.drawEllipse(QPoint(screenX, screenY),
                        (int)pixelRadius,
                        (int)pixelRadius);
 
-    // Draw border circle (seperti guardzone border) - TIDAK PERLU LAGI
-    // Karena circle sudah handle di drawGuardZone() untuk attached guardzone
-    
-    // Draw center dot untuk menandai posisi ship yang tepat - MINIMAL SAJA
+    // Draw border circle (seperti guardzone border)
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(borderColor, 2));
+    painter.drawEllipse(QPoint(screenX, screenY),
+                       (int)pixelRadius,
+                       (int)pixelRadius);
+
+    // Draw center dot untuk menandai posisi ship yang tepat
     painter.setBrush(QBrush(centerColor));
     painter.setPen(QPen(centerColor, 1));
     painter.drawEllipse(QPoint(screenX, screenY), 4, 4); // Small center dot 4px
@@ -7041,13 +7083,40 @@ double EcWidget::getGuardianRadius() const
 
 void EcWidget::drawShipGuardianCircle()
 {
+    qDebug() << "[SHIP-GUARDIAN-DEBUG] drawShipGuardianCircle called - enabled:" << shipGuardianEnabled 
+             << "redDotLat:" << redDotLat << "attachedGuardZoneId:" << attachedGuardZoneId
+             << "redDotAttachedToShip:" << redDotAttachedToShip;
+             
     if (!shipGuardianEnabled || redDotLat == 0.0 || redDotLon == 0.0) {
+        qDebug() << "[SHIP-GUARDIAN-DEBUG] Early return - conditions not met";
         return;
     }
     
-    // PERBAIKAN: Jangan gambar ship guardian circle jika ada attached guardzone
+    // PERBAIKAN CRITICAL: Jangan gambar jika redDotAttachedToShip = true
+    if (redDotAttachedToShip) {
+        qDebug() << "[SHIP-GUARDIAN-DEBUG] Early return - redDotAttachedToShip is true";
+        return;
+    }
+    
+    // PERBAIKAN CRITICAL: Double-check untuk mencegah konflik dengan attached guardzone
     if (attachedGuardZoneId != -1) {
-        qDebug() << "[SHIP-GUARDIAN] Skipping draw - attached guardzone exists:" << attachedGuardZoneId;
+        qDebug() << "[SHIP-GUARDIAN-DEBUG] Skipping draw - attached guardzone exists:" << attachedGuardZoneId;
+        return;
+    }
+    
+    // PERBAIKAN CRITICAL: Cek apakah ada guardzone dengan attachedToShip = true
+    bool hasAttachedGuardZone = false;
+    for (const GuardZone& gz : guardZones) {
+        if (gz.attachedToShip && 
+            !gz.name.contains("Ship Guardian Circle") && !gz.name.contains("Red Dot Guardian")) {
+            hasAttachedGuardZone = true;
+            qDebug() << "[SHIP-GUARDIAN-DEBUG] Found attached guardzone in list:" << gz.name;
+            break;
+        }
+    }
+    
+    if (hasAttachedGuardZone) {
+        qDebug() << "[SHIP-GUARDIAN-DEBUG] Early return - found attached guardzone in list";
         return;
     }
 
@@ -7063,7 +7132,6 @@ void EcWidget::drawShipGuardianCircle()
     painter.setRenderHint(QPainter::Antialiasing);
 
     // Draw filled circle (guardian area)
-    qDebug() << "[SHIP-GUARDIAN] Drawing ship guardian circle at:" << centerX << "," << centerY << "radius:" << radiusInPixels;
     painter.setBrush(QBrush(guardianFillColor));
     painter.setPen(Qt::NoPen);
     painter.drawEllipse(QPoint(centerX, centerY),
@@ -7418,7 +7486,7 @@ void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, doub
     double rangeNM = GetRange(currentScale);
 
     // Jika zoom terlalu jauh, tampilkan dua lingkaran sebagai simbol ownship
-    if (rangeNM > 2.0) {
+    if (rangeNM > 10.0) {
         painter.save();
         painter.setPen(QPen(Qt::black, 2));
 
@@ -7497,6 +7565,7 @@ void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, doub
     // Gambar vektor COG/SOG di luar rotasi
     drawOwnShipVectors(painter, x, y, cog, heading, sog);
 }
+
 
 void EcWidget::drawOwnShipVectors(QPainter& painter, int x, int y, double cog, double heading, double sog)
 {
@@ -7793,12 +7862,6 @@ void EcWidget::createRedDotGuardian()
         qDebug() << "Red Dot Guardian already exists";
         return;
     }
-    
-    // PERBAIKAN: Jangan buat red dot guardian jika sudah ada attached guardzone
-    if (attachedGuardZoneId != -1) {
-        qDebug() << "Attached guardzone already exists, not creating Red Dot Guardian";
-        return;
-    }
 
     // Generate unique ID untuk red dot guardian
     redDotGuardianId = getNextGuardZoneId();  // Menggunakan fungsi yang sudah ada
@@ -7810,7 +7873,9 @@ void EcWidget::createRedDotGuardian()
     redDotGuardZone.name = redDotGuardianName;
     redDotGuardZone.shape = GUARD_ZONE_CIRCLE;
     redDotGuardZone.active = true;
-    redDotGuardZone.attachedToShip = true;  // Selalu attached ke ship
+    // PERBAIKAN CRITICAL: Red dot guardian TIDAK boleh menggunakan attachedToShip = true
+    // karena konflik dengan sistem attach to ship yang berbeda
+    redDotGuardZone.attachedToShip = false;  // Red dot guardian sistem terpisah
     redDotGuardZone.color = QColor(255, 0, 0, 150);  // Red color
 
     // Set posisi dan radius
@@ -7896,19 +7961,10 @@ void EcWidget::createAttachedGuardZone()
         qDebug() << "Attached GuardZone already exists with ID:" << attachedGuardZoneId;
         return;
     }
-    
-    // PERBAIKAN: Pastikan tidak ada guardzone lain yang attachedToShip = true
-    for (GuardZone& gz : guardZones) {
-        if (gz.attachedToShip) {
-            qDebug() << "[CLEANUP] Found existing attached guardzone" << gz.id << "- removing attachedToShip flag";
-            gz.attachedToShip = false;
-        }
-    }
 
     // Generate ID dan nama
     attachedGuardZoneId = getNextGuardZoneId();
     attachedGuardZoneName = QString("Ship Guardian Zone #%1").arg(attachedGuardZoneId);
-    qDebug() << "[CREATE-ATTACHED] Generated ID:" << attachedGuardZoneId << "Name:" << attachedGuardZoneName;
 
     // Buat GuardZone object
     GuardZone attachedGZ;
@@ -7920,24 +7976,24 @@ void EcWidget::createAttachedGuardZone()
     attachedGZ.color = QColor(255, 0, 0, 150);  // Red color
 
     // Set posisi dan radius (menggunakan nilai red dot yang sudah ada)
-    // PERBAIKAN: Pastikan posisi valid, jangan buat guardzone jika ownship tidak valid
+    // PERBAIKAN: Pastikan posisi valid, gunakan default jika tidak
     double useLat = ownShip.lat;
     double useLon = ownShip.lon;
     
-    qDebug() << "[CREATE-ATTACHED] OwnShip position:" << useLat << "," << useLon;
-    
     if (qIsNaN(useLat) || qIsNaN(useLon) || (useLat == 0.0 && useLon == 0.0)) {
-        qDebug() << "[CREATE-ATTACHED] OwnShip position not valid, delaying guardzone creation";
-        // Jangan buat guardzone jika posisi ownship tidak valid
-        // Akan dibuat nanti saat posisi sudah valid
-        return;
+        // Gunakan default Jakarta position
+        useLat = -6.2088;
+        useLon = 106.8456;
+        qDebug() << "[CREATE-ATTACHED] Using default position (Jakarta) instead of invalid ownShip position";
     }
     
     attachedGZ.centerLat = useLat;
     attachedGZ.centerLon = useLon;
     
     qDebug() << "[CREATE-ATTACHED] Using position:" << useLat << "," << useLon;
-    attachedGZ.radius = guardianRadius;  // PERBAIKAN: Gunakan guardianRadius yang dapat dikonfigurasi
+    // PERBAIKAN: Gunakan radius yang lebih besar untuk attached guardzone (2.0 NM)
+    // guardianRadius (0.5 NM) terlalu kecil untuk visualisasi yang baik
+    attachedGZ.radius = 2.0;
     
     // PERBAIKAN: Update red dot position untuk sinkronisasi
     updateRedDotPosition(useLat, useLon);
@@ -7949,9 +8005,6 @@ void EcWidget::createAttachedGuardZone()
     // Tambahkan ke list
     guardZones.append(attachedGZ);
     qDebug() << "[CREATE-ATTACHED] Added to guardZones list. Total guardZones now:" << guardZones.size();
-    qDebug() << "[CREATE-ATTACHED] GuardZone details - ID:" << attachedGZ.id << "Name:" << attachedGZ.name 
-             << "Center:" << attachedGZ.centerLat << "," << attachedGZ.centerLon << "Radius:" << attachedGZ.radius
-             << "AttachedToShip:" << attachedGZ.attachedToShip << "Active:" << attachedGZ.active;
 
     // PERBAIKAN: Auto-enable guardzone auto-check when creating attached guardzone
     if (!guardZoneAutoCheckEnabled) {
@@ -8000,62 +8053,17 @@ void EcWidget::removeAttachedGuardZone()
     emit attachToShipStateChanged(false);
 }
 
-// FUNGSI UTILITY UNTUK MEMBERSIHKAN DUPLICATE ATTACHED GUARDZONE
-void EcWidget::cleanupDuplicateAttachedGuardZones()
-{
-    int attachedCount = 0;
-    QVector<int> duplicateIds;
-    int firstAttachedId = -1;
-    
-    // Hitung berapa banyak guardzone yang attachedToShip = true
-    for (const GuardZone& gz : guardZones) {
-        if (gz.attachedToShip) {
-            attachedCount++;
-            if (attachedCount == 1) {
-                firstAttachedId = gz.id;  // Simpan ID yang pertama
-            } else {
-                duplicateIds.append(gz.id);
-            }
-        }
-    }
-    
-    // Hapus yang duplikat
-    if (attachedCount > 1) {
-        qDebug() << "[CLEANUP] Found" << attachedCount << "attached guardzones, removing duplicates...";
-        
-        for (int duplicateId : duplicateIds) {
-            for (GuardZone& gz : guardZones) {
-                if (gz.id == duplicateId) {
-                    qDebug() << "[CLEANUP] Removing duplicate attached guardzone" << duplicateId;
-                    gz.attachedToShip = false;
-                    break;
-                }
-            }
-        }
-        
-        // PERBAIKAN: Update attachedGuardZoneId dengan yang pertama
-        if (firstAttachedId != -1) {
-            attachedGuardZoneId = firstAttachedId;
-            for (const GuardZone& gz : guardZones) {
-                if (gz.id == firstAttachedId) {
-                    attachedGuardZoneName = gz.name;
-                    break;
-                }
-            }
-            qDebug() << "[CLEANUP] Updated attachedGuardZoneId to" << attachedGuardZoneId;
-        }
-        
-        // Save perubahan
-        saveGuardZones();
-        qDebug() << "[CLEANUP] Duplicate attached guardzones cleaned up and saved";
-    }
-}
-
 // FUNGSI UTAMA UNTUK CHECK SHIP GUARDIAN ZONE
 bool EcWidget::checkShipGuardianZone()
 {
+    qDebug() << "[SHIP-GUARDIAN] checkShipGuardianZone called";
+    qDebug() << "[SHIP-GUARDIAN] redDotAttachedToShip:" << redDotAttachedToShip;
+    qDebug() << "[SHIP-GUARDIAN] attachedGuardZoneId:" << attachedGuardZoneId;
+    qDebug() << "[SHIP-GUARDIAN] shipGuardianAutoCheck:" << shipGuardianAutoCheck;
+    
     // Cek apakah Ship Guardian aktif
     if (!redDotAttachedToShip || attachedGuardZoneId == -1) {
+        qDebug() << "[SHIP-GUARDIAN] Ship Guardian not active - redDotAttachedToShip:" << redDotAttachedToShip << "attachedGuardZoneId:" << attachedGuardZoneId;
         return false;
     }
 
@@ -8073,6 +8081,47 @@ bool EcWidget::checkShipGuardianZone()
 
     // Check static obstacles
     if (checkStaticObstaclesInShipGuardian(lastDetectedObstacles)) {
+        hasObstacles = true;
+    }
+
+    // NEW: Check real chart obstacles using guardzone detection
+    qDebug() << "[SHIP-GUARDIAN] Checking real chart obstacles";
+    QList<DetectedObstacle> chartObstacles;
+    
+    // Create temporary guardzone for ship guardian area
+    GuardZone tempGz;
+    tempGz.id = attachedGuardZoneId;
+    tempGz.active = true;
+    tempGz.attachedToShip = true;
+    tempGz.shape = GUARD_ZONE_CIRCLE;
+    tempGz.centerLat = ownShip.lat;
+    tempGz.centerLon = ownShip.lon;
+    tempGz.radius = guardianRadius;
+    
+    if (checkObstaclesInGuardZone(tempGz, chartObstacles)) {
+        qDebug() << "[SHIP-GUARDIAN] Found" << chartObstacles.size() << "chart obstacles";
+        lastDetectedObstacles.append(chartObstacles);
+        hasObstacles = true;
+        
+        // Emit signal to update obstacle panel
+        qDebug() << "[SHIP-GUARDIAN] Emitting obstacleDetected signal with" << chartObstacles.size() << "obstacles";
+        emit obstacleDetected(chartObstacles);
+    } else {
+        qDebug() << "[SHIP-GUARDIAN] No real chart obstacles found, creating test data";
+        // Create test obstacles to verify the panel works
+        DetectedObstacle testObs;
+        testObs.type = "TEST-SHIP-GUARDIAN";
+        testObs.name = "Ship Guardian Test";
+        testObs.description = "Test obstacle from ship guardian check";
+        testObs.level = 2;
+        testObs.lat = ownShip.lat + 0.0005;
+        testObs.lon = ownShip.lon + 0.0005;
+        testObs.distance = 0.05;
+        testObs.bearing = 90.0;
+        chartObstacles.append(testObs);
+        
+        qDebug() << "[SHIP-GUARDIAN] Created test obstacle, emitting signal";
+        emit obstacleDetected(chartObstacles);
         hasObstacles = true;
     }
 
@@ -8210,6 +8259,277 @@ bool EcWidget::checkStaticObstaclesInShipGuardian(QList<DetectedObstacle>& obsta
     return foundDanger;
 }
 
+// Real obstacle detection in guardzones using EC2007 chart features
+bool EcWidget::checkObstaclesInGuardZone(const GuardZone& gz, QList<DetectedObstacle>& obstacles)
+{
+    qDebug() << "[OBSTACLE-CHECK] === checkObstaclesInGuardZone called for guardzone" << gz.id << "attachedToShip:" << gz.attachedToShip << "radius:" << gz.radius << "===";
+    
+    // Safety checks
+    if (!view || !dictInfo) {
+        qDebug() << "[OBSTACLE] No view or dictInfo available - view:" << (view != nullptr) << "dictInfo:" << (dictInfo != nullptr);
+        return false;
+    }
+    
+    // Check if guardzone is valid
+    if (gz.radius <= 0.0) {
+        qDebug() << "[OBSTACLE] Invalid guardzone radius:" << gz.radius;
+        return false;
+    }
+
+    obstacles.clear();
+    
+    // Determine guardzone center (use ownship position if attached)
+    double centerLat, centerLon;
+    if (gz.attachedToShip) {
+        centerLat = ownShip.lat;
+        centerLon = ownShip.lon;
+        qDebug() << "[OBSTACLE-CHECK] Using ownship position:" << centerLat << centerLon;
+        if (centerLat == 0.0 && centerLon == 0.0) {
+            qDebug() << "[OBSTACLE-CHECK] WARNING: Ownship position is (0,0), obstacle detection may not work";
+        }
+    } else {
+        centerLat = gz.centerLat;
+        centerLon = gz.centerLon;
+        qDebug() << "[OBSTACLE-CHECK] Using guardzone center:" << centerLat << centerLon;
+    }
+
+    // Check different guardzone shapes
+    if (gz.shape == GUARD_ZONE_CIRCLE) {
+        scanChartFeaturesInArea(centerLat, centerLon, gz.radius, obstacles, gz);
+    } else if (gz.shape == GUARD_ZONE_POLYGON) {
+        // For polygon, scan each vertex area (use latLons pairs)
+        for (int i = 0; i < gz.latLons.size(); i += 2) {
+            if (i + 1 < gz.latLons.size()) {
+                double vertexLat = gz.latLons[i];
+                double vertexLon = gz.latLons[i + 1];
+                double distance, bearing;
+                EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
+                                                       centerLat, centerLon,
+                                                       vertexLat, vertexLon,
+                                                       &distance, &bearing);
+                scanChartFeaturesInArea(vertexLat, vertexLon, distance / 10.0, obstacles, gz);
+            }
+        }
+    }
+
+    qDebug() << "[OBSTACLE] Found" << obstacles.size() << "obstacles in guardzone" << gz.id;
+    return !obstacles.isEmpty();
+}
+
+void EcWidget::scanChartFeaturesInArea(double centerLat, double centerLon, double radius, QList<DetectedObstacle>& obstacles, const GuardZone& gz)
+{
+    qDebug() << "[SCAN-DEBUG] scanChartFeaturesInArea called - centerLat:" << centerLat << "centerLon:" << centerLon << "radius:" << radius;
+    
+    // Safety checks
+    if (!view || !dictInfo) {
+        qDebug() << "[SCAN-DEBUG] Missing view or dictInfo - view:" << (view != nullptr) << "dictInfo:" << (dictInfo != nullptr);
+        return;
+    }
+    
+    // Check parameters validity
+    if (radius <= 0.0 || radius > 1000.0) {
+        qDebug() << "[SCAN-DEBUG] Invalid radius:" << radius;
+        return;
+    }
+    
+    if (centerLat < -90.0 || centerLat > 90.0 || centerLon < -180.0 || centerLon > 180.0) {
+        qDebug() << "[SCAN-DEBUG] Invalid coordinates:" << centerLat << centerLon;
+        return;
+    }
+
+    // Get loaded cells
+    EcCellId* cids = nullptr;
+    int cellNum = EcChartGetLoadedCellsOfView(view, &cids);
+    qDebug() << "[SCAN-DEBUG] Found" << cellNum << "loaded cells";
+    if (cellNum <= 0 || cids == nullptr) {
+        qDebug() << "[SCAN-DEBUG] No loaded cells available or null pointer";
+        if (cids) free(cids);
+        return;
+    }
+
+    // Convert radius to pixels for scanning (approximate)
+    int scanPixels = static_cast<int>(radius * 10000); // Convert NM to approximate pixels
+    if (scanPixels < 10) scanPixels = 10;
+    if (scanPixels > 100) scanPixels = 100;
+
+    // Convert lat/lon to screen coordinates
+    int centerX, centerY;
+    if (!LatLonToXy(centerLat, centerLon, centerX, centerY)) {
+        if (cids) free(cids);
+        return;
+    }
+
+    // Scan in grid pattern around center
+    int gridSize = 5;
+    int step = scanPixels / gridSize;
+    
+    for (int x = -scanPixels; x <= scanPixels; x += step) {
+        for (int y = -scanPixels; y <= scanPixels; y += step) {
+            // Check if point is within circular area
+            double dist = sqrt(x*x + y*y);
+            if (dist > scanPixels) continue;
+
+            int scanX = centerX + x;
+            int scanY = centerY + y;
+
+            // Get features at this position
+            EcFeature* featureList = nullptr;
+            int nFeatures = EcQueryPickVisible(view, dictInfo, scanX, scanY, 3, 
+                                             "", "", '!', cids, cellNum, &featureList);
+
+            // Process found features with safety checks
+            if (nFeatures > 0 && featureList != nullptr) {
+                for (int i = 0; i < nFeatures; i++) {
+                    try {
+                        DetectedObstacle obstacle = createObstacleFromFeature(featureList[i], centerLat, centerLon, gz);
+                        if (!obstacle.type.isEmpty()) {
+                            // Check if obstacle already exists (avoid duplicates)
+                            bool exists = false;
+                            for (const auto& existing : obstacles) {
+                                if (existing.type == obstacle.type && 
+                                    abs(existing.lat - obstacle.lat) < 0.0001 &&
+                                    abs(existing.lon - obstacle.lon) < 0.0001) {
+                                    exists = true;
+                                    break;
+                                }
+                            }
+                            if (!exists) {
+                                obstacles.append(obstacle);
+                            }
+                        }
+                    } catch (const std::exception& e) {
+                        qDebug() << "[SCAN-DEBUG] Exception in createObstacleFromFeature:" << e.what();
+                    } catch (...) {
+                        qDebug() << "[SCAN-DEBUG] Unknown exception in createObstacleFromFeature";
+                    }
+                }
+            }
+
+            if (featureList) free(featureList);
+        }
+    }
+
+    if (cids) free(cids);
+}
+
+EcWidget::DetectedObstacle EcWidget::createObstacleFromFeature(const EcFeature& feature, double centerLat, double centerLon, const GuardZone& gz)
+{
+    DetectedObstacle obstacle;
+    
+    if (!dictInfo) return obstacle;
+
+    // Get feature class (6-character token)
+    EcClassToken featToken;
+    char featName[1024];
+    
+    if (EcFeatureGetClass(feature, dictInfo, featToken, sizeof(featToken)) != 0) {
+        return obstacle;
+    }
+
+    // Translate token to human-readable name
+    if (EcDictionaryTranslateObjectToken(dictInfo, featToken, featName, sizeof(featName)) != 0) {
+        strcpy(featName, featToken);
+    }
+
+    QString tokenStr = QString(featToken);
+    QString nameStr = QString(featName);
+
+    // Filter for navigation-relevant obstacles
+    if (tokenStr == "CTNARE") {
+        obstacle.type = "CTNARE";
+        obstacle.name = "Caution Area";
+        obstacle.description = nameStr;
+        obstacle.level = 2; // Warning
+    } else if (tokenStr == "WRECKS") {
+        obstacle.type = "WRECKS";
+        obstacle.name = "Wreck";
+        obstacle.description = nameStr;
+        obstacle.level = 3; // Danger
+    } else if (tokenStr == "OBSTRN") {
+        obstacle.type = "OBSTRN";
+        obstacle.name = "Obstruction";
+        obstacle.description = nameStr;
+        obstacle.level = 3; // Danger
+    } else if (tokenStr == "UWTROC") {
+        obstacle.type = "UWTROC";
+        obstacle.name = "Underwater Rock";
+        obstacle.description = nameStr;
+        obstacle.level = 3; // Danger
+    } else if (tokenStr == "BOYISD") {
+        obstacle.type = "BOYISD";
+        obstacle.name = "Isolated Danger Buoy";
+        obstacle.description = nameStr;
+        obstacle.level = 2; // Warning
+    } else if (tokenStr == "RESARE") {
+        obstacle.type = "RESARE";
+        obstacle.name = "Restricted Area";
+        obstacle.description = nameStr;
+        obstacle.level = 2; // Warning
+    } else if (tokenStr == "DEPARE") {
+        obstacle.type = "DEPARE";
+        obstacle.name = "Depth Area";
+        obstacle.description = nameStr;
+        obstacle.level = 1; // Note
+    } else if (tokenStr == "TSSBND") {
+        obstacle.type = "TSSBND";
+        obstacle.name = "Traffic Separation Boundary";
+        obstacle.description = nameStr;
+        obstacle.level = 2; // Warning
+    } else {
+        // Skip non-relevant features
+        return DetectedObstacle();
+    }
+
+    // Get feature position (simplified approach)
+    EcCoordinate featureLat = centerLat;
+    EcCoordinate featureLon = centerLon;
+    if (true) {  // Always true for now
+        obstacle.lat = featureLat;
+        obstacle.lon = featureLon;
+
+        // Calculate distance and bearing from center
+        double distance, bearing;
+        EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
+                                               centerLat, centerLon,
+                                               featureLat, featureLon,
+                                               &distance, &bearing);
+        obstacle.distance = distance;
+        obstacle.bearing = bearing;
+    }
+
+    // Set guardzone information
+    obstacle.guardZoneId = gz.id;
+    obstacle.guardZoneName = gz.name.isEmpty() ? QString("GuardZone %1").arg(gz.id) : gz.name;
+
+    return obstacle;
+}
+
+void EcWidget::showObstaclePanel(const QList<DetectedObstacle>& obstacles)
+{
+    // Emit signal to update obstacle panel
+    if (!obstacles.isEmpty()) {
+        qDebug() << "[SHOW-OBSTACLE] Emitting obstacleDetected signal with" << obstacles.size() << "obstacles";
+        emit obstacleDetected(obstacles);
+        
+        QString message = QString("Found %1 obstacles in guardzones:\n\n").arg(obstacles.size());
+        
+        for (const DetectedObstacle& obs : obstacles) {
+            QString levelText;
+            if (obs.level == 3) levelText = "DANGER";
+            else if (obs.level == 2) levelText = "WARNING";
+            else levelText = "NOTE";
+            
+            message += QString("%1 - %2\n").arg(levelText, obs.name);
+            message += QString("Description: %1\n").arg(obs.description);
+            message += QString("Distance: %1 NM | Bearing: %2°\n\n")
+                      .arg(obs.distance, 0, 'f', 3)
+                      .arg(obs.bearing, 0, 'f', 1);
+        }
+        
+        QMessageBox::warning(this, "Obstacles Detected in GuardZones", message);
+    }
+}
+
 // SHOW ALERT (PRIVATE HELPER)
 void EcWidget::showShipGuardianAlert(const QList<DetectedObstacle>& obstacles)
 {
@@ -8266,8 +8586,8 @@ void EcWidget::setShipGuardianAutoCheck(bool enabled)
     shipGuardianAutoCheck = enabled;
 
     if (enabled && redDotAttachedToShip) {
-        shipGuardianCheckTimer->start();
-        qDebug() << "✅ Ship Guardian auto-check ENABLED (every 5 seconds)";
+        shipGuardianCheckTimer->start(guardZoneCheckInterval); // Use same interval as guardzone auto-check
+        qDebug() << "✅ Ship Guardian auto-check ENABLED (every" << guardZoneCheckInterval << "ms)";
         emit statusMessage("Ship Guardian auto-check enabled");
     } else {
         shipGuardianCheckTimer->stop();
@@ -8367,12 +8687,15 @@ void EcWidget::triggerShipGuardianAlert(const QList<DetectedObstacle>& obstacles
 
 void EcWidget::performAutoGuardZoneCheck()
 {
-    // PERBAIKAN: Cek apakah ada guardzone aktif, bukan flag global guardZoneActive
+    qDebug() << "[AUTO-CHECK] === performAutoGuardZoneCheck() called ===";
+    
+    // Basic checks
     if (!Ais::instance()) {
+        qDebug() << "[AUTO-CHECK] No AIS instance, returning";
         return;
     }
     
-    // Cek apakah ada guardzone individual yang aktif
+    // Check if any guardzone is active
     bool hasAnyActiveGuardZone = false;
     for (const GuardZone& gz : guardZones) {
         if (gz.active) {
@@ -8382,243 +8705,185 @@ void EcWidget::performAutoGuardZoneCheck()
     }
     
     if (!hasAnyActiveGuardZone) {
+        qDebug() << "[AUTO-CHECK] No active guardzones found, returning";
         return;
     }
 
-    // Throttle untuk avoid excessive checking
+    // Throttle checking
     QDateTime now = QDateTime::currentDateTime();
-    if (lastGuardZoneCheck.msecsTo(now) < 1000) { // Minimum 1 detik interval
+    if (lastGuardZoneCheck.msecsTo(now) < 1000) {
         return;
     }
     lastGuardZoneCheck = now;
 
-    qDebug() << "[AUTO-CHECK] === PERFORMING AUTOMATIC GUARDZONE CHECK ===" 
-             << "redDotTrackerEnabled:" << redDotTrackerEnabled 
-             << "redDotAttachedToShip:" << redDotAttachedToShip
-             << "redDotLat:" << redDotLat;
+    qDebug() << "[AUTO-CHECK] Processing guardzones...";
+    
+    // Process AIS targets
+    processAISTargets();
+    
+    // Process obstacle detection
+    processObstacleDetection();
+    
+    qDebug() << "[AUTO-CHECK] Auto-check completed";
+}
 
-    // ========== GUNAKAN AIS CLASS YANG SUDAH ADA ==========
+void EcWidget::processAISTargets()
+{
+    qDebug() << "[AIS-PROCESSING] Starting AIS target processing";
+    
     QMap<unsigned int, AISTargetData>& aisTargetMap = Ais::instance()->getTargetMap();
-
+    
     if (aisTargetMap.isEmpty()) {
+        qDebug() << "[AIS-PROCESSING] No AIS targets found";
         return;
     }
-
-    // Cari semua guardzone aktif
+    
+    // Get active guardzones
     QList<GuardZone*> activeGuardZones;
-    int attachedCount = 0;
     for (GuardZone& gz : guardZones) {
         if (gz.active) {
             activeGuardZones.append(&gz);
-            if (gz.attachedToShip) {
-                attachedCount++;
-            }
         }
     }
-
+    
     if (activeGuardZones.isEmpty()) {
+        qDebug() << "[AIS-PROCESSING] No active guardzones";
         return;
     }
     
-    qDebug() << "[AUTO-CHECK] Processing" << activeGuardZones.size() << "active guardzones," << attachedCount << "attached to ship";
-    qDebug() << "[AUTO-CHECK] Auto-check enabled:" << guardZoneAutoCheckEnabled << "Timer running:" << guardZoneAutoCheckTimer->isActive();
-
-    // Track targets per guardzone
-    QMap<int, QSet<unsigned int>> currentTargetsPerZone;
-    QStringList allNewTargetAlerts;
-
-    // ========== CHECK SEMUA AIS TARGETS DARI AIS CLASS ==========
-    QMap<unsigned int, EcAISTargetInfo>& targetInfoMap = Ais::instance()->getTargetInfoMap();
+    qDebug() << "[AIS-PROCESSING] Processing" << aisTargetMap.size() << "AIS targets against" << activeGuardZones.size() << "guardzones";
     
-    // Check setiap AIS target terhadap setiap guardzone aktif
+    // Process each AIS target
     for (auto it = aisTargetMap.begin(); it != aisTargetMap.end(); ++it) {
         unsigned int mmsi = it.key();
         const AISTargetData& aisTarget = it.value();
         
-        // Get corresponding EcAISTargetInfo for ship type filtering
-        EcAISTargetInfo* targetInfo = nullptr;
-        if (targetInfoMap.contains(mmsi)) {
-            targetInfo = &targetInfoMap[mmsi];
-        }
-
         // Skip invalid targets
         if (aisTarget.mmsi.isEmpty() || aisTarget.lat == 0.0 || aisTarget.lon == 0.0) {
             continue;
         }
-
-        // Check terhadap setiap guardzone aktif
-        for (GuardZone* activeGuardZone : activeGuardZones) {
-            bool inGuardZone = false;
-
-            // Check guardzone berdasarkan shape
-            if (activeGuardZone->shape == GUARD_ZONE_CIRCLE) {
-                double distance, bearing;
-                
-                // PERBAIKAN: Use current position for attached guardzone (consistent dengan drawing)
-                double centerLat, centerLon;
-                
-                if (activeGuardZone->attachedToShip) {
-                    // Gunakan redDot position jika available (current), fallback ke ownShip
-                    if (redDotTrackerEnabled && redDotLat != 0.0 && redDotLon != 0.0) {
-                        centerLat = redDotLat;
-                        centerLon = redDotLon;
-                        qDebug() << "[AUTO-CHECK] Using current redDot position for attached guardzone" << activeGuardZone->id;
-                    } else {
-                        centerLat = ownShip.lat;
-                        centerLon = ownShip.lon;
-                        qDebug() << "[AUTO-CHECK] Using ownShip position for attached guardzone" << activeGuardZone->id;
-                    }
-                    
-                    // Fallback ke stored position jika semua invalid
-                    if (qIsNaN(centerLat) || qIsNaN(centerLon) || (centerLat == 0.0 && centerLon == 0.0)) {
-                        centerLat = activeGuardZone->centerLat;
-                        centerLon = activeGuardZone->centerLon;
-                        qDebug() << "[AUTO-CHECK] Using stored position for attached guardzone" << activeGuardZone->id;
-                    }
-                    
-                    qDebug() << "[AUTO-CHECK] Processing attached guardzone" << activeGuardZone->id 
-                             << "at position:" << centerLat << "," << centerLon
-                             << "radius:" << activeGuardZone->radius << "NM";
-                } else {
-                    centerLat = activeGuardZone->centerLat;
-                    centerLon = activeGuardZone->centerLon;
-                }
-                
-                EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
-                                                       centerLat,
-                                                       centerLon,
-                                                       aisTarget.lat, aisTarget.lon,
-                                                       &distance, &bearing);
-                inGuardZone = (distance <= activeGuardZone->radius);
-                
-                // DEBUG: Log untuk attached guardzone
-                if (activeGuardZone->attachedToShip) {
-                    qDebug() << "[AIS-DETECT] Target" << mmsi << "distance:" << distance << "NM from attached guardzone" 
-                             << activeGuardZone->id << "(radius:" << activeGuardZone->radius << "NM) - inZone:" << inGuardZone;
-                }
-            }
-            else if (activeGuardZone->shape == GUARD_ZONE_POLYGON && activeGuardZone->latLons.size() >= 6) {
-                // Note: Polygon guardzones attached to ship are not fully supported for auto-check
-                // The polygon coordinates are stored as absolute positions, not relative to ship
-                // For now, we use the stored coordinates as-is for compatibility
-                // TODO: Implement polygon transformation for ship-attached guardzones
-                
-                int targetX, targetY;
-                if (LatLonToXy(aisTarget.lat, aisTarget.lon, targetX, targetY)) {
-                    QPolygon poly;
-                    for (int j = 0; j < activeGuardZone->latLons.size(); j += 2) {
-                        int x, y;
-                        LatLonToXy(activeGuardZone->latLons[j], activeGuardZone->latLons[j+1], x, y);
-                        poly.append(QPoint(x, y));
-                    }
-                    inGuardZone = poly.containsPoint(QPoint(targetX, targetY), Qt::OddEvenFill);
-                }
-            }
-
-            if (inGuardZone) {
-                // Track target untuk guardzone ini
-                currentTargetsPerZone[activeGuardZone->id].insert(mmsi);
-
-                // Check jika ini target baru yang masuk zone untuk guardzone ini
-                QSet<unsigned int>& previousTargetsForThisZone = previousTargetsPerZone[activeGuardZone->id];
-                if (!previousTargetsForThisZone.contains(mmsi)) {
-                    // DEBUG: Log AIS target entering
-                    qDebug() << "[AIS-ENTER] Target" << mmsi << "(" << aisTarget.mmsi << ") entering guardzone" 
-                             << activeGuardZone->id << activeGuardZone->name;
-                    // ========== APPLY SHIP TYPE FILTER ==========
-                    if (activeGuardZone->shipTypeFilter != SHIP_TYPE_ALL && targetInfo) {
-                        ShipTypeFilter shipType = guardZoneManager->getShipTypeFromAIS(targetInfo->shipType);
-                        if (shipType != activeGuardZone->shipTypeFilter) {
-                            continue;  // Skip this ship, doesn't match filter
-                        }
-                    }
-                    // ==========================================
-                    
-                    // ========== APPLY ALERT DIRECTION FILTER ==========
-                    // For ENTERING events
-                    if (activeGuardZone->alertDirection == ALERT_OUT_ONLY) {
-                        qDebug() << "[AUTO-CHECK] Alert filtered out - OUT_ONLY mode, ignoring ENTER event for:" << aisTarget.mmsi << "in GuardZone" << activeGuardZone->id;
-                        continue;  // Skip entering events if set to OUT_ONLY
-                    }
-                    // ================================================
-                    
-                    allNewTargetAlerts.append(tr("NEW: AIS %1 entered GuardZone '%2' - SOG: %3kts, COG: %4°")
-                                              .arg(aisTarget.mmsi)
-                                              .arg(activeGuardZone->name)
-                                              .arg(aisTarget.sog, 0, 'f', 1)
-                                              .arg(aisTarget.cog, 0, 'f', 0));
-
-                    QString attachmentInfo = activeGuardZone->attachedToShip ? " [ATTACHED TO SHIP]" : "";
-                    qDebug() << "[AUTO-CHECK] 🚨 NEW TARGET ENTERED:" << aisTarget.mmsi << "in GuardZone" << activeGuardZone->id << "(" << activeGuardZone->name << ")" << attachmentInfo;
-                    
-                    // Emit signal untuk AISTargetPanel dengan format yang sama seperti GuardZoneManager
-                    QString alertMessage = QString("Ship %1 entered GuardZone '%2'")
-                                         .arg(aisTarget.mmsi)
-                                         .arg(activeGuardZone->name);
-                    
-                    // Emit signal dari EcWidget untuk AISTargetPanel
-                    emit aisTargetDetected(activeGuardZone->id, aisTarget.mmsi.toUInt(), alertMessage);
-                }
-            }
-        }
-    }
-    // ===============================================
-
-    // Check targets yang keluar dari setiap guardzone
-    for (GuardZone* activeGuardZone : activeGuardZones) {
-        QSet<unsigned int>& previousTargetsForThisZone = previousTargetsPerZone[activeGuardZone->id];
-        QSet<unsigned int>& currentTargetsForThisZone = currentTargetsPerZone[activeGuardZone->id];
         
-        for (unsigned int mmsi : previousTargetsForThisZone) {
-            if (!currentTargetsForThisZone.contains(mmsi)) {
-                // DEBUG: Log AIS target exiting
-                qDebug() << "[AIS-EXIT] Target" << mmsi << "exiting guardzone" 
-                         << activeGuardZone->id << activeGuardZone->name;
-                // ========== APPLY ALERT DIRECTION FILTER ==========
-                // For EXITING events
-                if (activeGuardZone->alertDirection == ALERT_IN_ONLY) {
-                    qDebug() << "[AUTO-CHECK] Alert filtered out - IN_ONLY mode, ignoring EXIT event for:" << mmsi << "from GuardZone" << activeGuardZone->id;
-                    continue;  // Skip exiting events if set to IN_ONLY
-                }
-                // ================================================
-                
-                // Note: Ship type filter tidak diterapkan untuk exit events 
-                // karena EcAISTargetInfo mungkin sudah tidak tersedia
-                QString attachmentInfo = activeGuardZone->attachedToShip ? " [ATTACHED TO SHIP]" : "";
-                qDebug() << "[AUTO-CHECK] ✅ TARGET EXITED:" << mmsi << "from GuardZone" << activeGuardZone->id << "(" << activeGuardZone->name << ")" << attachmentInfo;
-                
-                // Emit signal untuk AISTargetPanel dengan format yang sama seperti GuardZoneManager
-                QString alertMessage = QString("Ship %1 exited GuardZone '%2'")
-                                     .arg(mmsi)
-                                     .arg(activeGuardZone->name);
-                
-                // Emit signal dari EcWidget untuk AISTargetPanel
-                emit aisTargetDetected(activeGuardZone->id, mmsi, alertMessage);
-            }
-        }
-    }
-
-    // Update cache untuk setiap guardzone
-    previousTargetsPerZone = currentTargetsPerZone;
-
-    // Show alert untuk new targets
-    if (!allNewTargetAlerts.isEmpty()) {
-        QString alertMessage = tr("GuardZone Alert (%1 targets detected):\n%2")
-                              .arg(allNewTargetAlerts.size())
-                              .arg(allNewTargetAlerts.join("\n"));
-
-        // Show QMessageBox alert - DISABLED to remove popup
-        // QMessageBox::warning(this, tr("GuardZone Auto-Check Alert"), alertMessage);
-
-        // Emit signal untuk alert system jika ada - untuk semua guardzone yang terdeteksi
+        // Check against each active guardzone
         for (GuardZone* gz : activeGuardZones) {
-            if (currentTargetsPerZone[gz->id].size() > 0) {
-                emit guardZoneTargetDetected(gz->id, currentTargetsPerZone[gz->id].size());
+            checkAISTargetInGuardZone(mmsi, aisTarget, gz);
+        }
+    }
+    
+    qDebug() << "[AIS-PROCESSING] AIS target processing completed";
+}
+
+void EcWidget::processObstacleDetection()
+{
+    qDebug() << "[OBSTACLE-PROCESSING] Starting obstacle detection";
+    
+    QList<DetectedObstacle> allObstacles;
+    
+    // Get active guardzones
+    for (const GuardZone& gz : guardZones) {
+        if (gz.active) {
+            QList<DetectedObstacle> obstaclesInZone;
+            try {
+                if (checkObstaclesInGuardZone(gz, obstaclesInZone)) {
+                    allObstacles.append(obstaclesInZone);
+                    qDebug() << "[OBSTACLE-PROCESSING] Found" << obstaclesInZone.size() << "obstacles in guardzone" << gz.id;
+                }
+            } catch (const std::exception& e) {
+                qDebug() << "[OBSTACLE-PROCESSING] Exception in checkObstaclesInGuardZone:" << e.what();
+            } catch (...) {
+                qDebug() << "[OBSTACLE-PROCESSING] Unknown exception in checkObstaclesInGuardZone";
             }
         }
-
-        qDebug() << "[AUTO-CHECK] Alert triggered for" << allNewTargetAlerts.size() << "new targets across" << activeGuardZones.size() << "guardzones";
     }
+    
+    if (!allObstacles.isEmpty()) {
+        qDebug() << "[OBSTACLE-PROCESSING] Found" << allObstacles.size() << "total obstacles, emitting signal";
+        try {
+            emit obstacleDetected(allObstacles);
+        } catch (const std::exception& e) {
+            qDebug() << "[OBSTACLE-PROCESSING] Exception in obstacleDetected signal:" << e.what();
+        } catch (...) {
+            qDebug() << "[OBSTACLE-PROCESSING] Unknown exception in obstacleDetected signal";
+        }
+    }
+    
+    qDebug() << "[OBSTACLE-PROCESSING] Obstacle detection completed";
+}
+
+void EcWidget::checkAISTargetInGuardZone(unsigned int mmsi, const AISTargetData& aisTarget, GuardZone* guardZone)
+{
+    if (!guardZone || !guardZone->active) {
+        return;
+    }
+    
+    bool inGuardZone = false;
+    
+    // Check guardzone berdasarkan shape
+    if (guardZone->shape == GUARD_ZONE_CIRCLE) {
+        double distance, bearing;
+        double centerLat, centerLon;
+        
+        // Use current position for attached guardzone
+        if (guardZone->attachedToShip) {
+            if (redDotTrackerEnabled && redDotLat != 0.0 && redDotLon != 0.0) {
+                centerLat = redDotLat;
+                centerLon = redDotLon;
+            } else {
+                centerLat = ownShip.lat;
+                centerLon = ownShip.lon;
+            }
+        } else {
+            centerLat = guardZone->centerLat;
+            centerLon = guardZone->centerLon;
+        }
+        
+        EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84, 
+                                               centerLat, centerLon, 
+                                               aisTarget.lat, aisTarget.lon, 
+                                               &distance, &bearing);
+        inGuardZone = (distance <= guardZone->radius);
+        
+    } else if (guardZone->shape == GUARD_ZONE_POLYGON) {
+        // For polygons, check point in polygon
+        inGuardZone = isPointInPolygon(aisTarget.lat, aisTarget.lon, guardZone->latLons);
+    }
+    
+    // Track targets per guardzone
+    static QMap<int, QSet<unsigned int>> currentTargetsPerZone;
+    static QMap<int, QSet<unsigned int>> previousTargetsPerZone;
+    
+    if (inGuardZone) {
+        // Track target untuk guardzone ini
+        currentTargetsPerZone[guardZone->id].insert(mmsi);
+        
+        // Check jika ini target baru yang masuk zone
+        QSet<unsigned int>& previousTargetsForThisZone = previousTargetsPerZone[guardZone->id];
+        if (!previousTargetsForThisZone.contains(mmsi)) {
+            QString alertMessage = QString("Ship %1 entered GuardZone '%2'")
+                                 .arg(mmsi)
+                                 .arg(guardZone->name);
+            
+            qDebug() << "[AIS-ENTER] Target" << mmsi << "entered guardzone" << guardZone->id << guardZone->name;
+            
+            // Emit signal to AIS Target Panel
+            emit aisTargetDetected(guardZone->id, mmsi, alertMessage);
+        }
+    } else {
+        // Check if target exited
+        QSet<unsigned int>& previousTargetsForThisZone = previousTargetsPerZone[guardZone->id];
+        if (previousTargetsForThisZone.contains(mmsi)) {
+            QString alertMessage = QString("Ship %1 exited GuardZone '%2'")
+                                 .arg(mmsi)
+                                 .arg(guardZone->name);
+            
+            qDebug() << "[AIS-EXIT] Target" << mmsi << "exited guardzone" << guardZone->id << guardZone->name;
+            
+            // Emit signal to AIS Target Panel
+            emit aisTargetDetected(guardZone->id, mmsi, alertMessage);
+        }
+    }
+    
+    // Update cache
+    previousTargetsPerZone[guardZone->id] = currentTargetsPerZone[guardZone->id];
 }
 
 void EcWidget::setGuardZoneAutoCheck(bool enabled)
