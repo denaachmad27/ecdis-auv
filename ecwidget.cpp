@@ -3095,8 +3095,18 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon, double head )
   // ========== TAMBAHAN UNTUK RED DOT TRACKER ==========
   // Update red dot position if attached to ship
   if (redDotAttachedToShip) {
-      qDebug() << "Updating red dot position to:" << lat << "," << lon;
+      // PERBAIKAN: Update heading ownship dari data real-time
+      double oldHeading = ownShip.heading;
+      ownShip.heading = head;
+      
+      qDebug() << "Updating red dot position to:" << lat << "," << lon << "heading:" << head;
       updateRedDotPosition(lat, lon);
+      
+      // Log jika heading berubah signifikan
+      if (abs(head - oldHeading) > 1.0) {
+          qDebug() << "[HEADING-CHANGE] Ship heading changed from" << oldHeading << "to" << head;
+      }
+      
       update(); // Force widget repaint
   }
   
@@ -4363,23 +4373,71 @@ void EcWidget::drawGuardZone()
 
             int centerX, centerY;
             if (LatLonToXy(lat, lon, centerX, centerY)) {
-                double radiusInPixels = calculatePixelsFromNauticalMiles(gz.radius);
+                double outerRadiusInPixels = calculatePixelsFromNauticalMiles(gz.outerRadius);
+                double innerRadiusInPixels = calculatePixelsFromNauticalMiles(gz.innerRadius);
 
                 // TAMBAHAN: Clamp radius untuk performance
-                if (radiusInPixels > 5000) radiusInPixels = 5000;
-                if (radiusInPixels < 1) radiusInPixels = 1;
+                if (outerRadiusInPixels > 5000) outerRadiusInPixels = 5000;
+                if (outerRadiusInPixels < 1) outerRadiusInPixels = 1;
+                if (innerRadiusInPixels < 0) innerRadiusInPixels = 0;
 
-                painter.drawEllipse(QPoint(centerX, centerY),
-                                    static_cast<int>(radiusInPixels),
-                                    static_cast<int>(radiusInPixels));
+                // Check if this is a semicircle shield (has angles)
+                bool isSemicircleShield = (gz.startAngle != gz.endAngle && 
+                                           gz.startAngle >= 0 && gz.endAngle >= 0);
+
+                if (isSemicircleShield) {
+                    // Create semicircle shield using sector rendering
+                    QPainterPath semicirclePath;
+                    
+                    // Convert angles from navigation (0=North, clockwise) to Qt (0=East, counterclockwise)
+                    double qtStartAngle = (90 - gz.startAngle + 360) * 16;    // Qt uses 16th of degree
+                    double qtEndAngle = (90 - gz.endAngle + 360) * 16;
+                    double qtSpanAngle = (qtEndAngle - qtStartAngle);
+                    
+                    // Normalize angles
+                    qtStartAngle = fmod(qtStartAngle, 360 * 16);
+                    if (qtSpanAngle < 0) qtSpanAngle += 360 * 16;
+                    if (qtSpanAngle > 360 * 16) qtSpanAngle -= 360 * 16;
+                    
+                    double startAngleQt = qtStartAngle / 16.0;
+                    double spanAngleQt = qtSpanAngle / 16.0;
+                    
+                    // Create semicircle from center
+                    QRectF outerRect(centerX - outerRadiusInPixels, centerY - outerRadiusInPixels, 
+                                     2 * outerRadiusInPixels, 2 * outerRadiusInPixels);
+                    
+                    // Start from center
+                    semicirclePath.moveTo(centerX, centerY);
+                    
+                    // Draw arc
+                    semicirclePath.arcTo(outerRect, startAngleQt, spanAngleQt);
+                    
+                    // Close back to center
+                    semicirclePath.closeSubpath();
+                    
+                    painter.drawPath(semicirclePath);
+                    
+                    qDebug() << "[DRAW-SUCCESS] Successfully drew semicircle shield guardzone" << gz.id;
+                } else {
+                    // Create full circle or donut shape using QPainterPath
+                    QPainterPath circlePath;
+                    circlePath.addEllipse(QPointF(centerX, centerY), outerRadiusInPixels, outerRadiusInPixels);
+                    if (innerRadiusInPixels > 0) {
+                        circlePath.addEllipse(QPointF(centerX, centerY), innerRadiusInPixels, innerRadiusInPixels);
+                    }
+
+                    painter.drawPath(circlePath);
+                    
+                    qDebug() << "[DRAW-SUCCESS] Successfully drew" << (innerRadiusInPixels > 0 ? "donut" : "circle") << "guardzone" << gz.id;
+                }
 
                 labelX = centerX;
-                labelY = centerY - static_cast<int>(radiusInPixels) - 15;
+                labelY = centerY - static_cast<int>(outerRadiusInPixels) - 15;
                 drawnCount++;
                 
-                qDebug() << "[DRAW-SUCCESS] Successfully drew guardzone" << gz.id 
+                qDebug() << "[DRAW-SUCCESS] Successfully drew donut guardzone" << gz.id 
                          << "at screen coords:" << centerX << "," << centerY 
-                         << "radius:" << radiusInPixels << "pixels";
+                         << "outer radius:" << outerRadiusInPixels << "inner radius:" << innerRadiusInPixels << "pixels";
             }
         }
         else if (gz.shape == GUARD_ZONE_POLYGON && gz.latLons.size() >= 6) {
@@ -4405,6 +4463,7 @@ void EcWidget::drawGuardZone()
                 drawnCount++;
             }
         }
+        // SECTOR shape is no longer used - converted to donut circle
 
         // Draw label jika ada posisi valid
         if (labelX != 0 && labelY != 0) {
@@ -5036,11 +5095,29 @@ bool EcWidget::checkTargetsInGuardZone()
                                                    aisTarget.lat, aisTarget.lon,
                                                    &distance, &bearing);
 
-            inGuardZone = (distance <= activeGuardZone->radius);
+            // For shield guardzone: check if target is within radius
+            bool withinRadiusRange = (distance <= activeGuardZone->outerRadius);
+            if (activeGuardZone->innerRadius > 0) {
+                // If has inner radius, check donut range
+                withinRadiusRange = (distance <= activeGuardZone->outerRadius && distance >= activeGuardZone->innerRadius);
+            }
+            
+            // Check if this is a semicircle shield (has angle restrictions)
+            bool isSemicircleShield = (activeGuardZone->startAngle != activeGuardZone->endAngle && 
+                                       activeGuardZone->startAngle >= 0 && activeGuardZone->endAngle >= 0);
+            
+            if (isSemicircleShield && withinRadiusRange) {
+                // Use geometric method like polygon detection for accuracy
+                inGuardZone = isPointInSemicircle(aisTarget.lat, aisTarget.lon, activeGuardZone);
+                
+                qDebug() << "[REAL-AIS-CHECK] Semicircle shield - Using geometric detection";
+            } else {
+                inGuardZone = withinRadiusRange;
+            }
 
             qDebug() << "[REAL-AIS-CHECK] Target" << aisTarget.mmsi
-                     << "distance:" << distance << "vs radius:" << activeGuardZone->radius
-                     << "inZone:" << inGuardZone;
+                     << "distance:" << distance << "vs inner:" << activeGuardZone->innerRadius 
+                     << "outer:" << activeGuardZone->outerRadius << "inZone:" << inGuardZone;
         }
         else if (activeGuardZone->shape == GUARD_ZONE_POLYGON && activeGuardZone->latLons.size() >= 6) {
             qDebug() << "[REAL-AIS-CHECK] Checking polygon GuardZone";
@@ -5268,6 +5345,12 @@ void EcWidget::updateOwnShipPosition()
     if (guardZoneAttachedToShip) {
         guardZoneCenterLat = newLat;
         guardZoneCenterLon = newLon;
+    }
+    
+    // PERBAIKAN: Update guardzone angle ketika heading berubah
+    if (redDotAttachedToShip || hasAttachedGuardZone()) {
+        updateRedDotPosition(newLat, newLon);
+        qDebug() << "[HEADING-CHANGE] Updated guardzone angles due to heading change to:" << ownShipSimCourse;
     }
 
     // Ubah arah kapal sedikit secara acak (maksimal 5 derajat) untuk simulasi lebih realistis
@@ -5721,13 +5804,24 @@ void EcWidget::saveGuardZones()
         if (gz.shape == GUARD_ZONE_CIRCLE) {
             gzObject["centerLat"] = gz.centerLat;
             gzObject["centerLon"] = gz.centerLon;
-            gzObject["radius"] = gz.radius;
+            gzObject["radius"] = gz.radius;  // Keep for backward compatibility
+            gzObject["innerRadius"] = gz.innerRadius;
+            gzObject["outerRadius"] = gz.outerRadius;
         } else if (gz.shape == GUARD_ZONE_POLYGON) {
             QJsonArray latLonArray;
             for (double coord : gz.latLons) {
                 latLonArray.append(coord);
             }
             gzObject["latLons"] = latLonArray;
+        } else if (gz.shape == GUARD_ZONE_SECTOR) {
+            gzObject["centerLat"] = gz.centerLat;
+            gzObject["centerLon"] = gz.centerLon;
+            gzObject["innerRadius"] = gz.innerRadius;
+            gzObject["outerRadius"] = gz.outerRadius;
+            gzObject["startAngle"] = gz.startAngle;
+            gzObject["endAngle"] = gz.endAngle;
+            // Legacy radius untuk backward compatibility
+            gzObject["radius"] = gz.outerRadius;
         }
 
         guardZoneArray.append(gzObject);
@@ -5886,11 +5980,22 @@ void EcWidget::loadGuardZones()
                     gz.centerLat = gzObject["centerLat"].toDouble();
                     gz.centerLon = gzObject["centerLon"].toDouble();
                     gz.radius = gzObject["radius"].toDouble();
+                    
+                    // Load donut properties (with backward compatibility)
+                    if (gzObject.contains("innerRadius") && gzObject.contains("outerRadius")) {
+                        gz.innerRadius = gzObject["innerRadius"].toDouble();
+                        gz.outerRadius = gzObject["outerRadius"].toDouble();
+                    } else {
+                        // Backward compatibility - use old radius as outer radius
+                        gz.innerRadius = 0.0;
+                        gz.outerRadius = gz.radius;
+                    }
 
                     // Validate circle data
                     if (gz.centerLat >= -90 && gz.centerLat <= 90 &&
                         gz.centerLon >= -180 && gz.centerLon <= 180 &&
-                        gz.radius > 0 && gz.radius <= 100) {
+                        gz.outerRadius > 0 && gz.outerRadius <= 100 &&
+                        gz.innerRadius >= 0 && gz.innerRadius < gz.outerRadius) {
                         shapeDataValid = true;
                     }
                 }
@@ -5914,6 +6019,32 @@ void EcWidget::loadGuardZones()
                             }
                         }
                         if (coordsValid) shapeDataValid = true;
+                    }
+                }
+            } else if (gz.shape == GUARD_ZONE_SECTOR) {
+                if (gzObject.contains("centerLat") && gzObject.contains("centerLon") &&
+                    gzObject.contains("innerRadius") && gzObject.contains("outerRadius") &&
+                    gzObject.contains("startAngle") && gzObject.contains("endAngle")) {
+                    
+                    gz.centerLat = gzObject["centerLat"].toDouble();
+                    gz.centerLon = gzObject["centerLon"].toDouble();
+                    gz.innerRadius = gzObject["innerRadius"].toDouble();
+                    gz.outerRadius = gzObject["outerRadius"].toDouble();
+                    gz.startAngle = gzObject["startAngle"].toDouble();
+                    gz.endAngle = gzObject["endAngle"].toDouble();
+                    
+                    // Legacy radius untuk backward compatibility
+                    gz.radius = gz.outerRadius;
+                    
+                    // Validate sector data
+                    if (gz.centerLat >= -90 && gz.centerLat <= 90 &&
+                        gz.centerLon >= -180 && gz.centerLon <= 180 &&
+                        gz.innerRadius > 0 && gz.innerRadius <= 100 &&
+                        gz.outerRadius > 0 && gz.outerRadius <= 100 &&
+                        gz.outerRadius > gz.innerRadius &&
+                        gz.startAngle >= 0 && gz.startAngle < 360 &&
+                        gz.endAngle >= 0 && gz.endAngle < 360) {
+                        shapeDataValid = true;
                     }
                 }
             }
@@ -6331,6 +6462,140 @@ void EcWidget::drawGuardZoneCreationPreview(QPainter& painter)
     // =============================================
 }
 
+void EcWidget::drawSectorGuardZone(QPainter& painter, const GuardZone& gz, int& labelX, int& labelY)
+{
+    // ========== SECTOR GUARDZONE RENDERING ==========
+    // Implementasi sector guardzone (setengah lingkaran)
+    
+    qDebug() << "[DRAW-SECTOR] Drawing" << (gz.innerRadius <= 0.0 ? "semicircle" : "sector") << "guardzone" << gz.id << "at" << gz.centerLat << "," << gz.centerLon
+             << "angles:" << gz.startAngle << "to" << gz.endAngle;
+    
+    // Convert center position to screen coordinates
+    int centerX, centerY;
+    if (!LatLonToXy(gz.centerLat, gz.centerLon, centerX, centerY)) {
+        qDebug() << "[DRAW-SECTOR] Failed to convert coordinates for guardzone" << gz.id;
+        labelX = labelY = 0;
+        return;
+    }
+    
+    // Calculate radii in pixels
+    double innerRadiusPixels = calculatePixelsFromNauticalMiles(gz.innerRadius);
+    double outerRadiusPixels = calculatePixelsFromNauticalMiles(gz.outerRadius);
+    
+    // Ensure minimum visible size
+    if (outerRadiusPixels < 5) outerRadiusPixels = 5;
+    
+    // Handle semicircle case (inner radius = 0)
+    if (gz.innerRadius <= 0.0) {
+        innerRadiusPixels = 0;
+    } else {
+        if (innerRadiusPixels < 1) innerRadiusPixels = 1;
+        if (outerRadiusPixels <= innerRadiusPixels) innerRadiusPixels = outerRadiusPixels - 4;
+    }
+    
+    // Convert angles from navigation (0=North, clockwise) to Qt (0=East, counterclockwise)
+    // Navigation: 0° = North, clockwise
+    // Qt: 0° = East, counterclockwise
+    // Conversion: qtAngle = (90 - navAngle) mod 360
+    double qtStartAngle = (90 - gz.startAngle + 360) * 16;    // Qt uses 16th of degree
+    double qtEndAngle = (90 - gz.endAngle + 360) * 16;
+    double qtSpanAngle = (qtEndAngle - qtStartAngle);
+    
+    // Normalize angles
+    qtStartAngle = fmod(qtStartAngle, 360 * 16);
+    if (qtSpanAngle < 0) qtSpanAngle += 360 * 16;
+    if (qtSpanAngle > 360 * 16) qtSpanAngle -= 360 * 16;
+    
+    // Set up painter for sector drawing - consistent with circle/polygon
+    QPen pen(gz.color);
+    pen.setWidth(2);
+    painter.setPen(pen);
+    
+    QColor fillColor = gz.color;
+    fillColor.setAlpha(50);  // Same transparency as circle/polygon
+    painter.setBrush(QBrush(fillColor));
+    
+    // Create the sector path using QPainterPath for precise control
+    QPainterPath sectorPath;
+    
+    // Calculate start and end points for outer arc
+    double startAngleQt = qtStartAngle / 16.0;
+    double spanAngleQt = qtSpanAngle / 16.0;
+    
+    // Move to start point of outer arc
+    QRectF outerRect(centerX - outerRadiusPixels, centerY - outerRadiusPixels, 
+                     2 * outerRadiusPixels, 2 * outerRadiusPixels);
+    sectorPath.arcMoveTo(outerRect, startAngleQt);
+    
+    // Draw outer arc
+    sectorPath.arcTo(outerRect, startAngleQt, spanAngleQt);
+    
+    if (gz.innerRadius <= 0.0) {
+        // For semicircle (inner radius = 0), connect back to center
+        sectorPath.lineTo(centerX, centerY);
+        sectorPath.closeSubpath();
+    } else {
+        // For ring sector, draw inner arc
+        double endAngleQt = startAngleQt + spanAngleQt;
+        QRectF innerRect(centerX - innerRadiusPixels, centerY - innerRadiusPixels, 
+                         2 * innerRadiusPixels, 2 * innerRadiusPixels);
+        
+        // Connect to inner arc end point
+        QPointF innerEndPoint = QPointF(
+            centerX + innerRadiusPixels * cos(endAngleQt * M_PI / 180.0),
+            centerY + innerRadiusPixels * sin(endAngleQt * M_PI / 180.0)
+        );
+        sectorPath.lineTo(innerEndPoint);
+        
+        // Draw inner arc in reverse direction
+        sectorPath.arcTo(innerRect, endAngleQt, -spanAngleQt);
+        
+        // Close the path back to start
+        sectorPath.closeSubpath();
+    }
+    
+    // Draw the sector
+    painter.drawPath(sectorPath);
+    
+    // Draw border lines for better visibility - consistent with main border
+    painter.setPen(pen);
+    // Convert navigation angles to Qt coordinate system for radial lines
+    double startAngleRad = (90 - gz.startAngle) * M_PI / 180.0;  // Convert to radians
+    double endAngleRad = (90 - gz.endAngle) * M_PI / 180.0;
+    
+    if (gz.innerRadius <= 0.0) {
+        // For semicircle, draw radial lines from center to outer arc
+        painter.drawLine(centerX, centerY,
+                         centerX + cos(startAngleRad) * outerRadiusPixels,
+                         centerY + sin(startAngleRad) * outerRadiusPixels);
+        
+        painter.drawLine(centerX, centerY,
+                         centerX + cos(endAngleRad) * outerRadiusPixels,
+                         centerY + sin(endAngleRad) * outerRadiusPixels);
+    } else {
+        // For ring sector, draw radial lines from inner to outer arc
+        painter.drawLine(centerX + cos(startAngleRad) * innerRadiusPixels,
+                         centerY + sin(startAngleRad) * innerRadiusPixels,
+                         centerX + cos(startAngleRad) * outerRadiusPixels,
+                         centerY + sin(startAngleRad) * outerRadiusPixels);
+        
+        painter.drawLine(centerX + cos(endAngleRad) * innerRadiusPixels,
+                         centerY + sin(endAngleRad) * innerRadiusPixels,
+                         centerX + cos(endAngleRad) * outerRadiusPixels,
+                         centerY + sin(endAngleRad) * outerRadiusPixels);
+    }
+    
+    // Set label position at the center of the sector
+    labelX = centerX;
+    labelY = centerY - static_cast<int>(outerRadiusPixels) - 15;
+    
+    qDebug() << "[DRAW-SECTOR] Successfully drew" << (gz.innerRadius <= 0.0 ? "semicircle" : "sector") << "guardzone" << gz.id 
+             << "center:" << centerX << "," << centerY 
+             << "inner:" << innerRadiusPixels << "outer:" << outerRadiusPixels << "pixels"
+             << "nav angles:" << gz.startAngle << "to" << gz.endAngle
+             << "qt start:" << (qtStartAngle/16) << "span:" << (qtSpanAngle/16);
+}
+
 bool EcWidget::validateGuardZoneSystem()
 {
     qDebug() << "[VALIDATION] Starting comprehensive GuardZone system validation";
@@ -6386,13 +6651,46 @@ bool EcWidget::validateGuardZoneSystem()
                 issues << QString("GuardZone %1 has invalid longitude").arg(gz.id);
                 allValid = false;
             }
-            if (gz.radius <= 0 || gz.radius > 100) {
-                issues << QString("GuardZone %1 has invalid radius").arg(gz.id);
+            if (gz.outerRadius <= 0 || gz.outerRadius > 100) {
+                issues << QString("GuardZone %1 has invalid outer radius").arg(gz.id);
+                allValid = false;
+            }
+            if (gz.innerRadius < 0 || gz.innerRadius >= gz.outerRadius) {
+                issues << QString("GuardZone %1 has invalid inner radius").arg(gz.id);
                 allValid = false;
             }
         } else if (gz.shape == GUARD_ZONE_POLYGON) {
             if (gz.latLons.size() < 6 || gz.latLons.size() % 2 != 0) {
                 issues << QString("GuardZone %1 has invalid polygon data").arg(gz.id);
+                allValid = false;
+            }
+        } else if (gz.shape == GUARD_ZONE_SECTOR) {
+            if (gz.centerLat < -90 || gz.centerLat > 90) {
+                issues << QString("GuardZone %1 has invalid latitude").arg(gz.id);
+                allValid = false;
+            }
+            if (gz.centerLon < -180 || gz.centerLon > 180) {
+                issues << QString("GuardZone %1 has invalid longitude").arg(gz.id);
+                allValid = false;
+            }
+            if (gz.innerRadius <= 0 || gz.innerRadius > 100) {
+                issues << QString("GuardZone %1 has invalid inner radius").arg(gz.id);
+                allValid = false;
+            }
+            if (gz.outerRadius <= 0 || gz.outerRadius > 100) {
+                issues << QString("GuardZone %1 has invalid outer radius").arg(gz.id);
+                allValid = false;
+            }
+            if (gz.outerRadius <= gz.innerRadius) {
+                issues << QString("GuardZone %1 has outer radius <= inner radius").arg(gz.id);
+                allValid = false;
+            }
+            if (gz.startAngle < 0 || gz.startAngle >= 360) {
+                issues << QString("GuardZone %1 has invalid start angle").arg(gz.id);
+                allValid = false;
+            }
+            if (gz.endAngle < 0 || gz.endAngle >= 360) {
+                issues << QString("GuardZone %1 has invalid end angle").arg(gz.id);
                 allValid = false;
             }
         }
@@ -6837,6 +7135,22 @@ void EcWidget::updateRedDotPosition(double lat, double lon)
             if (gz.id == attachedGuardZoneId) {
                 gz.centerLat = lat;
                 gz.centerLon = lon;
+                
+                // PERBAIKAN: Update angle untuk semicircle shield berdasarkan heading
+                if (gz.shape == GUARD_ZONE_CIRCLE && gz.startAngle != gz.endAngle) {
+                    double currentHeading = ownShip.heading;
+                    if (qIsNaN(currentHeading) || currentHeading < 0) {
+                        currentHeading = 0.0;  // Default to North if no heading
+                    }
+                    
+                    // Update semicircle shield angles berdasarkan heading (+90° shift lagi untuk depan)
+                    gz.startAngle = fmod(currentHeading + 90.0, 360.0);           // Port-forward (90° + heading)
+                    gz.endAngle = fmod(currentHeading + 270.0, 360.0);            // Starboard-forward (270° + heading)
+                    
+                    qDebug() << "[UPDATE-GUARDZONE] Updated semicircle shield angles - Start:" << gz.startAngle 
+                             << "End:" << gz.endAngle << "Based on heading:" << currentHeading;
+                }
+                
                 qDebug() << "[UPDATE-GUARDZONE] Updated attached guardzone position to:" << lat << "," << lon;
                 break;
             }
@@ -6851,6 +7165,22 @@ void EcWidget::updateRedDotPosition(double lat, double lon)
                 !gz.name.contains("Red Dot Guardian")) {
                 gz.centerLat = lat;
                 gz.centerLon = lon;
+                
+                // PERBAIKAN: Update angle untuk semicircle shield berdasarkan heading
+                if (gz.shape == GUARD_ZONE_CIRCLE && gz.startAngle != gz.endAngle) {
+                    double currentHeading = ownShip.heading;
+                    if (qIsNaN(currentHeading) || currentHeading < 0) {
+                        currentHeading = 0.0;  // Default to North if no heading
+                    }
+                    
+                    // Update semicircle shield angles berdasarkan heading (+90° shift lagi untuk depan)
+                    gz.startAngle = fmod(currentHeading + 90.0, 360.0);           // Port-forward (90° + heading)
+                    gz.endAngle = fmod(currentHeading + 270.0, 360.0);            // Starboard-forward (270° + heading)
+                    
+                    qDebug() << "[UPDATE-GUARDZONE] Updated semicircle shield angles - Start:" << gz.startAngle 
+                             << "End:" << gz.endAngle << "Based on heading:" << currentHeading;
+                }
+                
                 qDebug() << "[UPDATE-GUARDZONE] Updated attached guardzone (no ID) position to:" << lat << "," << lon;
                 // Emit signal untuk update panel
                 emit guardZoneModified();
@@ -7914,7 +8244,7 @@ void EcWidget::createAttachedGuardZone()
     GuardZone attachedGZ;
     attachedGZ.id = attachedGuardZoneId;
     attachedGZ.name = attachedGuardZoneName;
-    attachedGZ.shape = GUARD_ZONE_CIRCLE;
+    attachedGZ.shape = GUARD_ZONE_CIRCLE;  // PERBAIKAN: Gunakan bentuk circle untuk donut
     attachedGZ.active = true;
     attachedGZ.attachedToShip = true;
     attachedGZ.color = QColor(255, 0, 0, 150);  // Red color
@@ -7937,7 +8267,28 @@ void EcWidget::createAttachedGuardZone()
     attachedGZ.centerLon = useLon;
     
     qDebug() << "[CREATE-ATTACHED] Using position:" << useLat << "," << useLon;
-    attachedGZ.radius = guardianRadius;  // PERBAIKAN: Gunakan guardianRadius yang dapat dikonfigurasi
+    
+    // PERBAIKAN: Set properties untuk setengah lingkaran perisai
+    attachedGZ.innerRadius = 0.0;              // No inner radius - full semicircle shield
+    attachedGZ.outerRadius = guardianRadius;   // Outer radius
+    
+    // PERBAIKAN: Set angle berdasarkan heading ownship untuk perisai setengah lingkaran
+    double baseHeading = ownShip.heading;
+    if (qIsNaN(baseHeading) || baseHeading < 0) {
+        baseHeading = 0.0;  // Default to North if no heading
+    }
+    
+    // Create forward-facing semicircle shield (perisai setengah lingkaran di depan kapal)
+    // Navigation: 0° = North, clockwise
+    // Perisai di depan: shift +90° lagi agar berada di depan bukan samping
+    attachedGZ.startAngle = fmod(baseHeading + 90.0, 360.0);           // Port-forward (90° + heading)
+    attachedGZ.endAngle = fmod(baseHeading + 270.0, 360.0);            // Starboard-forward (270° + heading)
+    
+    qDebug() << "[CREATE-ATTACHED] Semicircle shield properties - Radius:" << attachedGZ.outerRadius 
+             << "Angles:" << attachedGZ.startAngle << "to" << attachedGZ.endAngle;
+    
+    // Legacy radius untuk backward compatibility
+    attachedGZ.radius = guardianRadius;
     
     // PERBAIKAN: Update red dot position untuk sinkronisasi
     updateRedDotPosition(useLat, useLon);
@@ -8478,7 +8829,7 @@ void EcWidget::performAutoGuardZoneCheck()
                     
                     qDebug() << "[AUTO-CHECK] Processing attached guardzone" << activeGuardZone->id 
                              << "at position:" << centerLat << "," << centerLon
-                             << "radius:" << activeGuardZone->radius << "NM";
+                             << "inner:" << activeGuardZone->innerRadius << "outer:" << activeGuardZone->outerRadius << "NM";
                 } else {
                     centerLat = activeGuardZone->centerLat;
                     centerLon = activeGuardZone->centerLon;
@@ -8489,12 +8840,35 @@ void EcWidget::performAutoGuardZoneCheck()
                                                        centerLon,
                                                        aisTarget.lat, aisTarget.lon,
                                                        &distance, &bearing);
-                inGuardZone = (distance <= activeGuardZone->radius);
+                // For shield guardzone: check if target is within radius
+                bool withinRadiusRange = (distance <= activeGuardZone->outerRadius);
+                if (activeGuardZone->innerRadius > 0) {
+                    // If has inner radius, check donut range
+                    withinRadiusRange = (distance <= activeGuardZone->outerRadius && distance >= activeGuardZone->innerRadius);
+                }
+                
+                // Check if this is a semicircle shield (has angle restrictions)
+                bool isSemicircleShield = (activeGuardZone->startAngle != activeGuardZone->endAngle && 
+                                           activeGuardZone->startAngle >= 0 && activeGuardZone->endAngle >= 0);
+                
+                if (isSemicircleShield && withinRadiusRange) {
+                    // Use geometric method like polygon detection for accuracy
+                    // Create temporary guardzone with current center position
+                    GuardZone tempGZ = *activeGuardZone;
+                    tempGZ.centerLat = centerLat;
+                    tempGZ.centerLon = centerLon;
+                    
+                    inGuardZone = isPointInSemicircle(aisTarget.lat, aisTarget.lon, &tempGZ);
+                    
+                    qDebug() << "[AUTO-CHECK] Semicircle shield - Using geometric detection";
+                } else {
+                    inGuardZone = withinRadiusRange;
+                }
                 
                 // DEBUG: Log untuk attached guardzone
                 if (activeGuardZone->attachedToShip) {
                     qDebug() << "[AIS-DETECT] Target" << mmsi << "distance:" << distance << "NM from attached guardzone" 
-                             << activeGuardZone->id << "(radius:" << activeGuardZone->radius << "NM) - inZone:" << inGuardZone;
+                             << activeGuardZone->id << "(inner:" << activeGuardZone->innerRadius << "outer:" << activeGuardZone->outerRadius << "NM) - inZone:" << inGuardZone;
                 }
             }
             else if (activeGuardZone->shape == GUARD_ZONE_POLYGON && activeGuardZone->latLons.size() >= 6) {
@@ -8770,4 +9144,61 @@ double EcWidget::calculateCrossProduct(double pointLat, double pointLon,
 
     // Cross product: (v2-v1) × (point-v1)
     return ((x2 - x1) * (py - y1) - (y2 - y1) * (px - x1));
+}
+
+// ========== SEMICIRCLE GUARDZONE DETECTION ==========
+bool EcWidget::isPointInSemicircle(double lat, double lon, const GuardZone* gz)
+{
+    if (!gz || gz->shape != GUARD_ZONE_CIRCLE) {
+        qDebug() << "[SEMICIRCLE-CHECK] Invalid guardzone";
+        return false;
+    }
+
+    // Step 1: Check if point is within radius range
+    double distance, bearing;
+    EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
+                                           gz->centerLat, gz->centerLon,
+                                           lat, lon,
+                                           &distance, &bearing);
+
+    bool withinRadius = (distance <= gz->outerRadius);
+    if (gz->innerRadius > 0) {
+        withinRadius = (distance <= gz->outerRadius && distance >= gz->innerRadius);
+    }
+
+    if (!withinRadius) {
+        qDebug() << "[SEMICIRCLE-CHECK] Point outside radius range - distance:" << distance 
+                 << "inner:" << gz->innerRadius << "outer:" << gz->outerRadius;
+        return false;
+    }
+
+    // Step 2: Check if point is within semicircle angle range
+    // Convert startAngle and endAngle from guardzone to determine the semicircle direction
+    double startAngle = gz->startAngle;
+    double endAngle = gz->endAngle;
+    
+    // Normalize bearing to 0-360
+    bearing = fmod(bearing + 360.0, 360.0);
+    
+    // For semicircle: check if bearing is in the "front" semicircle
+    // Current configuration: startAngle = heading+90°, endAngle = heading+270°
+    // Visual guardzone: from starboard through BOW to port (FRONT semicircle)
+    // Detection should EXCLUDE the range from startAngle to endAngle (which is the BACK semicircle)
+    
+    bool withinAngle;
+    if (startAngle < endAngle) {
+        // Simple case: e.g., 90° to 270° - EXCLUDE this range (back semicircle)
+        withinAngle = !(bearing >= startAngle && bearing <= endAngle);
+    } else {
+        // Wrap-around case: e.g., 270° to 90° - EXCLUDE this range
+        withinAngle = !(bearing >= startAngle || bearing <= endAngle);
+    }
+
+    qDebug() << "[SEMICIRCLE-CHECK] Point (" << lat << "," << lon << ")";
+    qDebug() << "[SEMICIRCLE-CHECK] Distance:" << distance << "Bearing:" << bearing;
+    qDebug() << "[SEMICIRCLE-CHECK] Angle range:" << startAngle << "to" << endAngle;
+    qDebug() << "[SEMICIRCLE-CHECK] Within radius:" << withinRadius << "Within angle:" << withinAngle;
+    qDebug() << "[SEMICIRCLE-CHECK] Final result:" << (withinRadius && withinAngle);
+
+    return (withinRadius && withinAngle);
 }

@@ -230,6 +230,7 @@ public:
   bool isGuardZoneInViewport(const GuardZone& gz, const QRect& viewport);
   void drawGuardZoneLabel(QPainter& painter, const GuardZone& gz, const QPoint& position);
   void drawGuardZoneCreationPreview(QPainter& painter);
+  void drawSectorGuardZone(QPainter& painter, const GuardZone& gz, int& labelX, int& labelY);
 
   void createRedDotGuardian();
   void removeRedDotGuardian();
@@ -763,6 +764,7 @@ private:
   bool checkPointInPolygonGeographic(double lat, double lon, const QVector<double>& polygonLatLons);
   bool checkPointInPolygonScreen(double lat, double lon, const QVector<double>& polygonLatLons);
   double calculateCrossProduct(double pointLat, double pointLon, double lat1, double lon1, double lat2, double lon2);
+  bool isPointInSemicircle(double lat, double lon, const GuardZone* gz);
 
   GuardZoneManager* guardZoneManager;
   QList<GuardZone> guardZones;
