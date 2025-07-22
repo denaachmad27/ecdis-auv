@@ -42,6 +42,7 @@ struct AISTargetDetection {
     QString status;          // "ACTIVE" atau "CLEARED"
 };
 
+
 class AISTargetPanel : public QWidget
 {
     Q_OBJECT

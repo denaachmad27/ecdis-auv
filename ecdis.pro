@@ -59,6 +59,7 @@ HEADERS += mainwindow.h ecwidget.h pickwindow.h ais.h \
     alertsystem.h \
     alertpanel.h \
     aistargetpanel.h \
+    obstacledetectionpanel.h \
 
 SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     AISSubscriber.cpp \
@@ -83,6 +84,7 @@ SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     alertsystem.cpp \
     alertpanel.cpp \
     aistargetpanel.cpp \
+    obstacledetectionpanel.cpp \
 
 RESOURCES += \
     resources.qrc

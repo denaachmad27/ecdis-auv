@@ -39,6 +39,7 @@ AISTargetPanel::~AISTargetPanel()
     }
 }
 
+
 void AISTargetPanel::setupUI()
 {
     setWindowTitle("AIS Target Manager");
@@ -297,13 +298,14 @@ void AISTargetPanel::addTargetToList(const AISTargetDetection& detection)
     }
     
     // Store detection data in item
-    item->setData(0, Qt::UserRole, QVariant::fromValue(detection));
+    QVariant detectionVariant;
+    detectionVariant.setValue(detection);
+    item->setData(0, Qt::UserRole, detectionVariant);
     
-    // Auto-scroll to new item
-    targetList->scrollToItem(item);
-    
-    qDebug() << "AISTargetPanel: Added item to tree widget. Total items now:" << targetList->topLevelItemCount();
+    targetList->addTopLevelItem(item);
+    applyFilters();
 }
+
 
 QString AISTargetPanel::formatEventType(const QString& eventType)
 {
@@ -568,3 +570,4 @@ void AISTargetPanel::onTargetExited(int guardZoneId, int mmsi, const QString& de
     // Alternative slot for more specific exited events
     qDebug() << "Target exited - GuardZone:" << guardZoneId << "MMSI:" << mmsi << "Details:" << details;
 }
+

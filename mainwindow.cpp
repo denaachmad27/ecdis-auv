@@ -1090,7 +1090,7 @@ MainWindow::MainWindow(QWidget *parent)
 
   setupGuardZonePanel();
   setupAISTargetPanel();
-
+  setupObstacleDetectionPanel();
 
   //setupAlertPanel();
   //setupTestingMenu();
@@ -1617,7 +1617,7 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
     }
 
 
-    //pickWindow->show();
+    pickWindow->show();
 
     //changeText();
 }
@@ -2206,6 +2206,7 @@ void MainWindow::setupAISTargetPanel()
                 aisTargetPanel, &AISTargetPanel::onGuardZoneAlert,
                 Qt::QueuedConnection);
 
+
         // Connect from EcWidget auto-check signals if available
         connect(ecchart, &EcWidget::guardZoneTargetDetected,
                 [this](int guardZoneId, int targetCount) {
@@ -2250,6 +2251,69 @@ void MainWindow::setupAISTargetPanel()
         qDebug() << "Unknown critical error setting up AIS Target panel";
         QMessageBox::critical(this, tr("Setup Error"),
                               tr("Unknown error occurred while setting up AIS Target panel"));
+    }
+}
+
+void MainWindow::setupObstacleDetectionPanel()
+{
+    qDebug() << "Setting up Obstacle Detection panel...";
+    
+    if (!ecchart) {
+        qDebug() << "Cannot setup Obstacle Detection panel: ecchart not available";
+        return;
+    }
+
+    try {
+        // Create Obstacle Detection panel
+        obstacleDetectionPanel = new ObstacleDetectionPanel(ecchart, ecchart->getGuardZoneManager(), this);
+
+        // Create dock widget
+        obstacleDetectionDock = new QDockWidget(tr("Obstacle Detection"), this);
+        obstacleDetectionDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
+        obstacleDetectionDock->setWidget(obstacleDetectionPanel);
+
+        // Add to right dock area
+        addDockWidget(Qt::RightDockWidgetArea, obstacleDetectionDock);
+
+        // Add to Sidebar menu
+        QList<QAction*> actions = menuBar()->actions();
+        bool sidebarFound = false;
+        for (QAction* action : actions) {
+            if (action->menu() && action->menu()->title() == tr("&Sidebar")) {
+                action->menu()->addAction(obstacleDetectionDock->toggleViewAction());
+                qDebug() << "Obstacle Detection Panel added to Sidebar menu successfully";
+                sidebarFound = true;
+                break;
+            }
+        }
+        if (!sidebarFound) {
+            qDebug() << "[MAIN] Warning: Sidebar menu not found for Obstacle Detection Panel";
+        }
+
+        // Connect pick report obstacle detection signal
+        bool connectionResult = connect(ecchart, &EcWidget::pickReportObstacleDetected,
+                obstacleDetectionPanel, &ObstacleDetectionPanel::onPickReportObstacleDetected,
+                Qt::QueuedConnection);
+        qDebug() << "[OBSTACLE-MAIN-DEBUG] Signal connection result:" << connectionResult;
+
+        // ========== TABIFY WITH OTHER PANELS ==========
+        if (aisTargetDock && obstacleDetectionDock) {
+            // Add Obstacle Detection Panel to the tabbed interface
+            tabifyDockWidget(aisTargetDock, obstacleDetectionDock);
+            qDebug() << "Added Obstacle Detection Panel to tabbed interface";
+        }
+        // =================================================
+
+        qDebug() << "Obstacle Detection panel setup completed successfully";
+
+    } catch (const std::exception& e) {
+        qDebug() << "Critical error setting up Obstacle Detection panel:" << e.what();
+        QMessageBox::critical(this, tr("Setup Error"),
+                              tr("Failed to setup Obstacle Detection panel: %1").arg(e.what()));
+    } catch (...) {
+        qDebug() << "Unknown critical error setting up Obstacle Detection panel";
+        QMessageBox::critical(this, tr("Setup Error"),
+                              tr("Unknown error occurred while setting up Obstacle Detection panel"));
     }
 }
 

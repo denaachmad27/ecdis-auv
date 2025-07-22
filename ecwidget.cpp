@@ -972,6 +972,7 @@ void EcWidget::paintEvent (QPaintEvent *e)
   painter.drawPixmap(e->rect(), drawPixmap, e->rect());
 
   drawGuardZone();
+  drawObstacleDetectionArea(painter); // Show obstacle detection area
   drawRedDotTracker();
 
   // ========== DRAW TEST GUARDZONE ==========
@@ -8902,6 +8903,9 @@ bool EcWidget::checkShipGuardianZone()
         hasObstacles = true;
     }
 
+    // Check pick report obstacles (chart features at ship position)
+    checkPickReportObstaclesInShipGuardian();
+
     // Show alert jika ada obstacles
     if (hasObstacles && !lastDetectedObstacles.isEmpty()) {
         showShipGuardianAlert(lastDetectedObstacles);
@@ -9035,6 +9039,314 @@ bool EcWidget::checkStaticObstaclesInShipGuardian(QList<DetectedObstacle>& obsta
 
     return foundDanger;
 }
+
+// Check pick report obstacles in ship guardian zone
+void EcWidget::checkPickReportObstaclesInShipGuardian()
+{
+    // Check if any guardzone is attached to ship
+    bool hasAttachedGuardZone = false;
+    int totalGuardZones = guardZones.size();
+    int activeGuardZones = 0;
+    int attachedGuardZones = 0;
+    
+    for (const GuardZone& gz : guardZones) {
+        if (gz.active) activeGuardZones++;
+        if (gz.attachedToShip) {
+            attachedGuardZones++;
+            if (gz.active) {
+                hasAttachedGuardZone = true;
+                qDebug() << "[OBSTACLE-DEBUG] Found active attached guardzone:" << gz.id << gz.name;
+            }
+        }
+    }
+    
+    qDebug() << "[OBSTACLE-DEBUG] GuardZone status: total=" << totalGuardZones 
+             << "active=" << activeGuardZones << "attached=" << attachedGuardZones;
+    
+    if (!hasAttachedGuardZone) {
+        return; // Only check when guardzone is attached to ship
+    }
+
+    // Get all attached guardzone for area checking
+    GuardZone* attachedGuardZone = nullptr;
+    for (GuardZone& gz : guardZones) {
+        if (gz.attachedToShip && gz.active) {
+            attachedGuardZone = &gz;
+            break; // Use first attached guardzone
+        }
+    }
+    
+    if (!attachedGuardZone) {
+        return;
+    }
+
+    // Check multiple points within guardzone area for better coverage
+    QList<EcFeature> allPickedFeatures;
+    
+    // Check center (ship position)
+    QList<EcFeature> centerFeatures;
+    GetPickedFeaturesSubs(centerFeatures, ownShip.lat, ownShip.lon);
+    allPickedFeatures.append(centerFeatures);
+    
+    qDebug() << "[OBSTACLE-DEBUG] Guardzone shape:" << attachedGuardZone->shape 
+             << "radius:" << attachedGuardZone->outerRadius << "NM";
+    qDebug() << "[OBSTACLE-DEBUG] Center features found:" << centerFeatures.size();
+    
+    // For circular guardzone, check additional points around the circumference
+    if (attachedGuardZone->shape == GUARD_ZONE_CIRCLE) {
+        double radius = attachedGuardZone->outerRadius; // Use outer radius in NM
+        
+        // Check 8 points around the circle (45 degree intervals)
+        for (int angle = 0; angle < 360; angle += 45) {
+            double checkLat, checkLon;
+            EcCalculateRhumblinePosition(EC_GEO_DATUM_WGS84,
+                                        ownShip.lat, ownShip.lon,
+                                        radius, angle,
+                                        &checkLat, &checkLon);
+            
+            QList<EcFeature> pointFeatures;
+            GetPickedFeaturesSubs(pointFeatures, checkLat, checkLon);
+            allPickedFeatures.append(pointFeatures);
+            
+            if (pointFeatures.size() > 0) {
+                qDebug() << "[OBSTACLE-DEBUG] Found" << pointFeatures.size() << "features at angle" << angle 
+                         << "position" << checkLat << checkLon;
+            }
+        }
+    }
+    
+    qDebug() << "[OBSTACLE-DEBUG] Total features collected:" << allPickedFeatures.size();
+    
+    // Track current obstacles
+    QSet<QString> currentDetectedObstacles;
+    
+    // Process each feature individually like in PickWindow
+    for (const EcFeature& feature : allPickedFeatures) {
+        char featToken[EC_LENATRCODE + 1];
+        char featName[256];
+        
+        // Get feature class using SevenCs API (same as PickWindow)
+        EcFeatureGetClass(feature, dictInfo, featToken, sizeof(featToken));
+        
+        // Skip AIS targets and own ship (like in PickWindow)
+        QString featureClass = QString::fromLatin1(featToken);
+        
+        if (featureClass == "aistar" || featureClass == "ownshp") {
+            continue;
+        }
+        
+        // Translate token to human readable name (fallback)
+        if (EcDictionaryTranslateObjectToken(dictInfo, featToken, featName, sizeof(featName)) != EC_DICT_OK) {
+            strcpy(featName, "Unknown Chart Feature");
+        }
+        
+        // Extract better object name from attributes (like "swept between 5m and 10m")
+        QString betterObjectName = extractObjectNameFromFeature(feature);
+        QString finalObjectName = betterObjectName.isEmpty() ? QString::fromLatin1(featName) : betterObjectName;
+        
+        // Create unique identifier for this obstacle
+        QString obstacleId = QString("%1_%2_%3")
+                            .arg(featureClass)
+                            .arg(finalObjectName)
+                            .arg(QString("%1,%2").arg(ownShip.lat, 0, 'f', 4).arg(ownShip.lon, 0, 'f', 4));
+        
+        currentDetectedObstacles.insert(obstacleId);
+        
+        // Only emit if this is a new obstacle
+        if (!previousDetectedObstacles.contains(obstacleId)) {
+            // Determine danger level based on feature type
+            QString dangerLevel = "NOTE";
+            if (featureClass == "WRECKS" || featureClass == "OBSTNS" || featureClass == "UWTROC") {
+                dangerLevel = "DANGEROUS";
+            } else if (featureClass == "BOYISD" || featureClass == "CTNARE" || featureClass == "TSSBND") {
+                dangerLevel = "WARNING";
+            }
+            
+            // Extract Information field from attributes
+            QString information = extractInformationFromFeature(feature);
+            if (information.isEmpty()) {
+                information = "Chart feature detected";
+            }
+            
+            // Create pick report obstacle data
+            QString details = QString("PICK_REPORT|%1|%2|%3|%4|%5|%6|%7")
+                             .arg(featureClass)
+                             .arg(finalObjectName)
+                             .arg(featureClass)
+                             .arg(ownShip.lat, 0, 'f', 6)
+                             .arg(ownShip.lon, 0, 'f', 6)
+                             .arg(dangerLevel)
+                             .arg(information);
+            
+            // Emit signal to add to obstacle detection panel
+            emit pickReportObstacleDetected(0, details); // 0 = ship guardian zone ID
+            
+            qDebug() << "Pick Report NEW Obstacle Detected:" << finalObjectName 
+                     << "(" << featureClass << ") Level:" << dangerLevel << "at" << ownShip.lat << ownShip.lon;
+        }
+    }
+    
+    // Update previous obstacles for next check
+    previousDetectedObstacles = currentDetectedObstacles;
+}
+
+QString EcWidget::extractInformationFromFeature(const EcFeature& feature)
+{
+    QString information;
+    
+    // Extract attributes using SevenCs API like in PickWindow
+    char attrStr[512];
+    EcFindInfo fI;
+    Bool result;
+    EcAttributeToken attrToken;
+    char attrName[256];
+    
+    // Get the first attribute string of the feature
+    result = EcFeatureGetAttributes(feature, dictInfo, &fI, EC_FIRST, attrStr, sizeof(attrStr));
+    
+    while (result) {
+        // Extract the six character long attribute token
+        strncpy(attrToken, attrStr, EC_LENATRCODE);
+        attrToken[EC_LENATRCODE] = (char)0;
+        
+        // Translate the token to a human readable name
+        if (EcDictionaryTranslateAttributeToken(dictInfo, attrToken, attrName, sizeof(attrName))) {
+            QString tokenStr = QString::fromLatin1(attrToken);
+            QString nameStr = QString::fromLatin1(attrName);
+            QString attrString = QString::fromLatin1(attrStr);
+            
+            // Look for INFORM, OBJNAM, or other relevant attributes
+            if (tokenStr == "INFORM" || tokenStr == "OBJNAM" || nameStr.contains("Information") || nameStr.contains("Object name")) {
+                // Extract value after = sign  
+                int equalPos = attrString.indexOf('=');
+                if (equalPos > 0 && equalPos < attrString.length() - 1) {
+                    QString value = attrString.mid(equalPos + 1).trimmed();
+                    if (!value.isEmpty()) {
+                        information = value;
+                        break; // Use first meaningful information found
+                    }
+                }
+            }
+        }
+        
+        // Get next attribute
+        result = EcFeatureGetAttributes(feature, dictInfo, &fI, EC_NEXT, attrStr, sizeof(attrStr));
+    }
+    
+    return information;
+}
+
+QString EcWidget::extractObjectNameFromFeature(const EcFeature& feature)
+{
+    QString objectName;
+    
+    // Extract attributes using SevenCs API like in PickWindow
+    char attrStr[512];
+    EcFindInfo fI;
+    Bool result;
+    EcAttributeToken attrToken;
+    char attrName[256];
+    
+    // Get the first attribute string of the feature
+    result = EcFeatureGetAttributes(feature, dictInfo, &fI, EC_FIRST, attrStr, sizeof(attrStr));
+    
+    while (result) {
+        // Extract the six character long attribute token
+        strncpy(attrToken, attrStr, EC_LENATRCODE);
+        attrToken[EC_LENATRCODE] = (char)0;
+        
+        // Translate the token to a human readable name
+        if (EcDictionaryTranslateAttributeToken(dictInfo, attrToken, attrName, sizeof(attrName))) {
+            QString tokenStr = QString::fromLatin1(attrToken);
+            QString nameStr = QString::fromLatin1(attrName);
+            QString attrString = QString::fromLatin1(attrStr);
+            
+            // Look for OBJNAM, INFORM, or any descriptive attribute
+            if (tokenStr == "OBJNAM" || tokenStr == "INFORM" || 
+                nameStr.contains("Object name") || nameStr.contains("Information") ||
+                nameStr.contains("Description")) {
+                // Extract value after = sign  
+                int equalPos = attrString.indexOf('=');
+                if (equalPos > 0 && equalPos < attrString.length() - 1) {
+                    QString value = attrString.mid(equalPos + 1).trimmed();
+                    if (!value.isEmpty() && value != "?" && value != "0") {
+                        objectName = value;
+                        break; // Use first meaningful name found
+                    }
+                }
+            }
+        }
+        
+        // Get next attribute
+        result = EcFeatureGetAttributes(feature, dictInfo, &fI, EC_NEXT, attrStr, sizeof(attrStr));
+    }
+    
+    return objectName;
+}
+
+void EcWidget::drawObstacleDetectionArea(QPainter& painter)
+{
+    // Only draw if there's an attached guardzone
+    GuardZone* attachedGuardZone = nullptr;
+    for (GuardZone& gz : guardZones) {
+        if (gz.attachedToShip && gz.active) {
+            attachedGuardZone = &gz;
+            break;
+        }
+    }
+    
+    if (!attachedGuardZone) {
+        return; // No attached guardzone to visualize
+    }
+    
+    // Set yellow color with transparency for detection area
+    QColor detectionColor(255, 255, 0, 80); // Yellow with 80/255 opacity
+    QColor borderColor(255, 215, 0, 150);   // Gold border
+    
+    painter.setPen(QPen(borderColor, 2, Qt::DashLine));
+    painter.setBrush(QBrush(detectionColor));
+    
+    // Get ship position in screen coordinates
+    int shipX, shipY;
+    if (!LatLonToXy(ownShip.lat, ownShip.lon, shipX, shipY)) {
+        return; // Can't convert coordinates
+    }
+    
+    if (attachedGuardZone->shape == GUARD_ZONE_CIRCLE) {
+        // Draw circular detection area
+        double radiusPixels = calculatePixelsFromNauticalMiles(attachedGuardZone->outerRadius);
+        
+        painter.drawEllipse(QPointF(shipX, shipY), radiusPixels, radiusPixels);
+        
+        // Draw center point and radius indicator
+        painter.setPen(QPen(Qt::yellow, 3));
+        painter.drawPoint(shipX, shipY);
+        
+        // Draw label
+        painter.setPen(QPen(Qt::black, 1));
+        painter.setFont(QFont("Arial", 10, QFont::Bold));
+        QString label = QString("Obstacle Detection Area\nRadius: %1 NM").arg(attachedGuardZone->outerRadius, 0, 'f', 1);
+        painter.drawText(shipX + 10, shipY - 10, label);
+        
+        // Draw additional detection points (8 points around circumference)
+        painter.setPen(QPen(Qt::red, 2));
+        for (int angle = 0; angle < 360; angle += 45) {
+            double checkLat, checkLon;
+            EcCalculateRhumblinePosition(EC_GEO_DATUM_WGS84,
+                                       ownShip.lat, ownShip.lon,
+                                       attachedGuardZone->outerRadius, angle,
+                                       &checkLat, &checkLon);
+            
+            int checkX, checkY;
+            if (LatLonToXy(checkLat, checkLon, checkX, checkY)) {
+                painter.drawEllipse(QPointF(checkX, checkY), 3, 3);
+            }
+        }
+    }
+    
+    qDebug() << "[OBSTACLE-VIS] Drew obstacle detection area for guardzone radius:" << attachedGuardZone->outerRadius << "NM";
+}
+
 
 // SHOW ALERT (PRIVATE HELPER)
 void EcWidget::showShipGuardianAlert(const QList<DetectedObstacle>& obstacles)
@@ -9468,6 +9780,9 @@ void EcWidget::performAutoGuardZoneCheck()
 
         qDebug() << "[AUTO-CHECK] Alert triggered for" << allNewTargetAlerts.size() << "new targets across" << activeGuardZones.size() << "guardzones";
     }
+    
+    // Check pick report obstacles for ship guardian zones
+    checkPickReportObstaclesInShipGuardian();
 }
 
 void EcWidget::setGuardZoneAutoCheck(bool enabled)
