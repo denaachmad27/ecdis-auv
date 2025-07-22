@@ -4,6 +4,7 @@
 #include "aisdecoder.h"
 #include "pickwindow.h"
 #include "moosdb.h"
+#include "aisdatabasemanager.h"
 
 Ais::Ais( EcWidget *parent, EcView *view, EcDictInfo *dict,
          EcCoordinate ownShipLat, EcCoordinate ownShipLon,
@@ -484,6 +485,10 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
                 Ais::instance()->_aisTargetMap[ti->mmsi] = data;
                 Ais::instance()->_aisTargetInfoMap[ti->mmsi] = *ti;
             }
+
+            // MASUK KE DATABASE
+            // PLEASE WAIT!!
+            // AisDatabaseManager::instance().insertOrUpdateAisTarget(*ti); // EcAISTargetInfo
         }
     }
 
@@ -619,6 +624,11 @@ void Ais::readAISLogfile( const QString &logFile )
 
     nmeaText->append(nmea);
     extractNMEA(nmea);
+
+    // EKOR OWNSHIP
+    if (navShip.lat != 0 && navShip.lon != 0){
+        _wParent->ownShipTrailPoints.append(qMakePair(EcCoordinate(navShip.lat), EcCoordinate(navShip.lon)));
+    }
 
     // OWNSHIP NMEA
     PickWindow *pickWindow = new PickWindow(parentWidget, dictInfo, denc);
@@ -772,6 +782,17 @@ void Ais::extractNMEA(QString nmea){
     }
 }
 
+void Ais::clearTargetData()
+{
+    _aisTargetMap.clear();
+    _aisTargetInfoMap.clear();
+
+    if (_transponder)
+    {
+        EcAISDeleteAllTargets(_transponder);
+    }
+}
+
 // Read AIS variable.
 ////////////////////
 void Ais::readAISVariable( const QStringList &dataLines )
@@ -837,6 +858,52 @@ void Ais::readAISVariable( const QStringList &dataLines )
 
     stopAnimation();
 }
+
+void Ais::readAISVariableString( const QString &data )
+{
+    _bReadFromFile = False;
+    _bReadFromVariable = True;
+    _bReadFromServer = False;
+
+    if( !_transponder )
+    {
+        addLogFileEntry( QString( "Error in readAISVariable(): Transponder object is not initialized!" ) );
+        return;
+    }
+
+    if( _bReadFromVariable == False )
+    {
+        addLogFileEntry( QString( "Error in readAISVariable(): Read from AIS variable permitted!" ) );
+        return;
+    }
+
+    // Read AIS logfile line by line and add each line to the AIS transponder object by calling EcAISAddTransponderOutput.
+    // EcAISAddTransponderOutput calls the callback AISTargetUpdateCallback for each line read from the logfile.
+    int iLineNo = 1;
+    // for( const QString &sLine : dataLines )
+
+    if( _bReadFromVariable == False )
+    {
+        return;
+    }
+
+    if( _transponder == NULL )
+    {
+        return;
+    }
+
+    QString line = data + "\r\n";
+    qDebug() << data;
+
+    if( EcAISAddTransponderOutput( _transponder, (unsigned char*)line.toStdString().c_str(), line.count() ) == False )
+    {
+        addLogFileEntry( QString( "Error in readAISLogfile(): EcAISAddTransponderOutput() failed in input line %1" ).arg( iLineNo ) );
+        return;
+    }
+
+    stopAnimation();
+}
+
 
 // Connect to AIS server.
 /////////////////////////

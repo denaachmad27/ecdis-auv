@@ -789,6 +789,14 @@ MainWindow::MainWindow(QWidget *parent)
 
   viewMenu->addSeparator();
 
+  QAction *trailAction = viewMenu->addAction("Clear Trail");
+  connect(trailAction, &QAction::triggered, this, [=]() {
+      ecchart->clearOwnShipTrail();
+      update(); // misalnya untuk redraw
+  });
+
+  viewMenu->addSeparator();
+
   // QAction *searchAction = viewMenu->addAction("Search");
   // connect(searchAction, &QAction::triggered, this, &MainWindow::onSearch);
 
@@ -974,6 +982,9 @@ MainWindow::MainWindow(QWidget *parent)
 
 
 
+  // PLEASE WAIT!!
+
+  /*
   // DISPLAY ORIENTATION
   QMenu *displayOrientationMenu = menuBar()->addMenu("&Chart Orientation");
 
@@ -1029,6 +1040,7 @@ MainWindow::MainWindow(QWidget *parent)
   manualAction->setChecked(false);
   centeringGroup->addAction(manualAction);
   connect(manualAction, SIGNAL(triggered(bool)), this, SLOT(onManual(bool)));
+  */
 
   // Load Plugin
   // loadPluginAis();
@@ -1667,127 +1679,45 @@ void MainWindow::slotLoadAisVariable()
     //          << "$GPRMC,074027.569,A,0712.029,S,11248.206,E,1333.0,276.3,210325,000.0,W*5B"
     //          << "$GPGGA,074028.569,0711.988,S,11247.835,E,1,12,1.0,0.0,M,0.0,M,,*71"
     //          << "$GPGSA,A,3,01,02,03,04,05,06,07,08,09,10,11,12,1.0,1.0,1.0*30";
-
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-    nmeaData << "!AIVDO,1,1,,A,1000000P0284fR?sp`QS92P00000,0*4A";
-
     //nmeaData << aivdo;
+
+    nmeaData << "!AIVDM,1,1,,A,4050KlAvUl1ss`43P5spKjo004;d,0*1B";
+    nmeaData << "!AIVDM,1,1,,A,4050KlAvUl1ss`43P5spKjo004;d,0*1B";
+    nmeaData << "!AIVDM,1,1,,A,37ldh0gP@:840mQspDrF<600010i,0*1E";
+    nmeaData << "!AIVDM,1,1,,A,37ldh0gP@:840mQspDrF<600010i,0*1E";
+    nmeaData << "!AIVDM,1,1,,B,17lcMBwP00`4319spL?=hgwn20SE,0*24";
+    nmeaData << "!AIVDM,1,1,,B,17lcMBwP00`4319spL?=hgwn20SE,0*24";
+    nmeaData << "!AIVDM,1,1,,A,17lcMBwP00`4319spL>uhgv224@0,0*51";
+    nmeaData << "!AIVDM,1,1,,A,17lcMBwP00`4319spL>uhgv224@0,0*51";
+    nmeaData << "!AIVDM,1,1,,A,17lcM@0P00846F5spGCcdwv60<2D,0*46";
+    nmeaData << "!AIVDM,1,1,,A,17lcM@0P00846F5spGCcdwv60<2D,0*46";
+    nmeaData << "!AIVDM,1,1,,B,37ldh0gP@:840mespDq5iEd60000,0*75";
+    nmeaData << "!AIVDM,1,1,,B,37ldh0gP@:840mespDq5iEd60000,0*75";
+    nmeaData << "!AIVDM,1,1,,B,B7lde2000:113Ovv3HMDKwQ73P06,0*34";
+    nmeaData << "!AIVDM,1,1,,B,B7lde2000:113Ovv3HMDKwQ73P06,0*34";
+    nmeaData << "!AIVDM,1,1,,B,17lcMBwP00`4319spL>ehgv62@2W,0*27";
+    nmeaData << "!AIVDM,1,1,,B,17lcMBwP00`4319spL>ehgv62@2W,0*27";
+    nmeaData << "!AIVDM,1,1,,B,17isD0@P00`44wAspFh:Twv:2D49,0*08";
+    nmeaData << "!AIVDM,1,1,,B,17isD0@P00`44wAspFh:Twv:2D49,0*08";
+    nmeaData << "!AIVDM,1,1,,B,17lciMPP00`41PWsp86W?wv:24@0,0*42";
+    nmeaData << "!AIVDM,1,1,,B,17lciMPP00`41PWsp86W?wv:24@0,0*42";
+    nmeaData << "!AIVDM,1,1,,A,37ldh0gP@9840mwspDomI5>>011P,0*43";
+    nmeaData << "!AIVDM,1,1,,A,37ldh0gP@9840mwspDomI5>>011P,0*43";
+    nmeaData << "!AIVDM,1,1,,A,17lcMBwP00`4319spL>Mhgv820S?,0*7B";
+    nmeaData << "!AIVDM,1,1,,A,17lcMBwP00`4319spL>Mhgv820S?,0*7B";
+    nmeaData << "!AIVDM,1,1,,B,17lunPh000`42jAspH7N4;2>2<2B,0*5E";
+    nmeaData << "!AIVDM,1,1,,B,17lunPh000`42jAspH7N4;2>2<2B,0*5E";
+    nmeaData << "!AIVDM,1,1,,A,17lulhH000842IQspGNio`B>085;,0*75";
+    nmeaData << "!AIVDM,1,1,,A,17lulhH000842IQspGNio`B>085;,0*75";
+    nmeaData << "!AIVDM,1,1,,B,17lcMBwP00`4317spL=uhgv@24@0,0*2D";
+    nmeaData << "!AIVDM,1,1,,B,17lcMBwP00`4317spL=uhgv@24@0,0*2D";
 
 
     ecchart->ReadAISVariable( nmeaData );
 
     //ecchart->StartReadAISSubscribeSSH();
 }
+
 
 void MainWindow::slotStopLoadAisVariable()
 {
@@ -1814,7 +1744,11 @@ void MainWindow::subscribeMOOSDB()
     //ecchart->Draw();
 
     // START AGAIN
-    ecchart->StartThreadSubscribeSSH(ecchart);
+    //ecchart->StartThreadSubscribeSSH(ecchart);
+    //qDebug() << "MOOSDB IP: " + SettingsManager::instance().data().moosIp;
+
+    // NEW
+    ecchart->startAISSubscribe();
     qDebug() << "MOOSDB IP: " + SettingsManager::instance().data().moosIp;
 
     //serverThreadMOOSSubscribeSSH();
@@ -1822,8 +1756,10 @@ void MainWindow::subscribeMOOSDB()
 
 void MainWindow::stopSubscribeMOOSDB()
 {
-    ecchart -> stopAISSubscribeThread();
-    ecchart->Draw();
+    //ecchart -> stopAISSubscribeThread();
+    //ecchart->Draw();
+
+    ecchart->stopAISConnection();
 }
 
 ////////////////////////////////////////////////////   END MOOSDB   /////////////////////////////////////////////////////
@@ -3142,6 +3078,10 @@ void MainWindow::onCPATCPAAlarms(bool enabled)
 void MainWindow::onNorthUp(bool checked) {
     if (checked) {
         ecchart->displayOrientation = EcWidget::NorthUp;
+
+        QSettings settings("config.ini", QSettings::IniFormat);
+        settings.setValue("OwnShip/orientation", EcWidget::NorthUp);
+
         update();
         DrawChart();
         DrawChart();
@@ -3151,6 +3091,10 @@ void MainWindow::onNorthUp(bool checked) {
 void MainWindow::onHeadUp(bool checked) {
     if (checked) {
         ecchart->displayOrientation = EcWidget::HeadUp;
+
+        QSettings settings("config.ini", QSettings::IniFormat);
+        settings.setValue("OwnShip/orientation", EcWidget::HeadUp);
+
         update();
         DrawChart();
         DrawChart();
@@ -3160,7 +3104,11 @@ void MainWindow::onHeadUp(bool checked) {
 void MainWindow::onCourseUp(bool checked) {
     if (checked) {
         ecchart->displayOrientation = EcWidget::CourseUp;
-        ecchart->SetHeading(0);
+
+        QSettings settings("config.ini", QSettings::IniFormat);
+        settings.setValue("OwnShip/orientation", EcWidget::CourseUp);
+        settings.setValue("OwnShip/course_heading", 0);
+
         update();
         DrawChart();
         DrawChart();
@@ -3171,6 +3119,10 @@ void MainWindow::onCourseUp(bool checked) {
 void MainWindow::onCentered(bool checked) {
     if (checked) {
         ecchart->osCentering = EcWidget::Centered;
+
+        QSettings settings("config.ini", QSettings::IniFormat);
+        settings.setValue("OwnShip/centering", EcWidget::Centered);
+
         update();
         DrawChart();
         DrawChart();
@@ -3180,6 +3132,10 @@ void MainWindow::onCentered(bool checked) {
 void MainWindow::onLookAhead(bool checked) {
     if (checked) {
         ecchart->osCentering = EcWidget::LookAhead;
+
+        QSettings settings("config.ini", QSettings::IniFormat);
+        settings.setValue("OwnShip/centering", EcWidget::LookAhead);
+
         update();
         DrawChart();
         DrawChart();
@@ -3189,6 +3145,10 @@ void MainWindow::onLookAhead(bool checked) {
 void MainWindow::onManual(bool checked) {
     if (checked) {
         ecchart->osCentering = EcWidget::Manual;
+
+        QSettings settings("config.ini", QSettings::IniFormat);
+        settings.setValue("OwnShip/centering", EcWidget::Manual);
+
         update();
         DrawChart();
         DrawChart();

@@ -25,6 +25,7 @@
 
 #include "moosdb.h"
 #include "guardzone.h"
+#include "AISSubscriber.h"
 
 //popup
 #include <QLabel>
@@ -53,6 +54,21 @@ struct AISTargetData {
 
     EcFeature feat;
     EcDictInfo *_dictInfo;
+};
+
+// Struktur untuk menyimpan data kapal
+struct ShipStruct {
+    double lat;           // Latitude
+    double lon;          // Longitude
+    double x;           // Pixel X
+    double y;          // Pixel Y
+    double heading;      // Heading dalam derajat
+    double heading_og;   // Heading over ground
+    double speed;        // Kecepatan dalam knot
+    double speed_og;   // Kecepatan over ground
+    double yaw;        // Sudut yaw kapal
+    double depth;        // Kedalaman
+    double z;        // Vertikal kapal
 };
 
 class AlertSystem;
@@ -503,6 +519,14 @@ public:
   void startServerMOOSSubscribe();
   void ReadFromServer( const QString& );
 
+  void startAISSubscribe();
+  void startAISConnection();
+  void stopAISConnection();
+  void processAISJson(const QByteArray&);
+  void processData(double, double, double, double, double, double, double, double, double);
+  void processMapInfoReq(QString);
+  void processAis(QString);
+
   void processAISLoop();
   void handleDisconnection(QTcpSocket* socket);
   void PublishNavInfo(QTcpSocket* socket, double lat, double lon);
@@ -553,6 +577,10 @@ public:
 
   void setMainWindow(MainWindow*);
 
+  // OWNSHIP TRAIL
+  QList<QPair<EcCoordinate, EcCoordinate>> ownShipTrailPoints;
+  void clearOwnShipTrail();
+
 public slots:
   void updateAISTargetsList();
   void addOrUpdateAISTarget(const AISTargetData& target);
@@ -564,6 +592,7 @@ public slots:
   void performAutoGuardZoneCheck();
   void setGuardZoneAutoCheck(bool enabled);
   void setGuardZoneCheckInterval(int intervalMs);
+
 
 signals:
   // Drawing signals
@@ -855,7 +884,9 @@ private:
   QTcpSocket* socketAIS;
   std::atomic<bool> stopThread;
 
+  // NEW SUBS FUNC
   QThread* threadAIS = nullptr;
+  AISSubscriber *subscriber = nullptr;
 
   QThread* threadAISMAP;
   QTcpSocket* socketAISMAP;
@@ -954,6 +985,15 @@ private:
   QTimer* shipGuardianCheckTimer;
   bool shipGuardianAutoCheck;
   QDateTime lastShipGuardianCheck;
+
+  // MOOSDB VAR
+  ShipStruct mapInfo;
+  ShipStruct navInfo;
+
+  // OWNSHIP TRACK VAR
+  void addOwnShipPoint(double, double);
+  void drawOwnShipTrail(QPainter &painter);
+
 }; // EcWidget
 
 #endif // _ec_widget_h_

@@ -14,6 +14,7 @@
 
 // Waypoint
 #include "SettingsManager.h"
+#include "aisdatabasemanager.h"
 #include "editwaypointdialog.h"
 
 #include <QTime>
@@ -1065,6 +1066,40 @@ void EcWidget::paintEvent (QPaintEvent *e)
   }
 }
 
+void EcWidget::drawOwnShipTrail(QPainter &painter)
+{
+    if (ownShipTrailPoints.size() < 2)
+        return;
+
+    for (int i = 1; i < ownShipTrailPoints.size(); ++i)
+    {
+        EcCoordinate lat1 = ownShipTrailPoints[i - 1].first;
+        EcCoordinate lon1 = ownShipTrailPoints[i - 1].second;
+        EcCoordinate lat2 = ownShipTrailPoints[i].first;
+        EcCoordinate lon2 = ownShipTrailPoints[i].second;
+
+        // Cek validitas angka
+        if (!qIsFinite(lat1) || !qIsFinite(lon1) || !qIsFinite(lat2) || !qIsFinite(lon2))
+            continue;
+
+        int x1 = 0, y1 = 0, x2 = 0, y2 = 0;
+        bool ok1 = LatLonToXy(lat1, lon1, x1, y1);
+        bool ok2 = LatLonToXy(lat2, lon2, x2, y2);
+
+        if (!ok1 || !ok2)
+            continue;
+
+        painter.setPen(QPen(QColor(0, 110, 0), 4));
+        painter.drawLine(x1, y1, x2, y2);
+    }
+}
+
+void EcWidget::clearOwnShipTrail()
+{
+    ownShipTrailPoints.clear();
+    update();
+}
+
 /*---------------------------------------------------------------------------*/
 
 void EcWidget::resizeEvent (QResizeEvent *event)
@@ -1981,6 +2016,8 @@ void EcWidget::ReadAISLogfile( const QString &aisLogFile )
   //deleteAISCell();
   //createAISCell();
 
+  clearOwnShipTrail();
+  _aisObj->clearTargetData();
   _aisObj->setAISCell( aisCellId );
   _aisObj->readAISLogfile( aisLogFile );
 }
@@ -2026,6 +2063,8 @@ void EcWidget::ReadAISVariable( const QStringList &aisDataLines )
         return;
     }
 
+    clearOwnShipTrail();
+    _aisObj->clearTargetData();
     _aisObj->setAISCell( aisCellId );
     _aisObj->readAISVariable( aisDataLines );
 }
@@ -2593,7 +2632,6 @@ void EcWidget::processAISDataHybrid(QTcpSocket* socket, EcWidget *ecchart) {
     }
 
 
-
     // ============= ALERT SYSTEM INTEGRATION =============
     // Update alert system with new position (TAMBAHAN BARU)
     if (alertSystem && alertMonitoringEnabled) {
@@ -2654,6 +2692,439 @@ void EcWidget::jsonExample(){
 
     qDebug().noquote() << jsonDocOut.toJson(QJsonDocument::Indented);
 }
+
+// NEW SUBSCRIBE FUNC
+void EcWidget::startAISSubscribe() {
+    if (!deleteAISCell()) {
+        QMessageBox::warning(this, tr("ReadAISLogfile"), tr("Could not remove old AIS overlay cell. Please restart the program."));
+        return;
+    }
+    if (!createAISCell()) {
+        QMessageBox::warning(this, tr("ReadAISLogfile"), tr("Could not create AIS overlay cell. Please restart the program."));
+        return;
+    }
+
+    _aisObj->clearTargetData();
+    _aisObj->setAISCell(aisCellId);
+    startAISConnection();
+}
+
+void EcWidget::startAISConnection()
+{
+    threadAIS = new QThread(this);
+    subscriber = new AISSubscriber();
+
+    subscriber->moveToThread(threadAIS);
+
+    QString sshIP = SettingsManager::instance().data().moosIp;
+    quint16 sshPort = 5000;
+
+    connect(threadAIS, &QThread::started, [=]() {
+        subscriber->connectToHost(sshIP, sshPort);
+    });
+
+    connect(subscriber, &AISSubscriber::navLatReceived, this, [=](double lat) {
+        navShip.lat = lat;
+    });
+
+    connect(subscriber, &AISSubscriber::navLongReceived, this, [=](double lon) {
+        navShip.lon = lon;
+    });
+
+    connect(subscriber, &AISSubscriber::navDepthReceived, this, [=](double depth) {
+        navShip.depth = depth;
+    });
+
+    connect(subscriber, &AISSubscriber::navHeadingReceived, this, [=](double hdg) {
+        navShip.heading = hdg;
+    });
+
+    connect(subscriber, &AISSubscriber::navHeadingOGReceived, this, [=](double cog) {
+        navShip.heading_og = cog;
+    });
+
+    connect(subscriber, &AISSubscriber::navSpeedReceived, this, [=](double sog) {
+        navShip.speed_og = sog;
+    });
+
+    connect(subscriber, &AISSubscriber::navYawReceived, this, [=](double yaw) {
+        navShip.yaw = yaw;
+    });
+
+    connect(subscriber, &AISSubscriber::navZReceived, this, [=](double z) {
+        navShip.z = z;
+    });
+
+    connect(subscriber, &AISSubscriber::mapInfoReqReceived, this, &EcWidget::processMapInfoReq);
+
+    connect(subscriber, &AISSubscriber::processingAis, this, &EcWidget::processAis);
+
+    connect(subscriber, &AISSubscriber::processingData, this, &EcWidget::processData);
+
+    connect(subscriber, &AISSubscriber::errorOccurred, this, [](const QString &msg) {
+        qWarning() << "Error:" << msg;
+    });
+
+    connect(subscriber, &AISSubscriber::disconnected, this, []() {
+        qDebug() << "Disconnected from AIS source.";
+    });
+
+    connect(threadAIS, &QThread::finished, subscriber, &QObject::deleteLater);
+    threadAIS->start();
+}
+
+void EcWidget::stopAISConnection()
+{
+    if (subscriber) {
+        // Pastikan disconnectFromHost dijalankan di thread-nya subscriber
+        QMetaObject::invokeMethod(subscriber, "disconnectFromHost", Qt::QueuedConnection);
+    }
+
+    if (threadAIS) {
+        threadAIS->quit();
+        threadAIS->wait();
+        threadAIS->deleteLater();
+        threadAIS = nullptr;
+
+        // Pastikan pointer subscriber tidak langsung dihapus,
+        // biarkan dia deleteLater() sendiri kalau perlu.
+        subscriber = nullptr;
+    }
+}
+
+void EcWidget::processData(double lat, double lon, double cog, double sog, double hdg, double spd, double dep, double yaw, double z){
+    QString nmea = AIVDOEncoder::encodeAIVDO1(lat, lon, cog, sog/10, hdg, 0, 1);
+
+    _aisObj->readAISVariable({nmea});
+
+    IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
+    if (dvr && dvr->isRecording() && !nmea.isEmpty()) {
+        dvr->recordRawNmea(nmea);
+    }
+
+    QList<EcFeature> pickedFeatureList;
+    GetPickedFeaturesSubs(pickedFeatureList, lat, lon);
+
+    PickWindow *pickWindow = new PickWindow(this, dictInfo, denc);
+    QJsonObject navInfo;
+
+    navInfo = pickWindow->fillJsonSubs(pickedFeatureList);
+
+    navInfo.insert("latitude", lat);
+    navInfo.insert("longitude", lon);
+
+    QJsonObject jsonDataOut {
+        {"NAV_INFO", navInfo}
+    };
+    QJsonDocument jsonDocOut(jsonDataOut);
+    //QByteArray sendData = jsonDocOut.toJson();
+
+    QString strJson(jsonDocOut.toJson(QJsonDocument::Compact));
+    QByteArray sendData = strJson.toUtf8();
+
+    //qDebug().noquote() << "[INFO] Sending Data: \n" << jsonDocOut.toJson(QJsonDocument::Indented);
+
+    // Kirim data ke server Ubuntu (port 5001)
+    QTcpSocket* sendSocket = new QTcpSocket();
+    sendSocket->connectToHost(SettingsManager::instance().data().moosIp, 5001);
+    if (sendSocket->waitForConnected(3000)) {
+        sendSocket->write(sendData);
+        sendSocket->waitForBytesWritten(3000);
+        sendSocket->disconnectFromHost();
+    }
+    else {
+        qCritical() << "Could not connect to data server.";
+    }
+
+    sendSocket->deleteLater();
+    delete pickWindow;
+
+    // OWNSHIP PANEL
+    ownShipText->setHtml(pickWindow->ownShipAutoFill());
+
+    // INSERT TO DATABASE
+    // PLEASE WAIT!!
+    // AisDatabaseManager::instance().insertOwnShipToDB(lat, lon, dep, hdg, cog, spd, sog, yaw, z);
+
+    // EKOR OWNSHIP
+    ownShipTrailPoints.append(qMakePair(EcCoordinate(lat), EcCoordinate(lon)));
+}
+
+void EcWidget::processAis(QString ais){
+    QStringList nmeaData{ais};
+    IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
+
+    if (dvr && dvr->isRecording() && !ais.isEmpty()) {
+        dvr->recordRawNmea(ais);
+    }
+
+    _aisObj->readAISVariableString(ais);
+}
+
+void EcWidget::processMapInfoReq(QString req){
+    QStringList pairs = req.split(",", Qt::SkipEmptyParts);
+    QMap<QString, QString> map;
+
+    for (const QString& pair : pairs) {
+        QStringList keyValue = pair.split("=", Qt::SkipEmptyParts);
+        if (keyValue.size() == 2) {
+            QString key = keyValue[0].trimmed();
+            QString value = keyValue[1].trimmed();
+            map.insert(key, value);
+        }
+    }
+
+    // Ambil latitude dan longitude
+    double lat = map.value("latitude").toDouble();
+    double lon = map.value("longitude").toDouble();
+
+    if (mapInfo.lat != lat || mapInfo.lon != lon){
+        mapInfo.lat = lat;
+        mapInfo.lon = lon;
+
+        SetCenter(lat, lon);
+        SetScale(80000);
+
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        Draw();
+        QApplication::restoreOverrideCursor();
+
+        QList<EcFeature> pickedFeatureList;
+        GetPickedFeaturesSubs(pickedFeatureList, lat, lon);
+
+        PickWindow *pickWindow = new PickWindow(this, dictInfo, denc);;
+        QJsonObject mapInfo;
+
+        mapInfo = pickWindow->fillJsonSubs(pickedFeatureList);
+
+        mapInfo.insert("latitude", lat);
+        mapInfo.insert("longitude", lon);
+
+        QJsonObject jsonDataOut {
+            {"MAP_INFO", mapInfo}
+        };
+        QJsonDocument jsonDocOut(jsonDataOut);
+        //QByteArray sendData = jsonDocOut.toJson();
+
+        QString strJson(jsonDocOut.toJson(QJsonDocument::Compact));
+        QByteArray sendData = strJson.toUtf8();
+
+        // Kirim data ke server Ubuntu (port 5003)
+        QTcpSocket* sendSocket = new QTcpSocket();
+        sendSocket->connectToHost(SettingsManager::instance().data().moosIp, 5001);
+        if (sendSocket->waitForConnected(3000)) {
+            sendSocket->write(sendData);
+            sendSocket->waitForBytesWritten(3000);
+            sendSocket->disconnectFromHost();
+        }
+        else {
+            qCritical() << "Could not connect to data server.";
+        }
+
+        sendSocket->deleteLater();
+    }
+}
+
+void EcWidget::processAISJson(const QByteArray& rawData){
+    QByteArray data = rawData;
+
+    data = data.simplified();
+    data = data.trimmed();
+    data.replace("\r", "");
+
+    if (data.isEmpty()) {
+        qWarning() << "Socket kosong, tidak ada data diterima";
+        return;
+    }
+
+    qDebug() << data;
+}
+
+/*
+void EcWidget::processAISJson(const QByteArray& rawData){
+    QByteArray data = rawData;
+
+    data = data.simplified();
+    data = data.trimmed();
+    data.replace("\r", "");
+
+    if (data.isEmpty()) {
+        qWarning() << "Socket kosong, tidak ada data diterima";
+        return;
+    }
+
+    QJsonParseError err;
+    QJsonDocument jsonDoc = QJsonDocument::fromJson(data, &err);
+    if (err.error != QJsonParseError::NoError || !jsonDoc.isObject()) {
+        qCritical() << "Invalid JSON received: " << data;
+        return;
+    }
+
+    QJsonObject jsonData = jsonDoc.object();
+
+    if (jsonData.contains("MAP_INFO_REQ")) {
+        QString mapInfoString = jsonData.value("MAP_INFO_REQ").toString();
+        QStringList pairs = mapInfoString.split(",", Qt::SkipEmptyParts);
+        QMap<QString, QString> map;
+
+        for (const QString& pair : pairs) {
+            QStringList keyValue = pair.split("=", Qt::SkipEmptyParts);
+            if (keyValue.size() == 2) {
+                QString key = keyValue[0].trimmed();
+                QString value = keyValue[1].trimmed();
+                map.insert(key, value);
+            }
+        }
+
+        double lat = map.value("latitude").toDouble();
+        double lon = map.value("longitude").toDouble();
+
+        if (mapShip.lat != lat || mapShip.lon != lon) {
+            mapShip.lat = lat;
+            mapShip.lon = lon;
+
+            SetCenter(lat, lon);
+            SetScale(80000);
+
+            QApplication::setOverrideCursor(Qt::WaitCursor);
+            Draw();
+            QApplication::restoreOverrideCursor();
+
+            QMetaObject::invokeMethod(this, [this, lat, lon]() {
+                try {
+                    QList<EcFeature> pickedFeatureList;
+                    GetPickedFeaturesSubs(pickedFeatureList, lat, lon);
+
+                    QScopedPointer<PickWindow> pickWindow(new PickWindow(this, dictInfo, denc));
+                    QJsonObject mapInfo = pickWindow->fillJsonSubs(pickedFeatureList);
+
+                    mapInfo.insert("latitude", lat);
+                    mapInfo.insert("longitude", lon);
+
+                    QJsonObject wrapped;
+                    wrapped.insert("MAP_INFO", mapInfo);
+                    QJsonDocument jsonDocOut(wrapped);
+                    QByteArray sendData = jsonDocOut.toJson(QJsonDocument::Compact);
+
+                    QTcpSocket* sendSocket = new QTcpSocket();
+                    sendSocket->connectToHost(SettingsManager::instance().data().moosIp, 5001);
+                    if (sendSocket->waitForConnected(3000)) {
+                        sendSocket->write(sendData);
+                        sendSocket->waitForBytesWritten(3000);
+                        sendSocket->disconnectFromHost();
+                    } else {
+                        qCritical() << "Could not connect to data server.";
+                    }
+                    sendSocket->deleteLater();
+                } catch (...) {
+                    qCritical() << "Exception in MAP_INFO_REQ handler";
+                }
+            }, Qt::QueuedConnection);
+        }
+    }
+
+    IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
+
+    if (jsonData.contains("NAV_LAT") && jsonData.contains("NAV_LONG")) {
+        QJsonValue latValue = jsonData["NAV_LAT"];
+        QJsonValue lonValue = jsonData["NAV_LONG"];
+        navShip.lat = latValue.isDouble() ? latValue.toDouble() : latValue.toString().toDouble();
+        navShip.lon = lonValue.isDouble() ? lonValue.toDouble() : lonValue.toString().toDouble();
+    }
+
+    if (jsonData.contains("WAIS_NMEA") && jsonData["WAIS_NMEA"].isString()) {
+        QString ais = jsonData["WAIS_NMEA"].toString();
+
+        QMetaObject::invokeMethod(this, [this, ais, dvr]() {
+            try {
+                if (!_aisObj) return;
+                nmea = ais;
+                QStringList nmeaData{ais};
+
+                if (dvr && dvr->isRecording() && !ais.isEmpty()) {
+                    dvr->recordRawNmea(nmea);
+                }
+
+                _aisObj->readAISVariable(nmeaData);
+            } catch (...) {
+                qCritical() << "Exception in WAIS_NMEA handler";
+            }
+        }, Qt::QueuedConnection);
+    }
+
+    auto parseNavValue = [](const QJsonObject& obj, const QString& key, double& target) {
+        if (obj.contains(key)) {
+            QJsonValue val = obj[key];
+            target = val.isDouble() ? val.toDouble() : val.toString().toDouble();
+        }
+    };
+
+    parseNavValue(jsonData, "NAV_SPEED_OVER_GROUND", navShip.speed_og);
+    parseNavValue(jsonData, "NAV_HEADING_OVER_GROUND", navShip.heading_og);
+    parseNavValue(jsonData, "NAV_HEADING", navShip.heading);
+    parseNavValue(jsonData, "NAV_DEPTH", navShip.depth);
+    parseNavValue(jsonData, "NAV_SPEED", navShip.speed);
+    parseNavValue(jsonData, "NAV_YAW", navShip.yaw);
+    parseNavValue(jsonData, "NAV_Z", navShip.z);
+
+    if (navShip.lat != 0 && navShip.lon != 0) {
+        double lat = navShip.lat;
+        double lon = navShip.lon;
+        double sog = navShip.speed_og / 10;
+        double cog = navShip.heading_og;
+        double hdg = navShip.heading;
+
+        QMetaObject::invokeMethod(this, [this, lat, lon, dvr, sog, cog, hdg]() {
+            try {
+                if (!_aisObj) return;
+                aivdo = AIVDOEncoder::encodeAIVDO1(lat, lon, cog, sog, hdg, 0, 1);
+
+                QStringList nmeaData{aivdo};
+                _aisObj->readAISVariable(nmeaData);
+
+                if (dvr && dvr->isRecording() && !nmeaData.isEmpty()) {
+                    dvr->recordRawNmea(aivdo);
+                }
+
+                QList<EcFeature> pickedFeatureList;
+                GetPickedFeaturesSubs(pickedFeatureList, lat, lon);
+
+                QScopedPointer<PickWindow> pickWindow(new PickWindow(this, dictInfo, denc));
+                QJsonObject navInfo = pickWindow->fillJsonSubs(pickedFeatureList);
+
+                navInfo.insert("latitude", lat);
+                navInfo.insert("longitude", lon);
+
+                QJsonObject wrapped;
+                wrapped.insert("NAV_INFO", navInfo);
+                QJsonDocument jsonDocOut(wrapped);
+                QByteArray sendData = jsonDocOut.toJson(QJsonDocument::Compact);
+
+                QTcpSocket* sendSocket = new QTcpSocket();
+                sendSocket->connectToHost(SettingsManager::instance().data().moosIp, 5001);
+                if (sendSocket->waitForConnected(3000)) {
+                    sendSocket->write(sendData);
+                    sendSocket->waitForBytesWritten(3000);
+                    sendSocket->disconnectFromHost();
+                } else {
+                    qCritical() << "Could not connect to data server.";
+                }
+                sendSocket->deleteLater();
+
+                if (ownShipText)
+                    ownShipText->setHtml(pickWindow->ownShipAutoFill());
+            } catch (...) {
+                qCritical() << "Exception in NAV update block";
+            }
+        }, Qt::QueuedConnection);
+    }
+
+    if (alertSystem && alertMonitoringEnabled && navShip.lat != 0 && navShip.lon != 0) {
+        alertSystem->updateOwnShipPosition(navShip.lat, navShip.lon, navShip.depth);
+    }
+}
+*/
+
 
 // Read an AIS from MOOSDB -- MAP INFO
 ////////////////////////////////////////////////////////////////////////
@@ -2950,6 +3421,10 @@ void EcWidget::drawAISCell()
 
               // ⭐ PANGGIL DENGAN PARAMETER BARU: COG, Heading, SOG
               drawOwnShipIcon(painter, x, y, cog, heading, ownShipData.sog);
+
+              // GAMBAR EKOR OWNSHIP
+              drawOwnShipTrail(painter);
+
               painter.end();
           }
       }
@@ -6702,11 +7177,11 @@ bool EcWidget::isRedDotAttachedToShip() const
 
 void EcWidget::updateRedDotPosition(double lat, double lon)
 {
-    qDebug() << "[UPDATE-RED-DOT] Called with lat:" << lat << "lon:" << lon 
-             << "enabled:" << redDotTrackerEnabled << "attached:" << redDotAttachedToShip;
+    // qDebug() << "[UPDATE-RED-DOT] Called with lat:" << lat << "lon:" << lon
+    //         << "enabled:" << redDotTrackerEnabled << "attached:" << redDotAttachedToShip;
              
     if (!redDotTrackerEnabled || !redDotAttachedToShip) {
-        qDebug() << "[UPDATE-RED-DOT] Early return - conditions not met";
+        // qDebug() << "[UPDATE-RED-DOT] Early return - conditions not met";
         return;
     }
 
@@ -6738,12 +7213,12 @@ void EcWidget::updateRedDotPosition(double lat, double lon)
 
 void EcWidget::drawRedDotTracker()
 {
-    qDebug() << "[RED-DOT-DEBUG] drawRedDotTracker called - enabled:" << redDotTrackerEnabled 
-             << "attachedGuardZoneId:" << attachedGuardZoneId << "redDotLat:" << redDotLat;
+    // qDebug() << "[RED-DOT-DEBUG] drawRedDotTracker called - enabled:" << redDotTrackerEnabled
+    //         << "attachedGuardZoneId:" << attachedGuardZoneId << "redDotLat:" << redDotLat;
              
     // Check if tracker is enabled and position is valid
     if (!redDotTrackerEnabled || redDotLat == 0.0 || redDotLon == 0.0) {
-        qDebug() << "[RED-DOT-DEBUG] Early return - tracker disabled or invalid position";
+        // qDebug() << "[RED-DOT-DEBUG] Early return - tracker disabled or invalid position";
         return;
     }
     
@@ -6752,7 +7227,7 @@ void EcWidget::drawRedDotTracker()
     if (attachedGuardZoneId != -1) {
         // Area guardzone sudah digambar oleh drawGuardZone()
         // Tidak perlu gambar apapun di sini
-        qDebug() << "[RED-DOT-DEBUG] Early return - attached guardzone exists, let drawGuardZone handle it";
+        // qDebug() << "[RED-DOT-DEBUG] Early return - attached guardzone exists, let drawGuardZone handle it";
         return;
     }
 

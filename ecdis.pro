@@ -4,6 +4,7 @@ QT += network
 QT += widgets
 QT += winextras
 QT += core gui
+QT += sql
 
 # win32:KERNELPATH = ../../
 win32:KERNELPATH = C:/EC2007/5.22.69.3
@@ -30,11 +31,13 @@ unix:DEFINES += _LINUX_SOURCE
 
 # Input
 HEADERS += mainwindow.h ecwidget.h pickwindow.h ais.h \
+    AISSubscriber.h \
     IAisDvrPlugin.h \
     PluginManager.h \
     SettingsData.h \
     SettingsDialog.h \
     SettingsManager.h \
+    aisdatabasemanager.h \
     aisdecoder.h \
     aistooltip.h \
     aivdoencoder.h \
@@ -58,9 +61,11 @@ HEADERS += mainwindow.h ecwidget.h pickwindow.h ais.h \
     aistargetpanel.h \
 
 SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
+    AISSubscriber.cpp \
     PluginManager.cpp \
     SettingsDialog.cpp \
     SettingsManager.cpp \
+    aisdatabasemanager.cpp \
     aisdecoder.cpp \
     aistooltip.cpp \
     aivdoencoder.cpp \

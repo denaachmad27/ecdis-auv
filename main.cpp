@@ -6,6 +6,7 @@
 #include "IAisDvrPlugin.h"
 #include "SettingsManager.h"
 #include "PluginManager.h"
+#include "aisdatabasemanager.h"
 
 // PERBAIKAN: Message filter untuk menghilangkan HANYA warning debug messages Qt
 void messageFilter(QtMsgType type, const QMessageLogContext &context, const QString &msg)
@@ -35,6 +36,9 @@ int main( int argc, char ** argv )
 
   // LOAD PLUGIN
   PluginManager::instance().loadPlugin("/AisDvrPlugin.dll", "IAisDvrPlugin");
+
+  // LOAD DATABASE
+  AisDatabaseManager::instance().connect("localhost", 5432, "ecdis", "postgres", "112030");
 
   MainWindow * mw;
   try

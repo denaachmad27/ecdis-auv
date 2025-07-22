@@ -61,8 +61,6 @@ void SettingsManager::save(const SettingsData& data) {
 
     if (data.orientationMode == EcWidget::CourseUp) {
         settings.setValue("OwnShip/course_heading", data.courseUpHeading);
-    } else {
-        settings.remove("OwnShip/course_heading");
     }
 }
 

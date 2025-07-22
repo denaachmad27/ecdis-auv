@@ -64,10 +64,12 @@ public:
     Bool createTransponderObject();
     void readAISLogfile( const QString& );
     void readAISLogfileWDelay(const QString &logFile, int delayMs, std::atomic<bool>* stopFlag);
+    void readAISVariableString( const QString& );
     void readAISVariable( const QStringList& );
     void nmeaSelection(const QString &line, QString &outNmea);
 
     void extractNMEA(QString nmea);
+    void clearTargetData();
 
     void connectToAISServer( const QString&, int port );
     EcCellId getAISCell();
