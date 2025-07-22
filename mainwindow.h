@@ -12,6 +12,7 @@
 #include "alertpanel.h"
 #include "alertsystem.h"
 #include "aistargetpanel.h"
+#include "obstacledetectionpanel.h"
 
 #include <QPluginLoader>
 
@@ -242,8 +243,11 @@ private:
     QDockWidget* guardZoneDock;
     AISTargetPanel* aisTargetPanel;
     QDockWidget* aisTargetDock;
+    ObstacleDetectionPanel* obstacleDetectionPanel;
+    QDockWidget* obstacleDetectionDock;
     void setupGuardZonePanel();
     void setupAISTargetPanel();
+    void setupObstacleDetectionPanel();
     void setupTestingMenu();
 
     // Alert Panel

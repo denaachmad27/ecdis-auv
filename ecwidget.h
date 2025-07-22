@@ -370,6 +370,9 @@ public:
 
   // Returns the picked features at a position
   void GetPickedFeaturesSubs(QList<EcFeature> &pickedFeatureList, EcCoordinate lat, EcCoordinate lon);
+  void checkPickReportObstaclesInShipGuardian();
+  QString extractInformationFromFeature(const EcFeature& feature);
+  QString extractObjectNameFromFeature(const EcFeature& feature);
 
   // Defines the DENC path
   bool CreateDENC(const QString & dp, bool updCat);
@@ -616,6 +619,7 @@ signals:
   void debugAISTargets();
   void guardZoneTargetDetected(int guardZoneId, int targetCount);
   void aisTargetDetected(int guardZoneId, int mmsi, const QString& message);
+  void pickReportObstacleDetected(int guardZoneId, const QString& details);
 
   // GuardZone signals untuk panel
   void guardZoneCreated();
@@ -902,6 +906,7 @@ private:
 
   // ========== RED DOT TRACKER VARIABLES ==========
   bool attachedToShip;                // Flag untuk attachment ke ship
+  QSet<QString> previousDetectedObstacles; // Track obstacles yang sudah terdeteksi
   // ==============================================
 
   // ========== RED DOT TRACKER METHODS ==========
@@ -935,6 +940,9 @@ private:
   void createAISTooltip();
   void showAISTooltip(const QPoint& position, const AISTargetData& targetData);
   void hideAISTooltip();
+  
+  // Obstacle detection area visualization
+  void drawObstacleDetectionArea(QPainter& painter);
 
   QTimer* aisTooltipTimer;
   QPoint lastMousePos;
