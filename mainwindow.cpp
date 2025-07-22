@@ -641,11 +641,14 @@ MainWindow::MainWindow(QWidget *parent)
   statusBar()->addPermanentWidget(new QLabel("Cursor:", statusBar()));
   statusBar()->addPermanentWidget(posEdit, 0);
 
+  /*
+  // PLEASE WAIT
   // File menu
   QMenu *fileMenu = menuBar()->addMenu("&File");
 
   fileMenu->addAction("E&xit", this, SLOT(close()))->setShortcut(tr("Ctrl+x", "File|Exit"));
   // fileMenu->addAction("Reload", this, SLOT(onReload()));
+  */
 
   // DENC menu
   QMenu *importMenu = menuBar()->addMenu("&Import");
@@ -677,7 +680,7 @@ MainWindow::MainWindow(QWidget *parent)
   dencActionGroup->setEnabled(!dencPath.isEmpty());
 
   // Draw menu
-  QMenu *drawMenu = menuBar()->addMenu("&Draw");
+  QMenu *drawMenu = menuBar()->addMenu("&Control");
 
   drawMenu->addAction("Zoom In", this, SLOT(onZoomIn()))->setShortcut(tr("PgUp", "Draw|Zoom In"));
   drawMenu->addAction("Zoom Out", this, SLOT(onZoomOut()))->setShortcut(tr("PgDown", "Draw|Zoom out"));
@@ -714,7 +717,7 @@ MainWindow::MainWindow(QWidget *parent)
   // drawMenu->addAction(stereographicAction);
 
   // View menu
-  QMenu *viewMenu = menuBar()->addMenu("&View");
+  QMenu *viewMenu = menuBar()->addMenu("&Layers");
 
   QActionGroup *lActionGroup = new QActionGroup(this);
   simplifiedAction  = lActionGroup->addAction("Simplified");
@@ -735,7 +738,7 @@ MainWindow::MainWindow(QWidget *parent)
   QActionGroup *vActionGroup = new QActionGroup(this);
   baseAction = vActionGroup->addAction("Display Base");
   standardAction    = vActionGroup->addAction("Standard");
-  otherAction       = vActionGroup->addAction("Other");
+  otherAction       = vActionGroup->addAction("Detailed");
   baseAction->setCheckable(true);
   standardAction->setCheckable(true);
   otherAction->setCheckable(true);
@@ -802,7 +805,7 @@ MainWindow::MainWindow(QWidget *parent)
   // connect(searchAction, &QAction::triggered, this, &MainWindow::onSearch);
 
   // Color menu
-  QMenu *colorMenu = menuBar()->addMenu("&Colour");
+  QMenu *colorMenu = menuBar()->addMenu("&Display");
 
   QActionGroup *cActionGroup = new QActionGroup(this);
   dayAction    = cActionGroup->addAction("Day");

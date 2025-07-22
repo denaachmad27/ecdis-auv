@@ -408,6 +408,11 @@ void Ais::handleOwnShipUpdate(EcAISTargetInfo *ti)
 
         Ais::instance()->_aisOwnShip = dataOS;
 
+        // EKOR OWNSHIP
+        if (dataOS.lat != 0 && dataOS.lon != 0){
+            _wParent->ownShipTrailPoints.append(qMakePair(EcCoordinate(dataOS.lat), EcCoordinate(dataOS.lon)));
+        }
+
         // DEBUG COMMENT TEMP
         //qDebug() << "Ownship data updated - COG:" << dataOS.cog << "Heading:" << dataOS.heading;
     }
@@ -624,11 +629,6 @@ void Ais::readAISLogfile( const QString &logFile )
 
     nmeaText->append(nmea);
     extractNMEA(nmea);
-
-    // EKOR OWNSHIP
-    if (navShip.lat != 0 && navShip.lon != 0){
-        _wParent->ownShipTrailPoints.append(qMakePair(EcCoordinate(navShip.lat), EcCoordinate(navShip.lon)));
-    }
 
     // OWNSHIP NMEA
     PickWindow *pickWindow = new PickWindow(parentWidget, dictInfo, denc);
