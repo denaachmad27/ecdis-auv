@@ -43,6 +43,12 @@ struct GuardZone {
     // Polygon specific
     QVector<double> latLons; // lat1, lon1, lat2, lon2, ...
 
+    // Sector specific (radar/tapal kuda)
+    double innerRadius;      // Inner radius (nautical miles)
+    double outerRadius;      // Outer radius (nautical miles)
+    double startAngle;       // Start angle in degrees (0 = North, clockwise)
+    double endAngle;         // End angle in degrees (0 = North, clockwise)
+
     // Default constructor
     GuardZone() :
         id(-1),
@@ -52,7 +58,11 @@ struct GuardZone {
         color(Qt::red),
         centerLat(0.0),
         centerLon(0.0),
-        radius(0.5) {
+        radius(0.5),
+        innerRadius(0.2),    // Default inner radius 0.2 NM
+        outerRadius(0.5),    // Default outer radius 0.5 NM
+        startAngle(0.0),     // Default start angle 0° (North)
+        endAngle(90.0) {     // Default end angle 90° (East) - quarter sector
         shipTypeFilter = SHIP_TYPE_ALL;  // Default: semua jenis kapal
         alertDirection = ALERT_BOTH;     // Default: alert untuk in dan out
     }

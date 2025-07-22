@@ -4,6 +4,7 @@
 #include <QPluginLoader>
 #include <QDir>
 #include <QMessageBox>
+#include <QTimer>
 
 #include "mainwindow.h"
 #include "pickwindow.h"
@@ -851,6 +852,29 @@ MainWindow::MainWindow(QWidget *parent)
   
   createActions();
 
+  // PERBAIKAN: Manual sync UI dengan state backend setelah actions dibuat
+  // Gunakan QTimer untuk delay sync agar guardzone dari file sudah fully loaded
+  QTimer::singleShot(500, [this]() {
+      bool hasAttached = ecchart && ecchart->hasAttachedGuardZone();
+      qDebug() << "[STARTUP-SYNC-DELAYED] Checking hasAttachedGuardZone:" << hasAttached;
+      
+      if (hasAttached) {
+          // Jika ada guardzone attached, sync UI
+          if (attachToShipAction) {
+              attachToShipAction->blockSignals(true);
+              attachToShipAction->setChecked(true);
+              attachToShipAction->blockSignals(false);
+              qDebug() << "[STARTUP-SYNC-DELAYED] Manual sync: found attached guardzone, set UI to checked";
+          } else {
+              qDebug() << "[STARTUP-SYNC-DELAYED] ERROR: attachToShipAction is null!";
+          }
+      } else {
+          qDebug() << "[STARTUP-SYNC-DELAYED] No attached guardzone found, keeping UI unchecked";
+      }
+  });
+
+  qDebug() << "[STARTUP] MainWindow startup completed, UI synchronized with backend state";
+
   // GuardZone
   // ========== INITIALIZE GUARDZONE PANEL POINTERS ==========
   guardZonePanel = nullptr;
@@ -895,6 +919,7 @@ MainWindow::MainWindow(QWidget *parent)
 
   attachToShipAction = guardZoneMenu->addAction("Attach to Ship");
   attachToShipAction->setCheckable(true);
+  attachToShipAction->setChecked(false);  // PERBAIKAN: Set default false, akan diupdate oleh signal dari EcWidget
   connect(attachToShipAction, SIGNAL(toggled(bool)), this, SLOT(onAttachGuardZoneToShip(bool)));
 
   guardZoneMenu->addSeparator();
@@ -1056,10 +1081,10 @@ MainWindow::MainWindow(QWidget *parent)
     // qDebug() << userpermit;
 
   // PLEASE WAIT, TURN OFF FOR A MOMENT
-  /*
+
   setupGuardZonePanel();
   setupAISTargetPanel();
-  */
+
 
   //setupAlertPanel();
   //setupTestingMenu();
@@ -1959,6 +1984,24 @@ void MainWindow::onAttachGuardZoneToShip(bool attached)
     qDebug() << "=== ATTACH TO SHIP CALLED ===" << attached;
 
     if (ecchart) {
+        // Debug current state
+        bool currentHasAttached = ecchart->hasAttachedGuardZone();
+        qDebug() << "[DEBUG] Current hasAttachedGuardZone:" << currentHasAttached;
+        
+        // PERBAIKAN: Jika user mengaktifkan attach tapi sudah ada guardzone attached
+        if (attached && currentHasAttached) {
+            qDebug() << "[DEBUG] Already has attached guardzone, skipping creation";
+            statusBar()->showMessage(tr("Guardzone already attached to ship"), 3000);
+            return;
+        }
+        
+        // PERBAIKAN: Jika user menonaktifkan attach tapi tidak ada guardzone attached
+        if (!attached && !currentHasAttached) {
+            qDebug() << "[DEBUG] No attached guardzone found, nothing to detach";
+            statusBar()->showMessage(tr("No guardzone to detach"), 3000);
+            return;
+        }
+        
         ecchart->setRedDotAttachedToShip(attached);
 
         if (attached) {
@@ -1978,12 +2021,16 @@ void MainWindow::onAttachGuardZoneToShip(bool attached)
 
 void MainWindow::onAttachToShipStateChanged(bool attached)
 {
+    qDebug() << "[UI-SYNC] onAttachToShipStateChanged called with:" << attached;
+    
     // Update checkbox untuk sinkronisasi dengan backend state
     if (attachToShipAction) {
         attachToShipAction->blockSignals(true); // Block signal untuk prevent infinite loop
         attachToShipAction->setChecked(attached);
         attachToShipAction->blockSignals(false);
         qDebug() << "[UI-SYNC] Attach to ship checkbox updated to:" << attached;
+    } else {
+        qDebug() << "[UI-SYNC] WARNING: attachToShipAction is null!";
     }
 }
 

@@ -246,6 +246,7 @@ public:
   bool isGuardZoneInViewport(const GuardZone& gz, const QRect& viewport);
   void drawGuardZoneLabel(QPainter& painter, const GuardZone& gz, const QPoint& position);
   void drawGuardZoneCreationPreview(QPainter& painter);
+  void drawSectorGuardZone(QPainter& painter, const GuardZone& gz, int& labelX, int& labelY);
 
   void createRedDotGuardian();
   void removeRedDotGuardian();
@@ -253,6 +254,7 @@ public:
 
   void createAttachedGuardZone();
   void removeAttachedGuardZone();
+  void cleanupDuplicateAttachedGuardZones();
 
   bool isGuardZoneAutoCheckEnabled() const { return guardZoneAutoCheckEnabled; }
   int getGuardZoneCheckInterval() const { return guardZoneCheckInterval; }
@@ -454,6 +456,7 @@ public:
   void setRedDotAttachedToShip(bool attached);
   bool isRedDotTrackerEnabled() const;
   bool isRedDotAttachedToShip() const;
+  bool hasAttachedGuardZone() const;
 
   // Transforms device coordinates from this widget to geodetic coordinates (WGS84)
   virtual bool XyToLatLon (int x, int y, EcCoordinate & lat, EcCoordinate & lon);
@@ -790,6 +793,7 @@ private:
   bool checkPointInPolygonGeographic(double lat, double lon, const QVector<double>& polygonLatLons);
   bool checkPointInPolygonScreen(double lat, double lon, const QVector<double>& polygonLatLons);
   double calculateCrossProduct(double pointLat, double pointLon, double lat1, double lon1, double lat2, double lon2);
+  bool isPointInSemicircle(double lat, double lon, const GuardZone* gz);
 
   GuardZoneManager* guardZoneManager;
   QList<GuardZone> guardZones;
