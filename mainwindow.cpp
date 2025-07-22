@@ -835,7 +835,7 @@ MainWindow::MainWindow(QWidget *parent)
   aisMenu->addAction( tr( "Load AIS Logfile" ), this, SLOT( slotLoadAisFile() ) );
   aisMenu->addAction( tr( "Load AIS Variable" ), this, SLOT( slotLoadAisVariable() ) );
   aisMenu->addAction( tr( "Stop Load AIS Variable" ), this, SLOT( slotStopLoadAisVariable() ) );
-  aisMenu->addAction( tr( "Connect to AIS Server" ), this, SLOT( slotConnectToAisServer() ) );
+  // aisMenu->addAction( tr( "Connect to AIS Server" ), this, SLOT( slotConnectToAisServer() ) );
 
   // SETTINGS MANAGER
   QMenu *settingMenu = menuBar()->addMenu("&Settings");
@@ -974,9 +974,12 @@ MainWindow::MainWindow(QWidget *parent)
   stopAisRecAction->setEnabled(false);
 
   // Debug Purpose
-  QMenu *debugMenu = menuBar()->addMenu("&Debug");
+  // PLEASE WAIT!!
 
+  /*
+  QMenu *debugMenu = menuBar()->addMenu("&Debug");
   debugMenu->addAction("NMEA Decode", this, SLOT(nmeaDecode()));
+  */
 
   ///====================== IGNORE =============================
   // CPA/TCPA menu
