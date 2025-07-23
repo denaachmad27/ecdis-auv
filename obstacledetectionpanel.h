@@ -22,6 +22,11 @@
 #include <QStyledItemDelegate>
 #include <QPainter>
 #include <algorithm>
+#include <QMediaPlayer>
+#include <QUrl>
+#ifdef Q_OS_WIN
+#include <QSound>
+#endif
 
 #include "ecwidget.h"
 #include "guardzonemanager.h"
@@ -158,6 +163,16 @@ private:
     int dangerousObstacles;
     int warningObstacles;
     int noteObstacles;
+    
+    // Sound alarm for dangerous obstacles
+    QMediaPlayer* alarmPlayer;
+    QTimer* alarmLoopTimer;
+    bool alarmActive;
+    void startDangerousAlarm();
+    void stopDangerousAlarm();
+    void setupAlarmSound();
+    void playAlarmFallback();
+    void playAlarmLoop();
 };
 
 Q_DECLARE_METATYPE(PickReportObstacle)

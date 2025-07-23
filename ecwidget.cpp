@@ -193,6 +193,14 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   alertCheckTimer = new QTimer(this);
   connect(alertCheckTimer, &QTimer::timeout, this, &EcWidget::performPeriodicAlertChecks);
   alertCheckTimer->start(10000); // Check every 10 seconds
+  
+  // Initialize chart flashing for dangerous obstacles
+  chartFlashTimer = new QTimer(this);
+  chartFlashVisible = false;
+  connect(chartFlashTimer, &QTimer::timeout, [this]() {
+      chartFlashVisible = !chartFlashVisible;
+      update(); // Trigger repaint
+  });
 
   // Initialize alert system (delayed to ensure EcWidget is fully constructed)
   QTimer::singleShot(100, this, &EcWidget::initializeAlertSystem);
@@ -977,10 +985,26 @@ void EcWidget::paintEvent (QPaintEvent *e)
 
   QPainter painter(this);
   painter.drawPixmap(e->rect(), drawPixmap, e->rect());
+  
+  // FORCE CLEANUP: Run cleanup from paint event as fallback
+  static int paintCleanupCounter = 0;
+  if (++paintCleanupCounter % 100 == 0) { // Every ~100 paint events (less frequent)
+      qDebug() << "[PAINT-CLEANUP] Running obstacle cleanup from paintEvent";
+      if (!obstacleMarkers.isEmpty()) {
+          removeOutdatedObstacleMarkers();
+      }
+  }
 
   drawGuardZone();
   // TEMPORARY: Disabled untuk presentasi - obstacle area menyebabkan crash
   // drawObstacleDetectionArea(painter); // Show obstacle detection area (now safe)
+  
+  // Re-enabled with enhanced safety protections
+  drawObstacleMarkers(painter); // Draw obstacle markers with color-coded dots
+  
+  // Draw chart flashing overlay for dangerous obstacles
+  drawChartFlashOverlay(painter);
+  
   drawRedDotTracker();
 
   // ========== DRAW TEST GUARDZONE ==========
@@ -9220,12 +9244,20 @@ void EcWidget::cleanupDuplicateAttachedGuardZones()
 // FUNGSI UTAMA UNTUK CHECK SHIP GUARDIAN ZONE
 bool EcWidget::checkShipGuardianZone()
 {
-    // Cek apakah Ship Guardian aktif
-    if (!redDotAttachedToShip || attachedGuardZoneId == -1) {
+    // Check if any guardzone is attached to ship and active
+    bool hasAttachedGuardZone = false;
+    for (const GuardZone& gz : guardZones) {
+        if (gz.attachedToShip && gz.active) {
+            hasAttachedGuardZone = true;
+            break;
+        }
+    }
+    
+    if (!hasAttachedGuardZone) {
         return false;
     }
 
-    qDebug() << "=== CHECKING SHIP GUARDIAN ZONE ===" << attachedGuardZoneId;
+    qDebug() << "=== CHECKING SHIP GUARDIAN ZONE (Attached GuardZone) ===";
 
     // Clear previous detections
     lastDetectedObstacles.clear();
@@ -9244,6 +9276,18 @@ bool EcWidget::checkShipGuardianZone()
 
     // Check pick report obstacles (chart features at ship position)
     checkPickReportObstaclesInShipGuardian();
+    
+    // Clean up outdated obstacle markers
+    qDebug() << "[CLEANUP-TIMER] Running obstacle cleanup, current markers:" << obstacleMarkers.size();
+    removeOutdatedObstacleMarkers();
+    qDebug() << "[CLEANUP-TIMER] After cleanup, remaining markers:" << obstacleMarkers.size();
+    
+    // FORCE TEST: Also run cleanup from update paint event as fallback
+    static int cleanupCounter = 0;
+    if (++cleanupCounter % 50 == 0) { // Every ~50 paint events
+        qDebug() << "[FORCE-CLEANUP] Running fallback cleanup from paint event";
+        removeOutdatedObstacleMarkers();
+    }
 
     // Show alert jika ada obstacles
     if (hasObstacles && !lastDetectedObstacles.isEmpty()) {
@@ -9419,48 +9463,94 @@ void EcWidget::checkPickReportObstaclesInShipGuardian()
         return;
     }
 
-    // Check multiple points within guardzone area for better coverage
-    QList<EcFeature> allPickedFeatures;
-    
-    // Check center (ship position)
-    QList<EcFeature> centerFeatures;
-    GetPickedFeaturesSubs(centerFeatures, ownShip.lat, ownShip.lon);
-    allPickedFeatures.append(centerFeatures);
+    // Check multiple points within guardzone area USING SAME LOGIC as guardzone
+    QList<QPair<EcFeature, QPair<double, double>>> allPickedFeaturesWithCoords;
     
     qDebug() << "[OBSTACLE-DEBUG] Guardzone shape:" << attachedGuardZone->shape 
-             << "radius:" << attachedGuardZone->outerRadius << "NM";
+             << "radius inner:" << attachedGuardZone->innerRadius 
+             << "outer:" << attachedGuardZone->outerRadius << "NM"
+             << "angles:" << attachedGuardZone->startAngle << "to" << attachedGuardZone->endAngle;
+    
+    // Use guardzone center position (should be ship position for attached guardzone)
+    double centerLat = attachedGuardZone->centerLat;
+    double centerLon = attachedGuardZone->centerLon;
+    
+    // For attach to ship, center should follow ship position
+    if (attachedGuardZone->attachedToShip) {
+        centerLat = ownShip.lat;
+        centerLon = ownShip.lon;
+    }
+    
+    // Check center (guardzone center)
+    QList<EcFeature> centerFeatures;
+    GetPickedFeaturesSubs(centerFeatures, centerLat, centerLon);
+    for (const EcFeature& feature : centerFeatures) {
+        allPickedFeaturesWithCoords.append(qMakePair(feature, qMakePair(centerLat, centerLon)));
+    }
     qDebug() << "[OBSTACLE-DEBUG] Center features found:" << centerFeatures.size();
     
-    // For circular guardzone, check additional points around the circumference
+    // For circular guardzone, check additional points using SEMICIRCLE logic
     if (attachedGuardZone->shape == GUARD_ZONE_CIRCLE) {
-        double radius = attachedGuardZone->outerRadius; // Use outer radius in NM
+        double outerRadius = attachedGuardZone->outerRadius;
+        double innerRadius = attachedGuardZone->innerRadius;
         
-        // Check 8 points around the circle (45 degree intervals)
-        for (int angle = 0; angle < 360; angle += 45) {
+        // OPTIMIZED: Use strategic scanning pattern to reduce duplicates
+        // Focus on key angles and fewer radius checks
+        for (int angle = 0; angle < 360; angle += 45) { // Wider angle intervals (45°)
             double checkLat, checkLon;
-            EcCalculateRhumblinePosition(EC_GEO_DATUM_WGS84,
-                                        ownShip.lat, ownShip.lon,
-                                        radius, angle,
-                                        &checkLat, &checkLon);
             
-            QList<EcFeature> pointFeatures;
-            GetPickedFeaturesSubs(pointFeatures, checkLat, checkLon);
-            allPickedFeatures.append(pointFeatures);
+            // OPTIMIZED: Reduce radius checks to prevent over-scanning
+            QList<double> checkRadii;
+            if (innerRadius > 0 && outerRadius > innerRadius + 0.1) {
+                // Only check outer edge for annulus guardzone
+                checkRadii << outerRadius * 0.9; // Near outer edge only
+            } else {
+                // For simple circle, check two strategic points
+                if (outerRadius > 0.2) {
+                    checkRadii << outerRadius * 0.7; // 70% radius for good coverage
+                }
+            }
             
-            if (pointFeatures.size() > 0) {
-                qDebug() << "[OBSTACLE-DEBUG] Found" << pointFeatures.size() << "features at angle" << angle 
-                         << "position" << checkLat << checkLon;
+            for (double checkRadius : checkRadii) {
+                EcCalculateRhumblinePosition(EC_GEO_DATUM_WGS84,
+                                            centerLat, centerLon,
+                                            checkRadius, angle,
+                                            &checkLat, &checkLon);
+                
+                // CRITICAL: Only check points that would be in the guardzone using same logic
+                if (isPointInSemicircle(checkLat, checkLon, attachedGuardZone)) {
+                    QList<EcFeature> pointFeatures;
+                    GetPickedFeaturesSubs(pointFeatures, checkLat, checkLon);
+                    
+                    for (const EcFeature& feature : pointFeatures) {
+                        allPickedFeaturesWithCoords.append(qMakePair(feature, qMakePair(checkLat, checkLon)));
+                    }
+                    
+                    if (pointFeatures.size() > 0) {
+                        qDebug() << "[OBSTACLE-DEBUG] Found" << pointFeatures.size() << "features at angle" << angle 
+                                 << "radius" << checkRadius << "position" << checkLat << checkLon;
+                    }
+                }
             }
         }
     }
     
-    qDebug() << "[OBSTACLE-DEBUG] Total features collected:" << allPickedFeatures.size();
+    qDebug() << "[OBSTACLE-DEBUG] Total features with coordinates collected:" << allPickedFeaturesWithCoords.size();
     
-    // Track current obstacles
+    // Track current obstacles with counters for optimization monitoring
     QSet<QString> currentDetectedObstacles;
+    int totalScanned = 0;
+    int duplicatesSkipped = 0;
+    int irrelevantSkipped = 0;
+    int outsideGuardzone = 0;
     
     // Process each feature individually like in PickWindow
-    for (const EcFeature& feature : allPickedFeatures) {
+    for (const auto& featureWithCoords : allPickedFeaturesWithCoords) {
+        totalScanned++;
+        
+        const EcFeature& feature = featureWithCoords.first;
+        double obstacleLat = featureWithCoords.second.first;
+        double obstacleLon = featureWithCoords.second.second;
         char featToken[EC_LENATRCODE + 1];
         char featName[256];
         
@@ -9474,6 +9564,19 @@ void EcWidget::checkPickReportObstaclesInShipGuardian()
             continue;
         }
         
+        // OPTIMIZATION: Filter out irrelevant feature types to reduce noise
+        // Only process navigationally significant obstacles
+        QStringList relevantFeatures = {
+            "WRECKS", "OBSTNS", "UWTROC", "BOYISD", "CTNARE", "TSSBND", 
+            "DEPARE", "DRGARE", "PIPARE", "CBLARE", "NAVLNE", "DWRTPT", "DWRTCL"
+        };
+        
+        if (!relevantFeatures.contains(featureClass)) {
+            // Skip non-navigational features to reduce clutter
+            irrelevantSkipped++;
+            continue;
+        }
+        
         // Translate token to human readable name (fallback)
         if (EcDictionaryTranslateObjectToken(dictInfo, featToken, featName, sizeof(featName)) != EC_DICT_OK) {
             strcpy(featName, "Unknown Chart Feature");
@@ -9483,15 +9586,59 @@ void EcWidget::checkPickReportObstaclesInShipGuardian()
         QString betterObjectName = extractObjectNameFromFeature(feature);
         QString finalObjectName = betterObjectName.isEmpty() ? QString::fromLatin1(featName) : betterObjectName;
         
-        // Create unique identifier for this obstacle
-        QString obstacleId = QString("%1_%2_%3")
+        // Obstacle coordinates are already available from the loop
+        
+        // Create more precise unique identifier to prevent duplicates
+        // Use higher precision coordinates and include feature class
+        QString obstacleId = QString("%1_%2_%3_%4")
                             .arg(featureClass)
-                            .arg(finalObjectName)
-                            .arg(QString("%1,%2").arg(ownShip.lat, 0, 'f', 4).arg(ownShip.lon, 0, 'f', 4));
+                            .arg(finalObjectName.left(20)) // Limit name length
+                            .arg(obstacleLat, 0, 'f', 6)   // Higher precision lat
+                            .arg(obstacleLon, 0, 'f', 6);  // Higher precision lon
+        
+        // CRITICAL: Double-check that obstacle coordinates are actually within guardzone
+        // This prevents false detections from chart features picked up during scanning
+        bool obstacleInGuardZone = isPointInSemicircle(obstacleLat, obstacleLon, attachedGuardZone);
+        
+        if (!obstacleInGuardZone) {
+            outsideGuardzone++;
+            continue;
+        }
+        
+        // OPTIMIZATION: Check for nearby duplicate obstacles (distance-based deduplication)
+        bool isDuplicate = false;
+        for (const QString& existingId : currentDetectedObstacles) {
+            // Extract coordinates from existing obstacle IDs for comparison
+            QStringList parts = existingId.split("_");
+            if (parts.size() >= 4) {
+                double existingLat = parts[2].toDouble();
+                double existingLon = parts[3].toDouble();
+                
+                // Calculate distance between obstacles
+                double distance, bearing;
+                EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
+                                                       obstacleLat, obstacleLon,
+                                                       existingLat, existingLon,
+                                                       &distance, &bearing);
+                
+                // If obstacles are very close (< 50 meters), consider as duplicate
+                if (distance < 0.027) { // 0.027 NM ≈ 50 meters
+                    isDuplicate = true;
+                    qDebug() << "[OBSTACLE-DEBUG] Duplicate obstacle detected - too close to existing:"
+                             << finalObjectName << "distance:" << distance << "NM";
+                    break;
+                }
+            }
+        }
+        
+        if (isDuplicate) {
+            duplicatesSkipped++;
+            continue; // Skip this duplicate obstacle
+        }
         
         currentDetectedObstacles.insert(obstacleId);
         
-        // Only emit if this is a new obstacle
+        // Only emit if this is a new obstacle AND it's actually in guardzone
         if (!previousDetectedObstacles.contains(obstacleId)) {
             // Determine danger level based on feature type
             QString dangerLevel = "NOTE";
@@ -9507,38 +9654,51 @@ void EcWidget::checkPickReportObstaclesInShipGuardian()
                 information = "Chart feature detected";
             }
             
-            // Create pick report obstacle data
+            qDebug() << "[OBSTACLE-DEBUG] Feature position: " << obstacleLat << "," << obstacleLon;
+            
+            // Create pick report obstacle data with actual obstacle coordinates
             QString details = QString("PICK_REPORT|%1|%2|%3|%4|%5|%6|%7")
                              .arg(featureClass)
                              .arg(finalObjectName)
                              .arg(featureClass)
-                             .arg(ownShip.lat, 0, 'f', 6)
-                             .arg(ownShip.lon, 0, 'f', 6)
+                             .arg(obstacleLat, 0, 'f', 6)
+                             .arg(obstacleLon, 0, 'f', 6)
                              .arg(dangerLevel)
                              .arg(information);
             
             // Emit signal to add to obstacle detection panel
             emit pickReportObstacleDetected(0, details); // 0 = ship guardian zone ID
             
-            qDebug() << "Pick Report NEW Obstacle Detected:" << finalObjectName 
-                     << "(" << featureClass << ") Level:" << dangerLevel << "at" << ownShip.lat << ownShip.lon;
+            qDebug() << "✅ Pick Report NEW Obstacle Detected:" << finalObjectName 
+                     << "(" << featureClass << ") Level:" << dangerLevel << "at" << obstacleLat << obstacleLon
+                     << "- CONFIRMED in guardzone area";
         }
     }
     
     // Update previous obstacles for next check
     previousDetectedObstacles = currentDetectedObstacles;
+    
+    // OPTIMIZATION REPORT: Log performance metrics
+    qDebug() << "[OBSTACLE-OPTIMIZATION] Scan completed:"
+             << "Total scanned:" << totalScanned
+             << "Valid obstacles:" << currentDetectedObstacles.size()
+             << "Duplicates skipped:" << duplicatesSkipped
+             << "Irrelevant skipped:" << irrelevantSkipped  
+             << "Outside guardzone:" << outsideGuardzone;
 }
 
 QString EcWidget::extractInformationFromFeature(const EcFeature& feature)
 {
-    QString information;
+    QStringList infoList;
     
     // Extract attributes using SevenCs API like in PickWindow
-    char attrStr[512];
+    char attrStr[1024];
+    char attrName[1024];
+    char attrText[1024];
     EcFindInfo fI;
     Bool result;
     EcAttributeToken attrToken;
-    char attrName[256];
+    EcAttributeType attrType;
     
     // Get the first attribute string of the feature
     result = EcFeatureGetAttributes(feature, dictInfo, &fI, EC_FIRST, attrStr, sizeof(attrStr));
@@ -9550,19 +9710,80 @@ QString EcWidget::extractInformationFromFeature(const EcFeature& feature)
         
         // Translate the token to a human readable name
         if (EcDictionaryTranslateAttributeToken(dictInfo, attrToken, attrName, sizeof(attrName))) {
-            QString tokenStr = QString::fromLatin1(attrToken);
-            QString nameStr = QString::fromLatin1(attrName);
-            QString attrString = QString::fromLatin1(attrStr);
-            
-            // Look for INFORM, OBJNAM, or other relevant attributes
-            if (tokenStr == "INFORM" || tokenStr == "OBJNAM" || nameStr.contains("Information") || nameStr.contains("Object name")) {
-                // Extract value after = sign  
-                int equalPos = attrString.indexOf('=');
-                if (equalPos > 0 && equalPos < attrString.length() - 1) {
-                    QString value = attrString.mid(equalPos + 1).trimmed();
-                    if (!value.isEmpty()) {
-                        information = value;
-                        break; // Use first meaningful information found
+            // Get the attribute type (List, enumeration, integer, float, string, text)
+            if (EcDictionaryGetAttributeType(dictInfo, attrStr, &attrType) == EC_DICT_OK) {
+                QString attrTokenStr = QString(attrToken);
+                QString attrNameStr = QString(attrName);
+                
+                if (attrType == EC_ATTR_ENUM || attrType == EC_ATTR_LIST) {
+                    // Translate the value to a human readable text
+                    if (!EcDictionaryTranslateAttributeValue(dictInfo, attrStr, attrText, sizeof(attrText))) {
+                        attrText[0] = (char)0;
+                    }
+                    
+                    QString attrTextStr = QString(attrText);
+                    
+                    // Format specific enumerated attributes with enhanced display
+                    if (attrTokenStr == "trksta") {
+                        infoList << QString("Track Status: %1").arg(attrTextStr);
+                    } else if (attrTokenStr == "actsta") {
+                        infoList << QString("Activation: %1").arg(attrTextStr);
+                    } else if (attrTokenStr == "posint") {
+                        infoList << QString("Position Integrity: %1").arg(attrTextStr);
+                    } else if (attrTokenStr == "navsta") {
+                        infoList << QString("Navigation Status: %1").arg(attrTextStr);
+                    } else if (attrTokenStr == "catobs") {
+                        infoList << QString("Obstruction Category: %1").arg(attrTextStr);
+                    } else if (attrTokenStr == "catwrk") {
+                        infoList << QString("Wreck Category: %1").arg(attrTextStr);
+                    } else if (attrTokenStr == "catsil") {
+                        infoList << QString("Silo Category: %1").arg(attrTextStr);
+                    } else if (attrTokenStr == "status") {
+                        infoList << QString("Status: %1").arg(attrTextStr);
+                    } else if (attrTokenStr == "watlev") {
+                        infoList << QString("Water Level: %1").arg(attrTextStr);
+                    } else if (attrTokenStr == "quasou") {
+                        infoList << QString("Quality of Sounding: %1").arg(attrTextStr);
+                    } else if (!attrTextStr.isEmpty()) {
+                        infoList << QString("%1: %2").arg(attrNameStr).arg(attrTextStr);
+                    }
+                } else {
+                    // For other types, use the raw value with enhanced formatting
+                    strcpy(attrText, &attrStr[EC_LENATRCODE]);
+                    QString attrTextStr = QString(attrText);
+                    
+                    // Handle specific non-enum attributes with enhanced formatting
+                    if (attrTokenStr == "cogcrs") {
+                        infoList << QString("COG: %1°").arg(attrTextStr);
+                    } else if (attrTokenStr == "mmsino") {
+                        infoList << QString("MMSI: %1").arg(attrTextStr);
+                    } else if (attrTokenStr == "roturn") {
+                        infoList << QString("ROT: %1 deg/min").arg(attrTextStr);
+                    } else if (attrTokenStr == "headng") {
+                        infoList << QString("Heading: %1°").arg(attrTextStr);
+                    } else if (attrTokenStr == "sogspd") {
+                        infoList << QString("SOG: %1 kn").arg(attrTextStr);
+                    } else if (attrTokenStr == "valsou") {
+                        infoList << QString("Sounding: %1 m").arg(attrTextStr);
+                    } else if (attrTokenStr == "drval1") {
+                        infoList << QString("Depth Range Min: %1 m").arg(attrTextStr);
+                    } else if (attrTokenStr == "drval2") {
+                        infoList << QString("Depth Range Max: %1 m").arg(attrTextStr);
+                    } else if (attrTokenStr == "verdat") {
+                        infoList << QString("Vertical Datum: %1").arg(attrTextStr);
+                    } else if (attrTokenStr == "height") {
+                        infoList << QString("Height: %1 m").arg(attrTextStr);
+                    } else if (attrTokenStr == "verccl") {
+                        infoList << QString("Vertical Clearance: %1 m").arg(attrTextStr);
+                    } else if (attrTokenStr == "horccl") {
+                        infoList << QString("Horizontal Clearance: %1 m").arg(attrTextStr);
+                    } else if (attrTokenStr == "INFORM" || attrTokenStr == "inform") {
+                        infoList << QString("Information: %1").arg(attrTextStr);
+                    } else if (attrTokenStr == "OBJNAM" || attrTokenStr == "objnam") {
+                        infoList << QString("Object Name: %1").arg(attrTextStr);
+                    } else if (!attrTextStr.isEmpty() && attrTextStr.length() > 1) {
+                        // Skip very short or empty values but include meaningful ones
+                        infoList << QString("%1: %2").arg(attrNameStr).arg(attrTextStr);
                     }
                 }
             }
@@ -9572,7 +9793,12 @@ QString EcWidget::extractInformationFromFeature(const EcFeature& feature)
         result = EcFeatureGetAttributes(feature, dictInfo, &fI, EC_NEXT, attrStr, sizeof(attrStr));
     }
     
-    return information;
+    // Return comprehensive information or fallback message
+    if (infoList.isEmpty()) {
+        return "Navigational feature detected";
+    }
+    
+    return infoList.join("; ");
 }
 
 QString EcWidget::extractObjectNameFromFeature(const EcFeature& feature)
@@ -9800,13 +10026,23 @@ void EcWidget::setShipGuardianAutoCheck(bool enabled)
 {
     shipGuardianAutoCheck = enabled;
 
-    if (enabled && redDotAttachedToShip) {
+    // Check if any guardzone is attached to ship
+    bool hasAttachedGuardZone = false;
+    for (const GuardZone& gz : guardZones) {
+        if (gz.attachedToShip && gz.active) {
+            hasAttachedGuardZone = true;
+            break;
+        }
+    }
+
+    if (enabled && hasAttachedGuardZone) {
         shipGuardianCheckTimer->start();
-        qDebug() << "✅ Ship Guardian auto-check ENABLED (every 5 seconds)";
+        qDebug() << "✅ Ship Guardian auto-check ENABLED (every 5 seconds) - using attached guardzone";
         emit statusMessage("Ship Guardian auto-check enabled");
     } else {
-        shipGuardianCheckTimer->stop();
-        qDebug() << "❌ Ship Guardian auto-check DISABLED";
+        // FORCE START: Always run timer even if disabled for cleanup purposes
+        shipGuardianCheckTimer->start();
+        qDebug() << "⚠️  Ship Guardian auto-check FORCED (for cleanup) - enabled:" << enabled << "hasAttachedGuardZone:" << hasAttachedGuardZone;
         emit statusMessage("Ship Guardian auto-check disabled");
     }
 }
@@ -10354,9 +10590,12 @@ bool EcWidget::isPointInSemicircle(double lat, double lon, const GuardZone* gz)
     }
 
     if (!withinRadius) {
-        qDebug() << "[SEMICIRCLE-CHECK] Point outside radius range - distance:" << distance 
+        qDebug() << "[SEMICIRCLE-CHECK] Point" << lat << "," << lon << "outside radius range - distance:" << distance 
                  << "inner:" << gz->innerRadius << "outer:" << gz->outerRadius;
         return false;
+    } else {
+        qDebug() << "[SEMICIRCLE-CHECK] Point" << lat << "," << lon << "within radius - distance:" << distance 
+                 << "inner:" << gz->innerRadius << "outer:" << gz->outerRadius;
     }
 
     // Step 2: Check if point is within semicircle angle range
@@ -10388,4 +10627,300 @@ bool EcWidget::isPointInSemicircle(double lat, double lon, const GuardZone* gz)
     qDebug() << "[SEMICIRCLE-CHECK] Final result:" << (withinRadius && withinAngle);
 
     return (withinRadius && withinAngle);
+}
+
+// Obstacle marker functions implementation
+void EcWidget::addObstacleMarker(double lat, double lon, const QString& dangerLevel, 
+                                const QString& objectName, const QString& information)
+{
+    // CRITICAL: Validate input parameters
+    if (qIsNaN(lat) || qIsNaN(lon) || 
+        lat < -90.0 || lat > 90.0 || 
+        lon < -180.0 || lon > 180.0) {
+        qDebug() << "[OBSTACLE-MARKER] Invalid coordinates - marker not added:" << lat << "," << lon;
+        return;
+    }
+    
+    if (dangerLevel.isEmpty() || objectName.isEmpty()) {
+        qDebug() << "[OBSTACLE-MARKER] Invalid marker data - marker not added";
+        return;
+    }
+    
+    try {
+        ObstacleMarker marker;
+        marker.lat = lat;
+        marker.lon = lon;
+        marker.dangerLevel = dangerLevel;
+        marker.objectName = objectName;
+        marker.information = information;
+        marker.timestamp = QDateTime::currentDateTime();
+        
+        // Check for duplicates
+        for (const ObstacleMarker& existing : obstacleMarkers) {
+            if (qAbs(existing.lat - lat) < 0.0001 && qAbs(existing.lon - lon) < 0.0001 &&
+                existing.dangerLevel == dangerLevel && existing.objectName == objectName) {
+                qDebug() << "[OBSTACLE-MARKER] Duplicate marker - skipping:" << objectName;
+                return; // Skip duplicate
+            }
+        }
+        
+        // Limit number of markers to prevent memory issues
+        if (obstacleMarkers.size() >= 1000) {
+            qDebug() << "[OBSTACLE-MARKER] Too many markers - removing oldest";
+            obstacleMarkers.removeFirst();
+        }
+        
+        obstacleMarkers.append(marker);
+        qDebug() << "[OBSTACLE-MARKER] Added marker:" << objectName << "at" << lat << "," << lon << "level:" << dangerLevel;
+        
+        // Start chart flashing if this is a dangerous obstacle
+        if (dangerLevel == "DANGEROUS") {
+            startChartFlashing();
+        }
+        
+        // Check and update flashing status based on current obstacles
+        QTimer::singleShot(100, this, [this]() {
+            bool hasDangerous = hasDangerousObstacles();
+            qDebug() << "[FLASHING-DEBUG] After adding obstacle, has dangerous:" << hasDangerous 
+                     << "Total markers:" << obstacleMarkers.size() << "Flashing active:" << chartFlashTimer->isActive();
+            if (!hasDangerous) {
+                qDebug() << "[FLASHING-DEBUG] Stopping flashing - no dangerous obstacles";
+                stopChartFlashing();
+            }
+        });
+        
+        // Trigger repaint to show new marker (safe update)
+        QTimer::singleShot(0, this, [this]() { update(); });
+        
+    } catch (const std::exception& e) {
+        qDebug() << "[OBSTACLE-MARKER] Exception in addObstacleMarker:" << e.what();
+    } catch (...) {
+        qDebug() << "[OBSTACLE-MARKER] Unknown exception in addObstacleMarker";
+    }
+}
+
+void EcWidget::clearObstacleMarkers()
+{
+    try {
+        obstacleMarkers.clear();
+        qDebug() << "[OBSTACLE-MARKER] Cleared all obstacle markers";
+        
+        // Stop chart flashing when all obstacles cleared
+        stopChartFlashing();
+        
+        // Safe update using timer
+        QTimer::singleShot(0, this, [this]() { update(); });
+        
+    } catch (const std::exception& e) {
+        qDebug() << "[OBSTACLE-MARKER] Exception in clearObstacleMarkers:" << e.what();
+    } catch (...) {
+        qDebug() << "[OBSTACLE-MARKER] Unknown exception in clearObstacleMarkers";
+    }
+}
+
+void EcWidget::drawObstacleMarkers(QPainter& painter)
+{
+    // CRITICAL: Add extensive safety checks to prevent crash
+    try {
+        if (obstacleMarkers.isEmpty() || !initialized || !view) {
+            return; // Early return if no markers or not initialized
+        }
+        
+        // Validate painter state
+        if (!painter.device()) {
+            qDebug() << "[OBSTACLE-MARKER] Invalid painter device - skipping";
+            return;
+        }
+        
+        // Save painter state
+        painter.save();
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        
+        for (const ObstacleMarker& marker : obstacleMarkers) {
+            // CRITICAL: Validate marker data
+            if (qIsNaN(marker.lat) || qIsNaN(marker.lon) || 
+                marker.lat < -90.0 || marker.lat > 90.0 || 
+                marker.lon < -180.0 || marker.lon > 180.0) {
+                qDebug() << "[OBSTACLE-MARKER] Invalid coordinates - skipping marker";
+                continue;
+            }
+            
+            // Convert lat/lon to screen coordinates with validation
+            int x, y;
+            if (!LatLonToXy(marker.lat, marker.lon, x, y)) {
+                continue; // Skip if coordinate conversion fails
+            }
+            
+            // CRITICAL: Validate screen coordinates
+            QRect widgetRect = rect();
+            if (x < -100 || x > widgetRect.width() + 100 || 
+                y < -100 || y > widgetRect.height() + 100) {
+                continue; // Skip markers too far outside widget bounds
+            }
+            
+            // Set color based on danger level with validation
+            QColor markerColor(128, 128, 128, 200); // Default gray
+            if (marker.dangerLevel == "DANGEROUS") {
+                markerColor = QColor(255, 0, 0, 200); // Red
+            } else if (marker.dangerLevel == "WARNING") {
+                markerColor = QColor(255, 165, 0, 200); // Orange
+            } else if (marker.dangerLevel == "NOTE") {
+                markerColor = QColor(0, 100, 255, 200); // Blue
+            }
+            
+            // Draw filled circle with safety bounds
+            painter.setBrush(QBrush(markerColor));
+            painter.setPen(QPen(Qt::white, 2));
+            
+            int markerSize = 8;
+            QRect markerRect(x - markerSize/2, y - markerSize/2, markerSize, markerSize);
+            painter.drawEllipse(markerRect);
+            
+            // Draw pulsing effect for dangerous obstacles (simplified)
+            if (marker.dangerLevel == "DANGEROUS") {
+                // Simplified pulsing without complex math
+                int pulseSize = markerSize + 2;
+                QColor pulseColor(255, 0, 0, 100);
+                painter.setBrush(QBrush(pulseColor));
+                painter.setPen(Qt::NoPen);
+                QRect pulseRect(x - pulseSize/2, y - pulseSize/2, pulseSize, pulseSize);
+                painter.drawEllipse(pulseRect);
+            }
+            
+            // Skip text drawing to avoid font-related crashes
+            // Text drawing disabled for stability
+        }
+        
+        // Restore painter state
+        painter.restore();
+        
+    } catch (const std::exception& e) {
+        qDebug() << "[OBSTACLE-MARKER] Exception in drawObstacleMarkers:" << e.what();
+    } catch (...) {
+        qDebug() << "[OBSTACLE-MARKER] Unknown exception in drawObstacleMarkers";
+    }
+}
+
+// Chart flashing functions for dangerous obstacles
+bool EcWidget::hasDangerousObstacles() const
+{
+    int dangerousCount = 0;
+    for (const ObstacleMarker& marker : obstacleMarkers) {
+        if (marker.dangerLevel == "DANGEROUS") {
+            dangerousCount++;
+            qDebug() << "[DANGEROUS-CHECK] Found dangerous obstacle:" << marker.objectName 
+                     << "at" << marker.lat << "," << marker.lon 
+                     << "age:" << marker.timestamp.secsTo(QDateTime::currentDateTime()) << "seconds";
+        }
+    }
+    qDebug() << "[DANGEROUS-CHECK] Total dangerous obstacles:" << dangerousCount << "Total markers:" << obstacleMarkers.size();
+    return dangerousCount > 0;
+}
+
+void EcWidget::drawChartFlashOverlay(QPainter& painter)
+{
+    // Only flash if there are dangerous obstacles and flash is visible
+    if (!hasDangerousObstacles() || !chartFlashVisible) {
+        return;
+    }
+    
+    // Draw red flashing overlay over entire chart
+    painter.save();
+    painter.setCompositionMode(QPainter::CompositionMode_SourceAtop);
+    
+    // Create semi-transparent red overlay
+    QColor flashColor(255, 0, 0, 60); // Red with transparency
+    painter.fillRect(rect(), flashColor);
+    
+    painter.restore();
+}
+
+void EcWidget::startChartFlashing()
+{
+    if (!chartFlashTimer->isActive()) {
+        chartFlashTimer->start(500); // Flash every 500ms
+        qDebug() << "[CHART-FLASH] Started chart flashing for dangerous obstacles";
+    }
+}
+
+void EcWidget::stopChartFlashing()
+{
+    if (chartFlashTimer->isActive()) {
+        chartFlashTimer->stop();
+        chartFlashVisible = false;
+        update(); // Clear any remaining flash
+        qDebug() << "[CHART-FLASH] Stopped chart flashing";
+    }
+}
+
+// Remove obstacle markers that are no longer in guardzone or too old
+void EcWidget::removeOutdatedObstacleMarkers()
+{
+    if (obstacleMarkers.isEmpty()) return;
+    
+    // Find active attached guardzone
+    GuardZone* attachedGuardZone = nullptr;
+    for (GuardZone& gz : guardZones) {
+        if (gz.attachedToShip && gz.active) {
+            attachedGuardZone = &gz;
+            break;
+        }
+    }
+    
+    if (!attachedGuardZone) {
+        // No attached guardzone - clear all markers
+        clearObstacleMarkers();
+        return;
+    }
+    
+    // Remove markers that are outside guardzone or too old (>10 seconds for faster cleanup)
+    QDateTime cutoffTime = QDateTime::currentDateTime().addSecs(-10);
+    auto it = obstacleMarkers.begin();
+    bool removedAny = false;
+    bool hadDangerousObstacles = hasDangerousObstacles();
+    
+    while (it != obstacleMarkers.end()) {
+        bool shouldRemove = false;
+        
+        // Check if marker is too old (reduced to 10 seconds)
+        if (it->timestamp < cutoffTime) {
+            shouldRemove = true;
+            qDebug() << "[OBSTACLE-CLEANUP] Removing old marker:" << it->objectName;
+        }
+        // Check if marker is outside current guardzone
+        else {
+            bool inSemicircle = isPointInSemicircle(it->lat, it->lon, attachedGuardZone);
+            if (!inSemicircle) {
+                shouldRemove = true;
+                qDebug() << "[OBSTACLE-CLEANUP] Removing marker outside guardzone:" << it->objectName 
+                         << "at" << it->lat << "," << it->lon;
+            } else {
+                qDebug() << "[OBSTACLE-CLEANUP] Keeping marker inside guardzone:" << it->objectName 
+                         << "at" << it->lat << "," << it->lon;
+            }
+        }
+        
+        if (shouldRemove) {
+            it = obstacleMarkers.erase(it);
+            removedAny = true;
+        } else {
+            ++it;
+        }
+    }
+    
+    if (removedAny) {
+        qDebug() << "[OBSTACLE-CLEANUP] Removed obstacles, remaining markers:" << obstacleMarkers.size();
+        
+        // Check if we still have dangerous obstacles after cleanup
+        bool stillHasDangerous = hasDangerousObstacles();
+        qDebug() << "[OBSTACLE-CLEANUP] Had dangerous:" << hadDangerousObstacles << "Still has dangerous:" << stillHasDangerous;
+        
+        // Stop flashing if no dangerous obstacles remain
+        if (hadDangerousObstacles && !stillHasDangerous) {
+            qDebug() << "[OBSTACLE-CLEANUP] No more dangerous obstacles, stopping flashing";
+            stopChartFlashing();
+        }
+        
+        update(); // Trigger repaint
+    }
 }

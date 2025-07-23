@@ -352,6 +352,25 @@ void GuardZoneManager::showGuardZoneContextMenu(const QPoint &pos, int guardZone
         }
         else if (selectedAction == attachToShipAction) {
             // Handle attach to ship
+            if (targetGuardZone) {
+                // First, detach any other guardzone from ship
+                for (GuardZone& gz : ecWidget->getGuardZones()) {
+                    if (gz.attachedToShip) {
+                        gz.attachedToShip = false;
+                        qDebug() << "Detached guardzone" << gz.id << "from ship";
+                    }
+                }
+                
+                // Attach this guardzone to ship
+                targetGuardZone->attachedToShip = true;
+                qDebug() << "Attached guardzone" << targetGuardZone->id << "to ship";
+                
+                // Enable auto-check for obstacle detection
+                ecWidget->setShipGuardianAutoCheck(true);
+                
+                ecWidget->update();
+                emit statusMessage(QString("GuardZone %1 attached to ship - obstacle detection enabled").arg(targetGuardZone->id));
+            }
         }
         else if (selectedAction == checkAction) {
             // Handle check guardzone
