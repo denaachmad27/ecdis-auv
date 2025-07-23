@@ -1988,11 +1988,27 @@ void MainWindow::onCheckGuardZone()
 void MainWindow::onAttachGuardZoneToShip(bool attached)
 {
     qDebug() << "=== ATTACH TO SHIP CALLED ===" << attached;
+    qDebug() << "[ATTACH-DEBUG] Function started successfully";
 
-    if (ecchart) {
-        // Debug current state
-        bool currentHasAttached = ecchart->hasAttachedGuardZone();
-        qDebug() << "[DEBUG] Current hasAttachedGuardZone:" << currentHasAttached;
+    // CRITICAL: Add comprehensive protection but restore full functionality
+    try {
+        if (!ecchart) {
+            qDebug() << "[ATTACH-ERROR] ecchart is null!";
+            statusBar()->showMessage(tr("Chart not initialized"), 3000);
+            return;
+        }
+        
+        qDebug() << "[ATTACH-DEBUG] ecchart is valid";
+        
+        // Debug current state with protection
+        bool currentHasAttached = false;
+        try {
+            currentHasAttached = ecchart->hasAttachedGuardZone();
+            qDebug() << "[ATTACH-DEBUG] hasAttachedGuardZone returned:" << currentHasAttached;
+        } catch (...) {
+            qDebug() << "[ATTACH-ERROR] Exception in hasAttachedGuardZone()";
+            currentHasAttached = false; // Assume no attached guardzone
+        }
         
         // PERBAIKAN: Jika user mengaktifkan attach tapi sudah ada guardzone attached
         if (attached && currentHasAttached) {
@@ -2008,20 +2024,38 @@ void MainWindow::onAttachGuardZoneToShip(bool attached)
             return;
         }
         
-        ecchart->setRedDotAttachedToShip(attached);
+        qDebug() << "[ATTACH-DEBUG] About to call setRedDotAttachedToShip...";
+        
+        // CRITICAL: Protect this call but restore functionality
+        try {
+            ecchart->setRedDotAttachedToShip(attached);
+            qDebug() << "[ATTACH-DEBUG] setRedDotAttachedToShip completed successfully";
+        } catch (const std::exception& e) {
+            qDebug() << "[ATTACH-ERROR] Exception in setRedDotAttachedToShip:" << e.what();
+            statusBar()->showMessage(tr("Error creating attached guardzone"), 3000);
+            return;
+        } catch (...) {
+            qDebug() << "[ATTACH-ERROR] Unknown exception in setRedDotAttachedToShip";
+            statusBar()->showMessage(tr("Unknown error in attach function"), 3000);
+            return;
+        }
 
         if (attached) {
             statusBar()->showMessage(tr("Red dot tracker attached to ship"), 3000);
-
-            // Test red dot after 1 second
-            QTimer::singleShot(1000, [this]() {
-                if (ecchart) {
-                    ecchart->testRedDot();
-                }
-            });
+            qDebug() << "[ATTACH-DEBUG] Attached guardzone created successfully";
         } else {
             statusBar()->showMessage(tr("Red dot tracker detached from ship"), 3000);
+            qDebug() << "[ATTACH-DEBUG] Attached guardzone removed successfully";
         }
+        
+        qDebug() << "[ATTACH-DEBUG] Function completed successfully";
+        
+    } catch (const std::exception& e) {
+        qDebug() << "[ATTACH-ERROR] Exception in onAttachGuardZoneToShip:" << e.what();
+        statusBar()->showMessage(tr("Critical error in attach function"), 5000);
+    } catch (...) {
+        qDebug() << "[ATTACH-ERROR] Unknown exception in onAttachGuardZoneToShip";
+        statusBar()->showMessage(tr("Unknown critical error"), 5000);
     }
 }
 
