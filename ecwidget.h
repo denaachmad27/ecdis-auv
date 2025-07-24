@@ -584,7 +584,7 @@ public:
   void setMainWindow(MainWindow*);
 
   // OWNSHIP TRAIL
-  QList<QPair<EcCoordinate, EcCoordinate>> ownShipTrailPoints;
+  QList<QPair<QString, QString>> ownShipTrailPoints;
   void clearOwnShipTrail();
 
 public slots:
@@ -1005,6 +1005,7 @@ private:
   // OWNSHIP TRACK VAR
   void addOwnShipPoint(double, double);
   void drawOwnShipTrail(QPainter &painter);
+  double haversine(double lat1, double lon1, double lat2, double lon2);
 
 }; // EcWidget
 

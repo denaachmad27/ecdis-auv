@@ -978,13 +978,16 @@ void EcWidget::paintEvent (QPaintEvent *e)
   QPainter painter(this);
   painter.drawPixmap(e->rect(), drawPixmap, e->rect());
 
-  drawGuardZone();
+  // PLEASE WAIT
+
+  //drawGuardZone();
   // TEMPORARY: Disabled untuk presentasi - obstacle area menyebabkan crash
   // drawObstacleDetectionArea(painter); // Show obstacle detection area (now safe)
-  drawRedDotTracker();
+  //drawRedDotTracker();
 
   // ========== DRAW TEST GUARDZONE ==========
-  drawTestGuardSquare(painter);
+
+  // drawTestGuardSquare(painter);
   // if (testGuardZoneEnabled) {
   //
   // }
@@ -1082,26 +1085,63 @@ void EcWidget::drawOwnShipTrail(QPainter &painter)
 
     for (int i = 1; i < ownShipTrailPoints.size(); ++i)
     {
-        EcCoordinate lat1 = ownShipTrailPoints[i - 1].first;
-        EcCoordinate lon1 = ownShipTrailPoints[i - 1].second;
-        EcCoordinate lat2 = ownShipTrailPoints[i].first;
-        EcCoordinate lon2 = ownShipTrailPoints[i].second;
+        const QPair<QString, QString> &prev = ownShipTrailPoints[i - 1];
+        const QPair<QString, QString> &curr = ownShipTrailPoints[i];
 
-        // Cek validitas angka
-        if (!qIsFinite(lat1) || !qIsFinite(lon1) || !qIsFinite(lat2) || !qIsFinite(lon2))
+        bool ok1a = false, ok1b = false, ok2a = false, ok2b = false;
+        double lat1 = prev.first.toDouble(&ok1a);
+        double lon1 = prev.second.toDouble(&ok1b);
+        double lat2 = curr.first.toDouble(&ok2a);
+        double lon2 = curr.second.toDouble(&ok2b);
+
+        if (!(ok1a && ok1b && ok2a && ok2b))
+        {
+            qDebug() << "Invalid conversion to double at index" << i;
             continue;
+        }
+
+        if (!qIsFinite(lat1) || !qIsFinite(lon1) || !qIsFinite(lat2) || !qIsFinite(lon2))
+        {
+            qDebug() << "Non-finite coordinate at index" << i;
+            continue;
+        }
 
         int x1 = 0, y1 = 0, x2 = 0, y2 = 0;
         bool ok1 = LatLonToXy(lat1, lon1, x1, y1);
         bool ok2 = LatLonToXy(lat2, lon2, x2, y2);
 
         if (!ok1 || !ok2)
+        {
+            qDebug() << "LatLonToXy failed at index" << i;
             continue;
+        }
 
-        painter.setPen(QPen(QColor(0, 110, 0), 4));
+        double dist = haversine(lat1, lon1, lat2, lon2);
+
+        if (dist > 100.0)
+            painter.setPen(QPen(Qt::gray, 4));
+        else
+            painter.setPen(QPen(QColor(0, 150, 0), 4));
+
         painter.drawLine(x1, y1, x2, y2);
     }
 }
+
+
+
+// Fungsi utilitas Haversine (dalam kilometer)
+double EcWidget::haversine(double lat1, double lon1, double lat2, double lon2)
+{
+    static const double R = 6371000.0; // Radius bumi dalam meter
+    double dLat = qDegreesToRadians(lat2 - lat1);
+    double dLon = qDegreesToRadians(lon2 - lon1);
+    double a = std::sin(dLat / 2) * std::sin(dLat / 2) +
+               std::cos(qDegreesToRadians(lat1)) * std::cos(qDegreesToRadians(lat2)) *
+               std::sin(dLon / 2) * std::sin(dLon / 2);
+    double c = 2 * std::atan2(std::sqrt(a), std::sqrt(1 - a));
+    return R * c;
+}
+
 
 void EcWidget::clearOwnShipTrail()
 {
@@ -2856,7 +2896,7 @@ void EcWidget::processData(double lat, double lon, double cog, double sog, doubl
     // AisDatabaseManager::instance().insertOwnShipToDB(lat, lon, dep, hdg, cog, spd, sog, yaw, z);
 
     // EKOR OWNSHIP
-    ownShipTrailPoints.append(qMakePair(EcCoordinate(lat), EcCoordinate(lon)));
+    //ownShipTrailPoints.append(qMakePair(EcCoordinate(lat), EcCoordinate(lon)));
 }
 
 void EcWidget::processAis(QString ais){

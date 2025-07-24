@@ -409,8 +409,8 @@ void Ais::handleOwnShipUpdate(EcAISTargetInfo *ti)
         Ais::instance()->_aisOwnShip = dataOS;
 
         // EKOR OWNSHIP
-        if (dataOS.lat != 0 && dataOS.lon != 0){
-            _wParent->ownShipTrailPoints.append(qMakePair(EcCoordinate(dataOS.lat), EcCoordinate(dataOS.lon)));
+        if (ownShipLat != 0 && ownShipLon != 0){
+            _wParent->ownShipTrailPoints.append(qMakePair(QString::number(ownShipLat, 'f', 10), QString::number(ownShipLon, 'f', 10)));
         }
 
         // DEBUG COMMENT TEMP
