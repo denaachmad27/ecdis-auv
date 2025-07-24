@@ -25,6 +25,12 @@ struct SettingsData {
     EcWidget::DisplayOrientationMode orientationMode;
     EcWidget::OSCenteringMode centeringMode;
     int courseUpHeading;
+
+    // ALERT SETTINGS
+    bool visualFlashingEnabled;
+    QString soundAlarmFile;
+    bool soundAlarmEnabled;
+    int soundAlarmVolume;
 };
 
 #endif // SETTINGSDATA_H

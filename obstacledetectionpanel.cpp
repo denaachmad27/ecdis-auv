@@ -41,16 +41,6 @@ ObstacleDetectionPanel::ObstacleDetectionPanel(EcWidget* ecWidget, GuardZoneMana
     connect(alarmLoopTimer, &QTimer::timeout, this, &ObstacleDetectionPanel::playAlarmLoop);
     alarmLoopTimer->setInterval(3000); // Repeat alarm every 3 seconds
     
-    // FORCE TEST: Test continuous alarm 5 seconds after initialization
-    QTimer::singleShot(5000, this, [this]() {
-        qDebug() << "[FORCE-ALARM-TEST] Testing continuous alarm 5 seconds after init...";
-        qDebug() << "[FORCE-ALARM-TEST] Starting continuous alarm test...";
-        startDangerousAlarm();
-        QTimer::singleShot(10000, this, [this]() { // Let it run for 10 seconds
-            stopDangerousAlarm();
-            qDebug() << "[FORCE-ALARM-TEST] Continuous alarm test stopped";
-        });
-    });
     
     qDebug() << "ObstacleDetectionPanel initialized successfully with sound alarm";
 }
@@ -359,6 +349,9 @@ QString ObstacleDetectionPanel::formatTimestamp(const QDateTime& timestamp)
 
 void ObstacleDetectionPanel::updateStatistics()
 {
+    // Remove outdated obstacles (older than 30 seconds)
+    removeOutdatedObstacles();
+    
     totalObstacles = detectedObstacles.size();
     activeObstacles = 0;
     dangerousObstacles = 0;
@@ -368,14 +361,15 @@ void ObstacleDetectionPanel::updateStatistics()
     for (const PickReportObstacle& obstacle : detectedObstacles) {
         if (obstacle.status == "ACTIVE") {
             activeObstacles++;
-        }
-        
-        if (obstacle.dangerLevel == "DANGEROUS") {
-            dangerousObstacles++;
-        } else if (obstacle.dangerLevel == "WARNING") {
-            warningObstacles++;
-        } else {
-            noteObstacles++;
+            
+            // Only count dangers/warnings/notes for ACTIVE obstacles
+            if (obstacle.dangerLevel == "DANGEROUS") {
+                dangerousObstacles++;
+            } else if (obstacle.dangerLevel == "WARNING") {
+                warningObstacles++;
+            } else {
+                noteObstacles++;
+            }
         }
     }
     
@@ -388,20 +382,45 @@ void ObstacleDetectionPanel::updateStatistics()
     
     statisticsLabel->setText(stats);
     
-    // Check if we need to start/stop dangerous alarm
-    if (dangerousObstacles > 0 && !alarmActive) {
-        startDangerousAlarm();
-    } else if (dangerousObstacles == 0 && alarmActive) {
-        stopDangerousAlarm();
-    }
+    // Note: Sound alarm is now controlled by EcWidget flashing mechanism
+    // to ensure perfect synchronization with visual alerts
 }
 
 // Stub implementations for required slots
 void ObstacleDetectionPanel::refreshObstacleList() { updateStatistics(); }
-void ObstacleDetectionPanel::updateObstacleData() { /* Auto refresh logic */ }
+void ObstacleDetectionPanel::updateObstacleData() { 
+    updateStatistics(); // Auto refresh with cleanup
+}
 void ObstacleDetectionPanel::onFilterChanged() { applyFilters(); }
 void ObstacleDetectionPanel::onObstacleSelectionChanged() { /* Selection logic */ }
 void ObstacleDetectionPanel::showContextMenu(const QPoint& pos) { contextMenu->exec(obstacleList->mapToGlobal(pos)); }
+void ObstacleDetectionPanel::removeOutdatedObstacles()
+{
+    QDateTime currentTime = QDateTime::currentDateTime();
+    int removedCount = 0;
+    
+    // Remove obstacles older than 30 seconds
+    auto it = detectedObstacles.begin();
+    while (it != detectedObstacles.end()) {
+        qint64 ageInSeconds = it->timestamp.secsTo(currentTime);
+        
+        if (ageInSeconds > 30) { // 30 seconds timeout
+            qDebug() << "[OBSTACLE-CLEANUP] Removing outdated obstacle:" << it->objectName 
+                     << "Age:" << ageInSeconds << "seconds";
+            it = detectedObstacles.erase(it);
+            removedCount++;
+        } else {
+            ++it;
+        }
+    }
+    
+    if (removedCount > 0) {
+        qDebug() << "[OBSTACLE-CLEANUP] Removed" << removedCount << "outdated obstacles";
+        // Refresh the UI list
+        refreshObstacleList();
+    }
+}
+
 void ObstacleDetectionPanel::clearSelectedObstacle() { /* Clear selected */ }
 void ObstacleDetectionPanel::clearObstaclesForGuardZone() { /* Clear by guardzone */ }
 void ObstacleDetectionPanel::exportObstacleList() { /* Export logic */ }
@@ -639,25 +658,41 @@ void ObstacleDetectionPanel::playAlarmFallback()
     }
     #endif
     
-    // Method 3: Windows system beep
+    // Method 3: Windows system beep (asynchronous)
     if (!fallbackSuccess) {
         #ifdef Q_OS_WIN
-        qDebug() << "[ALARM] Method 3: Using Windows system beep";
-        for (int i = 0; i < 3; i++) {
-            Beep(1000, 200); // 1000Hz for 200ms
-            Sleep(100);       // 100ms pause
-        }
+        qDebug() << "[ALARM] Method 3: Using Windows system beep (async)";
+        // Use QTimer to avoid blocking UI thread
+        QTimer::singleShot(0, []() {
+            for (int i = 0; i < 3; i++) {
+                Beep(1000, 200); // 1000Hz for 200ms
+                Sleep(100);       // 100ms pause
+            }
+        });
         fallbackSuccess = true;
         #endif
     }
     
-    // Method 4: Application beep
+    // Method 4: Application beep (asynchronous)
     if (!fallbackSuccess) {
-        qDebug() << "[ALARM] Method 4: Using application beep";
-        for (int i = 0; i < 5; i++) {
+        qDebug() << "[ALARM] Method 4: Using application beep (async)";
+        // Use QTimer sequence to avoid blocking UI thread
+        static QTimer* beepTimer = new QTimer();
+        static int beepCount = 0;
+        
+        beepTimer->disconnect(); // Clear previous connections
+        beepCount = 0;
+        
+        connect(beepTimer, &QTimer::timeout, []() {
             QApplication::beep();
-            QThread::msleep(200);
-        }
+            beepCount++;
+            if (beepCount >= 5) {
+                beepTimer->stop();
+                beepCount = 0;
+            }
+        });
+        
+        beepTimer->start(200); // Beep every 200ms
         fallbackSuccess = true;
     }
     

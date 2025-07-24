@@ -1012,7 +1012,7 @@ void EcWidget::paintEvent (QPaintEvent *e)
 
   // PLEASE WAIT
 
-  //drawGuardZone();
+  drawGuardZone();
   // TEMPORARY: Disabled untuk presentasi - obstacle area menyebabkan crash
   // drawObstacleDetectionArea(painter); // Show obstacle detection area (now safe)
   //drawRedDotTracker();
@@ -1027,10 +1027,10 @@ void EcWidget::paintEvent (QPaintEvent *e)
 
   // ========== DRAW TEST GUARDZONE ==========
 
-  // drawTestGuardSquare(painter);
-  // if (testGuardZoneEnabled) {
-  //
-  // }
+  drawTestGuardSquare(painter);
+  if (testGuardZoneEnabled) {
+
+  }
   // =======================================
 
   EcCoordinate lat, lon;
@@ -8646,47 +8646,6 @@ void EcWidget::drawTestGuardSquare(QPainter& painter)
 
 
 
-/*
-void EcWidget::drawTestGuardSquare(QPainter& painter)
-{
-    // Pusat guardzone dalam lat/lon
-    double centerLat = closestAIS.lat;
-    double centerLon = closestAIS.lon;
-
-    // qDebug() << "LAT: " << centerLat << " / LON: " << centerLon;
-
-    int centerX, centerY;
-    if (!LatLonToXy(centerLat, centerLon, centerX, centerY)) {
-        qDebug() << "Failed to convert lat/lon to XY";
-        return;
-    }
-
-    double radiusInPixels = calculatePixelsFromNauticalMiles(0.2);
-
-    painter.save();
-
-    // Gunakan garis putus-putus tanpa fill
-    QPen dashedPen(Qt::red, 2, Qt::DashLine);
-    painter.setPen(dashedPen);
-    painter.setBrush(Qt::NoBrush);
-
-    QRectF squareRect(centerX - radiusInPixels,
-                      centerY - radiusInPixels,
-                      radiusInPixels * 2,
-                      radiusInPixels * 2);
-
-    painter.drawRect(squareRect); // Ganti dari drawEllipse ke drawRect
-
-    // Titik tengah
-    painter.setPen(QPen(Qt::red, 4));
-    painter.drawPoint(centerX, centerY);
-
-    painter.restore();
-
-    // qDebug() << "Dashed square guardzone drawn at center (px):" << centerX << centerY
-    //          << "side length:" << radiusInPixels * 2 << "px";
-}
-*/
 
 void EcWidget::setClosestCPA(double val)
 {
@@ -10699,6 +10658,9 @@ void EcWidget::startChartFlashing()
     if (!chartFlashTimer->isActive()) {
         chartFlashTimer->start(500); // Flash every 500ms
         qDebug() << "[CHART-FLASH] Started chart flashing for dangerous obstacles";
+        
+        // Emit signal to start sound alarm
+        emit dangerousObstacleDetected();
     }
 }
 
@@ -10709,6 +10671,9 @@ void EcWidget::stopChartFlashing()
         chartFlashVisible = false;
         update(); // Clear any remaining flash
         qDebug() << "[CHART-FLASH] Stopped chart flashing";
+        
+        // Emit signal to stop sound alarm
+        emit dangerousObstacleCleared();
     }
 }
 

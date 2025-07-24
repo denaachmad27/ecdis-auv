@@ -644,6 +644,10 @@ signals:
   void mouseRightClick(QPoint);
   void projection();
   void scale(int);
+  
+  // Dangerous obstacle alarm signals
+  void dangerousObstacleDetected();
+  void dangerousObstacleCleared();
 
   // DENC signals
   void import(const char *, bool &);
