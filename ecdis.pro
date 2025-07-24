@@ -5,6 +5,7 @@ QT += widgets
 QT += winextras
 QT += core gui
 QT += sql
+QT += multimedia
 
 # win32:KERNELPATH = ../../
 win32:KERNELPATH = C:/EC2007/5.22.69.3

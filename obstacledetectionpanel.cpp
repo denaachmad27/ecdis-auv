@@ -6,6 +6,12 @@
 #include <QClipboard>
 #include <QDebug>
 #include <algorithm>
+#include <QMediaPlayer>
+#include <QUrl>
+#include <QThread>
+#ifdef Q_OS_WIN
+#include <Windows.h>
+#endif
 
 ObstacleDetectionPanel::ObstacleDetectionPanel(EcWidget* ecWidget, GuardZoneManager* gzManager, QWidget *parent)
     : QWidget(parent)
@@ -16,6 +22,9 @@ ObstacleDetectionPanel::ObstacleDetectionPanel(EcWidget* ecWidget, GuardZoneMana
     , dangerousObstacles(0)
     , warningObstacles(0)
     , noteObstacles(0)
+    , alarmPlayer(nullptr)
+    , alarmLoopTimer(nullptr)
+    , alarmActive(false)
 {
     setupUI();
     
@@ -24,7 +33,26 @@ ObstacleDetectionPanel::ObstacleDetectionPanel(EcWidget* ecWidget, GuardZoneMana
     connect(updateTimer, &QTimer::timeout, this, &ObstacleDetectionPanel::updateObstacleData);
     updateTimer->start(10000); // Update setiap 10 detik
     
-    qDebug() << "ObstacleDetectionPanel initialized successfully";
+    // Setup alarm sound (no more flashing on panel - moved to chart)  
+    setupAlarmSound();
+    
+    // Setup alarm loop timer
+    alarmLoopTimer = new QTimer(this);
+    connect(alarmLoopTimer, &QTimer::timeout, this, &ObstacleDetectionPanel::playAlarmLoop);
+    alarmLoopTimer->setInterval(3000); // Repeat alarm every 3 seconds
+    
+    // FORCE TEST: Test continuous alarm 5 seconds after initialization
+    QTimer::singleShot(5000, this, [this]() {
+        qDebug() << "[FORCE-ALARM-TEST] Testing continuous alarm 5 seconds after init...";
+        qDebug() << "[FORCE-ALARM-TEST] Starting continuous alarm test...";
+        startDangerousAlarm();
+        QTimer::singleShot(10000, this, [this]() { // Let it run for 10 seconds
+            stopDangerousAlarm();
+            qDebug() << "[FORCE-ALARM-TEST] Continuous alarm test stopped";
+        });
+    });
+    
+    qDebug() << "ObstacleDetectionPanel initialized successfully with sound alarm";
 }
 
 ObstacleDetectionPanel::~ObstacleDetectionPanel()
@@ -59,6 +87,13 @@ void ObstacleDetectionPanel::addPickReportObstacle(const PickReportObstacle& obs
     
     detectedObstacles.append(obstacle);
     addObstacleToList(obstacle);
+    
+    // Add marker to map
+    if (ecWidget) {
+        ecWidget->addObstacleMarker(obstacle.lat, obstacle.lon, obstacle.dangerLevel, 
+                                   obstacle.objectName, obstacle.information);
+    }
+    
     updateStatistics();
     qDebug() << "Added pick report obstacle:" << obstacle.objectName;
 }
@@ -67,6 +102,12 @@ void ObstacleDetectionPanel::clearAllObstacles()
 {
     obstacleList->clear();
     detectedObstacles.clear();
+    
+    // Clear markers from map
+    if (ecWidget) {
+        ecWidget->clearObstacleMarkers();
+    }
+    
     updateStatistics();
     qDebug() << "Cleared all obstacles";
 }
@@ -292,6 +333,12 @@ void ObstacleDetectionPanel::onPickReportObstacleDetected(int guardZoneId, const
         // Add to the list
         addPickReportObstacle(obstacle);
         
+        // Add marker to map
+        if (ecWidget) {
+            ecWidget->addObstacleMarker(obstacle.lat, obstacle.lon, obstacle.dangerLevel, 
+                                       obstacle.objectName, obstacle.information);
+        }
+        
         qDebug() << "Added pick report obstacle:" << obstacle.objectName << "Level:" << obstacle.dangerLevel;
     } else {
         qDebug() << "Invalid pick report obstacle data format:" << details;
@@ -340,6 +387,13 @@ void ObstacleDetectionPanel::updateStatistics()
                    .arg(noteObstacles);
     
     statisticsLabel->setText(stats);
+    
+    // Check if we need to start/stop dangerous alarm
+    if (dangerousObstacles > 0 && !alarmActive) {
+        startDangerousAlarm();
+    } else if (dangerousObstacles == 0 && alarmActive) {
+        stopDangerousAlarm();
+    }
 }
 
 // Stub implementations for required slots
@@ -393,4 +447,243 @@ void ObstacleDetectionPanel::applyFilters()
     qDebug() << "Applied filters: DANGEROUS=" << showDangerous 
              << "WARNING=" << showWarning << "NOTE=" << showNote 
              << "Search='" << searchText << "'";
+}
+
+void ObstacleDetectionPanel::setupAlarmSound()
+{
+    try {
+        alarmPlayer = new QMediaPlayer(this);
+        
+        // Try different alarm sounds, preferring critical-alarm.wav
+        QStringList alarmOptions = {
+            "alarm_sound/critical-alarm.wav",
+            "alarm_sound/vintage-alarm.wav", 
+            "alarm_sound/clasic-alarm.wav",
+            "alarm_sound/street-public.wav"
+        };
+        
+        QString selectedAlarm;
+        QString appDir = QApplication::applicationDirPath();
+        QString workingDir = QDir::currentPath();
+        qDebug() << "[ALARM-SETUP] Application directory:" << appDir;
+        qDebug() << "[ALARM-SETUP] Working directory:" << workingDir;
+        
+        // Try multiple path combinations - prioritize working directory
+        QStringList searchPaths = {
+            workingDir,                    // Current working directory (most likely)
+            QDir::currentPath(),          // Current path alternative
+            appDir,                       // Application directory
+            QApplication::applicationDirPath(), // App dir alternative
+            workingDir + "/../",          // Parent of working directory
+            appDir + "/../"               // Parent of application directory
+        };
+        
+        for (const QString& searchPath : searchPaths) {
+            for (const QString& alarm : alarmOptions) {
+                QString fullPath = QDir(searchPath).absoluteFilePath(alarm);
+                QFileInfo fileInfo(fullPath);
+                QString absolutePath = fileInfo.absoluteFilePath();
+                
+                qDebug() << "[ALARM-SETUP] Checking alarm file:" << fullPath;
+                qDebug() << "[ALARM-SETUP] Absolute path:" << absolutePath;
+                qDebug() << "[ALARM-SETUP] File exists:" << QFile::exists(absolutePath);
+                qDebug() << "[ALARM-SETUP] File size:" << fileInfo.size() << "bytes";
+                
+                if (QFile::exists(absolutePath) && fileInfo.size() > 0) {
+                    selectedAlarm = absolutePath;
+                    qDebug() << "[ALARM-SETUP] Found valid alarm file:" << absolutePath;
+                    break;
+                }
+            }
+            if (!selectedAlarm.isEmpty()) break;
+        }
+        
+        if (!selectedAlarm.isEmpty()) {
+            // Use absolute path to ensure proper file access
+            QFileInfo fileInfo(selectedAlarm);
+            QString absolutePath = fileInfo.absoluteFilePath();
+            QUrl alarmUrl = QUrl::fromLocalFile(absolutePath);
+            
+            alarmPlayer->setMedia(alarmUrl);
+            alarmPlayer->setVolume(100); // Set volume to maximum
+            qDebug() << "[ALARM-SETUP] Alarm sound configured:" << absolutePath;
+            qDebug() << "[ALARM-SETUP] Alarm URL:" << alarmUrl.toString();
+            qDebug() << "[ALARM-SETUP] File exists check:" << QFile::exists(absolutePath);
+            
+            // Setup debugging for media status
+            connect(alarmPlayer, &QMediaPlayer::mediaStatusChanged, [this](QMediaPlayer::MediaStatus status) {
+                qDebug() << "[ALARM] Media status changed:" << status;
+                if (status == QMediaPlayer::EndOfMedia && alarmActive) {
+                    qDebug() << "[ALARM] Looping alarm sound";
+                    alarmPlayer->setPosition(0);
+                    alarmPlayer->play();
+                } else if (status == QMediaPlayer::InvalidMedia) {
+                    qDebug() << "[ALARM] Invalid media error:" << alarmPlayer->errorString();
+                }
+            });
+            
+            // Setup debugging for player state
+            connect(alarmPlayer, &QMediaPlayer::stateChanged, [this](QMediaPlayer::State state) {
+                qDebug() << "[ALARM] Player state changed:" << state;
+            });
+            
+            // Handle errors
+            connect(alarmPlayer, QOverload<QMediaPlayer::Error>::of(&QMediaPlayer::error), [this](QMediaPlayer::Error error) {
+                qDebug() << "[ALARM] Player error:" << error << "Message:" << alarmPlayer->errorString();
+            });
+            
+            // Test play the alarm briefly to verify it works (after media is loaded)
+            QTimer::singleShot(2000, [this, absolutePath]() {
+                if (alarmPlayer && !alarmPlayer->media().isNull()) {
+                    qDebug() << "[ALARM-TEST] Testing alarm playback...";
+                    qDebug() << "[ALARM-TEST] Media status:" << alarmPlayer->mediaStatus();
+                    qDebug() << "[ALARM-TEST] Player state:" << alarmPlayer->state();
+                    
+                    // Wait for media to be loaded before testing
+                    if (alarmPlayer->mediaStatus() == QMediaPlayer::LoadedMedia) {
+                        alarmPlayer->setVolume(50); // Test with lower volume
+                        alarmPlayer->play();
+                        
+                        // Stop test after 2 seconds
+                        QTimer::singleShot(2000, [this]() {
+                            if (alarmPlayer && !alarmActive) {
+                                alarmPlayer->stop();
+                                qDebug() << "[ALARM-TEST] Test playback stopped";
+                            }
+                        });
+                    } else {
+                        qDebug() << "[ALARM-TEST] Media not loaded yet, status:" << alarmPlayer->mediaStatus();
+                        
+                        // Try Windows QSound as fallback
+                        #ifdef Q_OS_WIN
+                        qDebug() << "[ALARM-TEST] Trying Windows QSound fallback...";
+                        QSound::play(absolutePath);
+                        #endif
+                    }
+                }
+            });
+            
+        } else {
+            qDebug() << "[ALARM-SETUP] No alarm sound files found in any search path";
+            qDebug() << "[ALARM-SETUP] Searched in paths:" << searchPaths;
+        }
+        
+    } catch (const std::exception& e) {
+        qDebug() << "[ALARM-SETUP] Exception setting up alarm:" << e.what();
+    }
+}
+
+void ObstacleDetectionPanel::startDangerousAlarm()
+{
+    if (alarmActive) return;
+    
+    alarmActive = true;
+    qDebug() << "[ALARM] Started continuous dangerous obstacle alarm";
+    
+    // Play first alarm immediately
+    playAlarmLoop();
+    
+    // Start continuous loop timer
+    if (!alarmLoopTimer->isActive()) {
+        alarmLoopTimer->start();
+        qDebug() << "[ALARM] Started continuous loop timer (every 3 seconds)";
+    }
+}
+
+void ObstacleDetectionPanel::playAlarmLoop()
+{
+    if (!alarmActive) return; // Safety check
+    
+    qDebug() << "[ALARM-LOOP] Playing alarm sound...";
+    
+    // MULTI-FALLBACK SOUND SYSTEM
+    bool soundPlayed = false;
+    
+    // Method 1: Try QMediaPlayer if available and loaded
+    if (alarmPlayer && !alarmPlayer->media().isNull()) {
+        qDebug() << "[ALARM-LOOP] Method 1: Trying QMediaPlayer...";
+        alarmPlayer->setVolume(100);
+        alarmPlayer->setPosition(0);
+        alarmPlayer->play();
+        soundPlayed = true;
+    }
+    
+    // Method 2: If QMediaPlayer not available, try immediate fallbacks
+    if (!soundPlayed) {
+        qDebug() << "[ALARM-LOOP] Method 1 not available, trying fallbacks...";
+        playAlarmFallback();
+    }
+}
+
+void ObstacleDetectionPanel::playAlarmFallback()
+{
+    bool fallbackSuccess = false;
+    
+    // Method 2: Try QSound
+    #ifdef Q_OS_WIN
+    qDebug() << "[ALARM] Method 2: Trying QSound...";
+    QString workingDir = QDir::currentPath();
+    QStringList alarmFiles = {
+        workingDir + "/alarm_sound/clasic-alarm.wav",
+        workingDir + "/alarm_sound/critical-alarm.wav",
+        workingDir + "/alarm_sound/vintage-alarm.wav"
+    };
+    
+    for (const QString& file : alarmFiles) {
+        if (QFile::exists(file)) {
+            qDebug() << "[ALARM] Method 2: Playing" << file;
+            QSound::play(file);
+            fallbackSuccess = true;
+            break;
+        }
+    }
+    #endif
+    
+    // Method 3: Windows system beep
+    if (!fallbackSuccess) {
+        #ifdef Q_OS_WIN
+        qDebug() << "[ALARM] Method 3: Using Windows system beep";
+        for (int i = 0; i < 3; i++) {
+            Beep(1000, 200); // 1000Hz for 200ms
+            Sleep(100);       // 100ms pause
+        }
+        fallbackSuccess = true;
+        #endif
+    }
+    
+    // Method 4: Application beep
+    if (!fallbackSuccess) {
+        qDebug() << "[ALARM] Method 4: Using application beep";
+        for (int i = 0; i < 5; i++) {
+            QApplication::beep();
+            QThread::msleep(200);
+        }
+        fallbackSuccess = true;
+    }
+    
+    if (fallbackSuccess) {
+        qDebug() << "[ALARM] Fallback sound played successfully";
+    } else {
+        qDebug() << "[ALARM] All sound methods failed!";
+    }
+}
+
+void ObstacleDetectionPanel::stopDangerousAlarm()
+{
+    if (!alarmActive) return;
+    
+    alarmActive = false;
+    qDebug() << "[ALARM] Stopped continuous dangerous obstacle alarm";
+    
+    // Stop continuous loop timer
+    if (alarmLoopTimer && alarmLoopTimer->isActive()) {
+        alarmLoopTimer->stop();
+        qDebug() << "[ALARM] Stopped continuous loop timer";
+    }
+    
+    // Stop sound alarm if using QMediaPlayer
+    if (alarmPlayer) {
+        alarmPlayer->stop();
+        qDebug() << "[ALARM] Stopped QMediaPlayer";
+    }
 }

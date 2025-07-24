@@ -496,6 +496,31 @@ public:
 
   // List untuk menyimpan obstacles yang terdeteksi
   QList<DetectedObstacle> lastDetectedObstacles;
+  
+  // Obstacle marker visualization
+  struct ObstacleMarker {
+      double lat;
+      double lon;
+      QString dangerLevel;
+      QString objectName;
+      QString information;
+      QDateTime timestamp;
+  };
+  
+  QList<ObstacleMarker> obstacleMarkers;
+  void addObstacleMarker(double lat, double lon, const QString& dangerLevel, 
+                        const QString& objectName, const QString& information);
+  void clearObstacleMarkers();
+  void removeOutdatedObstacleMarkers();
+  void drawObstacleMarkers(QPainter& painter);
+  
+  // Chart flashing for dangerous obstacles
+  bool hasDangerousObstacles() const;
+  void drawChartFlashOverlay(QPainter& painter);
+  QTimer* chartFlashTimer;
+  bool chartFlashVisible;
+  void startChartFlashing();
+  void stopChartFlashing();
 
   // Helper functions (private)
   bool checkAISTargetsInShipGuardian(QList<DetectedObstacle>& obstacles);
