@@ -54,7 +54,6 @@ HEADERS += mainwindow.h ecwidget.h pickwindow.h ais.h \
     iplugininterface.h \
     logger.h \
     guardzonecheckdialog.h \
-    moosdb.h \
     nmeadecoder.h \
     searchwindow.h \
     alertsystem.h \
@@ -79,7 +78,6 @@ SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     guardzonemanager.cpp \
     guardzonepanel.cpp \
     logger.cpp \
-    moosdb.cpp \
     nmeadecoder.cpp \
     searchwindow.cpp \
     alertsystem.cpp \

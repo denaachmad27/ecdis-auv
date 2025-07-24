@@ -20,9 +20,10 @@
 #include "alertsystem.h"
 #include "cpatcpasettingsdialog.h"
 #include "cpatcpasettings.h"
-#include "moosdb.h"
+#include "ecwidget.h"
 
 #include "aisdecoder.h"
+#include "aivdoencoder.h"
 
 QTextEdit *informationText;
 
@@ -1800,42 +1801,6 @@ void MainWindow::stopSubscribeMOOSDB()
 void MainWindow::subscribeMOOSDBMAP()
 {
     ecchart->startAISSubscribeThreadMAP(ecchart);
-}
-
-void MainWindow::subscribeMOOSDBMapInfo()
-{
-    // Server subscribe
-    MOOSShip moosShip;
-
-    QList<EcFeature> pickedFeatureList;
-
-    moosShip = serverThreadMOOSSubscribeMapInfo();
-
-    qDebug() << moosShip.lat;
-    qDebug() << moosShip.lon;
-
-    // Arahkan ke titik tersebut
-    ecchart->SetCenter(moosShip.lat, moosShip.lon);
-    ecchart->SetScale(80000);
-
-    DrawChart();
-
-    // Server publish
-    ecchart->GetPickedFeaturesSubs(pickedFeatureList, moosShip.lat, moosShip.lon);
-
-    startServerMOOSPublishMapInfo(pickWindow->fillJson(pickedFeatureList));
-
-    pickWindow->show();
-}
-
-void MainWindow::publishMOOSDB()
-{
-    startServerMOOSPublish();
-}
-
-void MainWindow::stopPublishMOOSDB()
-{
-    stopServerMOOSPublish();
 }
 
 

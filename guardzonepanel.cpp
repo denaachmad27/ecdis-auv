@@ -2,6 +2,7 @@
 #include "ecwidget.h"
 #include "guardzonemanager.h"
 #include <QDebug>
+#include <QElapsedTimer>
 
 // ========== GuardZoneListItem Implementation ==========
 GuardZoneListItem::GuardZoneListItem(const GuardZone& guardZone, QListWidget* parent)

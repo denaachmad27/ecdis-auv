@@ -15,6 +15,7 @@
 // Waypoint
 #include "SettingsManager.h"
 #include "aisdatabasemanager.h"
+#include "aivdoencoder.h"
 #include "editwaypointdialog.h"
 
 #include <QTime>
@@ -46,6 +47,20 @@ QTcpSocket* socketAISMAP = nullptr;
 std::atomic<bool> stopThreadMAP;
 
 std::atomic<bool> stopFlag;
+
+QTextEdit *nmeaText;
+QTextEdit *aisText;
+QTextEdit *ownShipText;
+
+QTextEdit *aisTemp;
+QTextEdit *ownShipTemp;
+
+ShipStruct mapShip = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
+ShipStruct navShip = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
+QString aivdo;
+QString nmea;
 
 // define for type of AIS overlay cell
 #define AISCELL_IN_RAM
@@ -2142,203 +2157,6 @@ void EcWidget::ReadAISVariable( const QStringList &aisDataLines )
     _aisObj->setAISCell( aisCellId );
     _aisObj->readAISVariable( aisDataLines );
 }
-
-void EcWidget::startServerMOOSSubscribe() {
-    QThread *thread = QThread::create([=]() { StartReadAISSubscribe(); });
-    thread->start();
-}
-
-QString EcWidget::StartReadAISSubscribe ()
-{
-    // AIS
-    if( deleteAISCell() == false )
-    {
-        QMessageBox::warning( this, tr( "ReadAISLogfile" ), tr( "Could not remove old AIS overlay cell. Please restart the program." ) );
-        return aivdo;
-    }
-
-    if( createAISCell() == false )
-    {
-        QMessageBox::warning( this, tr( "ReadAISLogfile" ), tr( "Could not create AIS overlay cell. Please restart the program." ) );
-        return aivdo;
-    }
-
-    _aisObj->setAISCell( aisCellId );
-
-
-    // SERVER
-    serverS = new QTcpServer();
-
-    if (!serverS->listen(QHostAddress::Any, 8080)) {
-        qDebug() << "Server failed to start.";
-        return aivdo;
-    }
-    qDebug() << "Waiting for connection...";
-
-    QObject::connect(serverS, &QTcpServer::newConnection, [=]() {
-        clientS = serverS->nextPendingConnection();
-        qDebug() << "Client connected!";
-
-        QObject::connect(clientS, &QTcpSocket::readyRead, [=]() {
-            QByteArray data = clientS->readAll();
-            QJsonDocument jsonDoc = QJsonDocument::fromJson(data);
-            QJsonObject jsonData = jsonDoc.object();
-
-            // Pastikan JSON memiliki key yang benar
-            if (jsonData.contains("NAV_LAT") && jsonData.contains("NAV_LONG")) {
-
-                navShip.lon = jsonData["NAV_LONG"].toDouble();
-                navShip.lat = jsonData["NAV_LAT"].toDouble();
-
-                // ================ FORMAT JSON =============== //
-                // qDebug().noquote() << "Received JSON:\n" << QJsonDocument(jsonData).toJson(QJsonDocument::Indented);
-
-                // ================ FORMAT GPGGA ================ //
-                //qDebug().noquote() << convertToGPGGA(navShip.lat, navShip.lon, 1, 8, 0.9, 15.0);
-
-                // ================ FORMAT AIVDO ================ //
-
-
-                // Encode AIS !AIVDO
-                aivdo = AIVDOEncoder::encodeAIVDO(0, navShip.lat, navShip.lon, 0, 0);
-                qDebug().noquote() << aivdo;
-
-                QStringList nmeaData;
-                nmeaData << aivdo;
-
-                // RECORD NMEA
-                IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
-
-                if (dvr && dvr->isRecording()) {
-                    dvr->recordRawNmea(aivdo);
-                }
-
-            } else {
-                qDebug().noquote() << "Received JSON:\n" << QJsonDocument(jsonData).toJson(QJsonDocument::Indented);
-            }
-        });
-
-        QObject::connect(clientS, &QTcpSocket::disconnected, [=]() {
-            qDebug() << "Client disconnected.";
-            clientS->deleteLater();
-        });
-    });
-
-    return aivdo;
-}
-
-// Thread Subscribe from MOOSDB -- SSH
-QString EcWidget::StartReadAISSubscribeSSH () {
-    // AIS
-    if( deleteAISCell() == false )
-    {
-        QMessageBox::warning( this, tr( "ReadAISLogfile" ), tr( "Could not remove old AIS overlay cell. Please restart the program." ) );
-        return aivdo;
-    }
-
-    if( createAISCell() == false )
-    {
-        QMessageBox::warning( this, tr( "ReadAISLogfile" ), tr( "Could not create AIS overlay cell. Please restart the program." ) );
-        return aivdo;
-    }
-
-    _aisObj->setAISCell(aisCellId);
-
-    // SERVER
-    QTcpSocket* clientS = new QTcpSocket();
-
-    // Hubungkan ke server MOOSDB di Ubuntu (SSH)
-    QString sshIP = SettingsManager::instance().data().moosIp;
-    quint16 sshPort = 5000;
-
-    clientS->connectToHost(sshIP, sshPort);
-
-    if (!clientS->waitForConnected(sshPort)) {
-        qCritical() << "Failed to connect to MOOSDB server.";
-        return aivdo;
-    }
-
-    qDebug() << "Connected to MOOSDB at" << sshIP << ":" << sshPort;
-
-    QObject::connect(clientS, &QTcpSocket::readyRead, [=]() {
-        QByteArray data = clientS->readAll();
-        QJsonDocument jsonDoc = QJsonDocument::fromJson(data);
-        QJsonObject jsonData = jsonDoc.object();
-
-        // Pastikan JSON memiliki key yang benar
-        if (jsonData.contains("NAV_LAT") && jsonData.contains("NAV_LONG")) {
-            QJsonValue latValue = jsonData["NAV_LAT"];
-            QJsonValue lonValue = jsonData["NAV_LONG"];
-
-            if(latValue.isDouble() && lonValue.isDouble()){
-                navShip.lat = jsonData["NAV_LAT"].toDouble();
-                navShip.lon = jsonData["NAV_LONG"].toDouble();
-            }
-            else {
-                navShip.lat = jsonData["NAV_LAT"].toString().toDouble();
-                navShip.lon = jsonData["NAV_LONG"].toString().toDouble();
-            }
-
-            // Encode AIS !AIVDO
-            aivdo = AIVDOEncoder::encodeAIVDO(0, navShip.lat, navShip.lon, 0, 0);
-
-            QStringList nmeaData;
-            nmeaData << aivdo;
-
-            _aisObj->readAISVariable(nmeaData);
-
-            // PUBLISH PICK INFO
-        }
-        else {
-            qDebug() << "[ERROR] Invalid JSON received.";
-        }
-
-    });
-
-    QObject::connect(clientS, &QTcpSocket::disconnected, [=]() {
-        qDebug() << "[INFO] Disconnected from MOOSDB.";
-        clientS->deleteLater();
-    });
-
-    return aivdo;
-}
-
-// Fungsi Publish PICK INFO from NAV
-void EcWidget::PublishNavInfo(QTcpSocket* socket, double lat, double lon) {
-    if (!socket) {
-        qDebug() << "[ERROR] Socket is null.";
-        return;
-    }
-
-    // Pastikan socket sudah terhubung
-    if (socket->state() != QAbstractSocket::ConnectedState) {
-        socket->connectToHost(SettingsManager::instance().data().moosIp, 5001);
-        if (!socket->waitForConnected(3000)) {
-            qDebug() << "Connection failed";
-            return;
-        }
-    }
-
-    QList<EcFeature> pickedFeatureList;
-    GetPickedFeaturesSubs(pickedFeatureList, lat, lon);
-
-    //PickWindow *pickWindow;  // Pakai instance, bukan pointer null
-    //QJsonObject navInfo = pickWindow->fillJson(pickedFeatureList);
-
-    QJsonObject jsonData {
-        {"NAV_INFO", "navInfo"}
-    };
-
-    QJsonDocument jsonDoc(jsonData);
-    QByteArray jsonString = jsonDoc.toJson();
-
-    qDebug().noquote() << "Send: \n" << jsonDoc.toJson(QJsonDocument::Indented);
-
-    socket->write(jsonString);
-    socket->waitForBytesWritten();
-    socket->waitForReadyRead();
-}
-// UNUSED ^^^
 
 // WORK vvv
 QString EcWidget::StartThreadSubscribeSSH(EcWidget *ecchart) {

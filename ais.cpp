@@ -3,8 +3,8 @@
 #include "PluginManager.h"
 #include "aisdecoder.h"
 #include "pickwindow.h"
-#include "moosdb.h"
 #include "aisdatabasemanager.h"
+#include "aivdoencoder.h"
 
 Ais::Ais( EcWidget *parent, EcView *view, EcDictInfo *dict,
          EcCoordinate ownShipLat, EcCoordinate ownShipLon,

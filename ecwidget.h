@@ -9,6 +9,7 @@
 #include <QDateTime>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QTextEdit>
 
 // SevenCs Kernel EC2007
 #ifdef _WIN32
@@ -23,7 +24,6 @@
 #include <eckernel.h>
 #endif
 
-#include "moosdb.h"
 #include "guardzone.h"
 #include "AISSubscriber.h"
 
@@ -71,12 +71,25 @@ struct ShipStruct {
     double z;        // Vertikal kapal
 };
 
-class AlertSystem;
-struct AlertData;
-
-class GuardZoneManager; // Forward declaration
+// GLOBAL VARAIBLE (DELETE LATER)
+extern ShipStruct navShip;
+extern ShipStruct mapShip;
 
 extern QString bottomBarText;
+extern QString aivdo;
+extern QString nmea;
+
+extern QTextEdit *nmeaText;
+extern QTextEdit *aisText;
+extern QTextEdit *ownShipText;
+
+extern QTextEdit *aisTemp;
+extern QTextEdit *ownShipTemp;
+
+class AlertSystem;
+struct AlertData;
+class GuardZoneManager; // Forward declaration
+
 
 // Defines for S-63 Chart Import
 // The Manufacturer is in charge of generating unique user permits for each installation of his application

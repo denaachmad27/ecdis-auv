@@ -4,7 +4,6 @@
 #include "cpatcpapanel.h"
 #include "cpatcpasettingsdialog.h"
 #include "ais.h"
-#include "moosdb.h"
 
 CPATCPAPanel::CPATCPAPanel(QWidget *parent)
     : QWidget(parent)

@@ -7,7 +7,6 @@
 
 #include "IAisDvrPlugin.h"
 #include "ecwidget.h"
-#include "moosdb.h"
 #include "guardzonepanel.h"
 #include "alertpanel.h"
 #include "alertsystem.h"
@@ -129,11 +128,7 @@ protected slots:
 
     void subscribeMOOSDB();
     void subscribeMOOSDBMAP();
-
-    void subscribeMOOSDBMapInfo();
     void stopSubscribeMOOSDB();
-    void publishMOOSDB();
-    void stopPublishMOOSDB();
 
     void jsonExample();
 
