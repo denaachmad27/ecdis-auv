@@ -38,6 +38,7 @@ void MainWindow::createDockWindows()
     dock->setWidget(aisText);
     addDockWidget(Qt::LeftDockWidgetArea, dock);
     viewMenu->addAction(dock->toggleViewAction());
+    dock->hide();
 
     dock = new QDockWidget(tr("NMEA Received"), this);
     dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::TopDockWidgetArea | Qt::BottomDockWidgetArea);
@@ -845,7 +846,7 @@ MainWindow::MainWindow(QWidget *parent)
   QMenu *settingMenu = menuBar()->addMenu("&Settings");
   settingMenu->addAction("Setting Manager", this, SLOT(openSettingsDialog()) );
 
-  // SIDEBAR
+  // SIDEBAR -- PLEASE WAIT
   createDockWindows();
   
   // Setup CPA/TCPA Panel after createDockWindows
@@ -995,9 +996,9 @@ MainWindow::MainWindow(QWidget *parent)
 
   cpaMenu->addSeparator();
 
-  QAction *showCPATargetsAction = cpaMenu->addAction("Show CPA Targets");
+  QAction *showCPATargetsAction = cpaMenu->addAction("Show CPA/TCPA Monitor");
   showCPATargetsAction->setCheckable(true);
-  showCPATargetsAction->setChecked(true);
+  showCPATargetsAction->setChecked(false);
   connect(showCPATargetsAction, SIGNAL(triggered(bool)), this, SLOT(onShowCPATargets(bool)));
 
   QAction *showTCPAInfoAction = cpaMenu->addAction("Show TCPA Info");
@@ -3481,7 +3482,7 @@ void MainWindow::setupCPATCPAPanel()
     }
 
     // Set initial visibility
-    m_cpatcpaDock->setVisible(true);
+    m_cpatcpaDock->setVisible(false);
 }
 
 void MainWindow::onEnableRedDotTracker(bool enabled)
