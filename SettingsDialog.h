@@ -10,6 +10,8 @@ class QLineEdit;
 class QComboBox;
 class QLabel;
 class QButtonGroup;
+class QCheckBox;
+class QSlider;
 
 class SettingsDialog : public QDialog {
     Q_OBJECT
@@ -53,6 +55,13 @@ private:
     QComboBox *centeringCombo;
     QSpinBox *headingSpin;
     QLabel *headingLabel;
+
+    // ALERT SETTINGS
+    QCheckBox *visualFlashingCheckBox;
+    QComboBox *soundAlarmCombo;
+    QCheckBox *soundAlarmEnabledCheckBox;
+    QSlider *soundVolumeSlider;
+    QLabel *soundVolumeLabel;
 };
 
 #endif // SETTINGSDIALOG_H

@@ -2294,6 +2294,15 @@ void MainWindow::setupObstacleDetectionPanel()
                 obstacleDetectionPanel, &ObstacleDetectionPanel::onPickReportObstacleDetected,
                 Qt::QueuedConnection);
         qDebug() << "[OBSTACLE-MAIN-DEBUG] Signal connection result:" << connectionResult;
+        
+        // Connect dangerous obstacle alarm signals (synchronized with flashing)
+        connect(ecchart, &EcWidget::dangerousObstacleDetected,
+                obstacleDetectionPanel, &ObstacleDetectionPanel::startDangerousAlarm,
+                Qt::QueuedConnection);
+        connect(ecchart, &EcWidget::dangerousObstacleCleared,
+                obstacleDetectionPanel, &ObstacleDetectionPanel::stopDangerousAlarm,
+                Qt::QueuedConnection);
+        qDebug() << "[ALARM-SYNC] Connected dangerous obstacle alarm signals with flashing";
 
         // ========== TABIFY WITH OTHER PANELS ==========
         if (aisTargetDock && obstacleDetectionDock) {

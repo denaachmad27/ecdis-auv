@@ -16,6 +16,9 @@
 #include <QRadioButton>
 #include <QButtonGroup>
 #include <QGroupBox>
+#include <QCheckBox>
+#include <QSlider>
+#include <QDir>
 
 SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
     setupUI();
@@ -182,11 +185,75 @@ void SettingsDialog::setupUI() {
     guardzoneLayout->addStretch();
     guardzoneTab->setLayout(guardzoneLayout);
 
+    // --- Alert Tab ---
+    QWidget *alertTab = new QWidget;
+    QVBoxLayout *alertLayout = new QVBoxLayout;
+    
+    // Visual Alert Group
+    QGroupBox *visualAlertGroup = new QGroupBox(tr("Visual Alert Settings"));
+    QVBoxLayout *visualAlertLayout = new QVBoxLayout;
+    
+    visualFlashingCheckBox = new QCheckBox(tr("Enable Flashing Alert"));
+    visualFlashingCheckBox->setChecked(true); // Default enabled
+    visualAlertLayout->addWidget(visualFlashingCheckBox);
+    visualAlertGroup->setLayout(visualAlertLayout);
+    
+    // Sound Alert Group
+    QGroupBox *soundAlertGroup = new QGroupBox(tr("Sound Alert Settings"));
+    QFormLayout *soundAlertLayout = new QFormLayout;
+    
+    soundAlarmEnabledCheckBox = new QCheckBox(tr("Enable Sound Alarm"));
+    soundAlarmEnabledCheckBox->setChecked(true); // Default enabled
+    soundAlertLayout->addRow("Sound:", soundAlarmEnabledCheckBox);
+    
+    soundAlarmCombo = new QComboBox;
+    // Populate with available sound files
+    QDir soundDir("alarm_sound");
+    QStringList soundFiles = soundDir.entryList(QStringList() << "*.wav" << "*.mp3", QDir::Files);
+    if (soundFiles.isEmpty()) {
+        soundFiles << "critical-alarm.wav" << "vintage-alarm.wav" << "clasic-alarm.wav" << "street-public.wav";
+    }
+    soundAlarmCombo->addItems(soundFiles);
+    soundAlertLayout->addRow("Alarm Sound:", soundAlarmCombo);
+    
+    soundVolumeSlider = new QSlider(Qt::Horizontal);
+    soundVolumeSlider->setRange(0, 100);
+    soundVolumeSlider->setValue(80); // Default 80%
+    soundVolumeLabel = new QLabel("80%");
+    
+    QHBoxLayout *volumeLayout = new QHBoxLayout;
+    volumeLayout->addWidget(soundVolumeSlider);
+    volumeLayout->addWidget(soundVolumeLabel);
+    
+    QWidget *volumeWidget = new QWidget;
+    volumeWidget->setLayout(volumeLayout);
+    soundAlertLayout->addRow("Volume:", volumeWidget);
+    
+    // Connect volume slider to label update
+    connect(soundVolumeSlider, &QSlider::valueChanged, this, [=](int value) {
+        soundVolumeLabel->setText(QString("%1%").arg(value));
+    });
+    
+    // Connect sound enabled checkbox to disable/enable sound controls
+    connect(soundAlarmEnabledCheckBox, &QCheckBox::toggled, this, [=](bool enabled) {
+        soundAlarmCombo->setEnabled(enabled);
+        soundVolumeSlider->setEnabled(enabled);
+        soundVolumeLabel->setEnabled(enabled);
+    });
+    
+    soundAlertGroup->setLayout(soundAlertLayout);
+    
+    alertLayout->addWidget(visualAlertGroup);
+    alertLayout->addWidget(soundAlertGroup);
+    alertLayout->addStretch();
+    alertTab->setLayout(alertLayout);
+
     tabWidget->addTab(moosTab, "MOOSDB");
     tabWidget->addTab(ownShipTab, "Own Ship");
     tabWidget->addTab(aisTab, "AIS");
     tabWidget->addTab(displayTab, "Display");
     tabWidget->addTab(guardzoneTab, "GuardZone");
+    tabWidget->addTab(alertTab, "Alert");
 
     mainLayout->addWidget(tabWidget);
 
@@ -260,6 +327,28 @@ void SettingsDialog::loadSettings() {
     bool isCourseUp = (ori == "CourseUp");
     headingLabel->setVisible(isCourseUp);
     headingSpin->setVisible(isCourseUp);
+
+    // Alert Settings
+    visualFlashingCheckBox->setChecked(settings.value("Alert/visual_flashing", true).toBool());
+    soundAlarmEnabledCheckBox->setChecked(settings.value("Alert/sound_enabled", true).toBool());
+    
+    QString soundFile = settings.value("Alert/sound_file", "critical-alarm.wav").toString();
+    int soundIndex = soundAlarmCombo->findText(soundFile);
+    if (soundIndex >= 0) {
+        soundAlarmCombo->setCurrentIndex(soundIndex);
+    } else {
+        soundAlarmCombo->setCurrentIndex(0);
+    }
+    
+    int volume = settings.value("Alert/sound_volume", 80).toInt();
+    soundVolumeSlider->setValue(volume);
+    soundVolumeLabel->setText(QString("%1%").arg(volume));
+    
+    // Update sound controls state based on enabled checkbox
+    bool soundEnabled = soundAlarmEnabledCheckBox->isChecked();
+    soundAlarmCombo->setEnabled(soundEnabled);
+    soundVolumeSlider->setEnabled(soundEnabled);
+    soundVolumeLabel->setEnabled(soundEnabled);
 }
 
 void SettingsDialog::saveSettings() {
@@ -290,6 +379,12 @@ void SettingsDialog::saveSettings() {
     } else {
         settings.remove("OwnShip/course_heading"); // bersihkan jika tidak relevan
     }
+
+    // Alert Settings
+    settings.setValue("Alert/visual_flashing", visualFlashingCheckBox->isChecked());
+    settings.setValue("Alert/sound_enabled", soundAlarmEnabledCheckBox->isChecked());
+    settings.setValue("Alert/sound_file", soundAlarmCombo->currentText());
+    settings.setValue("Alert/sound_volume", soundVolumeSlider->value());
 }
 
 void SettingsDialog::updateAisWidgetsVisibility(const QString &text) {
@@ -328,6 +423,12 @@ SettingsData SettingsDialog::loadSettingsFromFile(const QString &filePath) {
     data.centeringMode = centering(settings.value("OwnShip/centering", "Centered").toString());
     data.courseUpHeading = settings.value("OwnShip/course_heading", 0).toInt();
 
+    // Alert Settings
+    data.visualFlashingEnabled = settings.value("Alert/visual_flashing", true).toBool();
+    data.soundAlarmEnabled = settings.value("Alert/sound_enabled", true).toBool();
+    data.soundAlarmFile = settings.value("Alert/sound_file", "critical-alarm.wav").toString();
+    data.soundAlarmVolume = settings.value("Alert/sound_volume", 80).toInt();
+
     return data;
 }
 
@@ -354,6 +455,12 @@ void SettingsDialog::accept() {
     data.orientationMode = orientation(orientationCombo->currentData().toString());
     data.centeringMode = centering(centeringCombo->currentData().toString());
     data.courseUpHeading = (data.orientationMode == EcWidget::CourseUp) ? headingSpin->value() : -1;
+
+    // Alert settings
+    data.visualFlashingEnabled = visualFlashingCheckBox->isChecked();
+    data.soundAlarmEnabled = soundAlarmEnabledCheckBox->isChecked();
+    data.soundAlarmFile = soundAlarmCombo->currentText();
+    data.soundAlarmVolume = soundVolumeSlider->value();
 
     SettingsManager::instance().save(data);
 

@@ -99,6 +99,8 @@ public:
 public slots:
     void onPickReportObstacleDetected(int guardZoneId, const QString& details);
     void updateObstacleData();
+    void startDangerousAlarm();
+    void stopDangerousAlarm();
 
 private slots:
     void onFilterChanged();
@@ -168,11 +170,10 @@ private:
     QMediaPlayer* alarmPlayer;
     QTimer* alarmLoopTimer;
     bool alarmActive;
-    void startDangerousAlarm();
-    void stopDangerousAlarm();
     void setupAlarmSound();
     void playAlarmFallback();
     void playAlarmLoop();
+    void removeOutdatedObstacles();
 };
 
 Q_DECLARE_METATYPE(PickReportObstacle)
