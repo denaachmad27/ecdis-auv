@@ -1027,7 +1027,7 @@ void EcWidget::paintEvent (QPaintEvent *e)
 
   // ========== DRAW TEST GUARDZONE ==========
 
-  // drawTestGuardSquare(painter);
+  drawTestGuardSquare(painter);
   // if (testGuardZoneEnabled) {
   //
   // }
