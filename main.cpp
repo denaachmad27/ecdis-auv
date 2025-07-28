@@ -24,10 +24,10 @@ void messageFilter(QtMsgType type, const QMessageLogContext &context, const QStr
     stream << msg << Qt::endl;
 }
 
-int main( int argc, char ** argv ) 
+int main( int argc, char ** argv )
 {
   QApplication a( argc, argv );
-  
+
   // PERBAIKAN: Install message filter
   qInstallMessageHandler(messageFilter);
 
@@ -61,7 +61,6 @@ int main( int argc, char ** argv )
   qDebug() << "ECDIS Started";
   //qWarning() << "Tes peringatan";
 
-  mw->resize(960, 600);
   mw->showMaximized();
 
   a.connect( &a, SIGNAL(lastWindowClosed()), &a, SLOT(quit()) );
