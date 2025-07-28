@@ -190,6 +190,7 @@ public:
 
   void drawWaypointMarker(EcCoordinate lat, EcCoordinate lon);
   void drawSingleWaypoint(EcCoordinate lat, EcCoordinate lon, const QString& label);
+  void drawGhostWaypoint(EcCoordinate lat, EcCoordinate lon, const QString& label);
   void saveWaypoints();
   void removeWaypointAt(int x, int y);
   void moveWaypointAt(int x, int y);
@@ -825,6 +826,16 @@ private:
 
   QList<Waypoint> waypointList;
   int moveSelectedIndex = -1; // -1 artinya belum ada waypoint dipilih
+  
+  // Ghost waypoint untuk preview saat move
+  struct GhostWaypoint {
+      bool visible;
+      double lat;
+      double lon;
+      QString label;
+      
+      GhostWaypoint() : visible(false), lat(0), lon(0) {}
+  } ghostWaypoint;
 
   void showWaypointError(const QString &message);
 
