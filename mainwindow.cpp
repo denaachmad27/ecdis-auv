@@ -1090,12 +1090,12 @@ MainWindow::MainWindow(QWidget *parent)
 
   // PLEASE WAIT, TURN OFF FOR A MOMENT
 
-  // setupGuardZonePanel();
-  // setupAISTargetPanel();
-  // setupObstacleDetectionPanel();
+  setupGuardZonePanel();
+  setupAISTargetPanel();
+  setupObstacleDetectionPanel();
 
-  //setupAlertPanel();
-  //setupTestingMenu();
+  // setupAlertPanel();
+  // setupTestingMenu();
 
   // Initialize CPA/TCPA system
   m_cpaCalculator = new CPATCPACalculator(this);
