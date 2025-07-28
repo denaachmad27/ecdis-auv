@@ -1007,6 +1007,11 @@ void EcWidget::paintEvent (QPaintEvent *e)
 
   // PLEASE WAIT
 
+  // Draw ghost waypoint saat move mode
+  if (ghostWaypoint.visible) {
+      drawGhostWaypoint(ghostWaypoint.lat, ghostWaypoint.lon, ghostWaypoint.label);
+  }
+
   drawGuardZone();
   // TEMPORARY: Disabled untuk presentasi - obstacle area menyebabkan crash
   // drawObstacleDetectionArea(painter); // Show obstacle detection area (now safe)
@@ -1574,6 +1579,25 @@ void EcWidget::mouseMoveEvent(QMouseEvent *e)
         return; // Don't process normal mouse move during creation
     }
     // ==============================================================
+
+    // Handle ghost waypoint preview saat move waypoint
+    if (activeFunction == MOVE_WAYP && moveSelectedIndex != -1 && ghostWaypoint.visible) {
+        EcCoordinate lat, lon;
+        if (XyToLatLon(e->x(), e->y(), lat, lon)) {
+            // Update ghost waypoint position
+            ghostWaypoint.lat = lat;
+            ghostWaypoint.lon = lon;
+            
+            // Throttle update untuk performance
+            static QTime lastGhostUpdate;
+            QTime currentTime = QTime::currentTime();
+            
+            if (!lastGhostUpdate.isValid() || lastGhostUpdate.msecsTo(currentTime) >= 16) {
+                update(); // Trigger repaint untuk ghost waypoint
+                lastGhostUpdate = currentTime;
+            }
+        }
+    }
 
     // Normal mouse move processing
     EcCoordinate lat, lon;
@@ -3036,6 +3060,36 @@ void EcWidget::drawSingleWaypoint(double lat, double lon, const QString& label)
     painter.end();
 }
 
+void EcWidget::drawGhostWaypoint(double lat, double lon, const QString& label)
+{
+    int x, y;
+
+    if (!LatLonToXy(lat, lon, x, y))
+        return;
+
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    // Style ghost waypoint: semi-transparent dengan outline dashed
+    QPen pen(QColor(255, 140, 0, 120)); // Orange semi-transparent
+    pen.setWidth(2);
+    pen.setStyle(Qt::DashLine);
+    painter.setPen(pen);
+    
+    QBrush brush(QColor(255, 140, 0, 60)); // Fill semi-transparent
+    painter.setBrush(brush);
+
+    // Gambar ghost donut
+    painter.drawEllipse(QPoint(x, y), 8, 8);
+
+    // Gambar ghost label
+    painter.setPen(QColor(0, 0, 0, 120)); // Black semi-transparent
+    painter.setFont(QFont("Arial", 8));
+    painter.drawText(x + 10, y - 10, label);
+
+    painter.end();
+}
+
 void EcWidget::saveWaypoints()
 {
     QJsonArray waypointArray;
@@ -3150,6 +3204,13 @@ void EcWidget::moveWaypointAt(int x, int y)
                 if (qAbs(x - wx) <= 10 && qAbs(y - wy) <= 10)
                 {
                     moveSelectedIndex = i;
+                    
+                    // Setup ghost waypoint
+                    ghostWaypoint.visible = true;
+                    ghostWaypoint.lat = waypointList[i].lat;
+                    ghostWaypoint.lon = waypointList[i].lon;
+                    ghostWaypoint.label = waypointList[i].label;
+                    
                     qDebug() << "[DEBUG] Waypoint selected for moving:" << i;
                     return;
                 }
@@ -3198,6 +3259,9 @@ void EcWidget::moveWaypointAt(int x, int y)
             pw->fill(pickedList);
             pw->exec();
 
+            // Reset ghost waypoint
+            ghostWaypoint.visible = false;
+            
             moveSelectedIndex = -1; // Reset
             activeFunction = PAN; // Kembali ke mode normal
             emit waypointCreated();
@@ -5302,6 +5366,19 @@ void EcWidget::keyPressEvent(QKeyEvent *e)
     if (guardZoneManager && guardZoneManager->isEditingGuardZone()) {
         if (guardZoneManager->handleKeyPress(e)) {
             return; // Event handled by guard zone manager
+        }
+    }
+
+    // Handle ESC key untuk cancel waypoint move operation
+    if (e->key() == Qt::Key_Escape) {
+        if (activeFunction == MOVE_WAYP && moveSelectedIndex != -1) {
+            // Cancel move operation
+            ghostWaypoint.visible = false;
+            moveSelectedIndex = -1;
+            activeFunction = PAN;
+            update();
+            qDebug() << "[DEBUG] Waypoint move operation cancelled";
+            return;
         }
     }
 
