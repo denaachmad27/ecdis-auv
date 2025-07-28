@@ -597,7 +597,7 @@ MainWindow::MainWindow(QWidget *parent)
   ecchart->InitAIS( dict );
 
   // Start subscribe MOOSDB
-  // ecchart->StartThreadSubscribeSSH(ecchart);
+  // ecchart->startAISSubscribe();
 
   // Create the main user interface 
   connect(ecchart, SIGNAL(scale(int)), this, SLOT( onScale(int)));  
@@ -1090,9 +1090,9 @@ MainWindow::MainWindow(QWidget *parent)
 
   // PLEASE WAIT, TURN OFF FOR A MOMENT
 
-  setupGuardZonePanel();
-  setupAISTargetPanel();
-  setupObstacleDetectionPanel();
+  // setupGuardZonePanel();
+  // setupAISTargetPanel();
+  // setupObstacleDetectionPanel();
 
   //setupAlertPanel();
   //setupTestingMenu();
@@ -1769,29 +1769,13 @@ void MainWindow::slotConnectToAisServer()
 
 void MainWindow::subscribeMOOSDB()
 {
-    // QStringList nmeaData;
-    // nmeaData << aivdo;
-
-    // STOP THREAD
-    //ecchart -> stopAISSubscribeThread();
-    //ecchart->Draw();
-
-    // START AGAIN
-    //ecchart->StartThreadSubscribeSSH(ecchart);
-    //qDebug() << "MOOSDB IP: " + SettingsManager::instance().data().moosIp;
-
     // NEW
     ecchart->startAISSubscribe();
     qDebug() << "MOOSDB IP: " + SettingsManager::instance().data().moosIp;
-
-    //serverThreadMOOSSubscribeSSH();
 }
 
 void MainWindow::stopSubscribeMOOSDB()
 {
-    //ecchart -> stopAISSubscribeThread();
-    //ecchart->Draw();
-
     ecchart->stopAISConnection();
 }
 
@@ -1799,16 +1783,6 @@ void MainWindow::stopSubscribeMOOSDB()
 
 //////////////////////////////////////////////////////    UNUSED - FOR LOGIC BACKUP ONLY     //////////////////////////////////////////////////////
 
-void MainWindow::subscribeMOOSDBMAP()
-{
-    ecchart->startAISSubscribeThreadMAP(ecchart);
-}
-
-
-void MainWindow::jsonExample()
-{
-    ecchart->jsonExample();
-}
 
 // Waypoint menu handlers
 void MainWindow::onCreateWaypoint()

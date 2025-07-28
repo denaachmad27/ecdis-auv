@@ -127,10 +127,7 @@ protected slots:
     void slotConnectToAisServer();
 
     void subscribeMOOSDB();
-    void subscribeMOOSDBMAP();
     void stopSubscribeMOOSDB();
-
-    void jsonExample();
 
     // Waypoint
     void onCreateWaypoint();

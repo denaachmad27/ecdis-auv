@@ -570,28 +570,7 @@ public:
   void processData(double, double, double, double, double, double, double, double, double);
   void processMapInfoReq(QString);
   void processAis(QString);
-
-  void processAISLoop();
-  void handleDisconnection(QTcpSocket* socket);
-  void PublishNavInfo(QTcpSocket* socket, double lat, double lon);
-  void targetAISDrawTrigger();
-
-  // NAV INFO
-  QString StartThreadSubscribeSSH(EcWidget *ecchart);
-  void startAISSubscribeThread(EcWidget *ecchart);
-  void connectToMOOSDB(EcWidget *ecchart);
-  void processAISData(QTcpSocket* socket);
-  void processAISDataHybrid(QTcpSocket* socket, EcWidget *ecchart);
-  void stopAISSubscribeThread();
-  // QString ownShipAutoFill();
-
-  // MAP INFO
-  void startAISSubscribeThreadMAP(EcWidget *ecchart);
-  void connectToMOOSDBMAP(EcWidget *ecchart);
-  void processDataMAP(QTcpSocket* socket, EcWidget *ecchart);
-  void stopAISSubscribeThreadMAP();
-
-  void jsonExample();
+  void publishToMOOSDB(QString, QString);
 
   // Method untuk akses AIS data dari luar
   bool hasAISData() const;
