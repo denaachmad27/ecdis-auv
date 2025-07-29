@@ -786,6 +786,8 @@ MainWindow::MainWindow(QWidget *parent)
   QMenu *waypointMenu = menuBar()->addMenu("&Waypoint");
 
   waypointMenu->addAction("Create", this, SLOT(onCreateWaypoint()));
+  waypointMenu->addAction("Create Route", this, SLOT(onCreateRoute()));
+  waypointMenu->addSeparator();
   waypointMenu->addAction("Remove", this, SLOT(onRemoveWaypoint()));
   waypointMenu->addAction("Move", this, SLOT(onMoveWaypoint()));
   waypointMenu->addAction("Edit", this, SLOT(onEditWaypoint()));
@@ -3500,4 +3502,16 @@ void MainWindow::onShowGuardZoneStatus()
     statusInfo << "entering/exiting active GuardZones automatically.";
 
     QMessageBox::information(this, tr("GuardZone Status"), statusInfo.join("\n"));
+}
+
+// ====== NEW ROUTE IMPLEMENTATION ======
+
+void MainWindow::onCreateRoute()
+{
+    if (!ecchart) return;
+    
+    ecchart->setActiveFunction(EcWidget::CREATE_ROUTE);
+    ecchart->startRouteMode();
+    statusBar()->showMessage(tr("Route Mode: Click to add waypoints. Press ESC or right-click to end route creation"), 0);
+    setWindowTitle("ECDIS AUV - Create Route");
 }

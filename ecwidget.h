@@ -143,6 +143,7 @@ public:
   enum ActiveFunction {
       PAN,
       CREATE_WAYP,
+      CREATE_ROUTE,
       MOVE_WAYP,
       REMOVE_WAYP,
       EDIT_WAYP
@@ -172,9 +173,10 @@ public:
       QString remark;
       double turningRadius;
       bool active;
+      int routeId;                 // ID route untuk memisahkan route
 
       // Constructor - inisialisasi dengan invalid handle
-      Waypoint() : lat(0), lon(0), turningRadius(10.0), active(true)
+      Waypoint() : lat(0), lon(0), turningRadius(10.0), active(true), routeId(0)
       {
           featureHandle.id = EC_NOCELLID;
           featureHandle.offset = 0;
@@ -189,7 +191,7 @@ public:
   void drawOverlayCell();
 
   void drawWaypointMarker(EcCoordinate lat, EcCoordinate lon);
-  void drawSingleWaypoint(EcCoordinate lat, EcCoordinate lon, const QString& label);
+  void drawSingleWaypoint(EcCoordinate lat, EcCoordinate lon, const QString& label, const QColor& color = QColor(255, 140, 0));
   void drawGhostWaypoint(EcCoordinate lat, EcCoordinate lon, const QString& label);
   void saveWaypoints();
   void removeWaypointAt(int x, int y);
@@ -197,14 +199,26 @@ public:
   void editWaypointAt(int x, int y);
   bool resetWaypointCell();
   void drawLeglineLabels();
+  void drawRouteLines(); // Gambar garis route dengan warna berbeda per route
 
   void loadWaypoints();
   QString getWaypointFilePath() const;
   int getWaypointCount() const { return waypointList.size(); }
-  QList<Waypoint> getWaypoints() const { return waypointList; }  void clearWaypoints();
+  QList<Waypoint> getWaypoints() const { return waypointList; }
+  void clearWaypoints();
   bool exportWaypointsToFile(const QString &filename);
   bool importWaypointsFromFile(const QString &filename);
   bool initializeWaypointSystem();
+  
+  // Route mode methods
+  void startRouteMode();
+  void endRouteMode();
+  void finalizeCurrentRoute();
+  void resetRouteConnections();
+  void drawRoutesSeparately();
+  EcCellId getOrCreateRouteCellId(int routeId);
+  EcCellId createNewRouteCellId();
+  bool isInRouteMode() const { return isRouteMode; }
 
   DisplayOrientationMode displayOrientation = NorthUp;
   OSCenteringMode osCentering = Centered;
@@ -615,6 +629,8 @@ public slots:
 
   // waypoint
   void createWaypointAt(EcCoordinate lat, EcCoordinate lon);
+  void createSeparateRouteWaypoint(const Waypoint &waypoint);
+  void createSingleWaypoint(const Waypoint &waypoint);
 
   // Guardzone
   void performAutoGuardZoneCheck();
@@ -809,6 +825,12 @@ private:
 
   QList<Waypoint> waypointList;
   int moveSelectedIndex = -1; // -1 artinya belum ada waypoint dipilih
+  
+  // Route mode variables
+  bool isRouteMode = false;
+  int routeWaypointCounter = 1;
+  int currentRouteId = 1;
+  QMap<int, EcCellId> routeCells; // Separate cell for each route
   
   // Ghost waypoint untuk preview saat move
   struct GhostWaypoint {

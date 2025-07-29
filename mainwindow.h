@@ -131,6 +131,7 @@ protected slots:
 
     // Waypoint
     void onCreateWaypoint();
+    void onCreateRoute();
     void onRemoveWaypoint();
     void onMoveWaypoint();
     void onEditWaypoint();
