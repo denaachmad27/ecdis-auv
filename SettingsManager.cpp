@@ -30,7 +30,7 @@ void SettingsManager::load() {
     SettingsDialog *dialogObj = new SettingsDialog();
 
     m_data.orientationMode = dialogObj->orientation(settings.value("OwnShip/orientation", "NorthUp").toString());
-    m_data.centeringMode = dialogObj->centering(settings.value("OwnShip/centering", "Centered").toString());
+    m_data.centeringMode = dialogObj->centering(settings.value("OwnShip/centering", "Manual").toString());
     m_data.courseUpHeading = settings.value("OwnShip/course_heading", 0).toInt();
 
     m_data.trailMode = settings.value("OwnShip/mode", 0).toInt();

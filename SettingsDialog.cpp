@@ -47,9 +47,9 @@ void SettingsDialog::setupUI() {
     QFormLayout *ownShipLayout = new QFormLayout;
 
     centeringCombo = new QComboBox;
+    centeringCombo->addItem("Manual Offset", "Manual");
     centeringCombo->addItem("Centered", "Centered");
     centeringCombo->addItem("Look Ahead", "LookAhead");
-    centeringCombo->addItem("Manual Offset", "Manual");
     ownShipLayout->addRow("Centering Mode:", centeringCombo);
 
     orientationCombo = new QComboBox;
@@ -351,7 +351,7 @@ void SettingsDialog::loadSettings() {
 
     // Own Ship
     QString ori = settings.value("OwnShip/orientation", "NorthUp").toString();
-    QString cent = settings.value("OwnShip/centering", "Centered").toString();
+    QString cent = settings.value("OwnShip/centering", "Manual").toString();
     int heading = settings.value("OwnShip/course_heading", 0).toInt();
     int trailMode = settings.value("OwnShip/mode", 0).toInt();
     int trailMinute = settings.value("OwnShip/interval", 1).toInt();
@@ -480,7 +480,7 @@ SettingsData SettingsDialog::loadSettingsFromFile(const QString &filePath) {
 
     // Own Ship
     data.orientationMode = orientation(settings.value("OwnShip/orientation", "NorthUp").toString());
-    data.centeringMode = centering(settings.value("OwnShip/centering", "Centered").toString());
+    data.centeringMode = centering(settings.value("OwnShip/centering", "Manual").toString());
     data.courseUpHeading = settings.value("OwnShip/course_heading", 0).toInt();
     data.trailMode = settings.value("OwnShip/mode", 0).toInt();
     data.trailMinute = settings.value("OwnShip/interval", 1).toInt();
