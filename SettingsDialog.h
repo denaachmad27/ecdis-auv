@@ -62,6 +62,13 @@ private:
     QCheckBox *soundAlarmEnabledCheckBox;
     QSlider *soundVolumeSlider;
     QLabel *soundVolumeLabel;
+
+    // TRAIL MINUTES
+    QComboBox *trailCombo;
+    QLabel *trailLabel;
+    QLabel *trailLabelDistance;
+    QSpinBox *trailSpin;
+    QDoubleSpinBox *trailSpinDistance;
 };
 
 #endif // SETTINGSDIALOG_H

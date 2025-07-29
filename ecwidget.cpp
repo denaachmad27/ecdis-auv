@@ -1158,10 +1158,10 @@ void EcWidget::drawOwnShipTrail(QPainter &painter)
 
         double dist = haversine(lat1, lon1, lat2, lon2);
 
-        if (dist > 100.0)
-            painter.setPen(QPen(Qt::gray, 4));
-        else
-            painter.setPen(QPen(QColor(0, 150, 0), 4));
+        // if (dist > 100.0)
+        //     painter.setPen(QPen(Qt::gray, 4));
+        // else
+        painter.setPen(QPen(QColor(0, 150, 0), 4));
 
         painter.drawLine(x1, y1, x2, y2);
     }
@@ -2003,6 +2003,14 @@ void EcWidget::SetWaypointPos(EcCoordinate lat, EcCoordinate lon)
     wplon = lon;
 }
 
+void EcWidget::setOwnShipTrail(bool trail){
+    showOwnShipTrail = trail;
+}
+
+bool EcWidget::getOwnShipTrail(){
+    return showOwnShipTrail;
+}
+
 
 /* draw the user defined cell */
 
@@ -2335,14 +2343,16 @@ void EcWidget::processData(double lat, double lon, double cog, double sog, doubl
 }
 
 void EcWidget::processAis(QString ais){
-    QStringList nmeaData{ais};
-    IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
+    if (ais.startsWith("!AIVDM")) {
+        QStringList nmeaData{ais};
+        IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
 
-    if (dvr && dvr->isRecording() && !ais.isEmpty()) {
-        dvr->recordRawNmea(ais);
+        if (dvr && dvr->isRecording() && !ais.isEmpty()) {
+            dvr->recordRawNmea(ais);
+        }
+
+        _aisObj->readAISVariableString(ais);
     }
-
-    _aisObj->readAISVariableString(ais);
 }
 
 void EcWidget::processMapInfoReq(QString req){
@@ -2601,7 +2611,9 @@ void EcWidget::drawAISCell()
               drawOwnShipIcon(painter, x, y, cog, heading, ownShipData.sog);
 
               // GAMBAR EKOR OWNSHIP
-              drawOwnShipTrail(painter);
+              if (showOwnShipTrail){
+                  drawOwnShipTrail(painter);
+              }
 
               painter.end();
           }

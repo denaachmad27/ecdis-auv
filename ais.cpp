@@ -5,6 +5,7 @@
 #include "pickwindow.h"
 #include "aisdatabasemanager.h"
 #include "aivdoencoder.h"
+#include "SettingsManager.h"
 
 Ais::Ais( EcWidget *parent, EcView *view, EcDictInfo *dict,
          EcCoordinate ownShipLat, EcCoordinate ownShipLon,
@@ -409,12 +410,43 @@ void Ais::handleOwnShipUpdate(EcAISTargetInfo *ti)
         Ais::instance()->_aisOwnShip = dataOS;
 
         // EKOR OWNSHIP
-        if (ownShipLat != 0 && ownShipLon != 0){
-            _wParent->ownShipTrailPoints.append(qMakePair(QString::number(ownShipLat, 'f', 10), QString::number(ownShipLon, 'f', 10)));
-        }
+        if (ownShipLat != 0 && ownShipLon != 0 && _wParent->getOwnShipTrail()) {
+            int setting = SettingsManager::instance().data().trailMode;
+            if (setting == 1){
+                int minute = SettingsManager::instance().data().trailMinute;
+                QDateTime now = QDateTime::currentDateTime();
+                if (lastTrailDrawTime.isNull() || lastTrailDrawTime.secsTo(now) >= minute * 60) {
+                    _wParent->ownShipTrailPoints.append(qMakePair(QString::number(ownShipLat, 'f', 10), QString::number(ownShipLon, 'f', 10)));
+                    lastTrailDrawTime = now;
+                }
+            }
+            else if (setting == 2){
+                double trailDistanceMeters = SettingsManager::instance().data().trailDistance * 1852.0;
 
-        // DEBUG COMMENT TEMP
-        //qDebug() << "Ownship data updated - COG:" << dataOS.cog << "Heading:" << dataOS.heading;
+                if (!_wParent->ownShipTrailPoints.isEmpty()) {
+                    auto last = _wParent->ownShipTrailPoints.last();
+                    double lastLat = last.first.toDouble();
+                    double lastLon = last.second.toDouble();
+                    double dist = _wParent->haversine(lastLat, lastLon, ownShipLat, ownShipLon);
+
+                    if (dist >= trailDistanceMeters) {
+                        _wParent->ownShipTrailPoints.append(qMakePair(
+                            QString::number(ownShipLat, 'f', 10),
+                            QString::number(ownShipLon, 'f', 10)
+                            ));
+                    }
+                } else {
+                    // Titik pertama langsung disimpan
+                    _wParent->ownShipTrailPoints.append(qMakePair(
+                        QString::number(ownShipLat, 'f', 10),
+                        QString::number(ownShipLon, 'f', 10)
+                        ));
+                }
+            }
+            else {
+                _wParent->ownShipTrailPoints.append(qMakePair(QString::number(ownShipLat, 'f', 10), QString::number(ownShipLon, 'f', 10)));
+            }
+        }
     }
 }
 

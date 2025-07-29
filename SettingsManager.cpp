@@ -32,6 +32,10 @@ void SettingsManager::load() {
     m_data.orientationMode = dialogObj->orientation(settings.value("OwnShip/orientation", "NorthUp").toString());
     m_data.centeringMode = dialogObj->centering(settings.value("OwnShip/centering", "Centered").toString());
     m_data.courseUpHeading = settings.value("OwnShip/course_heading", 0).toInt();
+
+    m_data.trailMode = settings.value("OwnShip/mode", 0).toInt();
+    m_data.trailMinute = settings.value("OwnShip/interval", 1).toInt();
+    m_data.trailDistance = settings.value("OwnShip/distance", 0.01).toDouble();
 }
 
 void SettingsManager::save(const SettingsData& data) {
@@ -62,6 +66,10 @@ void SettingsManager::save(const SettingsData& data) {
     if (data.orientationMode == EcWidget::CourseUp) {
         settings.setValue("OwnShip/course_heading", data.courseUpHeading);
     }
+
+    settings.setValue("OwnShip/mode", data.trailMode);
+    settings.setValue("OwnShip/interval", data.trailMinute);
+    settings.setValue("OwnShip/distance", data.trailDistance);
 }
 
 const SettingsData& SettingsManager::data() const {

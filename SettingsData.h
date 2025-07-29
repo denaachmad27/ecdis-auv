@@ -31,6 +31,11 @@ struct SettingsData {
     QString soundAlarmFile;
     bool soundAlarmEnabled;
     int soundAlarmVolume;
+
+    // TRAIL SETTING
+    int trailMode;
+    int trailMinute;
+    double trailDistance;
 };
 
 #endif // SETTINGSDATA_H

@@ -152,6 +152,8 @@ private:
     void deleteOldOwnShipFeature();
     void handleOwnShipUpdate(EcAISTargetInfo *ti);
     void handleAISTargetUpdate(EcAISTargetInfo *ti);
+
+    QDateTime lastTrailDrawTime;
 };
 
 #endif

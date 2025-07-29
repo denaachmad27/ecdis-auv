@@ -489,6 +489,9 @@ public:
   bool drawUdo(void);
   bool createUdoCell();
 
+  bool getOwnShipTrail();
+  void setOwnShipTrail(bool);
+
   // GuardZone
   void enableGuardZone(bool enable);
   bool isGuardZoneActive() const { return guardZoneActive; }
@@ -604,6 +607,7 @@ public:
   // OWNSHIP TRAIL
   QList<QPair<QString, QString>> ownShipTrailPoints;
   void clearOwnShipTrail();
+  double haversine(double lat1, double lon1, double lat2, double lon2);
 
 public slots:
   void updateAISTargetsList();
@@ -1008,6 +1012,7 @@ private:
   void drawOwnShipVectors(QPainter& painter, int x, int y, double cog, double heading, double sog);
   AISTargetData ownShipData;
   bool showCustomOwnShip = true; // Flag untuk kontrol visibility
+  bool showOwnShipTrail;
 
   // Test GuardZone properties
   bool testGuardZoneEnabled;
@@ -1037,7 +1042,6 @@ private:
   // OWNSHIP TRACK VAR
   void addOwnShipPoint(double, double);
   void drawOwnShipTrail(QPainter &painter);
-  double haversine(double lat1, double lon1, double lat2, double lon2);
 
 }; // EcWidget
 

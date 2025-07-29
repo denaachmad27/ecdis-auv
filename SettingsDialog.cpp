@@ -72,6 +72,45 @@ void SettingsDialog::setupUI() {
         headingSpin->setVisible(isCourseUp);
     });
 
+    trailCombo = new QComboBox;
+    trailCombo->addItem("Every Update", 0);
+    trailCombo->addItem("Fixed Interval", 1);
+    trailCombo->addItem("Fixed Distance", 2);
+    ownShipLayout->addRow("Track Line Mode:", trailCombo);
+
+    trailSpin = new QSpinBox;
+    trailLabel = new QLabel("Interval:");
+    trailSpin->setRange(1, 300);
+    trailSpin->setSuffix(" minute(s)");
+    trailLabel->setVisible(false);
+    trailSpin->setVisible(false);
+    ownShipLayout->addRow(trailLabel, trailSpin);
+
+    connect(trailCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int) {
+        bool isMode = (trailCombo->currentData() == 1);
+        trailLabel->setVisible(isMode);
+        trailSpin->setVisible(isMode);
+    });
+
+    trailSpinDistance = new QDoubleSpinBox;
+    trailSpinDistance->setRange(0.01, 10.0);
+    trailSpinDistance->setSuffix(" NM");
+    trailSpinDistance->setDecimals(2);
+    trailSpinDistance->setSingleStep(0.01);
+    trailSpinDistance->setSuffix(" NM");
+    trailSpinDistance->setVisible(false);
+
+    trailLabelDistance = new QLabel("Distance:");
+    trailLabelDistance->setVisible(false);
+
+    ownShipLayout->addRow(trailLabelDistance, trailSpinDistance);
+
+    connect(trailCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int) {
+        bool isMode = (trailCombo->currentData() == 2);
+        trailLabelDistance->setVisible(isMode);
+        trailSpinDistance->setVisible(isMode);
+    });
+
     ownShipTab->setLayout(ownShipLayout);
 
     // --- AIS Tab ---
@@ -314,6 +353,9 @@ void SettingsDialog::loadSettings() {
     QString ori = settings.value("OwnShip/orientation", "NorthUp").toString();
     QString cent = settings.value("OwnShip/centering", "Centered").toString();
     int heading = settings.value("OwnShip/course_heading", 0).toInt();
+    int trailMode = settings.value("OwnShip/mode", 0).toInt();
+    int trailMinute = settings.value("OwnShip/interval", 1).toInt();
+    double trailDistance = settings.value("OwnShip/distance", 0.01).toDouble();
 
     int oriIndex = orientationCombo->findData(ori);
     if (oriIndex >= 0) orientationCombo->setCurrentIndex(oriIndex);
@@ -323,10 +365,24 @@ void SettingsDialog::loadSettings() {
     if (centIndex >= 0) centeringCombo->setCurrentIndex(centIndex);
     else centeringCombo->setCurrentIndex(0);
 
+    int modeIndex = trailCombo->findData(trailMode);
+    if (modeIndex >= 0) trailCombo->setCurrentIndex(modeIndex);
+    else trailCombo->setCurrentIndex(0);
+
     headingSpin->setValue(heading);
     bool isCourseUp = (ori == "CourseUp");
     headingLabel->setVisible(isCourseUp);
     headingSpin->setVisible(isCourseUp);
+
+    trailSpin->setValue(trailMinute);
+    bool isTime = (trailMode == 1);
+    trailLabel->setVisible(isTime);
+    trailSpin->setVisible(isTime);
+
+    trailSpinDistance->setValue(trailDistance);
+    bool isDistance = (trailMode == 2);
+    trailLabelDistance->setVisible(isDistance);
+    trailSpinDistance->setVisible(isDistance);
 
     // Alert Settings
     visualFlashingCheckBox->setChecked(settings.value("Alert/visual_flashing", true).toBool());
@@ -380,6 +436,10 @@ void SettingsDialog::saveSettings() {
         settings.remove("OwnShip/course_heading"); // bersihkan jika tidak relevan
     }
 
+    settings.setValue("OwnShip/mode", trailCombo->currentData().toString());
+    settings.setValue("OwnShip/interval", trailSpin->value());
+    settings.setValue("OwnShip/distance", trailSpinDistance->value());
+
     // Alert Settings
     settings.setValue("Alert/visual_flashing", visualFlashingCheckBox->isChecked());
     settings.setValue("Alert/sound_enabled", soundAlarmEnabledCheckBox->isChecked());
@@ -422,6 +482,9 @@ SettingsData SettingsDialog::loadSettingsFromFile(const QString &filePath) {
     data.orientationMode = orientation(settings.value("OwnShip/orientation", "NorthUp").toString());
     data.centeringMode = centering(settings.value("OwnShip/centering", "Centered").toString());
     data.courseUpHeading = settings.value("OwnShip/course_heading", 0).toInt();
+    data.trailMode = settings.value("OwnShip/mode", 0).toInt();
+    data.trailMinute = settings.value("OwnShip/interval", 1).toInt();
+    data.trailDistance = settings.value("OwnShip/distance", 0.01).toDouble();
 
     // Alert Settings
     data.visualFlashingEnabled = settings.value("Alert/visual_flashing", true).toBool();
@@ -455,6 +518,9 @@ void SettingsDialog::accept() {
     data.orientationMode = orientation(orientationCombo->currentData().toString());
     data.centeringMode = centering(centeringCombo->currentData().toString());
     data.courseUpHeading = (data.orientationMode == EcWidget::CourseUp) ? headingSpin->value() : -1;
+    data.trailMode = trailCombo->currentData().toInt();
+    data.trailMinute = trailSpin->value();
+    data.trailDistance = trailSpinDistance->value();
 
     // Alert settings
     data.visualFlashingEnabled = visualFlashingCheckBox->isChecked();
