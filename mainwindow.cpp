@@ -745,6 +745,9 @@ MainWindow::MainWindow(QWidget *parent)
       ecchart->setCPAPanelToAIS(m_cpatcpaPanel);
   }
   
+  // Setup Route Panel
+  setupRoutePanel();
+  
   createActions();
 
   // PERBAIKAN: Manual sync UI dengan state backend setelah actions dibuat
@@ -786,6 +789,8 @@ MainWindow::MainWindow(QWidget *parent)
   QMenu *waypointMenu = menuBar()->addMenu("&Waypoint");
 
   waypointMenu->addAction("Create", this, SLOT(onCreateWaypoint()));
+  waypointMenu->addAction("Create Route", this, SLOT(onCreateRoute()));
+  waypointMenu->addSeparator();
   waypointMenu->addAction("Remove", this, SLOT(onRemoveWaypoint()));
   waypointMenu->addAction("Move", this, SLOT(onMoveWaypoint()));
   waypointMenu->addAction("Edit", this, SLOT(onEditWaypoint()));
@@ -3349,6 +3354,75 @@ void MainWindow::setupCPATCPAPanel()
     m_cpatcpaDock->setVisible(false);
 }
 
+void MainWindow::setupRoutePanel()
+{
+    // Create Route panel
+    routePanel = new RoutePanel(ecchart, this);
+    
+    // Create dock widget untuk panel
+    routeDock = new QDockWidget(tr("Route Management"), this);
+    routeDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    routeDock->setWidget(routePanel);
+    
+    // Add dock to main window
+    addDockWidget(Qt::RightDockWidgetArea, routeDock);
+    
+    // Add Route Panel to Sidebar menu
+    QMenu* sidebarMenu = nullptr;
+    QList<QMenu*> menus = menuBar()->findChildren<QMenu*>();
+    for (QMenu* menu : menus) {
+        if (menu->title().contains("Sidebar") || menu->title().contains("&Sidebar")) {
+            sidebarMenu = menu;
+            break;
+        }
+    }
+    
+    if (sidebarMenu) {
+        sidebarMenu->addAction(routeDock->toggleViewAction());
+        qDebug() << "Route Panel added to Sidebar menu successfully";
+    } else {
+        qDebug() << "[MAIN] Warning: Sidebar menu not found for Route Panel";
+    }
+    
+    // Connect signals
+    connect(routePanel, &RoutePanel::routeSelectionChanged, 
+            this, &MainWindow::onRouteSelected);
+    connect(routePanel, &RoutePanel::routeVisibilityChanged, 
+            this, &MainWindow::onRouteVisibilityChanged);
+    connect(routePanel, &RoutePanel::statusMessage, 
+            this, [this](const QString& message) {
+                statusBar()->showMessage(message, 3000);
+            });
+    
+    // Connect EcWidget signals to RoutePanel
+    if (ecchart) {
+        connect(ecchart, &EcWidget::waypointCreated, 
+                routePanel, &RoutePanel::onWaypointAdded);
+    }
+    
+    // Set initial visibility (default disabled)
+    routeDock->setVisible(false);
+    
+    qDebug() << "Route Panel setup completed";
+}
+
+void MainWindow::onRouteSelected(int routeId)
+{
+    if (!ecchart) return;
+    
+    qDebug() << "Route selected:" << routeId;
+    statusBar()->showMessage(tr("Route %1 selected").arg(routeId), 2000);
+}
+
+void MainWindow::onRouteVisibilityChanged(int routeId, bool visible)
+{
+    if (!ecchart) return;
+    
+    qDebug() << "Route" << routeId << "visibility changed to:" << visible;
+    statusBar()->showMessage(tr("Route %1 %2").arg(routeId).arg(visible ? "shown" : "hidden"), 2000);
+    ecchart->update();
+}
+
 void MainWindow::onEnableRedDotTracker(bool enabled)
 {
     qDebug() << "onEnableRedDotTracker called with enabled =" << enabled;
@@ -3501,3 +3575,16 @@ void MainWindow::onShowGuardZoneStatus()
 
     QMessageBox::information(this, tr("GuardZone Status"), statusInfo.join("\n"));
 }
+
+// ====== NEW ROUTE IMPLEMENTATION ======
+
+void MainWindow::onCreateRoute()
+{
+    if (!ecchart) return;
+    
+    ecchart->setActiveFunction(EcWidget::CREATE_ROUTE);
+    ecchart->startRouteMode();
+    statusBar()->showMessage(tr("Route Mode: Click to add waypoints. Press ESC or right-click to end route creation"), 0);
+    setWindowTitle("ECDIS AUV - Create Route");
+}
+
