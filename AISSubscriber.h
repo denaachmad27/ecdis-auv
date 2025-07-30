@@ -13,18 +13,35 @@ public:
     //void disconnectFromHost();
 
 signals:
-    void navLatReceived(double lat);
-    void navLongReceived(double lon);
-    void navDepthReceived(double depth);
-    void navHeadingReceived(double heading);
-    void navHeadingOGReceived(double headingOg);
-    void navSpeedReceived(double speed);
-    void navSpeedOGReceived(double speedOg);
-    void navYawReceived(double yaw);
-    void navZReceived(double z);
+    // OWNSHIP
+    void navLatReceived(const double lat);
+    void navLongReceived(const double lon);
+    void navDepthReceived(const double depth);
+    void navHeadingReceived(const double heading);
+    void navHeadingOGReceived(const double headingOg);
+    void navSpeedReceived(const double speed);
+    void navSpeedOGReceived(const double speedOg);
+    void navYawReceived(const double yaw);
+    void navZReceived(const double z);
+    void navStwReceived(const double stw);
+    void navDriftReceived(const double drift);
+    void navDriftAngleReceived(const double driftAngle);
+    void navSetReceived(const double set);
+    void navRotReceived(const double rot);
+    void navDepthBelowKeelReceived(const double DepthBelowKeel);
 
     void mapInfoReqReceived(QString map);
     void waisNmeaReceived(QString nmea);
+
+    // ROUTES INFORMATION
+    void rteWpBrgReceived(const QString &value);
+    void rteXtdReceived(const QString &value);
+    void rteCrsReceived(const QString &value);
+    void rteCtmReceived(const QString &value);
+    void rteDtgReceived(const QString &value);
+    void rteDtgMReceived(const QString &value);
+    void rteTtgReceived(const QString &value);
+    void rteEtaReceived(const QString &value);
 
     void errorOccurred(const QString &message);
     void disconnected();

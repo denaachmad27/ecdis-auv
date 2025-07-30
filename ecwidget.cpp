@@ -50,9 +50,9 @@ QTextEdit *ownShipText;
 QTextEdit *aisTemp;
 QTextEdit *ownShipTemp;
 
-ShipStruct mapShip = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-
-ShipStruct navShip = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+ShipStruct mapShip = {};
+ShipStruct navShip = {};
+ActiveRouteStruct activeRoute = {};
 
 QString aivdo;
 QString nmea;
@@ -2215,51 +2215,38 @@ void EcWidget::startAISConnection()
         subscriber->connectToHost(sshIP, sshPort);
     });
 
-    connect(subscriber, &AISSubscriber::navLatReceived, this, [=](double lat) {
-        navShip.lat = lat;
-    });
-
-    connect(subscriber, &AISSubscriber::navLongReceived, this, [=](double lon) {
-        navShip.lon = lon;
-    });
-
-    connect(subscriber, &AISSubscriber::navDepthReceived, this, [=](double depth) {
-        navShip.depth = depth;
-    });
-
-    connect(subscriber, &AISSubscriber::navHeadingReceived, this, [=](double hdg) {
-        navShip.heading = hdg;
-    });
-
-    connect(subscriber, &AISSubscriber::navHeadingOGReceived, this, [=](double cog) {
-        navShip.heading_og = cog;
-    });
-
-    connect(subscriber, &AISSubscriber::navSpeedReceived, this, [=](double sog) {
-        navShip.speed_og = sog;
-    });
-
-    connect(subscriber, &AISSubscriber::navYawReceived, this, [=](double yaw) {
-        navShip.yaw = yaw;
-    });
-
-    connect(subscriber, &AISSubscriber::navZReceived, this, [=](double z) {
-        navShip.z = z;
-    });
+    // OWNSHIP
+    connect(subscriber, &AISSubscriber::navLatReceived, this, [=](double lat) { navShip.lat = lat;});
+    connect(subscriber, &AISSubscriber::navLongReceived, this, [=](double lon) { navShip.lon = lon;});
+    connect(subscriber, &AISSubscriber::navDepthReceived, this, [=](double depth) { navShip.depth = depth;});
+    connect(subscriber, &AISSubscriber::navHeadingReceived, this, [=](double hdg) { navShip.heading = hdg;});
+    connect(subscriber, &AISSubscriber::navHeadingOGReceived, this, [=](double cog) { navShip.heading_og = cog;});
+    connect(subscriber, &AISSubscriber::navSpeedReceived, this, [=](double sog) { navShip.speed_og = sog;});
+    connect(subscriber, &AISSubscriber::navYawReceived, this, [=](double yaw) { navShip.yaw = yaw;});
+    connect(subscriber, &AISSubscriber::navZReceived, this, [=](double z) { navShip.z = z;});
+    connect(subscriber, &AISSubscriber::navStwReceived, this, [=](double stw) { navShip.stw = stw;});
+    connect(subscriber, &AISSubscriber::navDriftReceived, this, [=](double drift) { navShip.drift = drift;});
+    connect(subscriber, &AISSubscriber::navDriftAngleReceived, this, [=](double drift_angle) { navShip.drift_angle = drift_angle;});
+    connect(subscriber, &AISSubscriber::navSetReceived, this, [=](double set) { navShip.set = set;});
+    connect(subscriber, &AISSubscriber::navRotReceived, this, [=](double rot) { navShip.rot = rot;});
+    connect(subscriber, &AISSubscriber::navDepthBelowKeelReceived, this, [=](double depth_below_keel) { navShip.depth_below_keel = depth_below_keel;});
 
     connect(subscriber, &AISSubscriber::mapInfoReqReceived, this, &EcWidget::processMapInfoReq);
-
     connect(subscriber, &AISSubscriber::processingAis, this, &EcWidget::processAis);
-
     connect(subscriber, &AISSubscriber::processingData, this, &EcWidget::processData);
 
-    connect(subscriber, &AISSubscriber::errorOccurred, this, [](const QString &msg) {
-        qWarning() << "Error:" << msg;
-    });
+    // ROUTE INFORMATION
+    connect(subscriber, &AISSubscriber::rteWpBrgReceived, this, [=](const QString &v) { activeRoute.rteWpBrg = v;});
+    connect(subscriber, &AISSubscriber::rteXtdReceived, this, [=](const QString &v) { activeRoute.rteXtd = v;});
+    connect(subscriber, &AISSubscriber::rteCrsReceived, this, [=](const QString &v) { activeRoute.rteCrs = v;});
+    connect(subscriber, &AISSubscriber::rteCtmReceived, this, [=](const QString &v) { activeRoute.rteCtm = v;});
+    connect(subscriber, &AISSubscriber::rteDtgReceived, this, [=](const QString &v) { activeRoute.rteDtg = v;});
+    connect(subscriber, &AISSubscriber::rteDtgMReceived, this, [=](const QString &v) { activeRoute.rteDtgM = v;});
+    connect(subscriber, &AISSubscriber::rteTtgReceived, this, [=](const QString &v) { activeRoute.rteTtg = v;});
+    connect(subscriber, &AISSubscriber::rteEtaReceived, this, [=](const QString &v) { activeRoute.rteEta = v;});
 
-    connect(subscriber, &AISSubscriber::disconnected, this, []() {
-        qDebug() << "Disconnected from AIS source.";
-    });
+    connect(subscriber, &AISSubscriber::errorOccurred, this, [](const QString &msg) { qWarning() << "Error:" << msg; });
+    connect(subscriber, &AISSubscriber::disconnected, this, []() { qDebug() << "Disconnected from AIS source.";});
 
     connect(threadAIS, &QThread::finished, subscriber, &QObject::deleteLater);
     threadAIS->start();
@@ -2735,7 +2722,9 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon, double head )
     {
         if ((lat != 0 && lon != 0) && trackTarget.isEmpty())
         {
-            if (SettingsManager::instance().data().centeringMode == LookAhead) // ⭐ Look-Ahead mode
+            OSCenteringMode mode = SettingsManager::instance().data().centeringMode;
+
+            if (mode == LookAhead) // ⭐ Look-Ahead mode
             {
                 double offsetNM = GetRange(currentScale) * 0.5;
                 double headingRad = head * M_PI / 180.0;
@@ -2747,9 +2736,36 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon, double head )
 
                 SetCenter(centerLat, centerLon);
             }
-            else if (SettingsManager::instance().data().centeringMode == Centered)
+            else if (mode == Centered)
             {
                 SetCenter(lat, lon);
+            }
+            else if (mode == AutoRecenter)
+            {
+                int x, y;
+                if (LatLonToXy(lat, lon, x, y))
+                {
+                    // Ambil ukuran tampilan layar saat ini
+                    QRect visibleRect = GetVisibleMapRect();
+
+                    // Tentukan margin minimum (misal 10% dari ukuran layar)
+                    int marginX = visibleRect.width() * 0.1;
+                    int marginY = visibleRect.height() * 0.1;
+
+                    // Buat area aman (safe area) di tengah layar
+                    QRect safeRect(
+                        visibleRect.left() + marginX,
+                        visibleRect.top() + marginY,
+                        visibleRect.width() - 2 * marginX,
+                        visibleRect.height() - 2 * marginY
+                    );
+
+                    // Jika kapal berada di luar area aman, lakukan recenter
+                    if (!safeRect.contains(x, y))
+                    {
+                        SetCenter(lat, lon);
+                    }
+                }
             }
         }
 
@@ -2803,6 +2819,10 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon, double head )
       }
   }
   // ==================================================
+}
+
+QRect EcWidget::GetVisibleMapRect(){
+    return QRect(0, 0, width(), height());
 }
 
 void EcWidget::slotRefreshCenter( double lat, double lon )

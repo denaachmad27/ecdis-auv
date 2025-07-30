@@ -69,11 +69,29 @@ struct ShipStruct {
     double yaw;        // Sudut yaw kapal
     double depth;        // Kedalaman
     double z;        // Vertikal kapal
+    double stw;     // Speed through water
+    double drift;   // Drift in knots
+    double drift_angle;  // Drift angle
+    double set;     // current set
+    double rot;     // Rate of Turn
+    double depth_below_keel; // distance from transducer to seabed
+};
+
+struct ActiveRouteStruct {
+    QString rteWpBrg;    // Bearing ke waypoint
+    QString rteXtd;      // Cross track distance
+    QString rteCrs;      // Course ke waypoint
+    QString rteCtm;      // Current time to waypoint
+    QString rteDtg;      // Distance to go
+    QString rteDtgM;     // Distance to go (manual)
+    QString rteTtg;      // Time to go
+    QString rteEta;      // Estimated time of arrival
 };
 
 // GLOBAL VARAIBLE (DELETE LATER)
 extern ShipStruct navShip;
 extern ShipStruct mapShip;
+extern ActiveRouteStruct activeRoute;
 
 extern QString bottomBarText;
 extern QString aivdo;
@@ -157,7 +175,8 @@ public:
   enum OSCenteringMode {
       LookAhead,
       Centered,
-      Manual
+      Manual,
+      AutoRecenter
   };
 
   struct Waypoint
@@ -1042,6 +1061,9 @@ private:
   // OWNSHIP TRACK VAR
   void addOwnShipPoint(double, double);
   void drawOwnShipTrail(QPainter &painter);
+
+  // AUTO RECENTER
+  QRect GetVisibleMapRect();
 
 }; // EcWidget
 

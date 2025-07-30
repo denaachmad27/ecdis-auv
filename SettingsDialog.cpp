@@ -47,9 +47,10 @@ void SettingsDialog::setupUI() {
     QFormLayout *ownShipLayout = new QFormLayout;
 
     centeringCombo = new QComboBox;
-    centeringCombo->addItem("Manual Offset", "Manual");
+    centeringCombo->addItem("Auto Recenter", "AutoRecenter");
     centeringCombo->addItem("Centered", "Centered");
     centeringCombo->addItem("Look Ahead", "LookAhead");
+    centeringCombo->addItem("Manual Offset", "Manual");
     ownShipLayout->addRow("Centering Mode:", centeringCombo);
 
     orientationCombo = new QComboBox;
@@ -351,9 +352,9 @@ void SettingsDialog::loadSettings() {
 
     // Own Ship
     QString ori = settings.value("OwnShip/orientation", "NorthUp").toString();
-    QString cent = settings.value("OwnShip/centering", "Manual").toString();
+    QString cent = settings.value("OwnShip/centering", "AutoRecenter").toString();
     int heading = settings.value("OwnShip/course_heading", 0).toInt();
-    int trailMode = settings.value("OwnShip/mode", 0).toInt();
+    int trailMode = settings.value("OwnShip/mode", 2).toInt();
     int trailMinute = settings.value("OwnShip/interval", 1).toInt();
     double trailDistance = settings.value("OwnShip/distance", 0.01).toDouble();
 
@@ -480,9 +481,9 @@ SettingsData SettingsDialog::loadSettingsFromFile(const QString &filePath) {
 
     // Own Ship
     data.orientationMode = orientation(settings.value("OwnShip/orientation", "NorthUp").toString());
-    data.centeringMode = centering(settings.value("OwnShip/centering", "Manual").toString());
+    data.centeringMode = centering(settings.value("OwnShip/centering", "AutoRecenter").toString());
     data.courseUpHeading = settings.value("OwnShip/course_heading", 0).toInt();
-    data.trailMode = settings.value("OwnShip/mode", 0).toInt();
+    data.trailMode = settings.value("OwnShip/mode", 2).toInt();
     data.trailMinute = settings.value("OwnShip/interval", 1).toInt();
     data.trailDistance = settings.value("OwnShip/distance", 0.01).toDouble();
 
@@ -542,5 +543,6 @@ EcWidget::DisplayOrientationMode SettingsDialog::orientation(const QString &str)
 EcWidget::OSCenteringMode SettingsDialog::centering(const QString &str) {
     if (str == "Centered") return EcWidget::Centered;
     if (str == "LookAhead") return EcWidget::LookAhead;
+    if (str == "AutoRecenter") return EcWidget::AutoRecenter;
     return EcWidget::Manual;
 }
