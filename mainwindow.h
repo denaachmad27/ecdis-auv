@@ -12,6 +12,7 @@
 #include "alertsystem.h"
 #include "aistargetpanel.h"
 #include "obstacledetectionpanel.h"
+#include "routepanel.h"
 
 #include <QPluginLoader>
 
@@ -161,6 +162,10 @@ protected slots:
     void onGuardZoneEditRequested(int guardZoneId);
     void onGuardZoneVisibilityChanged(int guardZoneId, bool visible);
 
+    // Route Panel slots
+    void onRouteSelected(int routeId);
+    void onRouteVisibilityChanged(int routeId, bool visible);
+
     // Simulasi
     void onStartSimulation();
     void onStopSimulation();
@@ -272,8 +277,13 @@ private:
     CPATCPAPanel* m_cpatcpaPanel;
     QDockWidget* m_cpatcpaDock;
 
+    // Route Panel
+    RoutePanel* routePanel;
+    QDockWidget* routeDock;
+
     // Helper methods untuk CPA/TCPA
     void setupCPATCPAPanel();
+    void setupRoutePanel();
 };
 
 #endif // _mainwindow_h_

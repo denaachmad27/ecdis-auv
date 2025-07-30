@@ -343,6 +343,10 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
 
   // Waypoint
   loadWaypoints(); // Muat waypoint dari file JSON
+  
+  // Routes
+  loadRoutes(); // Muat route dari file JSON
+  
   // DEBUGGING: Comment loadGuardZones() to test without auto-loading
   // loadGuardZones();
   
@@ -1484,6 +1488,9 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
                 }
                 
                 routeWaypointCounter++;
+                
+                // Emit signal to update route panel
+                emit waypointCreated();
                 
                 // Stay in CREATE_ROUTE mode for continuous creation
             }
@@ -3033,9 +3040,11 @@ void EcWidget::createSeparateRouteWaypoint(const Waypoint &waypoint)
     // Save to JSON file (like GuardZone does)
     saveWaypoints();
     
-    // Simple visual marker
-    drawWaypointMarker(wp.lat, wp.lon);
+    // Save route information
+    saveCurrentRoute();
     
+    // Redraw everything to show new waypoint and route lines
+    Draw();
     update();
 }
 
@@ -3097,22 +3106,6 @@ void EcWidget::drawWaypointMarker(double lat, double lon)
     painter.drawEllipse(QPoint(x, y), 8, 8);
 
     painter.end();
-
-    // 🚀 Simpan waypoint baru
-    Waypoint wp;
-    wp.lat = lat;
-    wp.lon = lon;
-    wp.label = QString("WP%1").arg(waypointList.size() + 1, 3, 10, QChar('0')); // Label: WP001, WP002
-    wp.remark = ""; // Default empty remark
-    wp.turningRadius = 10.0; // Default turning radius
-    wp.active = true; // Default active status
-    waypointList.append(wp);
-    saveWaypoints(); // Save to JSON file
-
-
-
-    // 🚀 Langsung redraw semua
-    Draw();
 }
 
 
@@ -3126,20 +3119,131 @@ void EcWidget::drawSingleWaypoint(double lat, double lon, const QString& label, 
     QPainter painter(&drawPixmap);
     painter.setRenderHint(QPainter::Antialiasing, true);
 
-    QPen pen(color); // Menggunakan warna yang diberikan
+    QPen pen(color);
     pen.setWidth(2);
     painter.setPen(pen);
     painter.setBrush(Qt::NoBrush);
 
-    // Gambar Donut
+    // Gambar Donut waypoint
     painter.drawEllipse(QPoint(x, y), 8, 8);
 
-    // Gambar Label di kanan atas
-    painter.setPen(Qt::black);
-    painter.setFont(QFont("Arial", 8));
-    painter.drawText(x + 10, y - 10, label);
+    // Setup font dan ukuran teks
+    QFont font("Arial", 9, QFont::Bold);
+    painter.setFont(font);
+    QFontMetrics fm(font);
+    QRect textRect = fm.boundingRect(label);
+    
+    // Tentukan posisi label yang optimal untuk menghindari tindihan
+    QPoint labelPos = findOptimalLabelPosition(x, y, textRect.size(), 18); // 18px minimum distance from waypoint
+    
+    // Gambar teks label tanpa background
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(color, 1));
+    painter.drawText(labelPos, label);
 
     painter.end();
+}
+
+QPoint EcWidget::findOptimalLabelPosition(int waypointX, int waypointY, const QSize& textSize, int minDistance)
+{
+    // Static list untuk menyimpan posisi label yang sudah digunakan dalam satu frame draw
+    static QList<QRect> usedLabelRects;
+    static int lastDrawTime = 0;
+    
+    // Reset list setiap kali draw baru dimulai
+    int currentTime = QTime::currentTime().msecsSinceStartOfDay();
+    if (currentTime - lastDrawTime > 100) {
+        usedLabelRects.clear();
+        lastDrawTime = currentTime;
+    }
+    
+    // Dapatkan bounds widget untuk memastikan label tidak keluar
+    QRect widgetBounds = rect();
+    int margin = 10; // Margin dari tepi widget
+    
+    // Daftar posisi kandidat dengan prioritas UI/UX yang baik
+    QList<QPoint> candidatePositions;
+    
+    // Prioritas 1: Posisi terpusat dan mudah dibaca (jarak optimal)
+    int distance = minDistance;
+    
+    // Urutan prioritas berdasarkan prinsip UI/UX:
+    // 1. Kanan atas (paling umum dan mudah dibaca)
+    // 2. Kiri atas (alternatif terbaik)
+    // 3. Kanan bawah 
+    // 4. Kiri bawah
+    // 5. Posisi tengah (jika ruang cukup)
+    candidatePositions << QPoint(waypointX + distance, waypointY - distance);     
+    candidatePositions << QPoint(waypointX - distance, waypointY - distance);     
+    candidatePositions << QPoint(waypointX + distance, waypointY + distance);     
+    candidatePositions << QPoint(waypointX - distance, waypointY + distance);     
+    candidatePositions << QPoint(waypointX, waypointY - distance - 8);           
+    candidatePositions << QPoint(waypointX, waypointY + distance + 8);           
+    
+    // Prioritas 2: Jarak sedang jika posisi dekat masih bertabrakan
+    distance = minDistance + 8;
+    candidatePositions << QPoint(waypointX + distance, waypointY - distance);
+    candidatePositions << QPoint(waypointX - distance, waypointY - distance);
+    candidatePositions << QPoint(waypointX + distance, waypointY + distance);
+    candidatePositions << QPoint(waypointX - distance, waypointY + distance);
+    
+    // Cari posisi optimal yang memenuhi kriteria UI/UX
+    for (const QPoint& candidate : candidatePositions) {
+        // Hitung rectangle label dengan padding
+        QRect labelRect(candidate.x() - 3, candidate.y() - textSize.height() - 3, 
+                       textSize.width() + 6, textSize.height() + 4);
+        
+        // KRITERIA 1: Pastikan label tidak keluar dari bounds widget
+        if (labelRect.left() < widgetBounds.left() + margin ||
+            labelRect.right() > widgetBounds.right() - margin ||
+            labelRect.top() < widgetBounds.top() + margin ||
+            labelRect.bottom() > widgetBounds.bottom() - margin) {
+            continue; // Skip posisi yang keluar bounds
+        }
+        
+        // KRITERIA 2: Check collision dengan label lain
+        bool hasCollision = false;
+        for (const QRect& usedRect : usedLabelRects) {
+            if (labelRect.intersects(usedRect)) {
+                hasCollision = true;
+                break;
+            }
+        }
+        
+        // Jika posisi memenuhi semua kriteria, gunakan posisi ini
+        if (!hasCollision) {
+            usedLabelRects.append(labelRect);
+            return candidate;
+        }
+    }
+    
+    // Fallback dengan constraining ke dalam bounds
+    QPoint fallbackPos(waypointX + minDistance, waypointY - minDistance);
+    
+    // Constraint ke dalam widget bounds
+    QRect fallbackRect(fallbackPos.x() - 3, fallbackPos.y() - textSize.height() - 3,
+                       textSize.width() + 6, textSize.height() + 4);
+    
+    // Adjust jika keluar bounds
+    if (fallbackRect.right() > widgetBounds.right() - margin) {
+        fallbackPos.setX(widgetBounds.right() - margin - textSize.width() - 6);
+    }
+    if (fallbackRect.left() < widgetBounds.left() + margin) {
+        fallbackPos.setX(widgetBounds.left() + margin + 3);
+    }
+    if (fallbackRect.top() < widgetBounds.top() + margin) {
+        fallbackPos.setY(widgetBounds.top() + margin + textSize.height() + 3);
+    }
+    if (fallbackRect.bottom() > widgetBounds.bottom() - margin) {
+        fallbackPos.setY(widgetBounds.bottom() - margin - 3);
+    }
+    
+    // Update rectangle dengan posisi yang sudah di-adjust
+    fallbackRect = QRect(fallbackPos.x() - 3, fallbackPos.y() - textSize.height() - 3,
+                        textSize.width() + 6, textSize.height() + 4);
+    usedLabelRects.append(fallbackRect);
+    
+    return fallbackPos;
 }
 
 void EcWidget::drawGhostWaypoint(double lat, double lon, const QString& label)
@@ -3424,8 +3528,6 @@ void EcWidget::drawLeglineLabels()
     
     painter.setFont(QFont("Arial", 8, QFont::Bold));
 
-    double defaultSpeed = 10.0; // knot (bisa kamu ubah sesuai kebutuhan)
-
     for (int i = 0; i < waypointList.size() - 1; ++i)
     {
         // MODIFIKASI: Hanya gambar label untuk waypoint dalam route yang sama
@@ -3450,11 +3552,6 @@ void EcWidget::drawLeglineLabels()
             &dist, &bearing
             );
 
-        // ETA
-        double hours = dist / defaultSpeed;
-        int h = static_cast<int>(hours);
-        int m = static_cast<int>((hours - h) * 60 + 0.5); // dibulatkan ke menit terdekat
-
         // Posisi tengah garis
         int x1, y1, x2, y2;
         if (LatLonToXy(lat1, lon1, x1, y1) && LatLonToXy(lat2, lon2, x2, y2))
@@ -3468,12 +3565,10 @@ void EcWidget::drawLeglineLabels()
             int midY = (y1 + y2) / 2;
 
             QString degree = QString::fromUtf8("\u00B0"); // simbol derajat
-            QString text = QString("%1 NM @ %2%3\nETA: %4h %5m")
+            QString text = QString("%1 NM @ %2%3")
                                .arg(QString::number(dist, 'f', 1))
                                .arg(QString::number(bearing, 'f', 0))
-                               .arg(degree)
-                               .arg(h)
-                               .arg(m);
+                               .arg(degree);
 
             painter.drawText(midX + 5, midY - 5, text);
         }
@@ -10457,6 +10552,255 @@ void EcWidget::finalizeCurrentRoute()
     
     // Force redraw to ensure proper visualization
     saveWaypoints();
+    
+    // Save current route to route list
+    saveCurrentRoute();
+    
     update();
+}
+
+// ====== ROUTE MANAGEMENT FUNCTIONS ======
+
+void EcWidget::saveRoutes()
+{
+    QJsonArray routeArray;
+
+    for (const EcWidget::Route &route : routeList)
+    {
+        QJsonObject routeObject;
+        routeObject["routeId"] = route.routeId;
+        routeObject["name"] = route.name;
+        routeObject["description"] = route.description;
+        routeObject["createdDate"] = route.createdDate.toString(Qt::ISODate);
+        routeObject["modifiedDate"] = route.modifiedDate.toString(Qt::ISODate);
+        routeObject["totalDistance"] = route.totalDistance;
+        routeObject["estimatedTime"] = route.estimatedTime;
+        
+        // Save waypoints with full coordinate data
+        QJsonArray waypointsArray;
+        for (const EcWidget::RouteWaypoint& wp : route.waypoints) {
+            QJsonObject waypointObject;
+            waypointObject["lat"] = wp.lat;
+            waypointObject["lon"] = wp.lon;
+            waypointObject["label"] = wp.label;
+            waypointObject["remark"] = wp.remark;
+            waypointObject["turningRadius"] = wp.turningRadius;
+            waypointObject["active"] = wp.active;
+            waypointsArray.append(waypointObject);
+        }
+        routeObject["waypoints"] = waypointsArray;
+
+        routeArray.append(routeObject);
+    }
+
+    QJsonObject rootObject;
+    rootObject["routes"] = routeArray;
+
+    QJsonDocument jsonDoc(rootObject);
+
+    QString filePath = getRouteFilePath();
+    QDir dir = QFileInfo(filePath).dir();
+
+    // Pastikan direktori ada
+    if (!dir.exists())
+    {
+        if (!dir.mkpath("."))
+        {
+            qDebug() << "[ERROR] Could not create directory for routes:" << dir.path();
+            filePath = "routes.json"; // Gunakan direktori saat ini sebagai fallback
+        }
+    }
+
+    QFile file(filePath);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text))
+    {
+        file.write(jsonDoc.toJson(QJsonDocument::Indented));
+        file.close();
+        qDebug() << "[INFO] Routes saved to" << filePath;
+    }
+    else
+    {
+        qDebug() << "[ERROR] Failed to save routes to" << filePath << ":" << file.errorString();
+        
+        // Coba simpan di direktori saat ini sebagai cadangan
+        QFile fallbackFile("routes.json");
+        if (fallbackFile.open(QIODevice::WriteOnly | QIODevice::Text))
+        {
+            fallbackFile.write(jsonDoc.toJson(QJsonDocument::Indented));
+            fallbackFile.close();
+            qDebug() << "[INFO] Routes saved to fallback location: routes.json";
+        }
+        else
+        {
+            qDebug() << "[ERROR] Failed to save routes to fallback location";
+        }
+    }
+}
+
+void EcWidget::loadRoutes()
+{
+    QString filePath = getRouteFilePath();
+    QFile file(filePath);
+
+    if (!file.exists())
+    {
+        qDebug() << "[INFO] Routes file not found. Starting with empty route list.";
+        return;
+    }
+
+    if (file.open(QIODevice::ReadOnly))
+    {
+        QByteArray fileData = file.readAll();
+        QJsonDocument doc = QJsonDocument::fromJson(fileData);
+        QJsonObject rootObject = doc.object();
+        QJsonArray routesArray = rootObject["routes"].toArray();
+
+        routeList.clear();
+
+        for (const QJsonValue& value : routesArray)
+        {
+            QJsonObject routeObject = value.toObject();
+
+            EcWidget::Route route;
+            route.routeId = routeObject["routeId"].toInt();
+            route.name = routeObject["name"].toString();
+            route.description = routeObject["description"].toString();
+            route.createdDate = QDateTime::fromString(routeObject["createdDate"].toString(), Qt::ISODate);
+            route.modifiedDate = QDateTime::fromString(routeObject["modifiedDate"].toString(), Qt::ISODate);
+            route.totalDistance = routeObject["totalDistance"].toDouble();
+            route.estimatedTime = routeObject["estimatedTime"].toDouble();
+            
+            // Load waypoints with coordinates
+            QJsonArray waypointsArray = routeObject["waypoints"].toArray();
+            for (const QJsonValue& waypointValue : waypointsArray) {
+                QJsonObject waypointObject = waypointValue.toObject();
+                
+                EcWidget::RouteWaypoint routeWp;
+                routeWp.lat = waypointObject["lat"].toDouble();
+                routeWp.lon = waypointObject["lon"].toDouble();
+                routeWp.label = waypointObject["label"].toString();
+                routeWp.remark = waypointObject["remark"].toString();
+                routeWp.turningRadius = waypointObject["turningRadius"].toDouble();
+                routeWp.active = waypointObject["active"].toBool();
+                
+                route.waypoints.append(routeWp);
+            }
+
+            routeList.append(route);
+        }
+
+        qDebug() << "[INFO] Loaded" << routeList.size() << "routes from" << filePath;
+        file.close();
+    }
+    else
+    {
+        qDebug() << "[ERROR] Failed to open routes file:" << filePath;
+    }
+}
+
+QString EcWidget::getRouteFilePath() const
+{
+    // Simpan di direktori data aplikasi yang sama dengan waypoints
+    QString basePath;
+
+#ifdef _WIN32
+    if (EcKernelGetEnv("APPDATA"))
+        basePath = QString(EcKernelGetEnv("APPDATA")) + "/SevenCs/EC2007/DENC";
+#else
+    if (EcKernelGetEnv("HOME"))
+        basePath = QString(EcKernelGetEnv("HOME")) + "/SevenCs/EC2007/DENC";
+#endif
+
+    // Jika base path tidak tersedia, gunakan direktori saat ini
+    if (basePath.isEmpty())
+        return "routes.json";
+    else
+        return basePath + "/routes.json";
+}
+
+void EcWidget::saveCurrentRoute()
+{
+    if (currentRouteId <= 0) return;
+    
+    // Check if route already exists in the list
+    bool routeExists = false;
+    for (int i = 0; i < routeList.size(); ++i) {
+        if (routeList[i].routeId == currentRouteId) {
+            // Update existing route
+            routeList[i].modifiedDate = QDateTime::currentDateTime();
+            routeList[i].name = QString("Route %1").arg(currentRouteId);
+            
+            // Recalculate route data
+            calculateRouteData(routeList[i]);
+            routeExists = true;
+            break;
+        }
+    }
+    
+    if (!routeExists) {
+        // Create new route
+        EcWidget::Route newRoute;
+        newRoute.routeId = currentRouteId;
+        newRoute.name = QString("Route %1").arg(currentRouteId);
+        newRoute.description = QString("Route created on %1").arg(QDateTime::currentDateTime().toString());
+        
+        // Calculate route data
+        calculateRouteData(newRoute);
+        
+        routeList.append(newRoute);
+        qDebug() << "[ROUTE] Created new route" << currentRouteId << "with" << newRoute.waypoints.size() << "waypoints";
+    }
+    
+    // Save to file
+    saveRoutes();
+}
+
+EcWidget::Route EcWidget::getRouteById(int routeId) const
+{
+    for (const EcWidget::Route& route : routeList) {
+        if (route.routeId == routeId) {
+            return route;
+        }
+    }
+    return EcWidget::Route(); // Return empty route if not found
+}
+
+void EcWidget::calculateRouteData(EcWidget::Route& route)
+{
+    route.waypoints.clear();
+    route.totalDistance = 0.0;
+    
+    // Find all waypoints belonging to this route and copy their data
+    for (const Waypoint& wp : waypointList) {
+        if (wp.routeId == route.routeId) {
+            route.waypoints.append(EcWidget::RouteWaypoint(wp));
+        }
+    }
+    
+    // Calculate total distance using waypoint coordinates
+    if (route.waypoints.size() >= 2) {
+        for (int i = 0; i < route.waypoints.size() - 1; ++i) {
+            const EcWidget::RouteWaypoint& wp1 = route.waypoints[i];
+            const EcWidget::RouteWaypoint& wp2 = route.waypoints[i + 1];
+            
+            // Calculate distance using Haversine formula
+            double lat1 = qDegreesToRadians(wp1.lat);
+            double lon1 = qDegreesToRadians(wp1.lon);
+            double lat2 = qDegreesToRadians(wp2.lat);
+            double lon2 = qDegreesToRadians(wp2.lon);
+            
+            double dlat = lat2 - lat1;
+            double dlon = lon2 - lon1;
+            
+            double a = qSin(dlat/2) * qSin(dlat/2) + qCos(lat1) * qCos(lat2) * qSin(dlon/2) * qSin(dlon/2);
+            double c = 2 * qAtan2(qSqrt(a), qSqrt(1-a));
+            double distance = 6371.0 * c; // Earth radius in km
+            
+            route.totalDistance += distance * 0.539957; // Convert km to nautical miles
+        }
+    }
+    
+    // Calculate estimated time (assume 10 knots speed)
+    route.estimatedTime = route.totalDistance / 10.0;
 }
 

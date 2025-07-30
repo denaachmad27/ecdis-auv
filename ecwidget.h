@@ -186,12 +186,45 @@ public:
       bool isValid() const { return ECOK(featureHandle); }
   };
 
+  struct RouteWaypoint
+  {
+      double lat;
+      double lon;
+      QString label;
+      QString remark;
+      double turningRadius;
+      bool active;
+      
+      RouteWaypoint() : lat(0.0), lon(0.0), turningRadius(10.0), active(true) {}
+      RouteWaypoint(const Waypoint& wp) : 
+          lat(wp.lat), lon(wp.lon), label(wp.label), 
+          remark(wp.remark), turningRadius(wp.turningRadius), active(wp.active) {}
+  };
+
+  struct Route
+  {
+      int routeId;
+      QString name;
+      QString description;
+      QDateTime createdDate;
+      QDateTime modifiedDate;
+      double totalDistance;      // in nautical miles
+      double estimatedTime;      // in hours
+      QList<RouteWaypoint> waypoints; // Waypoints in this route with full data
+      
+      Route() : routeId(0), totalDistance(0.0), estimatedTime(0.0) {
+          createdDate = QDateTime::currentDateTime();
+          modifiedDate = createdDate;
+      }
+  };
+
   void setActiveFunction(ActiveFunction func) { activeFunction = func; }
 
   void drawOverlayCell();
 
   void drawWaypointMarker(EcCoordinate lat, EcCoordinate lon);
   void drawSingleWaypoint(EcCoordinate lat, EcCoordinate lon, const QString& label, const QColor& color = QColor(255, 140, 0));
+  QPoint findOptimalLabelPosition(int waypointX, int waypointY, const QSize& textSize, int minDistance);
   void drawGhostWaypoint(EcCoordinate lat, EcCoordinate lon, const QString& label);
   void saveWaypoints();
   void removeWaypointAt(int x, int y);
@@ -206,6 +239,15 @@ public:
   int getWaypointCount() const { return waypointList.size(); }
   QList<Waypoint> getWaypoints() const { return waypointList; }
   void clearWaypoints();
+  
+  // Route management functions
+  void saveRoutes();
+  void loadRoutes();
+  QString getRouteFilePath() const;
+  void saveCurrentRoute();
+  QList<Route> getRoutes() const { return routeList; }
+  Route getRouteById(int routeId) const;
+  void calculateRouteData(Route& route);
   bool exportWaypointsToFile(const QString &filename);
   bool importWaypointsFromFile(const QString &filename);
   bool initializeWaypointSystem();
@@ -824,6 +866,7 @@ private:
   bool createWaypointCell();
 
   QList<Waypoint> waypointList;
+  QList<Route> routeList;
   int moveSelectedIndex = -1; // -1 artinya belum ada waypoint dipilih
   
   // Route mode variables
