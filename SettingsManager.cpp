@@ -1,5 +1,6 @@
 #include "SettingsDialog.h"
 #include "SettingsManager.h"
+#include "appconfig.h"
 #include <QSettings>
 
 SettingsManager& SettingsManager::instance() {
@@ -15,9 +16,11 @@ void SettingsManager::load() {
     m_data.moosPort = settings.value("MOOSDB/port", "9000").toString();
 
     // AIS
-    m_data.aisSource = settings.value("AIS/source", "log").toString();
-    m_data.aisIp = settings.value("AIS/ip", "").toString();
-    m_data.aisLogFile = settings.value("AIS/log_file", "").toString();
+    if (AppConfig::isDevelopment()){
+        m_data.aisSource = settings.value("AIS/source", "log").toString();
+        m_data.aisIp = settings.value("AIS/ip", "").toString();
+        m_data.aisLogFile = settings.value("AIS/log_file", "").toString();
+    }
 
     // DISPLAY
     m_data.displayMode = settings.value("Display/mode", "Day").toString();
@@ -48,9 +51,11 @@ void SettingsManager::save(const SettingsData& data) {
     settings.setValue("MOOSDB/port", data.moosPort);
 
     // AIS
-    settings.setValue("AIS/source", data.aisSource);
-    settings.setValue("AIS/ip", data.aisIp);
-    settings.setValue("AIS/log_file", data.aisLogFile);
+    if (AppConfig::isDevelopment()){
+        settings.setValue("AIS/source", data.aisSource);
+        settings.setValue("AIS/ip", data.aisIp);
+        settings.setValue("AIS/log_file", data.aisLogFile);
+    }
 
     // DISPLAY
     settings.setValue("Display/mode", data.displayMode);

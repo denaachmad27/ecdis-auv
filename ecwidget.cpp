@@ -16,6 +16,7 @@
 #include "SettingsManager.h"
 #include "aisdatabasemanager.h"
 #include "aivdoencoder.h"
+#include "appconfig.h"
 #include "editwaypointdialog.h"
 
 #include <QTime>
@@ -1033,36 +1034,34 @@ void EcWidget::paintEvent (QPaintEvent *e)
       }
   }
 
-  // PLEASE WAIT
-
   // Draw ghost waypoint saat move mode
   if (ghostWaypoint.visible) {
       drawGhostWaypoint(ghostWaypoint.lat, ghostWaypoint.lon, ghostWaypoint.label);
   }
 
-  drawGuardZone();
-  // TEMPORARY: Disabled untuk presentasi - obstacle area menyebabkan crash
-  // drawObstacleDetectionArea(painter); // Show obstacle detection area (now safe)
-  //drawRedDotTracker();
-  
-  // Re-enabled with enhanced safety protections
-  drawObstacleMarkers(painter); // Draw obstacle markers with color-coded dots
-  
-  // Draw chart flashing overlay for dangerous obstacles
-  drawChartFlashOverlay(painter);
-  
-  drawRedDotTracker();
+  if (AppConfig::isDevelopment()){
+      drawGuardZone();
 
-  // ========== DRAW TEST GUARDZONE ==========
+      // TEMPORARY: Disabled untuk presentasi - obstacle area menyebabkan crash
+      // drawObstacleDetectionArea(painter); // Show obstacle detection area (now safe)
+      //drawRedDotTracker();
 
-  drawTestGuardSquare(painter);
-  if (testGuardZoneEnabled) {
+      // Re-enabled with enhanced safety protections
+      drawObstacleMarkers(painter); // Draw obstacle markers with color-coded dots
 
+      // Draw chart flashing overlay for dangerous obstacles
+      drawChartFlashOverlay(painter);
+
+      drawRedDotTracker();
+
+      // ========== DRAW TEST GUARDZONE ==========
+
+      drawTestGuardSquare(painter);
+      if (testGuardZoneEnabled) {
+
+      }
   }
   // =======================================
-
-  EcCoordinate lat, lon;
-  _aisObj->getOwnShipPos(lat, lon);
 
   if (!getTrackMMSI().isEmpty() && trackShip)
   {
@@ -1096,7 +1095,7 @@ void EcWidget::paintEvent (QPaintEvent *e)
       painter.setBrush(Qt::red);
       painter.drawPath(path);
   }
-  else if (!qIsNaN(lat) && !qIsNaN(lon) && lat != 0 && lon != 0) {
+  else if (navShip.lat != 0 && navShip.lat != 0) {
       QFont font("Segoe UI", 10, QFont::Bold);
       painter.setFont(font);
 

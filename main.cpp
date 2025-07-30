@@ -61,6 +61,7 @@ int main( int argc, char ** argv )
   qDebug() << "ECDIS Started";
   //qWarning() << "Tes peringatan";
 
+  mw->resize(800, 800);
   mw->showMaximized();
 
   a.connect( &a, SIGNAL(lastWindowClosed()), &a, SLOT(quit()) );

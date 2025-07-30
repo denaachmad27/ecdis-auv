@@ -1,5 +1,6 @@
 #include "SettingsDialog.h"
 #include "SettingsManager.h"
+#include "appconfig.h"
 
 #include <QLineEdit>
 #include <QComboBox>
@@ -114,46 +115,50 @@ void SettingsDialog::setupUI() {
 
     ownShipTab->setLayout(ownShipLayout);
 
-    // --- AIS Tab ---
-    QWidget *aisTab = new QWidget;
-    QFormLayout *aisLayout = new QFormLayout;
+    if (AppConfig::isDevelopment()){
+        // --- AIS Tab ---
+        QWidget *aisTab = new QWidget;
+        QFormLayout *aisLayout = new QFormLayout;
 
-    // AIS Source
-    aisSourceCombo = new QComboBox;
-    aisSourceCombo->addItems({"log", "moosdb", "ip"});
-    aisLayout->addRow("AIS Source:", aisSourceCombo);
+        // AIS Source
+        aisSourceCombo = new QComboBox;
+        aisSourceCombo->addItems({"log", "moosdb", "ip"});
+        aisLayout->addRow("AIS Source:", aisSourceCombo);
 
-    // AIS IP
-    ipLabel = new QLabel("AIS IP:");
-    ipAisLineEdit = new QLineEdit;
-    aisLayout->addRow(ipLabel, ipAisLineEdit);
+        // AIS IP
+        ipLabel = new QLabel("AIS IP:");
+        ipAisLineEdit = new QLineEdit;
+        aisLayout->addRow(ipLabel, ipAisLineEdit);
 
-    // AIS Log File
-    logFileLabel = new QLabel("AIS Log File:");
-    logFileLineEdit = new QLineEdit;
-    logFileLineEdit->setPlaceholderText("Pilih file log...");
-    QPushButton *logFileButton = new QPushButton("Browse...");
-    QHBoxLayout *logInputLayout = new QHBoxLayout;
-    logInputLayout->addWidget(logFileLineEdit);
-    logInputLayout->addWidget(logFileButton);
-    logInputLayout->setContentsMargins(0, 0, 0, 0); // biar rapat
+        // AIS Log File
+        logFileLabel = new QLabel("AIS Log File:");
+        logFileLineEdit = new QLineEdit;
+        logFileLineEdit->setPlaceholderText("Pilih file log...");
+        QPushButton *logFileButton = new QPushButton("Browse...");
+        QHBoxLayout *logInputLayout = new QHBoxLayout;
+        logInputLayout->addWidget(logFileLineEdit);
+        logInputLayout->addWidget(logFileButton);
+        logInputLayout->setContentsMargins(0, 0, 0, 0); // biar rapat
 
-    QWidget *logInputWidget = new QWidget;
-    logInputWidget->setLayout(logInputLayout);
-    aisLayout->addRow(logFileLabel, logInputWidget);
+        QWidget *logInputWidget = new QWidget;
+        logInputWidget->setLayout(logInputLayout);
+        aisLayout->addRow(logFileLabel, logInputWidget);
 
-    aisTab->setLayout(aisLayout);
+        aisTab->setLayout(aisLayout);
 
-    // Browse button action
-    connect(logFileButton, &QPushButton::clicked, this, [=]() {
-        QString file = QFileDialog::getOpenFileName(this, "Select AIS Log File");
-        if (!file.isEmpty()) {
-            logFileLineEdit->setText(file);
-        }
-    });
+        // Browse button action
+        connect(logFileButton, &QPushButton::clicked, this, [=]() {
+            QString file = QFileDialog::getOpenFileName(this, "Select AIS Log File");
+            if (!file.isEmpty()) {
+                logFileLineEdit->setText(file);
+            }
+        });
 
-    // Update visibility
-    connect(aisSourceCombo, &QComboBox::currentTextChanged, this, &SettingsDialog::updateAisWidgetsVisibility);
+        // Update visibility
+        connect(aisSourceCombo, &QComboBox::currentTextChanged, this, &SettingsDialog::updateAisWidgetsVisibility);
+
+        tabWidget->addTab(aisTab, "AIS");
+    }
 
     // Display tab
     QWidget *displayTab = new QWidget;
@@ -290,7 +295,7 @@ void SettingsDialog::setupUI() {
 
     tabWidget->addTab(moosTab, "MOOSDB");
     tabWidget->addTab(ownShipTab, "Own Ship");
-    tabWidget->addTab(aisTab, "AIS");
+
     tabWidget->addTab(displayTab, "Display");
     tabWidget->addTab(guardzoneTab, "GuardZone");
     tabWidget->addTab(alertTab, "Alert");
@@ -312,19 +317,21 @@ void SettingsDialog::loadSettings() {
     moosPortLineEdit->setText(settings.value("MOOSDB/port", "9000").toString());
 
     // AIS
-    QString aisSource = settings.value("AIS/source", "log").toString();
-    int aisIndex = aisSourceCombo->findText(aisSource);
-    if (aisIndex >= 0) {
-        aisSourceCombo->setCurrentIndex(aisIndex);
-    } else {
-        aisSourceCombo->setCurrentIndex(0); // default to first if not found
+    if (AppConfig::isDevelopment()){
+        QString aisSource = settings.value("AIS/source", "log").toString();
+        int aisIndex = aisSourceCombo->findText(aisSource);
+        if (aisIndex >= 0) {
+            aisSourceCombo->setCurrentIndex(aisIndex);
+        } else {
+            aisSourceCombo->setCurrentIndex(0); // default to first if not found
+        }
+
+        ipAisLineEdit->setText(settings.value("AIS/ip", "").toString());
+        logFileLineEdit->setText(settings.value("AIS/log_file", "").toString());
+
+        // Perbarui visibilitas sesuai source
+        updateAisWidgetsVisibility(aisSource);
     }
-
-    ipAisLineEdit->setText(settings.value("AIS/ip", "").toString());
-    logFileLineEdit->setText(settings.value("AIS/log_file", "").toString());
-
-    // Perbarui visibilitas sesuai source
-    updateAisWidgetsVisibility(aisSource);
 
     // Display
     QString displayMode = settings.value("Display/mode", "Day").toString();
@@ -416,9 +423,11 @@ void SettingsDialog::saveSettings() {
     settings.setValue("MOOSDB/port", moosPortLineEdit->text());
 
     // AIS
-    settings.setValue("AIS/source", aisSourceCombo->currentText());
-    settings.setValue("AIS/ip", ipAisLineEdit->text());
-    settings.setValue("AIS/log_file", logFileLineEdit->text());
+    if (AppConfig::isDevelopment()){
+        settings.setValue("AIS/source", aisSourceCombo->currentText());
+        settings.setValue("AIS/ip", ipAisLineEdit->text());
+        settings.setValue("AIS/log_file", logFileLineEdit->text());
+    }
 
     // Display
     settings.setValue("Display/mode", displayModeCombo->currentText());
@@ -470,9 +479,11 @@ SettingsData SettingsDialog::loadSettingsFromFile(const QString &filePath) {
     //data.moosPort = settings.value("MOOSDB/port", "9000").toString();
 
     // AIS
-    data.aisSource = settings.value("AIS/source", "log").toString();
-    data.aisIp = settings.value("AIS/ip", "").toString();
-    data.aisLogFile = settings.value("AIS/log_file", "").toString();
+    if (AppConfig::isDevelopment()){
+        data.aisSource = settings.value("AIS/source", "log").toString();
+        data.aisIp = settings.value("AIS/ip", "").toString();
+        data.aisLogFile = settings.value("AIS/log_file", "").toString();
+    }
 
     // Guardzone
     data.displayMode = settings.value("Display/mode", "Day").toString();
@@ -504,9 +515,11 @@ void SettingsDialog::accept() {
     //data.moosPort = moosPortLineEdit->text();
 
     // AIS
-    data.aisSource = aisSourceCombo->currentText();
-    data.aisIp = ipAisLineEdit->text();
-    data.aisLogFile = logFileLineEdit->text();
+    if (AppConfig::isDevelopment()){
+        data.aisSource = aisSourceCombo->currentText();
+        data.aisIp = ipAisLineEdit->text();
+        data.aisLogFile = logFileLineEdit->text();
+    }
 
     // Display
     data.displayMode = displayModeCombo->currentText();

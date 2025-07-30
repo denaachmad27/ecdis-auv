@@ -141,6 +141,7 @@ protected slots:
     void createDockWindows();
     void createDockNmea();
     void createDockOwnship();
+    //void createLogPanel();
     void addTextToBar(QString);
     void createActions();
     void onClearWaypoints();
