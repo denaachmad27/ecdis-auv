@@ -1545,7 +1545,9 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
     }
 
 
-    pickWindow->show();
+    if (AppConfig::isDevelopment()){
+        pickWindow->show();
+    }
 
     //changeText();
 }
