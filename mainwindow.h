@@ -130,13 +130,19 @@ protected slots:
     void subscribeMOOSDB();
     void stopSubscribeMOOSDB();
 
-    // Waypoint
-    void onCreateWaypoint();
+    // Route - Comprehensive navigation planning
     void onCreateRoute();
-    void onRemoveWaypoint();
+    void onToggleRoutePanel();
+    void onEditRoute();
+    void onInsertWaypoint();
     void onMoveWaypoint();
-    void onEditWaypoint();
-    void onWaypointCreated();
+    void onDeleteWaypoint();
+    void onDeleteRoute();
+    void onImportRoute();
+    void onExportRoute();
+    void onExportAllRoutes();
+    void onClearRoutes();
+    void onWaypointCreated(); // Keep for backward compatibility
 
     void createDockWindows();
     void createDockNmea();

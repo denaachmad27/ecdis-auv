@@ -1,6 +1,9 @@
 // #include <QtGui>
 #include <QtWidgets>
 #include <QtWin>
+#include <QTimer>
+#include <limits>
+#include <cmath>
 #ifndef _WIN32
 #include <QX11Info>
 #endif
@@ -342,11 +345,14 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   setAttribute (Qt::WA_NoSystemBackground);
   setMouseTracking (true);
 
-  // Waypoint
-  loadWaypoints(); // Muat waypoint dari file JSON
+  // Routes (load first to populate waypointList from routes)
+  loadRoutes(); // Muat route dari file JSON dan konversi ke waypoints
   
-  // Routes
-  loadRoutes(); // Muat route dari file JSON
+  // Waypoint (load after routes for single waypoints)
+  loadWaypoints(); // Muat single waypoint dari file JSON
+  
+  // Convert legacy single waypoints to routes for compatibility
+  convertSingleWaypointsToRoutes();
   
   // DEBUGGING: Comment loadGuardZones() to test without auto-loading
   // loadGuardZones();
@@ -972,26 +978,10 @@ void EcWidget::Draw()
     if(showAIS)
         drawAISCell();
 
-    // Gambar waypoint dengan warna sesuai routeId  
-    QList<QColor> routeColors = {
-        QColor(255, 140, 0),     // Orange untuk single waypoints (routeId = 0)
-        QColor(255, 100, 100),   // Merah terang untuk Route 1
-        QColor(100, 255, 100),   // Hijau terang untuk Route 2  
-        QColor(100, 100, 255),   // Biru terang untuk Route 3
-        QColor(255, 255, 100),   // Kuning untuk Route 4
-        QColor(255, 100, 255),   // Magenta untuk Route 5
-        QColor(100, 255, 255),   // Cyan untuk Route 6
-    };
-    
+    // Gambar waypoint dengan warna konsisten
     for (const Waypoint &wp : waypointList)
     {
-        // Pilih warna berdasarkan routeId
-        QColor waypointColor;
-        if (wp.routeId == 0) {
-            waypointColor = routeColors[0]; // Orange untuk single waypoints
-        } else {
-            waypointColor = routeColors[wp.routeId % routeColors.size()];
-        }
+        QColor waypointColor = getRouteColor(wp.routeId);
         
         drawSingleWaypoint(wp.lat, wp.lon, wp.label, waypointColor);
     }
@@ -1002,7 +992,7 @@ void EcWidget::Draw()
 
     drawLeglineLabels();
     
-    // Gambar garis route dengan warna berbeda per route (enhancement)
+    // EMERGENCY FIX: Re-enable stable route drawing for presentation
     drawRouteLines();
 
     // Tidak perlu memanggil drawGuardZone() di sini,
@@ -1042,12 +1032,16 @@ void EcWidget::paintEvent (QPaintEvent *e)
   if (AppConfig::isDevelopment()){
       drawGuardZone();
 
-      // TEMPORARY: Disabled untuk presentasi - obstacle area menyebabkan crash
+      // TEMPORARY: Disabled untuk presentasi - obstacle area menyebukang crash
       // drawObstacleDetectionArea(painter); // Show obstacle detection area (now safe)
       //drawRedDotTracker();
 
       // Re-enabled with enhanced safety protections
       drawObstacleMarkers(painter); // Draw obstacle markers with color-coded dots
+  }
+      
+  // TEMPORARY DISABLE: Route lines drawing to prevent crash during presentation
+  // drawRouteLinesOverlay(painter);
 
       // Draw chart flashing overlay for dangerous obstacles
       drawChartFlashOverlay(painter);
@@ -1060,7 +1054,6 @@ void EcWidget::paintEvent (QPaintEvent *e)
       if (testGuardZoneEnabled) {
 
       }
-  }
   // =======================================
 
   if (!getTrackMMSI().isEmpty() && trackShip)
@@ -1143,7 +1136,7 @@ void EcWidget::paintEvent (QPaintEvent *e)
           }
       }
   }
-}
+} // End paintEvent
 
 void EcWidget::drawOwnShipTrail(QPainter &painter)
 {
@@ -1461,15 +1454,16 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
                 emit waypointCreated();
                 return;
             }
-            else if (activeFunction == CREATE_WAYP)
+            // CREATE_WAYP removed - now only route-based navigation
+            else if (activeFunction == INSERT_WAYP)
             {
-                // Single waypoint creation logic
-                createWaypointAt(lat, lon);
+                // Insert waypoint mode - find closest route segment and insert
+                insertWaypointAt(lat, lon);
                 
-                // End single waypoint mode
+                // Return to PAN mode after insertion
                 activeFunction = PAN;
                 if (mainWindow) {
-                    mainWindow->statusBar()->showMessage(tr("Waypoint created"), 3000);
+                    mainWindow->statusBar()->showMessage(tr("Waypoint inserted"), 3000);
                     mainWindow->setWindowTitle("ECDIS AUV");
                 }
                 emit waypointCreated();
@@ -3044,6 +3038,170 @@ void EcWidget::createWaypointAt(EcCoordinate lat, EcCoordinate lon)
     qDebug() << "[INFO] Waypoint created successfully. Total waypoints:" << waypointList.size();
 }
 
+bool EcWidget::createWaypointInRoute(int routeId, double lat, double lon, const QString& label)
+{
+    qDebug() << "[DEBUG] Creating waypoint in route" << routeId << "at" << lat << lon;
+    
+    // Create new waypoint struct
+    Waypoint newWaypoint;
+    newWaypoint.lat = lat;
+    newWaypoint.lon = lon;
+    newWaypoint.routeId = routeId;
+    
+    // Set label - use provided label or generate one
+    if (label.isEmpty()) {
+        // Count existing waypoints in this route to generate label
+        int waypointCount = 0;
+        for (const auto& wp : waypointList) {
+            if (wp.routeId == routeId) {
+                waypointCount++;
+            }
+        }
+        newWaypoint.label = QString("R%1-WP%2").arg(routeId).arg(waypointCount + 1, 3, 10, QChar('0'));
+    } else {
+        newWaypoint.label = label;
+    }
+    
+    newWaypoint.remark = QString("Route %1 waypoint").arg(routeId);
+    newWaypoint.featureHandle.id = EC_NOCELLID;
+    newWaypoint.featureHandle.offset = 0;
+    
+    // Add to waypoint list
+    waypointList.append(newWaypoint);
+    
+    qDebug() << "[ROUTE] Added waypoint" << newWaypoint.label << "to route" << routeId;
+    
+    // Save waypoints to JSON
+    saveWaypoints();
+    
+    // Update routeList for consistency
+    updateRouteList(routeId);
+    
+    // Save route information
+    saveRoutes();
+    
+    // Force complete chart redraw
+    forceRedraw();
+    
+    return true;
+}
+
+QColor EcWidget::getRouteColor(int routeId)
+{
+    // Consistent color mapping based on routeId
+    static const QList<QColor> routeColors = {
+        QColor(255, 140, 0),   // Orange untuk single waypoints (routeId 0)
+        QColor(255, 100, 100), // Merah untuk Route 1
+        QColor(100, 255, 100), // Hijau untuk Route 2
+        QColor(100, 100, 255), // Biru untuk Route 3
+        QColor(255, 255, 100), // Kuning untuk Route 4
+        QColor(255, 100, 255), // Magenta untuk Route 5
+        QColor(100, 255, 255), // Cyan untuk Route 6
+        QColor(200, 150, 100), // Coklat untuk Route 7
+        QColor(150, 200, 100), // Hijau muda untuk Route 8
+        QColor(100, 150, 200)  // Biru muda untuk Route 9
+    };
+    
+    return routeColors[routeId % routeColors.size()];
+}
+
+bool EcWidget::deleteRoute(int routeId)
+{
+    qDebug() << "[DEBUG] Deleting route" << routeId;
+    
+    if (routeId <= 0) {
+        qDebug() << "[ERROR] Invalid routeId:" << routeId;
+        return false;
+    }
+    
+    // Remove all waypoints with this routeId
+    QList<Waypoint> newWaypointList;
+    int deletedCount = 0;
+    
+    for (const auto& wp : waypointList) {
+        if (wp.routeId != routeId) {
+            newWaypointList.append(wp);
+        } else {
+            deletedCount++;
+        }
+    }
+    
+    if (deletedCount == 0) {
+        qDebug() << "[WARNING] No waypoints found for route" << routeId;
+        return false;
+    }
+    
+    // Update waypoint list
+    waypointList = newWaypointList;
+    
+    // Remove route from routeList
+    QList<Route> newRouteList;
+    for (const auto& route : routeList) {
+        if (route.routeId != routeId) {
+            newRouteList.append(route);
+        }
+    }
+    routeList = newRouteList;
+    
+    qDebug() << "[ROUTE] Deleted route" << routeId << "with" << deletedCount << "waypoints";
+    
+    // Save changes
+    saveWaypoints();
+    saveRoutes();
+    
+    // Force complete chart redraw
+    forceRedraw();
+    
+    return true;
+}
+
+void EcWidget::setRouteVisibility(int routeId, bool visible)
+{
+    routeVisibility[routeId] = visible;
+    qDebug() << "[ROUTE] Set route" << routeId << "visibility to" << visible;
+    forceRedraw(); // Refresh chart
+}
+
+bool EcWidget::isRouteVisible(int routeId) const
+{
+    return routeVisibility.value(routeId, true); // Default visible
+}
+
+void EcWidget::setSelectedRoute(int routeId)
+{
+    selectedRouteId = routeId;
+    qDebug() << "[ROUTE] Selected route" << routeId;
+    // Multiple redraw attempts for route selection
+    forceRedraw();
+    update();
+    repaint();
+    
+    // Delayed redraw as backup
+    QTimer::singleShot(10, this, [this]() {
+        this->forceRedraw();
+    });
+}
+
+void EcWidget::forceRedraw()
+{
+    // Force complete chart redraw
+    draw(true);
+    update();
+    repaint();
+}
+
+void EcWidget::immediateRedraw()
+{
+    // Immediate redraw for route selection
+    qDebug() << "[REDRAW] Starting immediate redraw";
+    draw(true);
+    draw(false);
+    update();
+    repaint();
+    QApplication::processEvents();
+    qDebug() << "[REDRAW] Immediate redraw completed";
+}
+
 void EcWidget::createSeparateRouteWaypoint(const Waypoint &waypoint)
 {
     // Simple approach: Just add to list and save, similar to GuardZone
@@ -3301,6 +3459,11 @@ void EcWidget::saveWaypoints()
 
     for (const Waypoint &wp : waypointList)
     {
+        // Skip route waypoints - they are saved in routes.json
+        if (wp.routeId > 0) {
+            continue;
+        }
+        
         QJsonObject wpObject;
         wpObject["label"] = wp.label;
         wpObject["lat"] = wp.lat;
@@ -3534,16 +3697,7 @@ void EcWidget::drawLeglineLabels()
     QPainter painter(&drawPixmap);
     painter.setRenderHint(QPainter::Antialiasing, true);
     
-    // Warna yang konsisten dengan route colors
-    QList<QColor> routeColors = {
-        QColor(255, 140, 0),     // Orange untuk single waypoints (routeId = 0)
-        QColor(255, 100, 100),   // Merah terang untuk Route 1
-        QColor(100, 255, 100),   // Hijau terang untuk Route 2  
-        QColor(100, 100, 255),   // Biru terang untuk Route 3
-        QColor(255, 255, 100),   // Kuning untuk Route 4
-        QColor(255, 100, 255),   // Magenta untuk Route 5
-        QColor(100, 255, 255),   // Cyan untuk Route 6
-    };
+    // Menggunakan getRouteColor untuk konsistensi
     
     painter.setFont(QFont("Arial", 8, QFont::Bold));
 
@@ -3577,7 +3731,7 @@ void EcWidget::drawLeglineLabels()
         {
             // Set warna teks sesuai dengan routeId
             int routeId = waypointList[i].routeId;
-            QColor textColor = routeColors[routeId % routeColors.size()];
+            QColor textColor = getRouteColor(routeId);
             painter.setPen(textColor);
             
             int midX = (x1 + x2) / 2;
@@ -3596,25 +3750,100 @@ void EcWidget::drawLeglineLabels()
     painter.end();
 }
 
-// ====== ROUTE LINE DRAWING DENGAN KONTROL PENUH ======
+// ====== ROUTE LINE DRAWING OVERLAY (Like GuardZone approach) ======
+void EcWidget::drawRouteLinesOverlay(QPainter& painter)
+{
+    // Safety checks to prevent crash
+    if (waypointList.size() < 2) return;
+    if (!painter.isActive()) {
+        qDebug() << "[ROUTE-OVERLAY-ERROR] QPainter is not active - aborting";
+        return;
+    }
+    
+    try {
+        painter.setRenderHint(QPainter::Antialiasing, true);
+    
+    // Group waypoints by route ID first
+    QMap<int, QList<int>> routeWaypoints; // routeId -> list of waypoint indices
+    
+    for (int i = 0; i < waypointList.size(); ++i) {
+        int routeId = waypointList[i].routeId;
+        if (routeId > 0) { // Only route waypoints, skip single waypoints
+            routeWaypoints[routeId].append(i);
+        }
+    }
+    
+    qDebug() << "[ROUTE-OVERLAY] Drawing" << routeWaypoints.size() << "different routes";
+    
+    // Draw lines within each route separately
+    for (auto it = routeWaypoints.begin(); it != routeWaypoints.end(); ++it) {
+        int routeId = it.key();
+        QList<int> indices = it.value();
+        
+        // Check visibility
+        if (!isRouteVisible(routeId)) {
+            continue;
+        }
+        
+        if (indices.size() < 2) {
+            continue;
+        }
+        
+        // Choose color based on routeId
+        QColor routeColor = getRouteColor(routeId);
+        
+        QPen pen(routeColor);
+        pen.setStyle(Qt::DashLine);
+        
+        // Make selected route thicker and more visible
+        if (routeId == selectedRouteId) {
+            pen.setWidth(4); // Thicker line for selected route
+            pen.setStyle(Qt::SolidLine); // Solid line for selected route
+            routeColor = routeColor.lighter(120); // Slightly lighter color
+            pen.setColor(routeColor);
+        } else {
+            pen.setWidth(2); // Normal width for other routes
+        }
+        
+        painter.setPen(pen);
+        
+        // Draw lines between consecutive waypoints in THIS route only
+        for (int i = 0; i < indices.size() - 1; ++i) {
+            int idx1 = indices[i];
+            int idx2 = indices[i + 1];
+            
+            const Waypoint &wp1 = waypointList[idx1];
+            const Waypoint &wp2 = waypointList[idx2];
+            
+            int x1, y1, x2, y2;
+            if (LatLonToXy(wp1.lat, wp1.lon, x1, y1) && LatLonToXy(wp2.lat, wp2.lon, x2, y2)) {
+                painter.drawLine(x1, y1, x2, y2);
+            }
+        }
+    }
+    
+    } catch (const std::exception& e) {
+        qDebug() << "[ROUTE-OVERLAY-ERROR] Exception in drawRouteLinesOverlay:" << e.what();
+    } catch (...) {
+        qDebug() << "[ROUTE-OVERLAY-ERROR] Unknown exception in drawRouteLinesOverlay";
+    }
+}
+
+// ====== OLD ROUTE LINE DRAWING (DEPRECATED) ======
 void EcWidget::drawRouteLines()
 {
     if (waypointList.size() < 2) return;
     
-    QPainter painter(&drawPixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
+    // EMERGENCY SAFETY CHECK for presentation
+    try {
+        QPainter painter(&drawPixmap);
+        if (!painter.isActive()) {
+            qDebug() << "[ROUTE-LINES-ERROR] QPainter not active - aborting";
+            return;
+        }
+        painter.setRenderHint(QPainter::Antialiasing, true);
     
     // Warna untuk route yang berbeda (harus sama dengan warna waypoint)
-    QList<QColor> routeColors = {
-        QColor(255, 140, 0),     // Orange untuk single waypoints (routeId = 0)
-        QColor(255, 100, 100),   // Merah terang untuk Route 1
-        QColor(100, 255, 100),   // Hijau terang untuk Route 2  
-        QColor(100, 100, 255),   // Biru terang untuk Route 3
-        QColor(255, 255, 100),   // Kuning untuk Route 4
-        QColor(255, 100, 255),   // Magenta untuk Route 5
-        QColor(100, 255, 255),   // Cyan untuk Route 6
-    };
-    
     // APPROACH BARU: Group waypoints by route ID first, then draw lines within each route
     QMap<int, QList<int>> routeWaypoints; // routeId -> list of waypoint indices
     
@@ -3633,17 +3862,34 @@ void EcWidget::drawRouteLines()
         int routeId = it.key();
         QList<int> indices = it.value();
         
+        // Check visibility
+        if (!isRouteVisible(routeId)) {
+            qDebug() << "[ROUTE-DRAW] Route" << routeId << "is hidden, skipping";
+            continue;
+        }
+        
         if (indices.size() < 2) {
             qDebug() << "[ROUTE-DRAW] Route" << routeId << "has only" << indices.size() << "waypoints, skipping lines";
             continue;
         }
         
         // Pilih warna berdasarkan routeId
-        QColor routeColor = routeColors[routeId % routeColors.size()];
+        QColor routeColor = getRouteColor(routeId);
         
         QPen pen(routeColor);
-        pen.setStyle(Qt::DashLine); 
-        pen.setWidth(2);
+        pen.setStyle(Qt::DashLine);
+        
+        // Make selected route thicker and more visible
+        if (routeId == selectedRouteId) {
+            qDebug() << "[ROUTE-DRAW] Drawing SELECTED route" << routeId << "with thick lines";
+            pen.setWidth(4); // Thicker line for selected route
+            pen.setStyle(Qt::SolidLine); // Solid line for selected route
+            routeColor = routeColor.lighter(120); // Slightly lighter color
+            pen.setColor(routeColor);
+        } else {
+            pen.setWidth(2); // Normal width for other routes
+        }
+        
         painter.setPen(pen);
         
         qDebug() << "[ROUTE-DRAW] Drawing" << (indices.size() - 1) << "lines for route" << routeId;
@@ -3667,6 +3913,12 @@ void EcWidget::drawRouteLines()
     
     painter.end();
     qDebug() << "[ROUTE-DRAW] Finished controlled route line drawing";
+    
+    } catch (const std::exception& e) {
+        qDebug() << "[ROUTE-LINES-ERROR] Exception in drawRouteLines:" << e.what();
+    } catch (...) {
+        qDebug() << "[ROUTE-LINES-ERROR] Unknown exception in drawRouteLines";
+    }
 }
 
 void EcWidget::loadWaypoints()
@@ -3722,6 +3974,7 @@ void EcWidget::loadWaypoints()
         currentRouteId = maxRouteId + 1;
 
         qDebug() << "[INFO] Loaded" << validWaypoints << "waypoints from" << filePath << "- Max Route ID:" << maxRouteId;
+        qDebug() << "[INFO] Total waypoints in list after loadWaypoints:" << waypointList.size();
 
         // Redraw waypoint setelah loading
         if (!waypointList.isEmpty())
@@ -10709,12 +10962,109 @@ void EcWidget::loadRoutes()
         }
 
         qDebug() << "[INFO] Loaded" << routeList.size() << "routes from" << filePath;
+        qDebug() << "[INFO] waypointList size before conversion:" << waypointList.size();
+        
+        // Convert loaded routes to waypoints for display
+        convertRoutesToWaypoints();
+        
+        qDebug() << "[INFO] waypointList size after conversion:" << waypointList.size();
+        
         file.close();
     }
     else
     {
         qDebug() << "[ERROR] Failed to open routes file:" << filePath;
     }
+}
+
+void EcWidget::convertRoutesToWaypoints()
+{
+    qDebug() << "[INFO] Converting loaded routes to waypoints for display";
+    
+    // Add waypoints from loaded routes to waypointList (only if not already present)
+    for (const EcWidget::Route& route : routeList) {
+        for (const EcWidget::RouteWaypoint& routeWp : route.waypoints) {
+            
+            // Check if waypoint already exists in waypointList
+            bool exists = false;
+            for (const Waypoint& existingWp : waypointList) {
+                if (existingWp.routeId == route.routeId && 
+                    existingWp.label == routeWp.label &&
+                    qAbs(existingWp.lat - routeWp.lat) < 0.00001 &&
+                    qAbs(existingWp.lon - routeWp.lon) < 0.00001) {
+                    exists = true;
+                    break;
+                }
+            }
+            
+            // Only add if doesn't exist
+            if (!exists) {
+                Waypoint wp;
+                wp.lat = routeWp.lat;
+                wp.lon = routeWp.lon;
+                wp.label = routeWp.label;
+                wp.remark = routeWp.remark;
+                wp.turningRadius = routeWp.turningRadius;
+                wp.active = routeWp.active;
+                wp.routeId = route.routeId;
+                wp.featureHandle.id = EC_NOCELLID;
+                wp.featureHandle.offset = 0;
+                
+                waypointList.append(wp);
+                qDebug() << "[CONVERT] Added waypoint" << wp.label << "from route" << route.routeId;
+            }
+        }
+    }
+    
+    qDebug() << "[INFO] Conversion complete. Total waypoints in list:" << waypointList.size();
+}
+
+void EcWidget::updateRouteList(int routeId)
+{
+    // Find or create route in routeList
+    EcWidget::Route* targetRoute = nullptr;
+    
+    for (auto& route : routeList) {
+        if (route.routeId == routeId) {
+            targetRoute = &route;
+            break;
+        }
+    }
+    
+    if (!targetRoute) {
+        // Create new route
+        EcWidget::Route newRoute;
+        newRoute.routeId = routeId;
+        newRoute.name = QString("Route %1").arg(routeId);
+        newRoute.description = "";
+        newRoute.createdDate = QDateTime::currentDateTime();
+        newRoute.modifiedDate = QDateTime::currentDateTime();
+        routeList.append(newRoute);
+        targetRoute = &routeList.last();
+    }
+    
+    // Clear existing waypoints and rebuild from waypointList
+    targetRoute->waypoints.clear();
+    targetRoute->modifiedDate = QDateTime::currentDateTime();
+    
+    for (const Waypoint& wp : waypointList) {
+        if (wp.routeId == routeId) {
+            EcWidget::RouteWaypoint routeWp;
+            routeWp.lat = wp.lat;
+            routeWp.lon = wp.lon;
+            routeWp.label = wp.label;
+            routeWp.remark = wp.remark;
+            routeWp.turningRadius = wp.turningRadius;
+            routeWp.active = wp.active;
+            
+            targetRoute->waypoints.append(routeWp);
+        }
+    }
+    
+    // Calculate route data
+    calculateRouteData(*targetRoute);
+    
+    qDebug() << "[INFO] Updated route" << routeId << "in routeList with" << targetRoute->waypoints.size() << "waypoints";
 }
 
 QString EcWidget::getRouteFilePath() const
@@ -10821,5 +11171,202 @@ void EcWidget::calculateRouteData(EcWidget::Route& route)
     
     // Calculate estimated time (assume 10 knots speed)
     route.estimatedTime = route.totalDistance / 10.0;
+}
+
+void EcWidget::insertWaypointAt(EcCoordinate lat, EcCoordinate lon)
+{
+    qDebug() << "[INSERT] Inserting waypoint at" << lat << lon;
+
+    if (waypointList.size() < 2) {
+        qDebug() << "[INSERT] Need at least 2 waypoints to insert between";
+        return;
+    }
+
+    // Find the closest route segment to insert the waypoint
+    double minDistance = std::numeric_limits<double>::max();
+    int insertIndex = -1;
+    int targetRouteId = -1;
+
+    // Group waypoints by route ID
+    QMap<int, QList<int>> routeWaypoints;
+    for (int i = 0; i < waypointList.size(); ++i) {
+        if (waypointList[i].routeId > 0) {
+            routeWaypoints[waypointList[i].routeId].append(i);
+        }
+    }
+
+    // For each route, check segments
+    for (auto it = routeWaypoints.begin(); it != routeWaypoints.end(); ++it) {
+        int routeId = it.key();
+        QList<int> indices = it.value();
+        
+        if (indices.size() < 2) continue;
+
+        // Check each segment in this route
+        for (int i = 0; i < indices.size() - 1; ++i) {
+            int idx1 = indices[i];
+            int idx2 = indices[i + 1];
+            
+            const Waypoint& wp1 = waypointList[idx1];
+            const Waypoint& wp2 = waypointList[idx2];
+            
+            // Calculate distance from point to line segment
+            double distance = distanceToLineSegment(lat, lon, wp1.lat, wp1.lon, wp2.lat, wp2.lon);
+            
+            if (distance < minDistance) {
+                minDistance = distance;
+                insertIndex = idx2; // Insert before idx2
+                targetRouteId = routeId;
+            }
+        }
+    }
+
+    if (insertIndex == -1 || targetRouteId == -1) {
+        qDebug() << "[INSERT] No suitable insertion point found";
+        return;
+    }
+
+    // Create new waypoint
+    Waypoint newWaypoint;
+    newWaypoint.lat = lat;
+    newWaypoint.lon = lon;
+    newWaypoint.routeId = targetRouteId;
+    newWaypoint.remark = "Inserted waypoint";
+    newWaypoint.turningRadius = 10.0;
+    newWaypoint.active = true;
+    newWaypoint.featureHandle.id = EC_NOCELLID;
+    newWaypoint.featureHandle.offset = 0;
+
+    // Generate appropriate label
+    QList<int> routeIndices;
+    for (int i = 0; i < waypointList.size(); ++i) {
+        if (waypointList[i].routeId == targetRouteId) {
+            routeIndices.append(i);
+        }
+    }
+    
+    int waypointNumber = routeIndices.size() + 1;
+    newWaypoint.label = QString("R%1-WP%2").arg(targetRouteId).arg(waypointNumber, 3, 10, QChar('0'));
+
+    // Insert waypoint at the correct position
+    waypointList.insert(insertIndex, newWaypoint);
+    
+    // Update labels for waypoints after insertion point
+    updateRouteLabels(targetRouteId);
+
+    qDebug() << "[INSERT] Inserted waypoint" << newWaypoint.label << "into route" << targetRouteId;
+
+    // Save and update
+    saveWaypoints();
+    saveCurrentRoute();
+    Draw();
+    update();
+}
+
+double EcWidget::distanceToLineSegment(double px, double py, double x1, double y1, double x2, double y2)
+{
+    // Calculate distance from point (px, py) to line segment (x1,y1)-(x2,y2)
+    double A = px - x1;
+    double B = py - y1;
+    double C = x2 - x1;
+    double D = y2 - y1;
+
+    double dot = A * C + B * D;
+    double len_sq = C * C + D * D;
+    
+    double param = -1;
+    if (len_sq != 0) {
+        param = dot / len_sq;
+    }
+
+    double xx, yy;
+    if (param < 0) {
+        xx = x1;
+        yy = y1;
+    } else if (param > 1) {
+        xx = x2;
+        yy = y2;
+    } else {
+        xx = x1 + param * C;
+        yy = y1 + param * D;
+    }
+
+    double dx = px - xx;
+    double dy = py - yy;
+    return sqrt(dx * dx + dy * dy);
+}
+
+void EcWidget::updateRouteLabels(int routeId)
+{
+    // Update labels for all waypoints in the specified route
+    QList<int> routeIndices;
+    for (int i = 0; i < waypointList.size(); ++i) {
+        if (waypointList[i].routeId == routeId) {
+            routeIndices.append(i);
+        }
+    }
+
+    // Renumber waypoints in sequence
+    for (int i = 0; i < routeIndices.size(); ++i) {
+        int index = routeIndices[i];
+        waypointList[index].label = QString("R%1-WP%2").arg(routeId).arg(i + 1, 3, 10, QChar('0'));
+    }
+    
+    qDebug() << "[UPDATE-LABELS] Updated" << routeIndices.size() << "labels for route" << routeId;
+}
+
+void EcWidget::convertSingleWaypointsToRoutes()
+{
+    qDebug() << "[ROUTE-CONVERSION] Starting conversion of single waypoints to routes";
+    
+    int singleWaypointCount = 0;
+    int maxRouteId = 0;
+    
+    // Find maximum existing route ID and count single waypoints
+    for (const Waypoint& wp : waypointList) {
+        if (wp.routeId == 0) {
+            singleWaypointCount++;
+        } else if (wp.routeId > maxRouteId) {
+            maxRouteId = wp.routeId;
+        }
+    }
+    
+    if (singleWaypointCount == 0) {
+        qDebug() << "[ROUTE-CONVERSION] No single waypoints found to convert";
+        return;
+    }
+    
+    // Create a special route for single waypoints
+    int singleWaypointsRouteId = maxRouteId + 1;
+    
+    // Convert single waypoints (routeId = 0) to a special route
+    for (Waypoint& wp : waypointList) {
+        if (wp.routeId == 0) {
+            wp.routeId = singleWaypointsRouteId;
+            qDebug() << "[ROUTE-CONVERSION] Converted waypoint" << wp.label << "to route" << singleWaypointsRouteId;
+        }
+    }
+    
+    // Create route entry for converted waypoints
+    if (singleWaypointCount > 0) {
+        EcWidget::Route convertedRoute;
+        convertedRoute.routeId = singleWaypointsRouteId;
+        convertedRoute.name = QString("Legacy Waypoints (Route %1)").arg(singleWaypointsRouteId);
+        convertedRoute.description = QString("Converted from %1 single waypoints for compatibility").arg(singleWaypointCount);
+        
+        // Calculate route data
+        calculateRouteData(convertedRoute);
+        
+        routeList.append(convertedRoute);
+        
+        qDebug() << "[ROUTE-CONVERSION] Created route" << singleWaypointsRouteId 
+                 << "for" << singleWaypointCount << "legacy waypoints";
+        
+        // Save both waypoints and routes
+        saveWaypoints();
+        saveRoutes();
+        
+        qDebug() << "[ROUTE-CONVERSION] Conversion completed successfully";
+    }
 }
 

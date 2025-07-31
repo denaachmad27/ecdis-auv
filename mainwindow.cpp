@@ -757,6 +757,14 @@ MainWindow::MainWindow(QWidget *parent)
   // Setup Route Panel
   setupRoutePanel();
   
+  // Delay refresh route panel untuk memastikan data sudah fully loaded
+  QTimer::singleShot(100, [this]() {
+      if (routePanel) {
+          routePanel->refreshRouteList();
+          qDebug() << "[MAINWINDOW] Route panel refreshed after data load";
+      }
+  });
+  
   createActions();
 
   // PERBAIKAN: Manual sync UI dengan state backend setelah actions dibuat
@@ -794,20 +802,21 @@ MainWindow::MainWindow(QWidget *parent)
   // ===================================================
 
   
-  // Waypoint
-  QMenu *waypointMenu = menuBar()->addMenu("&Waypoint");
+  // Route - Comprehensive navigation planning
+  QMenu *routeMenu = menuBar()->addMenu("&Route");
 
-  waypointMenu->addAction("Create", this, SLOT(onCreateWaypoint()));
-  waypointMenu->addAction("Create Route", this, SLOT(onCreateRoute()));
-  waypointMenu->addSeparator();
-  waypointMenu->addAction("Remove", this, SLOT(onRemoveWaypoint()));
-  waypointMenu->addAction("Move", this, SLOT(onMoveWaypoint()));
-  waypointMenu->addAction("Edit", this, SLOT(onEditWaypoint()));
-
-  waypointMenu->addSeparator();
-  waypointMenu->addAction("Import...", this, SLOT(onImportWaypoints()));
-  waypointMenu->addAction("Export...", this, SLOT(onExportWaypoints()));
-  waypointMenu->addAction("Clear All", this, SLOT(onClearWaypoints()));
+  routeMenu->addAction("Create New Route", this, SLOT(onCreateRoute()));
+  routeMenu->addSeparator();
+  routeMenu->addAction("Edit Route Points", this, SLOT(onEditRoute()));
+  routeMenu->addAction("Insert Waypoint", this, SLOT(onInsertWaypoint()));
+  routeMenu->addAction("Move Waypoint", this, SLOT(onMoveWaypoint()));
+  routeMenu->addAction("Delete Waypoint", this, SLOT(onDeleteWaypoint()));
+  routeMenu->addAction("Delete Route", this, SLOT(onDeleteRoute()));
+  routeMenu->addSeparator();
+  routeMenu->addAction("Import Route...", this, SLOT(onImportRoute()));
+  routeMenu->addAction("Export Route...", this, SLOT(onExportRoute()));
+  routeMenu->addAction("Export All Routes...", this, SLOT(onExportAllRoutes()));
+  routeMenu->addAction("Clear All Routes", this, SLOT(onClearRoutes()));
 
   // GuardZone menu
   if (AppConfig::isDevelopment()) {
@@ -1699,52 +1708,508 @@ void MainWindow::stopSubscribeMOOSDB()
 //////////////////////////////////////////////////////    UNUSED - FOR LOGIC BACKUP ONLY     //////////////////////////////////////////////////////
 
 
-// Waypoint menu handlers
-void MainWindow::onCreateWaypoint()
+// Route menu handlers - Comprehensive navigation planning
+void MainWindow::onToggleRoutePanel()
 {
-    setWindowTitle("ShowRoute     Creating waypoint ...");
-
-    if (ecchart) {
-        ecchart->setActiveFunction(EcWidget::CREATE_WAYP);
+    if (routeDock) {
+        routeDock->setVisible(!routeDock->isVisible());
+        
+        if (routeDock->isVisible()) {
+            statusBar()->showMessage("Route Management Panel opened", 2000);
+        } else {
+            statusBar()->showMessage("Route Management Panel closed", 2000);
+        }
     }
-
-    statusBar()->showMessage("Click on the chart to create a waypoint");
 }
 
-void MainWindow::onRemoveWaypoint()
+void MainWindow::onEditRoute()
 {
-    qDebug() << "Remove Waypoint clicked";
+    qDebug() << "Edit Route clicked";
 
-    setWindowTitle("ECDIS AUV - Remove Waypoint Mode");
-    statusBar()->showMessage("Click a waypoint to remove");
+    setWindowTitle("ECDIS AUV - Edit Route Mode");
+    statusBar()->showMessage("Click on waypoints to edit their properties");
+
+    if (ecchart) {
+        ecchart->setActiveFunction(EcWidget::EDIT_WAYP);
+    }
+
+    // Show route panel for additional editing options
+    if (routeDock) {
+        routeDock->setVisible(true);
+    }
+}
+
+void MainWindow::onInsertWaypoint()
+{
+    if (!ecchart) return;
+
+    // Check if there are any routes
+    QList<EcWidget::Route> routes = ecchart->getRoutes();
+    if (routes.isEmpty()) {
+        QMessageBox::information(this, "Insert Waypoint", 
+            "No routes available. Please create a route first.");
+        return;
+    }
+
+    qDebug() << "Insert Waypoint clicked";
+
+    setWindowTitle("ECDIS AUV - Insert Waypoint Mode");
+    statusBar()->showMessage("Click on the chart between two waypoints to insert a new waypoint in the route");
+
+    ecchart->setActiveFunction(EcWidget::INSERT_WAYP);
+}
+
+void MainWindow::onMoveWaypoint()
+{
+    if (!ecchart) return;
+
+    // Check if there are any waypoints
+    QList<EcWidget::Waypoint> waypoints = ecchart->getWaypoints();
+    if (waypoints.isEmpty()) {
+        QMessageBox::information(this, "Move Waypoint", 
+            "No waypoints available. Please create a route first.");
+        return;
+    }
+
+    qDebug() << "Move Waypoint clicked";
+
+    setWindowTitle("ECDIS AUV - Move Waypoint Mode");
+    statusBar()->showMessage("Click and drag a waypoint to move it to a new position");
+
+    ecchart->setActiveFunction(EcWidget::MOVE_WAYP);
+}
+
+void MainWindow::onDeleteWaypoint()
+{
+    qDebug() << "Delete Waypoint clicked";
+
+    setWindowTitle("ECDIS AUV - Delete Waypoint Mode");
+    statusBar()->showMessage("Click on a waypoint to delete it from the route");
 
     if (ecchart) {
         ecchart->setActiveFunction(EcWidget::REMOVE_WAYP);
     }
 }
 
-void MainWindow::onMoveWaypoint()
+void MainWindow::onDeleteRoute()
 {
-    qDebug() << "Move Waypoint clicked";
+    if (!ecchart) return;
 
-    setWindowTitle("ECDIS AUV - Move Waypoint Mode");
-    statusBar()->showMessage("Click a waypoint to move");
+    // Get available routes with waypoints
+    QList<EcWidget::Route> allRoutes = ecchart->getRoutes();
+    QList<EcWidget::Route> routes;
+    
+    // Filter routes yang memiliki waypoint
+    for (const auto& route : allRoutes) {
+        if (!route.waypoints.isEmpty()) {
+            routes.append(route);
+        }
+    }
+    
+    if (routes.isEmpty()) {
+        QMessageBox::information(this, "Delete Route", "No routes available to delete.");
+        return;
+    }
 
-    if (ecchart) {
-        ecchart->setActiveFunction(EcWidget::MOVE_WAYP);
+    // Let user choose route to delete
+    QStringList routeNames;
+    for (const auto& route : routes) {
+        routeNames << QString("Route %1 (%2 waypoints)")
+            .arg(route.routeId).arg(route.waypoints.size());
+    }
+    
+    bool ok;
+    QString selectedName = QInputDialog::getItem(this, "Delete Route", 
+        "Choose route to delete:", routeNames, 0, false, &ok);
+    
+    if (!ok) return;
+    
+    int selectedIndex = routeNames.indexOf(selectedName);
+    if (selectedIndex < 0) return;
+    
+    int routeIdToDelete = routes[selectedIndex].routeId;
+    QString routeName = QString("Route %1").arg(routeIdToDelete);
+
+    // Confirm deletion
+    QMessageBox::StandardButton reply = QMessageBox::question(this,
+        "Confirm Delete Route",
+        QString("Are you sure you want to delete %1?\n\nThis will remove all %2 waypoints in this route.\nThis action cannot be undone.")
+            .arg(routeName).arg(routes[selectedIndex].waypoints.size()),
+        QMessageBox::Yes | QMessageBox::No);
+
+    if (reply != QMessageBox::Yes) return;
+
+    // Delete all waypoints in this route
+    bool success = ecchart->deleteRoute(routeIdToDelete);
+    
+    if (success) {
+        statusBar()->showMessage(QString("%1 deleted successfully").arg(routeName), 3000);
+        
+        // Refresh route panel if it exists
+        if (routePanel) {
+            routePanel->onRouteDeleted();
+        }
+        
+        QMessageBox::information(this, "Route Deleted", 
+            QString("%1 has been deleted successfully.").arg(routeName));
+    } else {
+        QMessageBox::critical(this, "Delete Error", 
+            QString("Failed to delete %1.").arg(routeName));
     }
 }
 
-
-void MainWindow::onEditWaypoint()
+void MainWindow::onImportRoute()
 {
-    qDebug() << "Edit Waypoint clicked";
+    QString fileName = QFileDialog::getOpenFileName(this,
+        tr("Import Route"), "",
+        tr("JSON Files (*.json);;All Files (*)"));
 
-    setWindowTitle("ECDIS AUV - Edit Waypoint Mode");
-    statusBar()->showMessage("Click a waypoint to edit");
+    if (fileName.isEmpty()) return;
 
-    if (ecchart) {
-        ecchart->setActiveFunction(EcWidget::EDIT_WAYP);
+    QFile file(fileName);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QMessageBox::critical(this, "Import Error", 
+            QString("Failed to open file:\n%1\n\nError: %2").arg(fileName).arg(file.errorString()));
+        return;
+    }
+
+    // Read and parse JSON
+    QByteArray data = file.readAll();
+    file.close();
+
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
+    
+    if (parseError.error != QJsonParseError::NoError) {
+        QMessageBox::critical(this, "Import Error", 
+            QString("Failed to parse JSON file:\n%1\n\nError: %2")
+            .arg(fileName).arg(parseError.errorString()));
+        return;
+    }
+
+    QJsonObject importData = doc.object();
+    
+    // Validate required fields
+    if (!importData.contains("waypoints") || !importData["waypoints"].isArray()) {
+        QMessageBox::critical(this, "Import Error", 
+            "Invalid route file format. Missing 'waypoints' array.");
+        return;
+    }
+
+    if (!ecchart) {
+        QMessageBox::critical(this, "Import Error", "Chart widget not available.");
+        return;
+    }
+
+    // Create new route from imported data
+    QJsonArray waypointsArray = importData["waypoints"].toArray();
+    if (waypointsArray.isEmpty()) {
+        QMessageBox::information(this, "Import Warning", "No waypoints found in the route file.");
+        return;
+    }
+
+    // Try to use original routeId if available, otherwise get next available
+    int originalRouteId = importData["routeId"].toInt();
+    QList<EcWidget::Route> existingRoutes = ecchart->getRoutes();
+    
+    int newRouteId = originalRouteId;
+    
+    // Check if originalRouteId is already taken
+    bool idTaken = false;
+    for (const auto& route : existingRoutes) {
+        if (route.routeId == originalRouteId) {
+            idTaken = true;
+            break;
+        }
+    }
+    
+    // If taken, find next available ID
+    if (idTaken || originalRouteId <= 0) {
+        newRouteId = 1;
+        for (const auto& route : existingRoutes) {
+            if (route.routeId >= newRouteId) {
+                newRouteId = route.routeId + 1;
+            }
+        }
+        
+        QMessageBox::information(this, "Route ID Changed", 
+            QString("Original route ID %1 was already in use.\nRoute imported as Route %2.")
+            .arg(originalRouteId).arg(newRouteId));
+    }
+
+    // Import waypoints and create route
+    bool success = true;
+    for (int i = 0; i < waypointsArray.size(); ++i) {
+        QJsonObject wpObj = waypointsArray[i].toObject();
+        
+        if (!wpObj.contains("lat") || !wpObj.contains("lon")) {
+            QMessageBox::warning(this, "Import Warning", 
+                QString("Waypoint %1 missing coordinates, skipping.").arg(i + 1));
+            continue;
+        }
+
+        double lat = wpObj["lat"].toDouble();
+        double lon = wpObj["lon"].toDouble();
+        QString label = wpObj["label"].toString();
+        QString remark = wpObj["remark"].toString();
+
+        // Create waypoint in the route
+        if (!ecchart->createWaypointInRoute(newRouteId, lat, lon, label.isEmpty() ? QString("WP%1").arg(i + 1) : label)) {
+            success = false;
+            qDebug() << "Failed to create waypoint at" << lat << lon;
+        }
+    }
+
+    if (success) {
+        QString routeName = importData["name"].toString();
+        if (routeName.isEmpty()) {
+            routeName = QString("Imported Route %1").arg(newRouteId);
+        }
+
+        statusBar()->showMessage(QString("Route '%1' imported successfully with %2 waypoints")
+            .arg(routeName).arg(waypointsArray.size()), 5000);
+        
+        QMessageBox::information(this, "Import Successful", 
+            QString("Route '%1' has been imported successfully with %2 waypoints.")
+            .arg(routeName).arg(waypointsArray.size()));
+
+        // Force complete chart redraw
+        ecchart->forceRedraw();
+        ecchart->update();
+        ecchart->repaint();
+        
+        // Refresh the route panel if it exists
+        if (routePanel) {
+            routePanel->onRouteCreated();
+        }
+    } else {
+        QMessageBox::warning(this, "Import Warning", 
+            "Route imported with some errors. Check the log for details.");
+    }
+}
+
+void MainWindow::onExportRoute()
+{
+    if (!ecchart) return;
+
+    // Get available routes with waypoints
+    QList<EcWidget::Route> allRoutes = ecchart->getRoutes();
+    QList<EcWidget::Route> routes;
+    
+    // Filter routes yang memiliki waypoint
+    for (const auto& route : allRoutes) {
+        if (!route.waypoints.isEmpty()) {
+            routes.append(route);
+        }
+    }
+    
+    if (routes.isEmpty()) {
+        QMessageBox::information(this, "Export Route", "No routes with waypoints available to export.");
+        return;
+    }
+
+    // If multiple routes, let user choose
+    int selectedRouteId = -1;
+    if (routes.size() == 1) {
+        selectedRouteId = routes.first().routeId;
+    } else {
+        QStringList routeNames;
+        for (const auto& route : routes) {
+            routeNames << QString("%1 (%2 waypoints)").arg(route.name).arg(route.waypoints.size());
+        }
+        
+        bool ok;
+        QString selectedName = QInputDialog::getItem(this, "Select Route", 
+            "Choose route to export:", routeNames, 0, false, &ok);
+        
+        if (!ok) return;
+        
+        int index = routeNames.indexOf(selectedName);
+        if (index >= 0) {
+            selectedRouteId = routes[index].routeId;
+        }
+    }
+
+    if (selectedRouteId == -1) return;
+
+    // Get file name to save
+    QString fileName = QFileDialog::getSaveFileName(this,
+        tr("Export Route"), QString("Route_%1.json").arg(selectedRouteId),
+        tr("JSON Files (*.json);;All Files (*)"));
+
+    if (fileName.isEmpty()) return;
+
+    // Find the route to export
+    EcWidget::Route routeToExport;
+    bool routeFound = false;
+    for (const auto& route : routes) {
+        if (route.routeId == selectedRouteId) {
+            routeToExport = route;
+            routeFound = true;
+            break;
+        }
+    }
+
+    if (!routeFound) {
+        QMessageBox::critical(this, "Export Error", "Selected route not found.");
+        return;
+    }
+
+    // Create JSON structure for export
+    QJsonObject exportData;
+    exportData["routeId"] = routeToExport.routeId;
+    exportData["name"] = routeToExport.name;
+    exportData["description"] = routeToExport.description;
+    exportData["createdDate"] = routeToExport.createdDate.toString(Qt::ISODate);
+    exportData["modifiedDate"] = routeToExport.modifiedDate.toString(Qt::ISODate);
+    exportData["totalDistance"] = routeToExport.totalDistance;
+    exportData["estimatedTime"] = routeToExport.estimatedTime;
+
+    // Export waypoints
+    QJsonArray waypointsArray;
+    for (const auto& wp : routeToExport.waypoints) {
+        QJsonObject waypointObj;
+        waypointObj["lat"] = wp.lat;
+        waypointObj["lon"] = wp.lon;
+        waypointObj["label"] = wp.label;
+        waypointObj["remark"] = wp.remark;
+        waypointObj["turningRadius"] = wp.turningRadius;
+        waypointObj["active"] = wp.active;
+        waypointsArray.append(waypointObj);
+    }
+    exportData["waypoints"] = waypointsArray;
+
+    // Add export metadata
+    QJsonObject metadata;
+    metadata["exportedBy"] = "ECDIS AUV";
+    metadata["exportDate"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    metadata["version"] = "1.0";
+    exportData["metadata"] = metadata;
+
+    // Write to file
+    QJsonDocument doc(exportData);
+    QFile file(fileName);
+    
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        file.write(doc.toJson(QJsonDocument::Indented));
+        file.close();
+        
+        statusBar()->showMessage(QString("Route exported successfully to: %1").arg(fileName), 5000);
+        QMessageBox::information(this, "Export Successful", 
+            QString("Route '%1' has been exported to:\n%2").arg(routeToExport.name).arg(fileName));
+    } else {
+        QMessageBox::critical(this, "Export Error", 
+            QString("Failed to create export file:\n%1\n\nError: %2").arg(fileName).arg(file.errorString()));
+    }
+}
+
+void MainWindow::onExportAllRoutes()
+{
+    if (!ecchart) return;
+
+    // Get available routes with waypoints
+    QList<EcWidget::Route> allRoutes = ecchart->getRoutes();
+    QList<EcWidget::Route> routes;
+    
+    // Filter routes yang memiliki waypoint
+    for (const auto& route : allRoutes) {
+        if (!route.waypoints.isEmpty()) {
+            routes.append(route);
+        }
+    }
+    
+    if (routes.isEmpty()) {
+        QMessageBox::information(this, "Export All Routes", "No routes with waypoints available to export.");
+        return;
+    }
+
+    // Get directory to save all routes
+    QString dirPath = QFileDialog::getExistingDirectory(this,
+        tr("Select Directory to Export All Routes"), "",
+        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+
+    if (dirPath.isEmpty()) return;
+
+    int successCount = 0;
+    int failCount = 0;
+    QStringList failedRoutes;
+
+    // Export each route
+    for (const auto& route : routes) {
+        QString fileName = QString("%1/Route_%2_%3.json")
+            .arg(dirPath)
+            .arg(route.routeId)
+            .arg(route.name.isEmpty() ? QString("Route%1").arg(route.routeId) : route.name);
+
+        // Create JSON structure for export
+        QJsonObject exportData;
+        exportData["routeId"] = route.routeId;
+        exportData["name"] = route.name;
+        exportData["description"] = route.description;
+        exportData["createdDate"] = route.createdDate.toString(Qt::ISODate);
+        exportData["modifiedDate"] = route.modifiedDate.toString(Qt::ISODate);
+        exportData["totalDistance"] = route.totalDistance;
+        exportData["estimatedTime"] = route.estimatedTime;
+
+        // Export waypoints
+        QJsonArray waypointsArray;
+        for (const auto& wp : route.waypoints) {
+            QJsonObject waypointObj;
+            waypointObj["lat"] = wp.lat;
+            waypointObj["lon"] = wp.lon;
+            waypointObj["label"] = wp.label;
+            waypointObj["remark"] = wp.remark;
+            waypointObj["turningRadius"] = wp.turningRadius;
+            waypointObj["active"] = wp.active;
+            waypointsArray.append(waypointObj);
+        }
+        exportData["waypoints"] = waypointsArray;
+
+        // Add export metadata
+        QJsonObject metadata;
+        metadata["exportedBy"] = "ECDIS AUV";
+        metadata["exportDate"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+        metadata["version"] = "1.0";
+        exportData["metadata"] = metadata;
+
+        // Write to file
+        QJsonDocument doc(exportData);
+        QFile file(fileName);
+        
+        if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            file.write(doc.toJson(QJsonDocument::Indented));
+            file.close();
+            successCount++;
+        } else {
+            failCount++;
+            failedRoutes << QString("Route %1").arg(route.routeId);
+        }
+    }
+
+    // Show result
+    QString message = QString("Export completed!\n\nSuccessful: %1 routes\nFailed: %2 routes")
+        .arg(successCount).arg(failCount);
+    
+    if (failCount > 0) {
+        message += QString("\n\nFailed routes: %1").arg(failedRoutes.join(", "));
+    }
+
+    statusBar()->showMessage(QString("Exported %1 of %2 routes to: %3")
+        .arg(successCount).arg(routes.size()).arg(dirPath), 5000);
+    
+    QMessageBox::information(this, "Export All Routes", message);
+}
+
+void MainWindow::onClearRoutes()
+{
+    QMessageBox::StandardButton reply = QMessageBox::question(this,
+        "Clear All Routes",
+        "Are you sure you want to clear all routes?\nThis action cannot be undone.",
+        QMessageBox::Yes | QMessageBox::No);
+
+    if (reply == QMessageBox::Yes && ecchart) {
+        ecchart->clearWaypoints(); // This will clear all routes
+        statusBar()->showMessage("All routes cleared", 3000);
     }
 }
 
@@ -2123,10 +2588,16 @@ void MainWindow::setupAISTargetPanel()
                 qDebug() << "Added CPA/TCPA Manager to tabbed interface";
             }
             
+            // Add Route Panel to the tabbed interface if available
+            if (routeDock) {
+                tabifyDockWidget(guardZoneDock, routeDock);
+                qDebug() << "Added Route Panel to tabbed interface";
+            }
+            
             // Set GuardZone Manager as the default active tab
             guardZoneDock->raise();
             
-            qDebug() << "Created tabbed dock interface: GuardZone Manager + AIS Target Manager + CPA/TCPA Manager";
+            qDebug() << "Created tabbed dock interface: GuardZone Manager + AIS Target Manager + CPA/TCPA Manager + Route Panel";
         }
         // =================================================
 
@@ -3380,12 +3851,14 @@ void MainWindow::setupRoutePanel()
     routePanel = new RoutePanel(ecchart, this);
     
     // Create dock widget untuk panel
-    routeDock = new QDockWidget(tr("Route Management"), this);
+    routeDock = new QDockWidget(tr("Routes"), this);
     routeDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     routeDock->setWidget(routePanel);
     
     // Add dock to main window
     addDockWidget(Qt::RightDockWidgetArea, routeDock);
+    
+    // Note: Tabify logic moved to setupAISTargetPanel() after all panels are created
     
     // Add Route Panel to Sidebar menu
     QMenu* sidebarMenu = nullptr;
@@ -3409,6 +3882,8 @@ void MainWindow::setupRoutePanel()
             this, &MainWindow::onRouteSelected);
     connect(routePanel, &RoutePanel::routeVisibilityChanged, 
             this, &MainWindow::onRouteVisibilityChanged);
+    connect(routePanel, &RoutePanel::requestCreateRoute,
+            this, &MainWindow::onCreateRoute);
     connect(routePanel, &RoutePanel::statusMessage, 
             this, [this](const QString& message) {
                 statusBar()->showMessage(message, 3000);

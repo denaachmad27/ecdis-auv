@@ -42,7 +42,7 @@ public:
 
 private:
     int routeId;
-    void updateDisplayText(const RouteInfo& routeInfo);
+    void updateDisplayText(const RouteInfo& routeInfo, EcWidget* ecWidget = nullptr);
 };
 
 class RoutePanel : public QWidget
@@ -70,6 +70,7 @@ private slots:
     void onRouteItemSelectionChanged();
     void onRouteItemDoubleClicked(QListWidgetItem* item);
     void onShowContextMenu(const QPoint& pos);
+    void onAddRouteClicked();
     void onRefreshClicked();
     void onClearAllClicked();
     
@@ -83,6 +84,7 @@ signals:
     void routeSelectionChanged(int routeId);
     void routeVisibilityChanged(int routeId, bool visible);
     void statusMessage(const QString& message);
+    void requestCreateRoute();
 
 private:
     EcWidget* ecWidget;
@@ -94,6 +96,7 @@ private:
     
     // Control buttons
     QHBoxLayout* buttonLayout;
+    QPushButton* addRouteButton;
     QPushButton* refreshButton;
     QPushButton* clearAllButton;
     
@@ -104,6 +107,7 @@ private:
     QLabel* totalDistanceLabel;
     QLabel* totalTimeLabel;
     QCheckBox* visibilityCheckBox;
+    QPushButton* addToShipButton;
     
     
     // Helper methods

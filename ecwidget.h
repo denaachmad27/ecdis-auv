@@ -157,14 +157,14 @@ public:
     StereographicProjection = EC_GEO_PROJECTION_STEREOGRAPHIC
   };
 
-  // Waypoint
+  // Navigation Functions
   enum ActiveFunction {
       PAN,
-      CREATE_WAYP,
       CREATE_ROUTE,
-      MOVE_WAYP,
-      REMOVE_WAYP,
-      EDIT_WAYP
+      INSERT_WAYP,     // Insert waypoint in middle of route
+      REMOVE_WAYP,     // Remove waypoint from route
+      EDIT_WAYP,       // Edit waypoint properties
+      MOVE_WAYP        // Move waypoint position
   };
 
   enum DisplayOrientationMode {
@@ -251,7 +251,8 @@ public:
   void editWaypointAt(int x, int y);
   bool resetWaypointCell();
   void drawLeglineLabels();
-  void drawRouteLines(); // Gambar garis route dengan warna berbeda per route
+  void drawRouteLines(); // Gambar garis route dengan warna berbeda per route (DEPRECATED)
+  void drawRouteLinesOverlay(QPainter& painter); // Draw route lines directly to widget like GuardZone
 
   void loadWaypoints();
   QString getWaypointFilePath() const;
@@ -267,6 +268,9 @@ public:
   QList<Route> getRoutes() const { return routeList; }
   Route getRouteById(int routeId) const;
   void calculateRouteData(Route& route);
+  void convertSingleWaypointsToRoutes(); // Convert legacy waypoints to routes
+  void convertRoutesToWaypoints(); // Convert loaded routes to waypoints
+  void updateRouteList(int routeId); // Update routeList when waypoints change
   bool exportWaypointsToFile(const QString &filename);
   bool importWaypointsFromFile(const QString &filename);
   bool initializeWaypointSystem();
@@ -690,8 +694,20 @@ public slots:
 
   // waypoint
   void createWaypointAt(EcCoordinate lat, EcCoordinate lon);
+  bool createWaypointInRoute(int routeId, double lat, double lon, const QString& label = "");
   void createSeparateRouteWaypoint(const Waypoint &waypoint);
   void createSingleWaypoint(const Waypoint &waypoint);
+  void insertWaypointAt(EcCoordinate lat, EcCoordinate lon);
+  double distanceToLineSegment(double px, double py, double x1, double y1, double x2, double y2);
+  void updateRouteLabels(int routeId);
+  QColor getRouteColor(int routeId);
+  bool deleteRoute(int routeId);
+  void forceRedraw();
+  void immediateRedraw(); // Immediate redraw for UI updates
+  void setRouteVisibility(int routeId, bool visible);
+  bool isRouteVisible(int routeId) const;
+  void setSelectedRoute(int routeId);
+  int getSelectedRoute() const { return selectedRouteId; }
 
   // Guardzone
   void performAutoGuardZoneCheck();
@@ -886,6 +902,8 @@ private:
 
   QList<Waypoint> waypointList;
   QList<Route> routeList;
+  QMap<int, bool> routeVisibility; // Track visibility per route
+  int selectedRouteId = -1; // Currently selected route for visual feedback
   int moveSelectedIndex = -1; // -1 artinya belum ada waypoint dipilih
   
   // Route mode variables

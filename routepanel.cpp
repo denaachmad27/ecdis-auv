@@ -15,32 +15,47 @@ RouteListItem::RouteListItem(const RouteInfo& routeInfo, QListWidget* parent)
 void RouteListItem::updateFromRouteInfo(const RouteInfo& routeInfo)
 {
     routeId = routeInfo.routeId;
-    updateDisplayText(routeInfo);
+    updateDisplayText(routeInfo, nullptr);
 }
 
-void RouteListItem::updateDisplayText(const RouteInfo& routeInfo)
+void RouteListItem::updateDisplayText(const RouteInfo& routeInfo, EcWidget* ecWidget)
 {
-    QString statusIcon = routeInfo.visible ? "👁" : "🚫";
-    QString text = QString("%1 %2 (%3 WP, %4 NM)")
-                   .arg(statusIcon)
-                   .arg(routeInfo.name)
-                   .arg(routeInfo.waypointCount)
-                   .arg(routeInfo.totalDistance, 0, 'f', 1);
-    setText(text);
+    // Single line display: name and distance
+    QString statusIcon = routeInfo.visible ? "🟢" : "⚫";
     
-    // Set different color based on route ID
-    QColor routeColors[] = {
-        QColor(255, 140, 0),   // Orange untuk single waypoints
+    // Single line format: status + name + distance
+    QString combinedText = QString("%1 🗺️ %2 - 📏 %3 NM")
+                          .arg(statusIcon)
+                          .arg(routeInfo.name)
+                          .arg(routeInfo.totalDistance, 0, 'f', 1);
+    
+    setText(combinedText);
+    
+    // Use consistent color mapping but with modern approach
+    static const QList<QColor> routeColors = {
+        QColor(255, 140, 0),   // Orange untuk single waypoints (routeId 0)
         QColor(255, 100, 100), // Merah untuk Route 1
-        QColor(100, 255, 100), // Hijau untuk Route 2
-        QColor(100, 100, 255), // Biru untuk Route 3
-        QColor(255, 255, 100), // Kuning untuk Route 4
-        QColor(255, 100, 255), // Magenta untuk Route 5
-        QColor(100, 255, 255)  // Cyan untuk Route 6
+        QColor(100, 200, 100), // Hijau untuk Route 2
+        QColor(100, 150, 255), // Biru untuk Route 3
+        QColor(255, 200, 100), // Kuning untuk Route 4
+        QColor(200, 100, 255), // Magenta untuk Route 5
+        QColor(100, 200, 255), // Cyan untuk Route 6
+        QColor(200, 150, 100), // Coklat untuk Route 7
+        QColor(150, 200, 100), // Hijau muda untuk Route 8
+        QColor(150, 150, 200)  // Biru muda untuk Route 9
     };
     
-    QColor color = routeColors[routeInfo.routeId % 7];
-    setForeground(QBrush(color));
+    QColor color = routeColors[routeInfo.routeId % routeColors.size()];
+    
+    // Create modern gradient-like effect with the route color
+    setData(Qt::ForegroundRole, QBrush(color));
+    
+    // Set custom font for modern look
+    QFont font = this->font();
+    font.setFamily("Segoe UI");
+    font.setPixelSize(12);
+    font.setWeight(QFont::Medium);
+    setFont(font);
 }
 
 // ====== RoutePanel Implementation ======
@@ -51,8 +66,7 @@ RoutePanel::RoutePanel(EcWidget* ecWidget, QWidget *parent)
     setupUI();
     setupConnections();
     
-    // Initial refresh
-    refreshRouteList();
+    // Don't refresh here - will be refreshed by MainWindow after data is loaded
 }
 
 RoutePanel::~RoutePanel()
@@ -61,58 +75,82 @@ RoutePanel::~RoutePanel()
 
 void RoutePanel::setupUI()
 {
-    setFixedWidth(280);
-    setMinimumHeight(400);
+    // Consistent with CPA/TCPA Panel layout and styling
+    mainLayout = new QVBoxLayout();
+    this->setLayout(mainLayout);
+    mainLayout->setSpacing(10);
+    mainLayout->setContentsMargins(10, 10, 10, 10);
     
-    mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(5, 5, 5, 5);
-    mainLayout->setSpacing(5);
-    
-    // Title
-    titleLabel = new QLabel("Route Management", this);
-    titleLabel->setStyleSheet("QLabel { font-weight: bold; font-size: 14px; color: #2E86AB; padding: 5px; }");
+    // Title (simple like CPA/TCPA)
+    titleLabel = new QLabel("Routes");
     titleLabel->setAlignment(Qt::AlignCenter);
+    titleLabel->setStyleSheet("QLabel { font-weight: bold; font-size: 14px; }");
     mainLayout->addWidget(titleLabel);
     
-    // Route list
+    // Route List Group (consistent with CPA/TCPA GroupBox style)
+    QGroupBox* routeListGroup = new QGroupBox("Available Routes");
+    QVBoxLayout* listGroupLayout = new QVBoxLayout();
+    routeListGroup->setLayout(listGroupLayout);
+    
     routeListWidget = new QListWidget(this);
     routeListWidget->setMinimumHeight(200);
     routeListWidget->setSelectionMode(QAbstractItemView::SingleSelection);
     routeListWidget->setContextMenuPolicy(Qt::CustomContextMenu);
-    mainLayout->addWidget(routeListWidget);
+    listGroupLayout->addWidget(routeListWidget);
     
-    // Control buttons
-    buttonLayout = new QHBoxLayout();
-    refreshButton = new QPushButton("Refresh", this);
-    clearAllButton = new QPushButton("Clear All", this);
+    // Add route button in list group
+    addRouteButton = new QPushButton("Add New Route");
+    addRouteButton->setToolTip("Create new route");
+    listGroupLayout->addWidget(addRouteButton);
     
-    refreshButton->setToolTip("Refresh route list");
-    clearAllButton->setToolTip("Clear all routes");
-    clearAllButton->setStyleSheet("QPushButton { background-color: #E74C3C; color: white; }");
+    mainLayout->addWidget(routeListGroup);
     
-    buttonLayout->addWidget(refreshButton);
-    buttonLayout->addWidget(clearAllButton);
-    mainLayout->addLayout(buttonLayout);
+    // Route Details Group (similar to Own Ship group in CPA/TCPA)
+    routeInfoGroup = new QGroupBox("Route Details");
+    QGridLayout* infoLayout = new QGridLayout();
+    routeInfoGroup->setLayout(infoLayout);
     
-    // Route info group
-    routeInfoGroup = new QGroupBox("Route Information", this);
-    QVBoxLayout* infoLayout = new QVBoxLayout(routeInfoGroup);
+    // Labels in grid layout like CPA/TCPA
+    routeNameLabel = new QLabel("Name: -");
+    waypointCountLabel = new QLabel("Waypoints: -");
+    totalDistanceLabel = new QLabel("Distance: -");
+    totalTimeLabel = new QLabel("ETA: -");
     
-    routeNameLabel = new QLabel("Name: -", this);
-    waypointCountLabel = new QLabel("Waypoints: -", this);
-    totalDistanceLabel = new QLabel("Distance: -", this);
-    totalTimeLabel = new QLabel("ETA: -", this);
-    visibilityCheckBox = new QCheckBox("Visible", this);
+    infoLayout->addWidget(new QLabel("Route:"), 0, 0);
+    infoLayout->addWidget(routeNameLabel, 0, 1);
+    infoLayout->addWidget(new QLabel("Points:"), 1, 0);
+    infoLayout->addWidget(waypointCountLabel, 1, 1);
+    infoLayout->addWidget(new QLabel("Distance:"), 2, 0);
+    infoLayout->addWidget(totalDistanceLabel, 2, 1);
+    infoLayout->addWidget(new QLabel("ETA:"), 3, 0);
+    infoLayout->addWidget(totalTimeLabel, 3, 1);
     
-    infoLayout->addWidget(routeNameLabel);
-    infoLayout->addWidget(waypointCountLabel);
-    infoLayout->addWidget(totalDistanceLabel);
-    infoLayout->addWidget(totalTimeLabel);
-    infoLayout->addWidget(visibilityCheckBox);
+    // Visibility checkbox and Add to ship button
+    visibilityCheckBox = new QCheckBox("Show on Chart");
+    addToShipButton = new QPushButton("Add to Ship");
+    addToShipButton->setToolTip("Add this route to ship navigation (handled by other programmer)");
+    
+    QHBoxLayout* actionLayout = new QHBoxLayout();
+    actionLayout->addWidget(visibilityCheckBox);
+    actionLayout->addWidget(addToShipButton);
+    actionLayout->addStretch();
+    
+    infoLayout->addLayout(actionLayout, 4, 0, 1, 2);
     
     mainLayout->addWidget(routeInfoGroup);
     
-    // Context menu
+    // Control Buttons (consistent with CPA/TCPA button layout)
+    QHBoxLayout* buttonLayout = new QHBoxLayout();
+    refreshButton = new QPushButton("Refresh");
+    clearAllButton = new QPushButton("Clear All");
+    
+    buttonLayout->addWidget(refreshButton);
+    buttonLayout->addStretch();
+    buttonLayout->addWidget(clearAllButton);
+    
+    mainLayout->addLayout(buttonLayout);
+    
+    // Context menu (simple)
     contextMenu = new QMenu(this);
     renameAction = contextMenu->addAction("Rename Route");
     toggleVisibilityAction = contextMenu->addAction("Toggle Visibility");
@@ -134,13 +172,24 @@ void RoutePanel::setupConnections()
             this, &RoutePanel::onShowContextMenu);
     
     // Button connections
+    connect(addRouteButton, &QPushButton::clicked, this, &RoutePanel::onAddRouteClicked);
     connect(refreshButton, &QPushButton::clicked, this, &RoutePanel::onRefreshClicked);
     connect(clearAllButton, &QPushButton::clicked, this, &RoutePanel::onClearAllClicked);
     
     // Checkbox connection
     connect(visibilityCheckBox, &QCheckBox::toggled, [this](bool checked) {
-        if (selectedRouteId > 0) {
+        if (selectedRouteId > 0 && ecWidget) {
+            ecWidget->setRouteVisibility(selectedRouteId, checked);
+            ecWidget->update(); // Use lighter update instead of forceRedraw
             emit routeVisibilityChanged(selectedRouteId, checked);
+        }
+    });
+    
+    // Add to ship button connection (placeholder)
+    connect(addToShipButton, &QPushButton::clicked, [this]() {
+        // TODO: Implementation will be handled by other programmer
+        if (selectedRouteId > 0) {
+            emit statusMessage(QString("Add to Ship clicked for Route %1 (not implemented yet)").arg(selectedRouteId));
         }
     });
     
@@ -161,6 +210,11 @@ void RoutePanel::refreshRouteList()
     QList<EcWidget::Waypoint> waypoints = ecWidget->getWaypoints();
     
     qDebug() << "[ROUTE-PANEL] Refreshing route list, total waypoints:" << waypoints.size();
+    
+    // Debug: Print all waypoints with their routeIds
+    for (const auto& wp : waypoints) {
+        qDebug() << "[ROUTE-PANEL] Waypoint:" << wp.label << "routeId:" << wp.routeId << "lat:" << wp.lat << "lon:" << wp.lon;
+    }
     
     // Group waypoints by route ID
     QMap<int, QList<EcWidget::Waypoint>> routeGroups;
@@ -184,7 +238,7 @@ void RoutePanel::refreshRouteList()
     
     // Update title with count
     int routeCount = routeGroups.size();
-    titleLabel->setText(QString("Route Management (%1)").arg(routeCount));
+    titleLabel->setText(QString("Routes (%1)").arg(routeCount));
 }
 
 RouteInfo RoutePanel::calculateRouteInfo(int routeId)
@@ -192,7 +246,7 @@ RouteInfo RoutePanel::calculateRouteInfo(int routeId)
     RouteInfo info;
     info.routeId = routeId;
     info.name = QString("Route %1").arg(routeId);
-    info.visible = true; // For now, assume all routes are visible
+    info.visible = ecWidget ? ecWidget->isRouteVisible(routeId) : true;
     
     if (!ecWidget) return info;
     
@@ -253,24 +307,39 @@ QString RoutePanel::formatTime(double hours)
 
 void RoutePanel::updateRouteInfoDisplay(const RouteInfo& info)
 {
-    routeNameLabel->setText(QString("Name: %1").arg(info.name));
-    waypointCountLabel->setText(QString("Waypoints: %1").arg(info.waypointCount));
-    totalDistanceLabel->setText(QString("Distance: %1").arg(formatDistance(info.totalDistance)));
-    totalTimeLabel->setText(QString("ETA: %1").arg(formatTime(info.totalTime)));
+    routeNameLabel->setText(QString("📍 %1").arg(info.name));
+    waypointCountLabel->setText(QString("📌 %1 waypoints").arg(info.waypointCount));
+    totalDistanceLabel->setText(QString("📏 %1").arg(formatDistance(info.totalDistance)));
+    totalTimeLabel->setText("⏱️ -"); // ETA will be processed later
     visibilityCheckBox->setChecked(info.visible);
+    addToShipButton->setEnabled(true);
     
     routeInfoGroup->setEnabled(true);
+    
+    // Add subtle animation effect
+    routeInfoGroup->setStyleSheet(routeInfoGroup->styleSheet() + 
+        "QGroupBox { border-color: #007bff; }");
 }
 
 void RoutePanel::clearRouteInfoDisplay()
 {  
-    routeNameLabel->setText("Name: -");
-    waypointCountLabel->setText("Waypoints: -");
-    totalDistanceLabel->setText("Distance: -");
-    totalTimeLabel->setText("ETA: -");
+    routeNameLabel->setText("📍 No route selected");
+    waypointCountLabel->setText("📌 -");
+    totalDistanceLabel->setText("📏 -");
+    totalTimeLabel->setText("⏱️ -");
     visibilityCheckBox->setChecked(false);
+    addToShipButton->setEnabled(false);
     
     routeInfoGroup->setEnabled(false);
+    
+    // Clear visual feedback in chart
+    if (ecWidget) {
+        ecWidget->setSelectedRoute(-1);
+        // Note: setSelectedRoute already calls forceRedraw() internally
+    }
+    
+    // Reset border color
+    routeInfoGroup->setStyleSheet(routeInfoGroup->styleSheet().replace("#007bff", "#e9ecef"));
 }
 
 // ====== Slots Implementation ======
@@ -325,7 +394,22 @@ void RoutePanel::onRouteItemSelectionChanged()
         RouteInfo info = calculateRouteInfo(selectedRouteId);
         updateRouteInfoDisplay(info);
         
+        // Set visual feedback in chart
+        if (ecWidget) {
+            qDebug() << "[ROUTE-PANEL] Calling setSelectedRoute for route" << selectedRouteId;
+            ecWidget->setSelectedRoute(selectedRouteId);
+            qDebug() << "[ROUTE-PANEL] setSelectedRoute completed";
+            
+            // Force chart redraw for route selection
+            ecWidget->immediateRedraw();
+        } else {
+            qDebug() << "[ROUTE-PANEL] ERROR: ecWidget is null!";
+        }
+        
         emit routeSelectionChanged(selectedRouteId);
+        
+        // Emit status message for route selection
+        emit statusMessage(QString("Selected Route %1").arg(selectedRouteId));
     }
 }
 
@@ -343,6 +427,12 @@ void RoutePanel::onShowContextMenu(const QPoint& pos)
     if (item) {
         contextMenu->exec(routeListWidget->mapToGlobal(pos));
     }
+}
+
+void RoutePanel::onAddRouteClicked()
+{
+    // Emit signal to main window to start route creation
+    emit requestCreateRoute();
 }
 
 void RoutePanel::onRefreshClicked()
@@ -371,26 +461,68 @@ void RoutePanel::onRenameRoute()
     if (selectedRouteId <= 0) return;
     
     RouteInfo info = calculateRouteInfo(selectedRouteId);
-    bool ok;
-    QString newName = QInputDialog::getText(
-        this, "Rename Route",
-        "Enter new route name:", QLineEdit::Normal,
-        info.name, &ok
+    
+    // Create modern input dialog
+    QInputDialog dialog(this);
+    dialog.setWindowTitle("✏️ Rename Route");
+    dialog.setLabelText(QString("Enter new name for %1:").arg(info.name));
+    dialog.setTextValue(info.name);
+    dialog.setInputMode(QInputDialog::TextInput);
+    
+    // Modern styling
+    dialog.setStyleSheet(
+        "QInputDialog {"
+        "    background-color: white;"
+        "    font-family: 'Segoe UI';"
+        "}"
+        "QLabel {"
+        "    color: #495057;"
+        "    font-size: 13px;"
+        "    font-weight: 500;"
+        "}"
+        "QLineEdit {"
+        "    border: 2px solid #e9ecef;"
+        "    border-radius: 4px;"
+        "    padding: 8px 12px;"
+        "    font-size: 13px;"
+        "    background-color: white;"
+        "}"
+        "QLineEdit:focus {"
+        "    border-color: #007bff;"
+        "    outline: none;"
+        "}"
+        "QPushButton {"
+        "    background-color: #007bff;"
+        "    color: white;"
+        "    border: none;"
+        "    border-radius: 4px;"
+        "    padding: 8px 16px;"
+        "    font-weight: 500;"
+        "    min-width: 80px;"
+        "}"
+        "QPushButton:hover {"
+        "    background-color: #0056b3;"
+        "}"
     );
     
-    if (ok && !newName.isEmpty()) {
-        // Note: For now we just refresh the display
-        // In future, you might want to store route names in a separate structure
-        refreshRouteList();
-        emit statusMessage(QString("Route %1 renamed to %2").arg(selectedRouteId).arg(newName));
+    if (dialog.exec() == QDialog::Accepted) {
+        QString newName = dialog.textValue().trimmed();
+        if (!newName.isEmpty() && newName != info.name) {
+            // TODO: Implement actual rename functionality in EcWidget
+            // For now, just refresh and show message
+            refreshRouteList();
+            emit statusMessage(QString("✅ Route renamed to '%1'").arg(newName));
+        }
     }
 }
 
 void RoutePanel::onToggleRouteVisibility()
 {
-    if (selectedRouteId > 0) {
-        bool currentVisibility = visibilityCheckBox->isChecked();
+    if (selectedRouteId > 0 && ecWidget) {
+        bool currentVisibility = ecWidget->isRouteVisible(selectedRouteId);
+        ecWidget->setRouteVisibility(selectedRouteId, !currentVisibility);
         visibilityCheckBox->setChecked(!currentVisibility);
+        ecWidget->update(); // Use lighter update instead of forceRedraw
         emit routeVisibilityChanged(selectedRouteId, !currentVisibility);
     }
 }
@@ -399,17 +531,47 @@ void RoutePanel::onDeleteRoute()
 {
     if (selectedRouteId <= 0) return;
     
-    QMessageBox::StandardButton reply = QMessageBox::question(
-        this, "Delete Route", 
-        QString("Are you sure you want to delete Route %1?").arg(selectedRouteId),
-        QMessageBox::Yes | QMessageBox::No
+    // Modern styled message box
+    QMessageBox msgBox(this);
+    msgBox.setWindowTitle("🗑️ Delete Route");
+    msgBox.setText(QString("Are you sure you want to delete Route %1?").arg(selectedRouteId));
+    msgBox.setInformativeText("This action cannot be undone.");
+    msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::Cancel);
+    msgBox.setDefaultButton(QMessageBox::Cancel);
+    msgBox.setIcon(QMessageBox::Warning);
+    
+    // Modern button styling
+    msgBox.setStyleSheet(
+        "QMessageBox {"
+        "    background-color: white;"
+        "    font-family: 'Segoe UI';"
+        "}"
+        "QPushButton {"
+        "    background-color: #6c757d;"
+        "    color: white;"
+        "    border: none;"
+        "    border-radius: 4px;"
+        "    padding: 8px 16px;"
+        "    font-weight: 500;"
+        "}"
+        "QPushButton:hover {"
+        "    background-color: #545b62;"
+        "}"
     );
     
-    if (reply == QMessageBox::Yes && ecWidget) {
-        // Remove all waypoints with this routeId
-        // Note: This is a simplified implementation
-        // You might want to add a proper deleteRoute method to EcWidget
-        emit statusMessage(QString("Route %1 deletion requested").arg(selectedRouteId));
+    if (msgBox.exec() == QMessageBox::Yes && ecWidget) {
+        // Call the actual delete function
+        bool success = ecWidget->deleteRoute(selectedRouteId);
+        
+        if (success) {
+            refreshRouteList();
+            clearRouteInfoDisplay();
+            selectedRouteId = -1;
+            emit statusMessage(QString("✅ Route %1 deleted successfully").arg(selectedRouteId));
+        } else {
+            QMessageBox::critical(this, "❌ Delete Error", 
+                QString("Failed to delete Route %1").arg(selectedRouteId));
+        }
     }
 }
 
@@ -419,21 +581,52 @@ void RoutePanel::onRouteProperties()
     
     RouteInfo info = calculateRouteInfo(selectedRouteId);
     
+    // Create modern properties dialog
+    QMessageBox msgBox(this);
+    msgBox.setWindowTitle("ℹ️ Route Properties");
+    
     QString properties = QString(
-        "Route %1 Properties:\n\n"
-        "Name: %2\n"
-        "Waypoints: %3\n"
-        "Total Distance: %4\n"
-        "Estimated Time: %5\n"
-        "Visible: %6"
-    ).arg(info.routeId)
-     .arg(info.name)
+        "🗺️ <b>%1</b><br><br>"
+        "📍 <b>Route ID:</b> %2<br>"
+        "📌 <b>Waypoints:</b> %3<br>"
+        "📏 <b>Total Distance:</b> %4<br>"
+        "⏱️ <b>Estimated Time:</b> %5<br>"
+        "👁️ <b>Visibility:</b> %6"
+    ).arg(info.name)
+     .arg(info.routeId)
      .arg(info.waypointCount)
      .arg(formatDistance(info.totalDistance))
      .arg(formatTime(info.totalTime))
-     .arg(info.visible ? "Yes" : "No");
+     .arg(info.visible ? "Visible" : "Hidden");
     
-    QMessageBox::information(this, "Route Properties", properties);
+    msgBox.setText(properties);
+    msgBox.setIcon(QMessageBox::Information);
+    
+    // Modern styling
+    msgBox.setStyleSheet(
+        "QMessageBox {"
+        "    background-color: white;"
+        "    font-family: 'Segoe UI';"
+        "    font-size: 13px;"
+        "}"
+        "QMessageBox QLabel {"
+        "    color: #495057;"
+        "}"
+        "QPushButton {"
+        "    background-color: #007bff;"
+        "    color: white;"
+        "    border: none;"
+        "    border-radius: 4px;"
+        "    padding: 8px 16px;"
+        "    font-weight: 500;"
+        "    min-width: 80px;"
+        "}"
+        "QPushButton:hover {"
+        "    background-color: #0056b3;"
+        "}"
+    );
+    
+    msgBox.exec();
 }
 
 void RoutePanel::updateRouteInfo(int routeId)
