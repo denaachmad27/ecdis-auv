@@ -981,18 +981,19 @@ void EcWidget::Draw()
     // Gambar waypoint dengan warna konsisten
     for (const Waypoint &wp : waypointList)
     {
+        // Check visibility - skip hidden routes
+        if (wp.routeId > 0 && !isRouteVisible(wp.routeId)) {
+            continue; // Skip waypoints from hidden routes
+        }
+        
         QColor waypointColor = getRouteColor(wp.routeId);
         
         drawSingleWaypoint(wp.lat, wp.lon, wp.label, waypointColor);
     }
 
-    // HAPUS: Garis legline antar waypoint - sekarang digantikan oleh drawRouteLines()
-    // Kode ini DIHAPUS untuk menghindari duplikasi dengan drawRouteLines()
-    // drawRouteLines() sudah menggambar garis dengan warna yang benar per route
-
     drawLeglineLabels();
     
-    // EMERGENCY FIX: Re-enable stable route drawing for presentation
+    // Re-enable stable route drawing for presentation
     drawRouteLines();
 
     // Tidak perlu memanggil drawGuardZone() di sini,
@@ -3200,15 +3201,16 @@ bool EcWidget::isRouteVisible(int routeId) const
 void EcWidget::setSelectedRoute(int routeId)
 {
     selectedRouteId = routeId;
-    qDebug() << "[ROUTE] Selected route" << routeId;
-    // Multiple redraw attempts for route selection
-    forceRedraw();
-    update();
-    repaint();
+    // Multiple Draw() calls to ensure route selection works
+    Draw();
     
-    // Delayed redraw as backup
-    QTimer::singleShot(10, this, [this]() {
-        this->forceRedraw();
+    // Delayed Draw() calls to handle timing issues
+    QTimer::singleShot(50, this, [this]() {
+        this->Draw();
+    });
+    
+    QTimer::singleShot(100, this, [this]() {
+        this->Draw();
     });
 }
 
@@ -3733,11 +3735,15 @@ void EcWidget::drawLeglineLabels()
 
     for (int i = 0; i < waypointList.size() - 1; ++i)
     {
-        // MODIFIKASI: Hanya gambar label untuk waypoint dalam route yang sama
+        // Skip jika waypoint dari route yang berbeda
         if (waypointList[i].routeId != waypointList[i + 1].routeId) {
-            qDebug() << "[LEGLINE] Skipping label between different routes:" 
-                     << waypointList[i].routeId << "and" << waypointList[i + 1].routeId;
             continue; // Skip jika beda route
+        }
+        
+        // Check visibility - skip labels for hidden routes
+        int routeId = waypointList[i].routeId;
+        if (routeId > 0 && !isRouteVisible(routeId)) {
+            continue; // Skip labels from hidden routes
         }
         
         EcCoordinate lat1 = waypointList[i].lat;
@@ -3885,7 +3891,7 @@ void EcWidget::drawRouteLines()
         }
     }
     
-    qDebug() << "[ROUTE-DRAW] Found" << routeWaypoints.size() << "different routes";
+    // Draw routes with visibility check
     
     // Draw lines within each route separately
     for (auto it = routeWaypoints.begin(); it != routeWaypoints.end(); ++it) {
@@ -3909,9 +3915,8 @@ void EcWidget::drawRouteLines()
         QPen pen(routeColor);
         pen.setStyle(Qt::DashLine);
         
-        // Make selected route thicker and more visible
+        // Visual feedback for selected route
         if (routeId == selectedRouteId) {
-            qDebug() << "[ROUTE-DRAW] Drawing SELECTED route" << routeId << "with thick lines";
             pen.setWidth(4); // Thicker line for selected route
             pen.setStyle(Qt::SolidLine); // Solid line for selected route
             routeColor = routeColor.lighter(120); // Slightly lighter color
@@ -3922,7 +3927,7 @@ void EcWidget::drawRouteLines()
         
         painter.setPen(pen);
         
-        qDebug() << "[ROUTE-DRAW] Drawing" << (indices.size() - 1) << "lines for route" << routeId;
+        // Draw lines for this route
         
         // Draw lines between consecutive waypoints in THIS route only
         for (int i = 0; i < indices.size() - 1; ++i) {
