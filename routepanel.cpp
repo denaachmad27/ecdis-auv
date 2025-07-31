@@ -125,20 +125,37 @@ void RoutePanel::setupUI()
     infoLayout->addWidget(new QLabel("ETA:"), 3, 0);
     infoLayout->addWidget(totalTimeLabel, 3, 1);
     
-    // Visibility checkbox and Add to ship button
+    // Visibility checkbox and Add to ship button & detach
     visibilityCheckBox = new QCheckBox("Show on Chart");
     addToShipButton = new QPushButton("Attach to Ship");
+    detachFromShipButton = new QPushButton("Detach from Ship");
 
-    addToShipButton->setToolTip("Add this route to ship navigation (handled by other programmer)");
+    addToShipButton->setToolTip("Add this route to ship navigation");
+    detachFromShipButton->setToolTip("Remove this route from ship navigation");
+
+    // Awal: addToShip aktif, detachFromShip pasif
+    addToShipButton->setEnabled(true);
+    detachFromShipButton->setEnabled(false);
     
     QHBoxLayout* actionLayout = new QHBoxLayout();
     actionLayout->addWidget(visibilityCheckBox);
     actionLayout->addWidget(addToShipButton);
+    actionLayout->addWidget(detachFromShipButton);
     actionLayout->addStretch();
     
     infoLayout->addLayout(actionLayout, 4, 0, 1, 2);
-    
     mainLayout->addWidget(routeInfoGroup);
+
+    // Interaksi: toggle enable/disable antar tombol
+    connect(addToShipButton, &QPushButton::clicked, [=]() {
+        addToShipButton->setEnabled(false);
+        detachFromShipButton->setEnabled(true);
+    });
+
+    connect(detachFromShipButton, &QPushButton::clicked, [=]() {
+        addToShipButton->setEnabled(true);
+        detachFromShipButton->setEnabled(false);
+    });
     
     // Control Buttons (consistent with CPA/TCPA button layout)
     QHBoxLayout* buttonLayout = new QHBoxLayout();
@@ -190,8 +207,17 @@ void RoutePanel::setupConnections()
     connect(addToShipButton, &QPushButton::clicked, [this]() {
         // TODO: Implementation will be handled by other programmer
         if (selectedRouteId > 0) {
-            //emit ecWidget->publishRoutesToMOOSDB(selectedRouteItem);
-            emit publishToMOOSDB();
+            publishToMOOSDB();
+            ecWidget->clearOwnShipTrail();
+            ecWidget->setOwnShipTrail(true);
+        }
+    });
+
+    // Detach from ship button
+    connect(detachFromShipButton, &QPushButton::clicked, [this]() {
+        if (selectedRouteId > 0) {
+            ecWidget->publishToMOOSDB("WAYPT_MAP", "");
+            ecWidget->setOwnShipTrail(false);
         }
     });
     
@@ -321,7 +347,7 @@ void RoutePanel::publishToMOOSDB(){
     }
 
     QString result = "pts={" + coordPairs.join(": ") + "}";
-    qDebug() << result;
+    ecWidget->publishToMOOSDB("WAYPT_MAP", result);
 }
 
 QString RoutePanel::formatDistance(double distanceNM)

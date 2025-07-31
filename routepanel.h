@@ -110,6 +110,7 @@ private:
     QLabel* totalTimeLabel;
     QCheckBox* visibilityCheckBox;
     QPushButton* addToShipButton;
+    QPushButton* detachFromShipButton;
     
     
     // Helper methods

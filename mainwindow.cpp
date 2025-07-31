@@ -2598,10 +2598,16 @@ void MainWindow::setupAISTargetPanel()
             
             // Set GuardZone Manager as the default active tab
             guardZoneDock->raise();
+
+            guardZonePanel->hide();
+            guardZoneDock->hide();
             
             qDebug() << "Created tabbed dock interface: GuardZone Manager + AIS Target Manager + CPA/TCPA Manager + Route Panel";
         }
         // =================================================
+
+        aisTargetDock->hide();
+        aisTargetPanel->hide();
 
         qDebug() << "AIS Target panel setup completed successfully";
 
@@ -2676,6 +2682,9 @@ void MainWindow::setupObstacleDetectionPanel()
         // =================================================
 
         qDebug() << "Obstacle Detection panel setup completed successfully";
+
+        obstacleDetectionPanel->hide();
+        obstacleDetectionDock->hide();
 
     } catch (const std::exception& e) {
         qDebug() << "Critical error setting up Obstacle Detection panel:" << e.what();

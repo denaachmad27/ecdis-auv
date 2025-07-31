@@ -562,6 +562,8 @@ public:
 
   // Draws the chart
   void Draw();
+  void waypointDraw();
+  void ownShipDraw();
 
   // Waypoint
   void SetWaypointPos(EcCoordinate lat, EcCoordinate lon);

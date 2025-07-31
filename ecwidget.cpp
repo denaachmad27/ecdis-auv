@@ -975,26 +975,12 @@ void EcWidget::draw(bool upd)
 void EcWidget::Draw()
 {
     draw(true);
-    if(showAIS)
+    if(showAIS){
         drawAISCell();
-
-    // Gambar waypoint dengan warna konsisten
-    for (const Waypoint &wp : waypointList)
-    {
-        // Check visibility - skip hidden routes
-        if (wp.routeId > 0 && !isRouteVisible(wp.routeId)) {
-            continue; // Skip waypoints from hidden routes
-        }
-        
-        QColor waypointColor = getRouteColor(wp.routeId);
-        
-        drawSingleWaypoint(wp.lat, wp.lon, wp.label, waypointColor);
     }
 
-    drawLeglineLabels();
-    
-    // Re-enable stable route drawing for presentation
-    drawRouteLines();
+    // Draw Waypoint
+    waypointDraw();
 
     // Tidak perlu memanggil drawGuardZone() di sini,
     // karena akan dipanggil secara otomatis di paintEvent
@@ -1006,6 +992,26 @@ void EcWidget::Draw()
     // ======================================================
 
     update();
+}
+
+void EcWidget::waypointDraw(){
+    // Gambar waypoint dengan warna konsisten
+    for (const Waypoint &wp : waypointList)
+    {
+        // Check visibility - skip hidden routes
+        if (wp.routeId > 0 && !isRouteVisible(wp.routeId)) {
+            continue; // Skip waypoints from hidden routes
+        }
+
+        QColor waypointColor = getRouteColor(wp.routeId);
+
+        drawSingleWaypoint(wp.lat, wp.lon, wp.label, waypointColor);
+    }
+
+    drawLeglineLabels();
+
+    // Re-enable stable route drawing for presentation
+    drawRouteLines();
 }
 /*---------------------------------------------------------------------------*/
 
@@ -2444,6 +2450,8 @@ void EcWidget::processAISJson(const QByteArray& rawData){
 }
 
 void EcWidget::publishToMOOSDB(QString varName, QString data){
+    qDebug() << data;
+
     QJsonObject jsonDataOut {{varName, data}};
     QJsonDocument jsonDocOut(jsonDataOut);
 
@@ -2462,6 +2470,8 @@ void EcWidget::publishToMOOSDB(QString varName, QString data){
     }
 
     sendSocket->deleteLater();
+
+    qDebug() << sendData;
 }
 
 QString EcWidget::convertJsonData(const QString &jsonString){
@@ -2614,67 +2624,75 @@ void EcWidget::drawAISCell()
   drawPixmap = QPixmap::fromX11Pixmap(x11pixmap);
 
 #endif
+
   // Draw red dot tracker overlay
   drawRedDotTracker();
 
-  // DRAWING OWNSHIP CUSTOM
-  if (showCustomOwnShip) {
-      AISTargetData ownShipData = Ais::instance()->getOwnShipVar();
-
-      // Untuk simulasi, gunakan data simulasi
-      if (simulationActive && ownShipInSimulation) {
-          ownShipData.lat = ownShip.lat;
-          ownShipData.lon = ownShip.lon;
-          ownShipData.cog = ownShip.cog;          // ⭐ Gunakan COG dari simulasi
-          ownShipData.heading = ownShip.heading;  // ⭐ Gunakan heading dari simulasi
-          ownShipData.sog = ownShip.sog;
-      }
-
-      if (ownShipData.lat != 0.0 && ownShipData.lon != 0.0) {
-          int x, y;
-          if (LatLonToXy(ownShipData.lat, ownShipData.lon, x, y)) {
-
-              QPainter painter(&drawPixmap);
-              painter.setRenderHint(QPainter::Antialiasing, true);
-
-              // ⭐ Pastikan COG dan heading dalam range 0-360
-              double cog = ownShipData.cog - GetHeading();
-              while (cog < 0) cog += 360;
-              while (cog >= 360) cog -= 360;
-
-              double heading = ownShipData.heading - GetHeading();
-              while (heading < 0) heading += 360;
-              while (heading >= 360) heading -= 360;
-
-              // ⭐ PANGGIL DENGAN PARAMETER BARU: COG, Heading, SOG
-              drawOwnShipIcon(painter, x, y, cog, heading, ownShipData.sog);
-
-              // GAMBAR EKOR OWNSHIP
-              if (showOwnShipTrail){
-                  drawOwnShipTrail(painter);
-              }
-
-              painter.end();
-          }
-      }
-
-      if (SettingsManager::instance().data().orientationMode == HeadUp){
-          SetHeading(ownShipData.heading);
-          mainWindow->oriEditSetText(ownShipData.heading);
-      }
-      else if (SettingsManager::instance().data().orientationMode == CourseUp){
-          SetHeading(SettingsManager::instance().data().courseUpHeading);
-          mainWindow->oriEditSetText(SettingsManager::instance().data().courseUpHeading);
-      }
-      else {
-          SetHeading(0);
-      }
-  }
+  // OWNSHIP DRAW
+  waypointDraw();
+  ownShipDraw();
 
   update();
 
   emit projection();
   emit scale( currentScale );
+}
+
+// OWNSHIP DRAW
+void EcWidget::ownShipDraw(){
+    // DRAWING OWNSHIP CUSTOM
+    if (showCustomOwnShip) {
+        AISTargetData ownShipData = Ais::instance()->getOwnShipVar();
+
+        // Untuk simulasi, gunakan data simulasi
+        if (simulationActive && ownShipInSimulation) {
+            ownShipData.lat = ownShip.lat;
+            ownShipData.lon = ownShip.lon;
+            ownShipData.cog = ownShip.cog;          // ⭐ Gunakan COG dari simulasi
+            ownShipData.heading = ownShip.heading;  // ⭐ Gunakan heading dari simulasi
+            ownShipData.sog = ownShip.sog;
+        }
+
+        if (ownShipData.lat != 0.0 && ownShipData.lon != 0.0) {
+            int x, y;
+            if (LatLonToXy(ownShipData.lat, ownShipData.lon, x, y)) {
+
+                QPainter painter(&drawPixmap);
+                painter.setRenderHint(QPainter::Antialiasing, true);
+
+                // ⭐ Pastikan COG dan heading dalam range 0-360
+                double cog = ownShipData.cog - GetHeading();
+                while (cog < 0) cog += 360;
+                while (cog >= 360) cog -= 360;
+
+                double heading = ownShipData.heading - GetHeading();
+                while (heading < 0) heading += 360;
+                while (heading >= 360) heading -= 360;
+
+                // GAMBAR EKOR OWNSHIP
+                if (showOwnShipTrail){
+                    drawOwnShipTrail(painter);
+                }
+
+                // ⭐ PANGGIL DENGAN PARAMETER BARU: COG, Heading, SOG
+                drawOwnShipIcon(painter, x, y, cog, heading, ownShipData.sog);
+
+                painter.end();
+            }
+        }
+
+        if (SettingsManager::instance().data().orientationMode == HeadUp){
+            SetHeading(ownShipData.heading);
+            mainWindow->oriEditSetText(ownShipData.heading);
+        }
+        else if (SettingsManager::instance().data().orientationMode == CourseUp){
+            SetHeading(SettingsManager::instance().data().courseUpHeading);
+            mainWindow->oriEditSetText(SettingsManager::instance().data().courseUpHeading);
+        }
+        else {
+            SetHeading(0);
+        }
+    }
 }
 
 void EcWidget::setMainWindow(MainWindow *mw) {
