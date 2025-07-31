@@ -181,7 +181,7 @@ void RoutePanel::setupConnections()
     connect(visibilityCheckBox, &QCheckBox::toggled, [this](bool checked) {
         if (selectedRouteId > 0 && ecWidget) {
             ecWidget->setRouteVisibility(selectedRouteId, checked);
-            ecWidget->update(); // Use lighter update instead of forceRedraw
+            ecWidget->Draw(); // Use Draw() like route selection fix
             emit routeVisibilityChanged(selectedRouteId, checked);
         }
     });
@@ -427,14 +427,9 @@ void RoutePanel::onRouteItemSelectionChanged()
         
         // Set visual feedback in chart
         if (ecWidget) {
-            qDebug() << "[ROUTE-PANEL] Calling setSelectedRoute for route" << selectedRouteId;
             ecWidget->setSelectedRoute(selectedRouteId);
-            qDebug() << "[ROUTE-PANEL] setSelectedRoute completed";
-            
-            // Force chart redraw for route selection
+            // Additional redraw call for safety
             ecWidget->immediateRedraw();
-        } else {
-            qDebug() << "[ROUTE-PANEL] ERROR: ecWidget is null!";
         }
         
         emit routeSelectionChanged(selectedRouteId);
