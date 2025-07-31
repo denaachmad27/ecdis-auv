@@ -1,6 +1,8 @@
 #ifndef ROUTEPANEL_H
 #define ROUTEPANEL_H
 
+#include "ecwidget.h"
+
 #include <QWidget>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -127,6 +129,8 @@ private:
     QAction* propertiesAction;
     
     int selectedRouteId;
+    QList<EcWidget::Waypoint> getWaypointById(int routeId);
+    void publishToMOOSDB();
 };
 
 #endif // ROUTEPANEL_H

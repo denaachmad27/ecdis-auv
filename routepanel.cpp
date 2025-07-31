@@ -127,7 +127,8 @@ void RoutePanel::setupUI()
     
     // Visibility checkbox and Add to ship button
     visibilityCheckBox = new QCheckBox("Show on Chart");
-    addToShipButton = new QPushButton("Add to Ship");
+    addToShipButton = new QPushButton("Attach to Ship");
+
     addToShipButton->setToolTip("Add this route to ship navigation (handled by other programmer)");
     
     QHBoxLayout* actionLayout = new QHBoxLayout();
@@ -189,7 +190,8 @@ void RoutePanel::setupConnections()
     connect(addToShipButton, &QPushButton::clicked, [this]() {
         // TODO: Implementation will be handled by other programmer
         if (selectedRouteId > 0) {
-            emit statusMessage(QString("Add to Ship clicked for Route %1 (not implemented yet)").arg(selectedRouteId));
+            //emit ecWidget->publishRoutesToMOOSDB(selectedRouteItem);
+            emit publishToMOOSDB();
         }
     });
     
@@ -289,8 +291,37 @@ RouteInfo RoutePanel::calculateRouteInfo(int routeId)
         info.totalDistance = totalDistance;
         info.totalTime = totalDistance / 10.0; // Assume 10 knots speed
     }
-    
+
     return info;
+}
+
+QList<EcWidget::Waypoint> RoutePanel::getWaypointById(int routeId)
+{
+    if (!ecWidget) return {};
+
+    // Get waypoints for this route
+    QList<EcWidget::Waypoint> waypoints = ecWidget->getWaypoints();
+    QList<EcWidget::Waypoint> routeWaypoints;
+
+    for (const auto& wp : waypoints) {
+        if (wp.routeId == routeId) {
+            routeWaypoints.append(wp);
+        }
+    }
+
+    return routeWaypoints;
+}
+
+void RoutePanel::publishToMOOSDB(){
+    QList<EcWidget::Waypoint> selectedData = getWaypointById(selectedRouteId);
+
+    QStringList coordPairs;
+    for (const EcWidget::Waypoint& wp : selectedData) {
+        coordPairs << QString::number(wp.lat, 'f', 6) + ", " + QString::number(wp.lon, 'f', 6);
+    }
+
+    QString result = "pts={" + coordPairs.join(": ") + "}";
+    qDebug() << result;
 }
 
 QString RoutePanel::formatDistance(double distanceNM)

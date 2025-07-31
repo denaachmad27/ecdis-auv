@@ -1501,7 +1501,9 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
 
 	ecchart->GetPickedFeatures(pickedFeatureList);
 
-    pickWindow->fill(pickedFeatureList);
+    if (AppConfig::isDevelopment()){
+        pickWindow->fill(pickedFeatureList);
+    }
 
     //pickWindow->fillJson(pickedFeatureList);
 
