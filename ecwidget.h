@@ -655,6 +655,9 @@ public:
   void processAis(QString);
   void publishToMOOSDB(QString, QString);
 
+  QString convertJsonData(const QString &jsonString);
+  void publishRoutesToMOOSDB(const QString data);
+
   // Method untuk akses AIS data dari luar
   bool hasAISData() const;
   QList<AISTargetData> getAISTargets() const;

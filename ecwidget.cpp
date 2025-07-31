@@ -2463,6 +2463,36 @@ void EcWidget::publishToMOOSDB(QString varName, QString data){
     sendSocket->deleteLater();
 }
 
+QString EcWidget::convertJsonData(const QString &jsonString){
+    QJsonDocument doc = QJsonDocument::fromJson(jsonString.toUtf8());
+    if (!doc.isObject()) return {};
+
+    QJsonArray waypoints = doc.object().value("waypoints").toArray();
+    if (waypoints.isEmpty()) return "pts={}";
+
+    QString result = "pts={";
+
+    for (int i = 0; i < waypoints.size(); ++i) {
+        auto wp = waypoints[i].toObject();
+        double lat = wp["lat"].toDouble();
+        double lon = wp["lon"].toDouble();
+
+        result += QString("%1,%2").arg(lat, 0, 'f', 6).arg(lon, 0, 'f', 6);
+        if (i != waypoints.size() - 1)
+            result += ":";
+    }
+
+    result += "}";
+
+    return result;
+}
+
+void EcWidget::publishRoutesToMOOSDB(const QString data){
+    QString publishData = convertJsonData(data);
+
+    publishToMOOSDB("WAYPT_MAP", publishData);
+}
+
 // Read AIS data from AIS Server and display the AIS targets on the chart display.
 //////////////////////////////////////////////////////////////////////////////////
 void EcWidget::ReadFromServer( const QString &tcpAddress )
