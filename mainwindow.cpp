@@ -168,7 +168,6 @@ void MainWindow::createActions()
     connect(connectAct, SIGNAL(triggered()), this, SLOT(subscribeMOOSDB()));
     fileToolBar->addAction(connectAct);
     connectAct->setToolTip(tr("Reconnect MOOSDB"));
-    connectAct->setEnabled(true);
 
     const QIcon disconnectIcon = QIcon::fromTheme("import-disconnect", QIcon(":/images/disconnect.png"));
     disconnectAct = new QAction(disconnectIcon, tr("&Disconnect"), this);
@@ -176,7 +175,6 @@ void MainWindow::createActions()
     connect(disconnectAct, SIGNAL(triggered()), this, SLOT(stopSubscribeMOOSDB()));
     fileToolBar->addAction(disconnectAct);
     disconnectAct->setToolTip(tr("Disconnect MOOSDB"));
-    disconnectAct->setEnabled(false);
 
     const QIcon settingIcon = QIcon::fromTheme("import-setting", QIcon(":/images/setting.png"));
     QAction *settingAct = new QAction(settingIcon, tr("&Setting"), this);
@@ -507,7 +505,9 @@ MainWindow::MainWindow(QWidget *parent)
   ecchart->InitAIS( dict );
 
   // Start subscribe MOOSDB
-  // ecchart->startAISSubscribe();
+  if (AppConfig::isProduction()){
+      ecchart->startAISSubscribe();
+  }
 
   // Create the main user interface 
   connect(ecchart, SIGNAL(scale(int)), this, SLOT( onScale(int)));  
@@ -567,15 +567,18 @@ MainWindow::MainWindow(QWidget *parent)
               moosLedCircle->setStyleSheet("background-color: green; border-radius: 6px;");
               moosStatusText->setText(" MOOS: Connected");
               moosStatusText->setStyleSheet("color: green; font-weight: bold;");
+
+              connectAct->setEnabled(false);
+              disconnectAct->setEnabled(true);
           } else {
               moosLedCircle->setStyleSheet("background-color: red; border-radius: 6px;");
               moosStatusText->setText(" MOOS: Disconnected");
               moosStatusText->setStyleSheet("color: red; font-weight: bold;");
+
+              connectAct->setEnabled(true);
+              disconnectAct->setEnabled(false);
           }
       });
-
-      connect(ecchart->getAisSub(), &AISSubscriber::connectionStatusChanged,
-              this, &MainWindow::onMoosConnectionStatusChanged);
   });
 
   statusBar()->addPermanentWidget(new QLabel("Chart Rotation:", statusBar()));
