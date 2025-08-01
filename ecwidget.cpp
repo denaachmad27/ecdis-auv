@@ -2516,7 +2516,7 @@ QString EcWidget::convertJsonData(const QString &jsonString){
 void EcWidget::publishRoutesToMOOSDB(const QString data){
     QString publishData = convertJsonData(data);
 
-    publishToMOOSDB("WAYPT_MAP", publishData);
+    publishToMOOSDB("WAYPT_NAV", publishData);
 }
 
 AISSubscriber* EcWidget::getAisSub() const{
