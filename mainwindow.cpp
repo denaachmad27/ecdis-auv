@@ -110,16 +110,17 @@ void MainWindow::addTextToBar(QString text){
 void MainWindow::createActions()
 {
     QToolBar *fileToolBar = addToolBar(tr("File"));
+    addToolBar(Qt::LeftToolBarArea, fileToolBar);
 
     fileToolBar->setStyleSheet("QToolButton { margin-right: 5px; margin-left: 5px; margin-bottom: 5px; margin-top: 5px}");
 
-    const QIcon importIcon = QIcon::fromTheme("import-tree", QIcon(":/images/import.png"));
-    QAction *importAct = new QAction(importIcon, tr("&Import Tree"), this);
-    importAct->setShortcuts(QKeySequence::New);
-    //importAct->setStatusTip(tr("Import tree"));
-    connect(importAct, SIGNAL(triggered()), this, SLOT(onImportTree()));
-    fileToolBar->addAction(importAct);
-    importAct->setToolTip(tr("Import"));
+    // const QIcon importIcon = QIcon::fromTheme("import-tree", QIcon(":/images/import.png"));
+    // QAction *importAct = new QAction(importIcon, tr("&Import Tree"), this);
+    // importAct->setShortcuts(QKeySequence::New);
+    // //importAct->setStatusTip(tr("Import tree"));
+    // connect(importAct, SIGNAL(triggered()), this, SLOT(onImportTree()));
+    // fileToolBar->addAction(importAct);
+    // importAct->setToolTip(tr("Import"));
 
     const QIcon zoomInIcon = QIcon::fromTheme("import-zoomin", QIcon(":/images/zoom-in.png"));
     QAction *zoomInAct = new QAction(zoomInIcon, tr("&Zoom In"), this);
@@ -153,13 +154,13 @@ void MainWindow::createActions()
     fileToolBar->addAction(rotateRightAct);
     rotateRightAct->setToolTip(tr("Rotate right"));
 
-    const QIcon aisIcon = QIcon::fromTheme("import-ais", QIcon(":/images/ais.png"));
-    QAction *aisAct = new QAction(aisIcon, tr("&Ais"), this);
-    aisAct->setShortcuts(QKeySequence::New);
-    //aisAct->setStatusTip(tr("Ais"));
-    connect(aisAct, SIGNAL(triggered()), this, SLOT(onAIS()));
-    fileToolBar->addAction(aisAct);
-    aisAct->setToolTip(tr("AIS"));
+    // const QIcon aisIcon = QIcon::fromTheme("import-ais", QIcon(":/images/ais.png"));
+    // QAction *aisAct = new QAction(aisIcon, tr("&Ais"), this);
+    // aisAct->setShortcuts(QKeySequence::New);
+    // //aisAct->setStatusTip(tr("Ais"));
+    // connect(aisAct, SIGNAL(triggered()), this, SLOT(onAIS()));
+    // fileToolBar->addAction(aisAct);
+    // aisAct->setToolTip(tr("AIS"));
 
     const QIcon connectIcon = QIcon::fromTheme("import-connect", QIcon(":/images/connect.png"));
     QAction *connectAct = new QAction(connectIcon, tr("&connect"), this);
@@ -173,9 +174,17 @@ void MainWindow::createActions()
     QAction *disconnectAct = new QAction(disconnectIcon, tr("&disconnect"), this);
     disconnectAct->setShortcuts(QKeySequence::New);
     //disconnectAct->setStatusTip(tr("Disconnect MOOSDB"));
-    disconnect(disconnectAct, SIGNAL(triggered()), this, SLOT(stopSubscribeMOOSDB()));
+    connect(disconnectAct, SIGNAL(triggered()), this, SLOT(stopSubscribeMOOSDB()));
     fileToolBar->addAction(disconnectAct);
     disconnectAct->setToolTip(tr("Disconnect MOOSDB"));
+
+    const QIcon settingIcon = QIcon::fromTheme("import-setting", QIcon(":/images/setting.png"));
+    QAction *settingAct = new QAction(settingIcon, tr("&Setting"), this);
+    settingAct->setShortcuts(QKeySequence::New);
+    //settingAct->setStatusTip(tr("setting MOOSDB"));
+    connect(settingAct, SIGNAL(triggered()), this, SLOT(openSettingsDialog()));
+    fileToolBar->addAction(settingAct);
+    settingAct->setToolTip(tr("Settings Manager"));
 
     // const QIcon saveIcon = QIcon::fromTheme("document-save", QIcon(":/images/save.png"));
     // QAction *saveAct = new QAction(saveIcon, tr("&Save..."), this);
