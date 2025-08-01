@@ -693,6 +693,9 @@ public:
   void clearOwnShipTrail();
   double haversine(double lat1, double lon1, double lat2, double lon2);
 
+  // GETTER SETTER AISSUB VAR
+  AISSubscriber* getAisSub() const;
+
 public slots:
   void updateAISTargetsList();
   void addOrUpdateAISTarget(const AISTargetData& target);
@@ -718,7 +721,6 @@ public slots:
   void performAutoGuardZoneCheck();
   void setGuardZoneAutoCheck(bool enabled);
   void setGuardZoneCheckInterval(int intervalMs);
-
 
 signals:
   // Drawing signals
@@ -755,6 +757,9 @@ signals:
   void alertTriggered(const AlertData& alert);
   void criticalAlertTriggered(const AlertData& alert);
   void alertSystemStatusChanged(bool enabled);
+
+  // CONNECTION STATUS
+  void aisSubCreated(AISSubscriber *subscriber);
 
 private slots:
   void slotUpdateAISTargets( Bool bSymbolize );

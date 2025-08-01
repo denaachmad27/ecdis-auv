@@ -2234,6 +2234,9 @@ void EcWidget::startAISConnection()
     threadAIS = new QThread(this);
     subscriber = new AISSubscriber();
 
+    // TO TELL THE WORLD THAT U HAVE CREATE AISSUB!!
+    emit aisSubCreated(subscriber);
+
     subscriber->moveToThread(threadAIS);
 
     QString sshIP = SettingsManager::instance().data().moosIp;
@@ -2283,19 +2286,31 @@ void EcWidget::startAISConnection()
 void EcWidget::stopAISConnection()
 {
     if (subscriber) {
-        // Pastikan disconnectFromHost dijalankan di thread-nya subscriber
+        // Hubungkan ke slot lambda sementara
+        connect(subscriber, &AISSubscriber::disconnected, this, [this]() {
+            qDebug() << "[EcWidget] Subscriber disconnected, cleaning up";
+
+            if (threadAIS) {
+                threadAIS->quit();
+                threadAIS->wait();
+                threadAIS->deleteLater();
+                threadAIS = nullptr;
+            }
+
+            // Aman untuk kosongkan subscriber setelah benar-benar disconnect
+            subscriber = nullptr;
+        });
+
+        // Minta disconnect secara asinkron
         QMetaObject::invokeMethod(subscriber, "disconnectFromHost", Qt::QueuedConnection);
-    }
-
-    if (threadAIS) {
-        threadAIS->quit();
-        threadAIS->wait();
-        threadAIS->deleteLater();
-        threadAIS = nullptr;
-
-        // Pastikan pointer subscriber tidak langsung dihapus,
-        // biarkan dia deleteLater() sendiri kalau perlu.
-        subscriber = nullptr;
+    } else {
+        // Kalau subscriber sudah null, tetap bersihkan thread kalau ada
+        if (threadAIS) {
+            threadAIS->quit();
+            threadAIS->wait();
+            threadAIS->deleteLater();
+            threadAIS = nullptr;
+        }
     }
 }
 
@@ -2502,6 +2517,10 @@ void EcWidget::publishRoutesToMOOSDB(const QString data){
     QString publishData = convertJsonData(data);
 
     publishToMOOSDB("WAYPT_MAP", publishData);
+}
+
+AISSubscriber* EcWidget::getAisSub() const{
+    return subscriber;
 }
 
 // Read AIS data from AIS Server and display the AIS targets on the chart display.

@@ -559,16 +559,23 @@ MainWindow::MainWindow(QWidget *parent)
   // Tambahkan ke paling kiri status bar
   statusBar()->addWidget(moosStatusWidget);  // kiri
 
-  connect(aisSub, &AISSubscriber::connectionStatusChanged, this, [=](bool connected) {
-      if (connected) {
-          moosLedCircle->setStyleSheet("background-color: green; border-radius: 6px;");
-          moosStatusText->setText(" MOOS: Connected");
-          moosStatusText->setStyleSheet("color: green; font-weight: bold;");
-      } else {
-          moosLedCircle->setStyleSheet("background-color: red; border-radius: 6px;");
-          moosStatusText->setText(" MOOS: Disconnected");
-          moosStatusText->setStyleSheet("color: red; font-weight: bold;");
-      }
+  connect(ecchart, &EcWidget::aisSubCreated, this, [this](AISSubscriber* sub) {
+      qDebug() << "aisSub created, now connecting signal...";
+      connect(sub, &AISSubscriber::connectionStatusChanged, this, [this](bool connected) {
+          qDebug() << "[MainWindow] connectionStatusChanged called, connected =" << connected;
+          if (connected) {
+              moosLedCircle->setStyleSheet("background-color: green; border-radius: 6px;");
+              moosStatusText->setText(" MOOS: Connected");
+              moosStatusText->setStyleSheet("color: green; font-weight: bold;");
+          } else {
+              moosLedCircle->setStyleSheet("background-color: red; border-radius: 6px;");
+              moosStatusText->setText(" MOOS: Disconnected");
+              moosStatusText->setStyleSheet("color: red; font-weight: bold;");
+          }
+      });
+
+      connect(ecchart->getAisSub(), &AISSubscriber::connectionStatusChanged,
+              this, &MainWindow::onMoosConnectionStatusChanged);
   });
 
   statusBar()->addPermanentWidget(new QLabel("Chart Rotation:", statusBar()));

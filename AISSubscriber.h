@@ -49,6 +49,9 @@ signals:
     void processingData(double, double, double, double, double, double, double, double, double);
     void processingAis(QString);
 
+    // CONNECTION STATUS
+    void connectionStatusChanged(bool connected);
+
 private slots:
     void onReadyRead();
     void onSocketError(QAbstractSocket::SocketError socketError);

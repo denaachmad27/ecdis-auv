@@ -77,6 +77,9 @@ public slots:
     void onEnableRedDotTracker(bool enabled);
     void onAttachRedDotToShip(bool attached);
 
+    // Enable and Disable icon
+    void onMoosConnectionStatusChanged(bool connected);
+
 protected slots:
     void onReload();
 
@@ -244,9 +247,6 @@ private slots:
     void onConfigureGuardZoneAutoCheck();
     void onShowGuardZoneStatus();
 
-    // Enable and Disable icon
-    void onMoosConnectionStatusChanged(bool connected);
-
 private:
     GuardZonePanel* guardZonePanel;
     QDockWidget* guardZoneDock;
@@ -298,7 +298,6 @@ private:
 
     // Connection status bar
     QLabel *moosStatusLabel;
-    AISSubscriber *aisSub;
 
     QLabel *moosLedCircle;
     QLabel *moosStatusText;
