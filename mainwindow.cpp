@@ -506,9 +506,6 @@ MainWindow::MainWindow(QWidget *parent)
   // Iinitialize the AIS settings
   ecchart->InitAIS( dict );
 
-  // Start subscribe MOOSDB
-  // ecchart->startAISSubscribe();
-
   // Create the main user interface 
   connect(ecchart, SIGNAL(scale(int)), this, SLOT( onScale(int)));  
   connect(ecchart, SIGNAL(projection()), this, SLOT( onProjection()));  
@@ -1121,6 +1118,11 @@ MainWindow::MainWindow(QWidget *parent)
       // ecchart->setGuardZoneAutoCheck(true); // Tidak perlu karena sudah default true di EcWidget
       
       qDebug() << "[STARTUP] Menu states synchronized with backend: GuardZone=true, AutoCheck=true";
+  }
+
+  // Start subscribe MOOSDB
+  if (AppConfig::isProduction()){
+      ecchart->startAISSubscribe();
   }
 }
 
@@ -4147,4 +4149,3 @@ void MainWindow::onCreateRoute()
     statusBar()->showMessage(tr("Route Mode: Click to add waypoints. Press ESC or right-click to end route creation"), 0);
     setWindowTitle("ECDIS AUV - Create Route");
 }
-
