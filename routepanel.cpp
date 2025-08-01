@@ -216,7 +216,7 @@ void RoutePanel::setupConnections()
     // Detach from ship button
     connect(detachFromShipButton, &QPushButton::clicked, [this]() {
         if (selectedRouteId > 0) {
-            ecWidget->publishToMOOSDB("WAYPT_MAP", "");
+            ecWidget->publishToMOOSDB("WAYPT_NAV", "");
             ecWidget->setOwnShipTrail(false);
         }
     });
@@ -347,7 +347,7 @@ void RoutePanel::publishToMOOSDB(){
     }
 
     QString result = "pts={" + coordPairs.join(": ") + "}";
-    ecWidget->publishToMOOSDB("WAYPT_MAP", result);
+    ecWidget->publishToMOOSDB("WAYPT_NAV", result);
 }
 
 QString RoutePanel::formatDistance(double distanceNM)

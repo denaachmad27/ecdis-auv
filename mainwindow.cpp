@@ -301,7 +301,7 @@ void MainWindow::stopAisRecord(){
 void MainWindow::nmeaDecode(){
     ecchart->setOwnShipTrail(true);
 
-    // ecchart->publishToMOOSDB("WAYPT_MAP", "pts={-7.12, 112.01}");
+    ecchart->publishToMOOSDB("WAYPT_NAV", "pts={-7.12, 112.01}");
 }
 
 void MainWindow::onNmeaReceived(const QString& line) {
