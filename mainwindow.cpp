@@ -163,20 +163,20 @@ void MainWindow::createActions()
     // aisAct->setToolTip(tr("AIS"));
 
     const QIcon connectIcon = QIcon::fromTheme("import-connect", QIcon(":/images/connect.png"));
-    QAction *connectAct = new QAction(connectIcon, tr("&connect"), this);
+    connectAct = new QAction(connectIcon, tr("&Connect"), this);
     connectAct->setShortcuts(QKeySequence::New);
-    //connectAct->setStatusTip(tr("Reconnect MOOSDB"));
     connect(connectAct, SIGNAL(triggered()), this, SLOT(subscribeMOOSDB()));
     fileToolBar->addAction(connectAct);
     connectAct->setToolTip(tr("Reconnect MOOSDB"));
+    connectAct->setEnabled(true);
 
     const QIcon disconnectIcon = QIcon::fromTheme("import-disconnect", QIcon(":/images/disconnect.png"));
-    QAction *disconnectAct = new QAction(disconnectIcon, tr("&disconnect"), this);
+    disconnectAct = new QAction(disconnectIcon, tr("&Disconnect"), this);
     disconnectAct->setShortcuts(QKeySequence::New);
-    //disconnectAct->setStatusTip(tr("Disconnect MOOSDB"));
     connect(disconnectAct, SIGNAL(triggered()), this, SLOT(stopSubscribeMOOSDB()));
     fileToolBar->addAction(disconnectAct);
     disconnectAct->setToolTip(tr("Disconnect MOOSDB"));
+    disconnectAct->setEnabled(false);
 
     const QIcon settingIcon = QIcon::fromTheme("import-setting", QIcon(":/images/setting.png"));
     QAction *settingAct = new QAction(settingIcon, tr("&Setting"), this);
@@ -237,6 +237,12 @@ void MainWindow::createActions()
         viewMenu->addAction(toggleGuardZonePanelAction);
     }
     // ==============================================
+}
+
+void MainWindow::onMoosConnectionStatusChanged(bool connected)
+{
+    connectAct->setEnabled(!connected);       // Disable connect if already connected
+    disconnectAct->setEnabled(connected);     // Enable disconnect if connected
 }
 
 void MainWindow::loadPlugin()
@@ -536,6 +542,35 @@ MainWindow::MainWindow(QWidget *parent)
   oriEdit->setFixedWidth(wi + 10);
   oriEdit->setText("0°");
 
+  // CONNECTION STATUS
+  moosLedCircle = new QLabel;
+  moosLedCircle->setFixedSize(12, 12);  // lingkaran 12x12
+  moosLedCircle->setStyleSheet("background-color: red; border-radius: 6px;");
+
+  moosStatusText = new QLabel(" MOOS: Disconnected");
+  moosStatusText->setStyleSheet("color: red; font-weight: bold;");
+
+  QWidget *moosStatusWidget = new QWidget;
+  QHBoxLayout *statusLayout = new QHBoxLayout(moosStatusWidget);
+  statusLayout->setContentsMargins(5, 0, 10, 0); // spasi antar widget
+  statusLayout->addWidget(moosLedCircle);
+  statusLayout->addWidget(moosStatusText);
+
+  // Tambahkan ke paling kiri status bar
+  statusBar()->addWidget(moosStatusWidget);  // kiri
+
+  connect(aisSub, &AISSubscriber::connectionStatusChanged, this, [=](bool connected) {
+      if (connected) {
+          moosLedCircle->setStyleSheet("background-color: green; border-radius: 6px;");
+          moosStatusText->setText(" MOOS: Connected");
+          moosStatusText->setStyleSheet("color: green; font-weight: bold;");
+      } else {
+          moosLedCircle->setStyleSheet("background-color: red; border-radius: 6px;");
+          moosStatusText->setText(" MOOS: Disconnected");
+          moosStatusText->setStyleSheet("color: red; font-weight: bold;");
+      }
+  });
+
   statusBar()->addPermanentWidget(new QLabel("Chart Rotation:", statusBar()));
   statusBar()->addPermanentWidget(oriEdit, 0);
   statusBar()->addPermanentWidget(new QLabel("Range:", statusBar()));
@@ -546,6 +581,7 @@ MainWindow::MainWindow(QWidget *parent)
   statusBar()->addPermanentWidget(proEdit, 0);
   statusBar()->addPermanentWidget(new QLabel("Cursor:", statusBar()));
   statusBar()->addPermanentWidget(posEdit, 0);
+
 
   /*
   // DELETE LATER

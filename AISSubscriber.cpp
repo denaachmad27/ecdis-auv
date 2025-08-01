@@ -14,6 +14,9 @@ void AISSubscriber::connectToHost(const QString &host, quint16 port) {
 
     connect(socket, &QTcpSocket::readyRead, this, &AISSubscriber::onReadyRead);
     connect(socket, &QTcpSocket::disconnected, this, &AISSubscriber::onDisconnected);
+    connect(socket, &QTcpSocket::connected, this, [this]() {
+        emit connectionStatusChanged(true);  // ✅ emit jika connected
+    });
     connect(socket, QOverload<QAbstractSocket::SocketError>::of(&QTcpSocket::errorOccurred),
             this, &AISSubscriber::onSocketError);
 

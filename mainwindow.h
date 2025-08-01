@@ -25,6 +25,7 @@
 class PickWindow;
 class SearchWindow;
 class Ais;
+class AISSubscriber;
 
 // Defines for S-63 Chart Import
 // user permit (must have 28 characters)
@@ -243,6 +244,9 @@ private slots:
     void onConfigureGuardZoneAutoCheck();
     void onShowGuardZoneStatus();
 
+    // Enable and Disable icon
+    void onMoosConnectionStatusChanged(bool connected);
+
 private:
     GuardZonePanel* guardZonePanel;
     QDockWidget* guardZoneDock;
@@ -291,6 +295,17 @@ private:
     // Helper methods untuk CPA/TCPA
     void setupCPATCPAPanel();
     void setupRoutePanel();
+
+    // Connection status bar
+    QLabel *moosStatusLabel;
+    AISSubscriber *aisSub;
+
+    QLabel *moosLedCircle;
+    QLabel *moosStatusText;
+
+    // Connection icon
+    QAction *connectAct;
+    QAction *disconnectAct;
 };
 
 #endif // _mainwindow_h_
