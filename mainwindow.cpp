@@ -301,7 +301,7 @@ void MainWindow::stopAisRecord(){
 void MainWindow::nmeaDecode(){
     ecchart->setOwnShipTrail(true);
 
-    ecchart->publishToMOOSDB("WAYPT_NAV", "pts={-7.12, 112.01}");
+    // ecchart->publishToMOOSDB("WAYPT_NAV", "pts={-7.12, 112.01}");
 }
 
 void MainWindow::onNmeaReceived(const QString& line) {
@@ -596,7 +596,7 @@ MainWindow::MainWindow(QWidget *parent)
   // fileMenu->addAction("Reload", this, SLOT(onReload()));
   */
 
-  // DENC menu
+  // IMPORT MENU
   QMenu *importMenu = menuBar()->addMenu("&Import");
 
   dencActionGroup = new QActionGroup(this);
@@ -625,44 +625,7 @@ MainWindow::MainWindow(QWidget *parent)
 
   dencActionGroup->setEnabled(!dencPath.isEmpty());
 
-  // Draw menu
-  QMenu *drawMenu = menuBar()->addMenu("&Control");
-
-  drawMenu->addAction("Zoom In", this, SLOT(onZoomIn()))->setShortcut(tr("PgUp", "Draw|Zoom In"));
-  drawMenu->addAction("Zoom Out", this, SLOT(onZoomOut()))->setShortcut(tr("PgDown", "Draw|Zoom out"));
-
-  drawMenu->addSeparator();
-
-  drawMenu->addAction("Shift Left", this, SLOT(onLeft()))->setShortcut(tr("Left", "Draw|Left"));
-  drawMenu->addAction("Shift Right", this, SLOT(onRight()))->setShortcut(tr("Right", "Draw|Right"));
-  drawMenu->addAction("Shift Up", this, SLOT(onUp()))->setShortcut(tr("Up", "Draw|Up"));
-  drawMenu->addAction("Shift Down", this, SLOT(onDown()))->setShortcut(tr("Down", "Draw|Down"));
-
-  drawMenu->addSeparator();
-
-  drawMenu->addAction("Rotate Clockwise", this, SLOT(onRotateCW()))->setShortcut(tr("+", "Draw|Rotate Clockwise"));
-  drawMenu->addAction("Rotate AntiClockwise", this, SLOT(onRotateCCW()))->setShortcut(tr("-", "Draw|Rotate Anticlockwise"));
-
-  drawMenu->addSeparator();
-
-  QActionGroup *pActionGroup = new QActionGroup(this);
-  autoProjectionAction = pActionGroup->addAction("Automatic");
-  mercatorAction       = pActionGroup->addAction("Mercator");
-  gnomonicAction       = pActionGroup->addAction("Gnomonic");
-  stereographicAction  = pActionGroup->addAction("Stereographic");
-  autoProjectionAction->setCheckable(true);
-  mercatorAction->setCheckable(true);
-  gnomonicAction->setCheckable(true);
-  stereographicAction->setCheckable(true);
-  mercatorAction->setChecked(true);
-  connect(pActionGroup, SIGNAL(triggered(QAction *)), this, SLOT(onProjection(QAction *)));
-
-  // drawMenu->addAction(autoProjectionAction);
-  // drawMenu->addAction(mercatorAction);
-  // drawMenu->addAction(gnomonicAction);
-  // drawMenu->addAction(stereographicAction);
-
-  // View menu
+  // LAYERS MENU
   QMenu *viewMenu = menuBar()->addMenu("&Layers");
 
   QActionGroup *lActionGroup = new QActionGroup(this);
@@ -671,9 +634,9 @@ MainWindow::MainWindow(QWidget *parent)
   simplifiedAction->setCheckable(true);
   fullChartAction->setCheckable(true);
   if(lookupTable == EC_LOOKUP_SIMPLIFIED)
-    simplifiedAction->setChecked(true);
+      simplifiedAction->setChecked(true);
   else
-    fullChartAction->setChecked(true);
+      fullChartAction->setChecked(true);
   connect(lActionGroup, SIGNAL(triggered(QAction *)), this, SLOT(onLookup(QAction *)));
 
   viewMenu->addAction(simplifiedAction);
@@ -689,11 +652,11 @@ MainWindow::MainWindow(QWidget *parent)
   standardAction->setCheckable(true);
   otherAction->setCheckable(true);
   if(displayCategory == EC_OTHER)
-    otherAction->setChecked(true);
+      otherAction->setChecked(true);
   else if(displayCategory == EC_STANDARD)
-    standardAction->setChecked(true);
+      standardAction->setChecked(true);
   else
-    baseAction->setChecked(true);
+      baseAction->setChecked(true);
 
   connect(vActionGroup, SIGNAL(triggered(QAction *)), this, SLOT(onDisplayCategory(QAction *)));
 
@@ -741,18 +704,17 @@ MainWindow::MainWindow(QWidget *parent)
 
   viewMenu->addSeparator();
 
-  QAction *trailAction = viewMenu->addAction("Clear Trail");
-  connect(trailAction, &QAction::triggered, this, [=]() {
-      ecchart->clearOwnShipTrail();
-      update(); // misalnya untuk redraw
-  });
+  if (AppConfig::isDevelopment()){
+      QAction *trailAction = viewMenu->addAction("Clear Trail");
+      connect(trailAction, &QAction::triggered, this, [=]() {
+          ecchart->clearOwnShipTrail();
+          update(); // misalnya untuk redraw
+      });
 
-  viewMenu->addSeparator();
+      viewMenu->addSeparator();
+  }
 
-  // QAction *searchAction = viewMenu->addAction("Search");
-  // connect(searchAction, &QAction::triggered, this, &MainWindow::onSearch);
-
-  // Color menu
+  // DISPLAY MENU
   QMenu *colorMenu = menuBar()->addMenu("&Display");
 
   QActionGroup *cActionGroup = new QActionGroup(this);
@@ -775,7 +737,67 @@ MainWindow::MainWindow(QWidget *parent)
   greyAction->setCheckable(true);
   connect(greyAction, SIGNAL(toggled(bool)), this, SLOT(onGreyMode(bool)));
 
-  // MOOSDB
+  // QAction *searchAction = viewMenu->addAction("Search");
+  // connect(searchAction, &QAction::triggered, this, &MainWindow::onSearch);
+
+  // CONTROL
+  QMenu *drawMenu = menuBar()->addMenu("&Control");
+
+  drawMenu->addAction("Zoom In", this, SLOT(onZoomIn()))->setShortcut(tr("PgUp", "Draw|Zoom In"));
+  drawMenu->addAction("Zoom Out", this, SLOT(onZoomOut()))->setShortcut(tr("PgDown", "Draw|Zoom out"));
+
+  drawMenu->addSeparator();
+
+  drawMenu->addAction("Shift Left", this, SLOT(onLeft()))->setShortcut(tr("Left", "Draw|Left"));
+  drawMenu->addAction("Shift Right", this, SLOT(onRight()))->setShortcut(tr("Right", "Draw|Right"));
+  drawMenu->addAction("Shift Up", this, SLOT(onUp()))->setShortcut(tr("Up", "Draw|Up"));
+  drawMenu->addAction("Shift Down", this, SLOT(onDown()))->setShortcut(tr("Down", "Draw|Down"));
+
+  drawMenu->addSeparator();
+
+  drawMenu->addAction("Rotate Clockwise", this, SLOT(onRotateCW()))->setShortcut(tr("+", "Draw|Rotate Clockwise"));
+  drawMenu->addAction("Rotate AntiClockwise", this, SLOT(onRotateCCW()))->setShortcut(tr("-", "Draw|Rotate Anticlockwise"));
+
+  drawMenu->addSeparator();
+
+  QActionGroup *pActionGroup = new QActionGroup(this);
+  autoProjectionAction = pActionGroup->addAction("Automatic");
+  mercatorAction       = pActionGroup->addAction("Mercator");
+  gnomonicAction       = pActionGroup->addAction("Gnomonic");
+  stereographicAction  = pActionGroup->addAction("Stereographic");
+  autoProjectionAction->setCheckable(true);
+  mercatorAction->setCheckable(true);
+  gnomonicAction->setCheckable(true);
+  stereographicAction->setCheckable(true);
+  mercatorAction->setChecked(true);
+  connect(pActionGroup, SIGNAL(triggered(QAction *)), this, SLOT(onProjection(QAction *)));
+
+  // drawMenu->addAction(autoProjectionAction);
+  // drawMenu->addAction(mercatorAction);
+  // drawMenu->addAction(gnomonicAction);
+  // drawMenu->addAction(stereographicAction);
+
+
+  // ROUTE MENU
+  setupRoutePanel();
+
+  // Route - Comprehensive navigation planning
+  QMenu *routeMenu = menuBar()->addMenu("&Route");
+
+  routeMenu->addAction("Create New Route", this, SLOT(onCreateRoute()));
+  routeMenu->addSeparator();
+  routeMenu->addAction("Edit Route Points", this, SLOT(onEditRoute()));
+  routeMenu->addAction("Insert Waypoint", this, SLOT(onInsertWaypoint()));
+  routeMenu->addAction("Move Waypoint", this, SLOT(onMoveWaypoint()));
+  routeMenu->addAction("Delete Waypoint", this, SLOT(onDeleteWaypoint()));
+  routeMenu->addAction("Delete Route", this, SLOT(onDeleteRoute()));
+  routeMenu->addSeparator();
+  routeMenu->addAction("Import Route...", this, SLOT(onImportRoute()));
+  routeMenu->addAction("Export Route...", this, SLOT(onExportRoute()));
+  routeMenu->addAction("Export All Routes...", this, SLOT(onExportAllRoutes()));
+  routeMenu->addAction("Clear All Routes", this, SLOT(onClearRoutes()));
+
+  // MOOSDB MENU
   QMenu *moosMenu = menuBar()->addMenu("&MOOSDB");
   moosMenu->addAction("Restart Connection", this, SLOT(subscribeMOOSDB()) );
   moosMenu->addAction("Stop Connection", this, SLOT(stopSubscribeMOOSDB()) );
@@ -790,21 +812,19 @@ MainWindow::MainWindow(QWidget *parent)
       // aisMenu->addAction( tr( "Connect to AIS Server" ), this, SLOT( slotConnectToAisServer() ) );
   }
 
-  // SETTINGS MANAGER
+  // SIDEBAR MENU
+  createDockWindows();
+
+  // SETTINGS MANAGER MENU
   QMenu *settingMenu = menuBar()->addMenu("&Settings");
   settingMenu->addAction("Setting Manager", this, SLOT(openSettingsDialog()) );
 
-  // SIDEBAR
-  createDockWindows();
-  
+
   // Setup CPA/TCPA Panel after createDockWindows
   setupCPATCPAPanel();
   if (m_cpatcpaPanel) {
       ecchart->setCPAPanelToAIS(m_cpatcpaPanel);
   }
-  
-  // Setup Route Panel
-  setupRoutePanel();
   
   // Delay refresh route panel untuk memastikan data sudah fully loaded
   QTimer::singleShot(100, [this]() {
@@ -849,23 +869,6 @@ MainWindow::MainWindow(QWidget *parent)
   alertPanel = nullptr;
   alertDock = nullptr;
   // ===================================================
-
-  
-  // Route - Comprehensive navigation planning
-  QMenu *routeMenu = menuBar()->addMenu("&Route");
-
-  routeMenu->addAction("Create New Route", this, SLOT(onCreateRoute()));
-  routeMenu->addSeparator();
-  routeMenu->addAction("Edit Route Points", this, SLOT(onEditRoute()));
-  routeMenu->addAction("Insert Waypoint", this, SLOT(onInsertWaypoint()));
-  routeMenu->addAction("Move Waypoint", this, SLOT(onMoveWaypoint()));
-  routeMenu->addAction("Delete Waypoint", this, SLOT(onDeleteWaypoint()));
-  routeMenu->addAction("Delete Route", this, SLOT(onDeleteRoute()));
-  routeMenu->addSeparator();
-  routeMenu->addAction("Import Route...", this, SLOT(onImportRoute()));
-  routeMenu->addAction("Export Route...", this, SLOT(onExportRoute()));
-  routeMenu->addAction("Export All Routes...", this, SLOT(onExportAllRoutes()));
-  routeMenu->addAction("Clear All Routes", this, SLOT(onClearRoutes()));
 
   // GuardZone menu
   if (AppConfig::isDevelopment()) {
@@ -952,52 +955,54 @@ MainWindow::MainWindow(QWidget *parent)
 
   ///====================== IGNORE =============================
   // CPA/TCPA menu
-  if (AppConfig::isDevelopment()) {
-      QMenu *cpaMenu = menuBar()->addMenu("&CPA/TCPA");
+  if (AppConfig::isDevelopment()){
+      if (AppConfig::isDevelopment()) {
+          QMenu *cpaMenu = menuBar()->addMenu("&CPA/TCPA");
 
-      // Sub menu untuk CPA/TCPA
-      QAction *cpaSettingsAction = cpaMenu->addAction("CPA/TCPA Settings");
-      connect(cpaSettingsAction, SIGNAL(triggered()), this, SLOT(onCPASettings()));
+          // Sub menu untuk CPA/TCPA
+          QAction *cpaSettingsAction = cpaMenu->addAction("CPA/TCPA Settings");
+          connect(cpaSettingsAction, SIGNAL(triggered()), this, SLOT(onCPASettings()));
 
-      cpaMenu->addSeparator();
+          cpaMenu->addSeparator();
 
-      QAction *showCPATargetsAction = cpaMenu->addAction("Show CPA/TCPA Monitor");
-      showCPATargetsAction->setCheckable(true);
-      showCPATargetsAction->setChecked(false);
-      connect(showCPATargetsAction, SIGNAL(triggered(bool)), this, SLOT(onShowCPATargets(bool)));
+          QAction *showCPATargetsAction = cpaMenu->addAction("Show CPA/TCPA Monitor");
+          showCPATargetsAction->setCheckable(true);
+          showCPATargetsAction->setChecked(false);
+          connect(showCPATargetsAction, SIGNAL(triggered(bool)), this, SLOT(onShowCPATargets(bool)));
 
-      QAction *showTCPAInfoAction = cpaMenu->addAction("Show TCPA Info");
-      showTCPAInfoAction->setCheckable(true);
-      showTCPAInfoAction->setChecked(false);
-      connect(showTCPAInfoAction, SIGNAL(triggered(bool)), this, SLOT(onShowTCPAInfo(bool)));
+          QAction *showTCPAInfoAction = cpaMenu->addAction("Show TCPA Info");
+          showTCPAInfoAction->setCheckable(true);
+          showTCPAInfoAction->setChecked(false);
+          connect(showTCPAInfoAction, SIGNAL(triggered(bool)), this, SLOT(onShowTCPAInfo(bool)));
 
-      cpaMenu->addSeparator();
+          cpaMenu->addSeparator();
 
-      QAction *cpaTcpaAlarmsAction = cpaMenu->addAction("Enable CPA/TCPA Alarms");
-      cpaTcpaAlarmsAction->setCheckable(true);
-      cpaTcpaAlarmsAction->setChecked(true);
-      connect(cpaTcpaAlarmsAction, SIGNAL(triggered(bool)), this, SLOT(onCPATCPAAlarms(bool)));
+          QAction *cpaTcpaAlarmsAction = cpaMenu->addAction("Enable CPA/TCPA Alarms");
+          cpaTcpaAlarmsAction->setCheckable(true);
+          cpaTcpaAlarmsAction->setChecked(true);
+          connect(cpaTcpaAlarmsAction, SIGNAL(triggered(bool)), this, SLOT(onCPATCPAAlarms(bool)));
 
-      connect(m_cpatcpaDock, &QDockWidget::visibilityChanged, this, [=](bool visible) {
-          if (!visible) { showCPATargetsAction->setChecked(false);}
-          else { showCPATargetsAction->setChecked(true);}
-      });
-  }
-  else {
-      QMenu *cpaMenu = menuBar()->addMenu("&CPA/TCPA");
+          connect(m_cpatcpaDock, &QDockWidget::visibilityChanged, this, [=](bool visible) {
+              if (!visible) { showCPATargetsAction->setChecked(false);}
+              else { showCPATargetsAction->setChecked(true);}
+          });
+      }
+      else {
+          QMenu *cpaMenu = menuBar()->addMenu("&CPA/TCPA");
 
-      QAction *showCPATargetsAction = cpaMenu->addAction("Show CPA/TCPA Monitor");
-      showCPATargetsAction->setCheckable(true);
-      showCPATargetsAction->setChecked(false);
-      connect(showCPATargetsAction, SIGNAL(triggered(bool)), this, SLOT(onShowCPATargets(bool)));
+          QAction *showCPATargetsAction = cpaMenu->addAction("Show CPA/TCPA Monitor");
+          showCPATargetsAction->setCheckable(true);
+          showCPATargetsAction->setChecked(false);
+          connect(showCPATargetsAction, SIGNAL(triggered(bool)), this, SLOT(onShowCPATargets(bool)));
 
-      QAction *cpaSettingsAction = cpaMenu->addAction("CPA/TCPA Settings");
-      connect(cpaSettingsAction, SIGNAL(triggered()), this, SLOT(onCPASettings()));
+          QAction *cpaSettingsAction = cpaMenu->addAction("CPA/TCPA Settings");
+          connect(cpaSettingsAction, SIGNAL(triggered()), this, SLOT(onCPASettings()));
 
-      connect(m_cpatcpaDock, &QDockWidget::visibilityChanged, this, [=](bool visible) {
-          if (!visible) { showCPATargetsAction->setChecked(false);}
-          else { showCPATargetsAction->setChecked(true);}
-      });
+          connect(m_cpatcpaDock, &QDockWidget::visibilityChanged, this, [=](bool visible) {
+              if (!visible) { showCPATargetsAction->setChecked(false);}
+              else { showCPATargetsAction->setChecked(true);}
+          });
+      }
   }
 
   if (AppConfig::isDevelopment()) {
@@ -1555,9 +1560,7 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
 
 	ecchart->GetPickedFeatures(pickedFeatureList);
 
-    if (AppConfig::isDevelopment()){
-        pickWindow->fill(pickedFeatureList);
-    }
+    pickWindow->fill(pickedFeatureList);
 
     //pickWindow->fillJson(pickedFeatureList);
 

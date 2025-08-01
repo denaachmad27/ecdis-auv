@@ -4,6 +4,7 @@
 #include "cpatcpapanel.h"
 #include "cpatcpasettingsdialog.h"
 #include "ais.h"
+#include "appconfig.h"
 
 CPATCPAPanel::CPATCPAPanel(QWidget *parent)
     : QWidget(parent)
@@ -23,14 +24,16 @@ CPATCPAPanel::CPATCPAPanel(QWidget *parent)
     CPATCPASettings& settings = CPATCPASettings::instance();
     refreshTimer->start(settings.getAlarmUpdateInterval() * 1000);
 
-    // Add tooltips
-    refreshButton->setToolTip("Refresh AIS targets data (F5)");
-    settingsButton->setToolTip("Open CPA/TCPA settings dialog");
-    clearAlarmsButton->setToolTip("Clear all alarm highlights");
+    if (AppConfig::isDevelopment()){
+        // Add tooltips
+        refreshButton->setToolTip("Refresh AIS targets data (F5)");
+        settingsButton->setToolTip("Open CPA/TCPA settings dialog");
+        clearAlarmsButton->setToolTip("Clear all alarm highlights");
 
-    // Add keyboard shortcuts
-    refreshButton->setShortcut(QKeySequence("F5"));
-    settingsButton->setShortcut(QKeySequence("Ctrl+T"));
+        // Add keyboard shortcuts
+        refreshButton->setShortcut(QKeySequence("F5"));
+        settingsButton->setShortcut(QKeySequence("Ctrl+T"));
+    }
 }
 
 void CPATCPAPanel::setupUI()
@@ -64,25 +67,28 @@ void CPATCPAPanel::setupUI()
     setupTargetsTable();
 
     // Control Buttons
-    QHBoxLayout* buttonLayout = new QHBoxLayout();
-    refreshButton = new QPushButton("Refresh");
-    settingsButton = new QPushButton("Settings");
-    clearAlarmsButton = new QPushButton("Clear Alarms");
+    if (AppConfig::isDevelopment()){
+        QHBoxLayout* buttonLayout = new QHBoxLayout();
+        refreshButton = new QPushButton("Refresh");
+        settingsButton = new QPushButton("Settings");
+        clearAlarmsButton = new QPushButton("Clear Alarms");
 
-    connect(refreshButton, SIGNAL(clicked()), this, SLOT(refreshData()));
-    connect(settingsButton, SIGNAL(clicked()), this, SLOT(onSettingsClicked()));
-    connect(clearAlarmsButton, SIGNAL(clicked()), this, SLOT(onClearAlarmsClicked()));
+        connect(refreshButton, SIGNAL(clicked()), this, SLOT(refreshData()));
+        connect(settingsButton, SIGNAL(clicked()), this, SLOT(onSettingsClicked()));
+        connect(clearAlarmsButton, SIGNAL(clicked()), this, SLOT(onClearAlarmsClicked()));
 
-    buttonLayout->addWidget(refreshButton);
-    buttonLayout->addWidget(settingsButton);
-    buttonLayout->addStretch();
-    buttonLayout->addWidget(clearAlarmsButton);
+        buttonLayout->addWidget(refreshButton);
+        buttonLayout->addWidget(settingsButton);
+        buttonLayout->addStretch();
+        buttonLayout->addWidget(clearAlarmsButton);
 
-    // Add all to main layout
+        // Add all to main layout
+        mainLayout->addLayout(buttonLayout);
+    }
+
     mainLayout->addWidget(statusGroup);
     mainLayout->addWidget(ownShipGroup);
     mainLayout->addWidget(targetsGroup);
-    mainLayout->addLayout(buttonLayout);
 }
 
 void CPATCPAPanel::setupStatusPanel()

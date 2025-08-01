@@ -297,8 +297,11 @@ void SettingsDialog::setupUI() {
     tabWidget->addTab(ownShipTab, "Own Ship");
 
     tabWidget->addTab(displayTab, "Display");
-    tabWidget->addTab(guardzoneTab, "GuardZone");
-    tabWidget->addTab(alertTab, "Alert");
+
+    if (AppConfig::isDevelopment()){
+        tabWidget->addTab(guardzoneTab, "GuardZone");
+        tabWidget->addTab(alertTab, "Alert");
+    }
 
     mainLayout->addWidget(tabWidget);
 
