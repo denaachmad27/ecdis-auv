@@ -73,3 +73,5 @@ int main( int argc, char ** argv )
 
   return a.exec();
 }
+
+// v1.1 Stable Checkpoint
