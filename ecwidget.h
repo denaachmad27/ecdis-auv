@@ -696,6 +696,9 @@ public:
   // GETTER SETTER AISSUB VAR
   AISSubscriber* getAisSub() const;
 
+  // DISPLAY CATEGORY
+  void setDisplayCategoryInternal(int category);
+
 public slots:
   void updateAISTargetsList();
   void addOrUpdateAISTarget(const AISTargetData& target);
@@ -1158,6 +1161,9 @@ private:
 
   // AUTO RECENTER
   QRect GetVisibleMapRect();
+
+  // DISPLAY VAR
+  int displayCategory;
 
 }; // EcWidget
 

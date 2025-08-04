@@ -68,8 +68,6 @@ public:
     SearchWindow *searchWindow;
     QTextEdit *logText;
 
-    void loadPlugin();
-    void loadPluginAis();
     void onNmeaReceived(const QString&);
     void oriEditSetText(const double&);
 
@@ -149,8 +147,6 @@ protected slots:
     void onWaypointCreated(); // Keep for backward compatibility
 
     void createDockWindows();
-    void createDockNmea();
-    void createDockOwnship();
     //void createLogPanel();
     void addTextToBar(QString);
     void createActions();
@@ -305,6 +301,11 @@ private:
     // Connection icon
     QAction *connectAct;
     QAction *disconnectAct;
+
+    // BAR BAR
+    void createStatusBar();
+    void createMenuBar();
+    void userPermitGenerate();
 };
 
 #endif // _mainwindow_h_

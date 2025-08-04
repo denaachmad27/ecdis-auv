@@ -1050,17 +1050,21 @@ void EcWidget::paintEvent (QPaintEvent *e)
   // TEMPORARY DISABLE: Route lines drawing to prevent crash during presentation
   // drawRouteLinesOverlay(painter);
 
-      // Draw chart flashing overlay for dangerous obstacles
-      drawChartFlashOverlay(painter);
+  // Draw chart flashing overlay for dangerous obstacles
+  drawChartFlashOverlay(painter);
 
-      drawRedDotTracker();
+  drawRedDotTracker();
 
-      // ========== DRAW TEST GUARDZONE ==========
+  // ========== DRAW TEST GUARDZONE ==========
 
+  // DRAW AIS TARGET DANGEROUS BOX
+  if (displayCategory != EC_DISPLAYBASE){
       drawTestGuardSquare(painter);
-      if (testGuardZoneEnabled) {
+  }
 
-      }
+  if (testGuardZoneEnabled) {
+
+  }
   // =======================================
 
   if (!getTrackMMSI().isEmpty() && trackShip)
@@ -1128,7 +1132,7 @@ void EcWidget::paintEvent (QPaintEvent *e)
   }
 
   // Draw red box around dangerous AIS targets
-  if (_aisObj) {
+  if (false) {
       QPainter painter(this);
       painter.setRenderHint(QPainter::Antialiasing);
       QMap<unsigned int, AISTargetData> targetMap = _aisObj->getTargetMap();
@@ -1144,6 +1148,10 @@ void EcWidget::paintEvent (QPaintEvent *e)
       }
   }
 } // End paintEvent
+
+void EcWidget::setDisplayCategoryInternal(int category){
+    displayCategory = category;
+}
 
 void EcWidget::drawOwnShipTrail(QPainter &painter)
 {
