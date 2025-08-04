@@ -28,52 +28,9 @@
 
 QTextEdit *informationText;
 
+// DOCK WINDOW
 void MainWindow::createDockWindows()
 {
-    QMenu* viewMenu = menuBar()->addMenu(tr("&Sidebar"));
-    QDockWidget *dock = new QDockWidget(tr("AIS Target"), this);
-    dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::TopDockWidgetArea | Qt::BottomDockWidgetArea);
-    aisText = new QTextEdit(dock);
-    aisText->setText("");
-    aisText->setReadOnly(true); // Membuat teks tidak dapat diedit
-    dock->setWidget(aisText);
-    addDockWidget(Qt::LeftDockWidgetArea, dock);
-    viewMenu->addAction(dock->toggleViewAction());
-    dock->hide();
-
-    dock = new QDockWidget(tr("NMEA Received"), this);
-    dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::TopDockWidgetArea | Qt::BottomDockWidgetArea);
-    nmeaText = new QTextEdit(dock);
-    nmeaText->setText("");
-    nmeaText->setReadOnly(true); // Membuat teks tidak dapat diedit
-    dock->setWidget(nmeaText);
-    addDockWidget(Qt::LeftDockWidgetArea, dock);
-    viewMenu->addAction(dock->toggleViewAction());
-    dock->hide();
-
-    dock = new QDockWidget(tr("Ownship Info"), this);
-    dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::TopDockWidgetArea | Qt::BottomDockWidgetArea);
-    ownShipText = new QTextEdit(dock);
-    ownShipText->setText("");
-    ownShipText->setReadOnly(true); // Membuat teks tidak dapat diedit
-    dock->setWidget(ownShipText);
-    addDockWidget(Qt::LeftDockWidgetArea, dock);
-    viewMenu->addAction(dock->toggleViewAction());
-    dock->hide();
-
-    dock = new QDockWidget(tr("Log"), this);
-    dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::TopDockWidgetArea | Qt::BottomDockWidgetArea);
-    logText = new QTextEdit(dock);
-    logText->setText("");
-    logText->setReadOnly(true); // Membuat teks tidak dapat diedit
-    dock->setWidget(logText);
-    addDockWidget(Qt::BottomDockWidgetArea, dock);
-    viewMenu->addAction(dock->toggleViewAction());
-
-    if (AppConfig::isProduction()){
-        dock->hide();
-    }
-
     // Panel kanan sebagai dock widget
     // dock = new QDockWidget("Informasi", this);
     // QWidget *formWidget = new QWidget;
@@ -93,26 +50,27 @@ void MainWindow::createDockWindows()
     // addDockWidget(Qt::BottomDockWidgetArea, dock);
 }
 
-void MainWindow::createDockNmea()
-{
-
-}
-
-void MainWindow::createDockOwnship()
-{
-
-}
-
 void MainWindow::addTextToBar(QString text){
     nmeaText->append(text);
 }
 
+// ACTION BAR
 void MainWindow::createActions()
 {
     QToolBar *fileToolBar = addToolBar(tr("File"));
     addToolBar(Qt::LeftToolBarArea, fileToolBar);
 
+    fileToolBar->setIconSize(QSize(35, 35));
     fileToolBar->setStyleSheet("QToolButton { margin-right: 5px; margin-left: 5px; margin-bottom: 5px; margin-top: 5px}");
+    // fileToolBar->setStyleSheet(R"(
+    //     QToolButton {
+    //         padding: 8px;
+    //         margin: 4px;
+    //         min-width: 64px;
+    //         min-height: 64px;
+    //         font-size: 12px;
+    //     }
+    // )");
 
     // const QIcon importIcon = QIcon::fromTheme("import-tree", QIcon(":/images/import.png"));
     // QAction *importAct = new QAction(importIcon, tr("&Import Tree"), this);
@@ -239,36 +197,626 @@ void MainWindow::createActions()
     // ==============================================
 }
 
+// STATUS BAR
 void MainWindow::onMoosConnectionStatusChanged(bool connected)
 {
     connectAct->setEnabled(!connected);       // Disable connect if already connected
     disconnectAct->setEnabled(connected);     // Enable disconnect if connected
 }
 
-void MainWindow::loadPlugin()
-{
-    QString pluginPath = QDir::currentPath() + "/genericplugin.dll";  // sesuaikan path plugin
+void MainWindow::createStatusBar(){
+    // Status bar
+    posEdit = new QLineEdit(statusBar());
+    posEdit->setReadOnly(true);
+    int wi = QFontMetrics(posEdit->font()).horizontalAdvance("12 34.56 N 123 45.678 E");
+    posEdit->setFixedWidth(wi + 30);
 
-    QPluginLoader loader(pluginPath);
-    QObject *pluginObj = loader.instance();
+    proEdit = new QLineEdit(statusBar());
+    proEdit->setReadOnly(true);
+    wi = QFontMetrics(proEdit->font()).horizontalAdvance("Cylindrical Equidistant");
+    proEdit->setFixedWidth(wi + 10);
 
-    if (!pluginObj) {
-        qWarning() << "Gagal load plugin:" << loader.errorString();
-        return;
-    }
+    sclEdit = new QLineEdit(statusBar());
+    sclEdit->setReadOnly(true);
+    wi = QFontMetrics(sclEdit->font()).horizontalAdvance("1:25000000");
+    sclEdit->setFixedWidth(wi + 10);
 
-    IPluginInterface *plugin = qobject_cast<IPluginInterface *>(pluginObj);
-    if (!plugin) {
-        qWarning() << "Plugin tidak sesuai interface.";
-        return;
-    }
+    rngEdit = new QLineEdit(statusBar());
+    rngEdit->setReadOnly(true);
+    wi = QFontMetrics(rngEdit->font()).horizontalAdvance("2000");
+    rngEdit->setFixedWidth(wi + 10);
 
-    qDebug() << "Plugin loaded:" << plugin->pluginName();
+    oriEdit = new QLineEdit(statusBar());
+    oriEdit->setReadOnly(true);
+    wi = QFontMetrics(oriEdit->font()).horizontalAdvance("2000");
+    oriEdit->setFixedWidth(wi + 10);
+    oriEdit->setText("0°");
 
-    // Panggil fungsi plugin untuk menampilkan window
-    plugin->showWindow();
+    // CONNECTION STATUS
+    moosLedCircle = new QLabel;
+    moosLedCircle->setFixedSize(12, 12);  // lingkaran 12x12
+    moosLedCircle->setStyleSheet("background-color: red; border-radius: 6px;");
+
+    moosStatusText = new QLabel(" MOOS: Disconnected");
+    moosStatusText->setStyleSheet("color: red; font-weight: bold;");
+
+    QWidget *moosStatusWidget = new QWidget;
+    QHBoxLayout *statusLayout = new QHBoxLayout(moosStatusWidget);
+    statusLayout->setContentsMargins(5, 0, 10, 0); // spasi antar widget
+    statusLayout->addWidget(moosLedCircle);
+    statusLayout->addWidget(moosStatusText);
+
+    // Tambahkan ke paling kiri status bar
+    statusBar()->addWidget(moosStatusWidget);  // kiri
+
+    connect(ecchart, &EcWidget::aisSubCreated, this, [this](AISSubscriber* sub) {
+        qDebug() << "aisSub created, now connecting signal...";
+        connect(sub, &AISSubscriber::connectionStatusChanged, this, [this](bool connected) {
+            qDebug() << "[MainWindow] connectionStatusChanged called, connected =" << connected;
+            if (connected) {
+                moosLedCircle->setStyleSheet("background-color: green; border-radius: 6px;");
+                moosStatusText->setText(" MOOS: Connected");
+                moosStatusText->setStyleSheet("color: green; font-weight: bold;");
+            } else {
+                moosLedCircle->setStyleSheet("background-color: red; border-radius: 6px;");
+                moosStatusText->setText(" MOOS: Disconnected");
+                moosStatusText->setStyleSheet("color: red; font-weight: bold;");
+            }
+        });
+
+        connect(ecchart->getAisSub(), &AISSubscriber::connectionStatusChanged,
+                this, &MainWindow::onMoosConnectionStatusChanged);
+    });
+
+    statusBar()->addPermanentWidget(new QLabel("Chart Rotation:", statusBar()));
+    statusBar()->addPermanentWidget(oriEdit, 0);
+    statusBar()->addPermanentWidget(new QLabel("Range:", statusBar()));
+    statusBar()->addPermanentWidget(rngEdit, 0);
+    statusBar()->addPermanentWidget(new QLabel("Scale:", statusBar()));
+    statusBar()->addPermanentWidget(sclEdit, 0);
+    statusBar()->addPermanentWidget(new QLabel("Projection:", statusBar()));
+    statusBar()->addPermanentWidget(proEdit, 0);
+    statusBar()->addPermanentWidget(new QLabel("Cursor:", statusBar()));
+    statusBar()->addPermanentWidget(posEdit, 0);
 }
 
+// MENU BAR
+void MainWindow::createMenuBar(){
+    /*
+    // DELETE LATER
+    // File menu
+    QMenu *fileMenu = menuBar()->addMenu("&File");
+
+    fileMenu->addAction("E&xit", this, SLOT(close()))->setShortcut(tr("Ctrl+x", "File|Exit"));
+    // fileMenu->addAction("Reload", this, SLOT(onReload()));
+    */
+
+    // ================================== IMPORT MENU
+    QMenu *importMenu = menuBar()->addMenu("&Import");
+
+    dencActionGroup = new QActionGroup(this);
+
+    QAction * action = dencActionGroup->addAction("Tree");
+    connect(action, SIGNAL(triggered()), this, SLOT(onImportTree()));
+    importMenu->addAction(action);
+
+    action = dencActionGroup->addAction("S-57 Exchange Set");
+    connect(action, SIGNAL(triggered()), this, SLOT(onImportS57()));
+    importMenu->addAction(action);
+
+    importMenu->addSeparator();
+
+    action = dencActionGroup->addAction("IHO Certificate");
+    connect(action, SIGNAL(triggered()), this, SLOT(onImportIHOCertificate()));
+    importMenu->addAction(action);
+
+    action = dencActionGroup->addAction("S-63 Permits");
+    connect(action, SIGNAL(triggered()), this, SLOT(onImportS63Permits()));
+    importMenu->addAction(action);
+
+    action = dencActionGroup->addAction("S-63 Exchange Set");
+    connect(action, SIGNAL(triggered()), this, SLOT(onImportS63()));
+    importMenu->addAction(action);
+
+    dencActionGroup->setEnabled(!dencPath.isEmpty());
+
+    // ================================== LAYERS MENU
+    QMenu *viewMenu = menuBar()->addMenu("&Layers");
+
+    QActionGroup *lActionGroup = new QActionGroup(this);
+    simplifiedAction  = lActionGroup->addAction("Simplified");
+    fullChartAction   = lActionGroup->addAction("Full Chart");
+    simplifiedAction->setCheckable(true);
+    fullChartAction->setCheckable(true);
+    if(lookupTable == EC_LOOKUP_SIMPLIFIED)
+        simplifiedAction->setChecked(true);
+    else
+        fullChartAction->setChecked(true);
+    connect(lActionGroup, SIGNAL(triggered(QAction *)), this, SLOT(onLookup(QAction *)));
+
+    viewMenu->addAction(simplifiedAction);
+    viewMenu->addAction(fullChartAction);
+
+    viewMenu->addSeparator();
+
+    QActionGroup *vActionGroup = new QActionGroup(this);
+    baseAction = vActionGroup->addAction("Display Base");
+    standardAction    = vActionGroup->addAction("Standard");
+    otherAction       = vActionGroup->addAction("Detailed");
+    baseAction->setCheckable(true);
+    standardAction->setCheckable(true);
+    otherAction->setCheckable(true);
+    if(displayCategory == EC_OTHER)
+        otherAction->setChecked(true);
+    else if(displayCategory == EC_STANDARD)
+        standardAction->setChecked(true);
+    else
+        baseAction->setChecked(true);
+
+    connect(vActionGroup, SIGNAL(triggered(QAction *)), this, SLOT(onDisplayCategory(QAction *)));
+
+    viewMenu->addAction(baseAction);
+    viewMenu->addAction(standardAction);
+    viewMenu->addAction(otherAction);
+    viewMenu->addSeparator();
+
+    QAction *lightsAction = viewMenu->addAction("Lights");
+    lightsAction->setCheckable(true);
+    lightsAction->setChecked(showLights);
+    connect(lightsAction, SIGNAL(toggled(bool)), this, SLOT(onLights(bool)));
+
+    QAction *textAction = viewMenu->addAction("Text");
+    textAction->setCheckable(true);
+    textAction->setChecked(showText);
+    connect(textAction, SIGNAL(toggled(bool)), this, SLOT(onText(bool)));
+
+    QAction *soundingsAction = viewMenu->addAction("Soundings");
+    soundingsAction->setCheckable(true);
+    soundingsAction->setChecked(showSoundings);
+    connect(soundingsAction, SIGNAL(toggled(bool)), this, SLOT(onSoundings(bool)));
+
+    viewMenu->addSeparator();
+
+    QAction *gridAction = viewMenu->addAction("Grid");
+    gridAction->setCheckable(true);
+    gridAction->setChecked(showGrid);
+    connect(gridAction, SIGNAL(toggled(bool)), this, SLOT(onGrid(bool)));
+
+    viewMenu->addSeparator();
+
+    //QAction *aisAction = viewMenu->addAction("AIS targets");
+    QAction *aisAction = viewMenu->addAction("Own ship");
+    aisAction->setCheckable(true);
+    aisAction->setChecked(showAIS);
+    connect(aisAction, SIGNAL(toggled(bool)), this, SLOT(onAIS(bool)));
+
+    if (AppConfig::isDevelopment()) {
+        QAction *trackAction = viewMenu->addAction("Track Ship");
+        trackAction->setCheckable(true);
+        trackAction->setChecked(trackShip);
+        connect(trackAction, SIGNAL(toggled(bool)), this, SLOT(onTrack(bool)));
+    }
+
+    viewMenu->addSeparator();
+
+    if (AppConfig::isDevelopment()){
+        QAction *trailAction = viewMenu->addAction("Clear Trail");
+        connect(trailAction, &QAction::triggered, this, [=]() {
+            ecchart->clearOwnShipTrail();
+            update(); // misalnya untuk redraw
+        });
+
+        viewMenu->addSeparator();
+    }
+
+    // ================================== DISPLAY MENU
+    QMenu *colorMenu = menuBar()->addMenu("&Display");
+
+    QActionGroup *cActionGroup = new QActionGroup(this);
+    dayAction    = cActionGroup->addAction("Day");
+    duskAction = cActionGroup->addAction("Dusk");
+    nightAction = cActionGroup->addAction("Night");
+    dayAction->setCheckable(true);
+    duskAction->setCheckable(true);
+    nightAction->setCheckable(true);
+    dayAction->setChecked(true);
+    connect(cActionGroup, SIGNAL(triggered(QAction *)), this, SLOT(onColorScheme(QAction *)));
+
+    colorMenu->addAction(dayAction);
+    colorMenu->addAction(duskAction);
+    colorMenu->addAction(nightAction);
+
+    colorMenu->addSeparator();
+
+    QAction *greyAction = colorMenu->addAction("Grey Mode");
+    greyAction->setCheckable(true);
+    connect(greyAction, SIGNAL(toggled(bool)), this, SLOT(onGreyMode(bool)));
+
+    // QAction *searchAction = viewMenu->addAction("Search");
+    // connect(searchAction, &QAction::triggered, this, &MainWindow::onSearch);
+
+    // ================================== CONTROL MENU
+    QMenu *drawMenu = menuBar()->addMenu("&Control");
+
+    drawMenu->addAction("Zoom In", this, SLOT(onZoomIn()))->setShortcut(tr("PgUp", "Draw|Zoom In"));
+    drawMenu->addAction("Zoom Out", this, SLOT(onZoomOut()))->setShortcut(tr("PgDown", "Draw|Zoom out"));
+
+    drawMenu->addSeparator();
+
+    drawMenu->addAction("Shift Left", this, SLOT(onLeft()))->setShortcut(tr("Left", "Draw|Left"));
+    drawMenu->addAction("Shift Right", this, SLOT(onRight()))->setShortcut(tr("Right", "Draw|Right"));
+    drawMenu->addAction("Shift Up", this, SLOT(onUp()))->setShortcut(tr("Up", "Draw|Up"));
+    drawMenu->addAction("Shift Down", this, SLOT(onDown()))->setShortcut(tr("Down", "Draw|Down"));
+
+    drawMenu->addSeparator();
+
+    drawMenu->addAction("Rotate Clockwise", this, SLOT(onRotateCW()))->setShortcut(tr("+", "Draw|Rotate Clockwise"));
+    drawMenu->addAction("Rotate AntiClockwise", this, SLOT(onRotateCCW()))->setShortcut(tr("-", "Draw|Rotate Anticlockwise"));
+
+    drawMenu->addSeparator();
+
+    QActionGroup *pActionGroup = new QActionGroup(this);
+    autoProjectionAction = pActionGroup->addAction("Automatic");
+    mercatorAction       = pActionGroup->addAction("Mercator");
+    gnomonicAction       = pActionGroup->addAction("Gnomonic");
+    stereographicAction  = pActionGroup->addAction("Stereographic");
+    autoProjectionAction->setCheckable(true);
+    mercatorAction->setCheckable(true);
+    gnomonicAction->setCheckable(true);
+    stereographicAction->setCheckable(true);
+    mercatorAction->setChecked(true);
+    connect(pActionGroup, SIGNAL(triggered(QAction *)), this, SLOT(onProjection(QAction *)));
+
+    // drawMenu->addAction(autoProjectionAction);
+    // drawMenu->addAction(mercatorAction);
+    // drawMenu->addAction(gnomonicAction);
+    // drawMenu->addAction(stereographicAction);
+
+
+    // ================================== ROUTE MENU
+    setupRoutePanel();
+
+    // Route - Comprehensive navigation planning
+    QMenu *routeMenu = menuBar()->addMenu("&Route");
+
+    routeMenu->addAction("Create New Route", this, SLOT(onCreateRoute()));
+    routeMenu->addSeparator();
+    routeMenu->addAction("Edit Route Points", this, SLOT(onEditRoute()));
+    routeMenu->addAction("Insert Waypoint", this, SLOT(onInsertWaypoint()));
+    routeMenu->addAction("Move Waypoint", this, SLOT(onMoveWaypoint()));
+    routeMenu->addAction("Delete Waypoint", this, SLOT(onDeleteWaypoint()));
+    routeMenu->addAction("Delete Route", this, SLOT(onDeleteRoute()));
+    routeMenu->addSeparator();
+    routeMenu->addAction("Import Route...", this, SLOT(onImportRoute()));
+    routeMenu->addAction("Export Route...", this, SLOT(onExportRoute()));
+    routeMenu->addAction("Export All Routes...", this, SLOT(onExportAllRoutes()));
+    routeMenu->addAction("Clear All Routes", this, SLOT(onClearRoutes()));
+
+    // ================================== MOOSDB MENU
+    QMenu *moosMenu = menuBar()->addMenu("&MOOSDB");
+    moosMenu->addAction("Restart Connection", this, SLOT(subscribeMOOSDB()) );
+    moosMenu->addAction("Stop Connection", this, SLOT(stopSubscribeMOOSDB()) );
+
+    // ================================== AIS
+    if (AppConfig::isDevelopment()) {
+        QMenu *aisMenu = menuBar()->addMenu("&AIS");
+        aisMenu->addAction( tr( "Run AIS" ), this, SLOT( runAis() ) );
+        aisMenu->addAction( tr( "Load AIS Logfile" ), this, SLOT( slotLoadAisFile() ) );
+        aisMenu->addAction( tr( "Load AIS Variable" ), this, SLOT( slotLoadAisVariable() ) );
+        aisMenu->addAction( tr( "Stop Load AIS Variable" ), this, SLOT( slotStopLoadAisVariable() ) );
+        // aisMenu->addAction( tr( "Connect to AIS Server" ), this, SLOT( slotConnectToAisServer() ) );
+    }
+
+    // ================================== SIDEBAR MENU
+    viewMenu = menuBar()->addMenu(tr("&Sidebar"));
+    QDockWidget *dock = new QDockWidget(tr("Ownship Info Panel"), this);
+
+    dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::TopDockWidgetArea | Qt::BottomDockWidgetArea);
+    ownShipText = new QTextEdit(dock);
+    ownShipText->setText("");
+    ownShipText->setReadOnly(true); // Membuat teks tidak dapat diedit
+    dock->setWidget(ownShipText);
+    addDockWidget(Qt::LeftDockWidgetArea, dock);
+    viewMenu->addAction(dock->toggleViewAction());
+    dock->hide();
+
+    dock = new QDockWidget(tr("AIS Target Panel"), this);
+    dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::TopDockWidgetArea | Qt::BottomDockWidgetArea);
+    aisText = new QTextEdit(dock);
+    aisText->setText("");
+    aisText->setReadOnly(true); // Membuat teks tidak dapat diedit
+    dock->setWidget(aisText);
+    addDockWidget(Qt::LeftDockWidgetArea, dock);
+    viewMenu->addAction(dock->toggleViewAction());
+    dock->hide();
+
+    // Setup CPA/TCPA Panel after createDockWindows
+    setupCPATCPAPanel();
+    if (m_cpatcpaPanel) {
+        ecchart->setCPAPanelToAIS(m_cpatcpaPanel);
+    }
+
+    viewMenu->addSeparator();
+
+    dock = new QDockWidget(tr("NMEA Received Log"), this);
+    dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::TopDockWidgetArea | Qt::BottomDockWidgetArea);
+    nmeaText = new QTextEdit(dock);
+    nmeaText->setText("");
+    nmeaText->setReadOnly(true); // Membuat teks tidak dapat diedit
+    dock->setWidget(nmeaText);
+    addDockWidget(Qt::LeftDockWidgetArea, dock);
+    viewMenu->addAction(dock->toggleViewAction());
+    dock->hide();
+
+    dock = new QDockWidget(tr("Program Log"), this);
+    dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::TopDockWidgetArea | Qt::BottomDockWidgetArea);
+    logText = new QTextEdit(dock);
+    logText->setText("");
+    logText->setReadOnly(true); // Membuat teks tidak dapat diedit
+    dock->setWidget(logText);
+    addDockWidget(Qt::BottomDockWidgetArea, dock);
+    viewMenu->addAction(dock->toggleViewAction());
+
+    if (AppConfig::isProduction()){
+        dock->hide();
+    }
+
+    // ================================== SETTINGS MANAGER MENU
+    QMenu *settingMenu = menuBar()->addMenu("&Settings");
+    settingMenu->addAction("Setting Manager", this, SLOT(openSettingsDialog()) );
+
+    // Delay refresh route panel untuk memastikan data sudah fully loaded
+    QTimer::singleShot(100, [this]() {
+        if (routePanel) {
+            routePanel->refreshRouteList();
+            qDebug() << "[MAINWINDOW] Route panel refreshed after data load";
+        }
+    });
+
+    createActions();
+
+    // PERBAIKAN: Manual sync UI dengan state backend setelah actions dibuat
+    // Gunakan QTimer untuk delay sync agar guardzone dari file sudah fully loaded
+    QTimer::singleShot(500, [this]() {
+        bool hasAttached = ecchart && ecchart->hasAttachedGuardZone();
+        qDebug() << "[STARTUP-SYNC-DELAYED] Checking hasAttachedGuardZone:" << hasAttached;
+
+        if (hasAttached) {
+            // Jika ada guardzone attached, sync UI
+            if (attachToShipAction) {
+                attachToShipAction->blockSignals(true);
+                attachToShipAction->setChecked(true);
+                attachToShipAction->blockSignals(false);
+                qDebug() << "[STARTUP-SYNC-DELAYED] Manual sync: found attached guardzone, set UI to checked";
+            } else {
+                qDebug() << "[STARTUP-SYNC-DELAYED] ERROR: attachToShipAction is null!";
+            }
+        } else {
+            qDebug() << "[STARTUP-SYNC-DELAYED] No attached guardzone found, keeping UI unchecked";
+        }
+    });
+
+    qDebug() << "[STARTUP] MainWindow startup completed, UI synchronized with backend state";
+
+    // GuardZone
+    // ========== INITIALIZE GUARDZONE PANEL POINTERS ==========
+    guardZonePanel = nullptr;
+    guardZoneDock = nullptr;
+    // ========================================================
+
+    // ========== INITIALIZE ALERT PANEL POINTERS ==========
+    alertPanel = nullptr;
+    alertDock = nullptr;
+    // ===================================================
+
+    // ================================== GUARDZONE MENU
+    if (AppConfig::isDevelopment()) {
+        QMenu *guardZoneMenu = menuBar()->addMenu("&GuardZone");
+
+        QAction *enableGuardZoneAction = guardZoneMenu->addAction("Enable GuardZone");
+        enableGuardZoneAction->setCheckable(true);
+        enableGuardZoneAction->setChecked(true);  // PERBAIKAN: Default checked
+        connect(enableGuardZoneAction, SIGNAL(toggled(bool)), this, SLOT(onEnableGuardZone(bool)));
+
+        guardZoneMenu->addSeparator();
+
+        guardZoneMenu->addAction("Create Circular GuardZone", this, SLOT(onCreateCircularGuardZone()));
+        guardZoneMenu->addAction("Create Polygon GuardZone", this, SLOT(onCreatePolygonGuardZone()));
+
+        guardZoneMenu->addSeparator();
+
+        guardZoneMenu->addAction("Check for Threats", this, SLOT(onCheckGuardZone()));
+
+        attachToShipAction = guardZoneMenu->addAction("Attach to Ship");
+        attachToShipAction->setCheckable(true);
+        attachToShipAction->setChecked(false);  // PERBAIKAN: Set default false, akan diupdate oleh signal dari EcWidget
+        connect(attachToShipAction, SIGNAL(toggled(bool)), this, SLOT(onAttachGuardZoneToShip(bool)));
+
+        guardZoneMenu->addSeparator();
+
+        // ========== TAMBAHAN BARU: SUB MENU TEST GUARDZONE ==========
+        QAction *testGuardZoneAction = guardZoneMenu->addAction("Test guardzone");
+        testGuardZoneAction->setCheckable(true);
+        connect(testGuardZoneAction, SIGNAL(toggled(bool)), this, SLOT(onTestGuardZone(bool)));
+        // ===========================================================
+
+        guardZoneMenu->addSeparator();
+
+        QAction *autoCheckShipGuardianAction = guardZoneMenu->addAction("Auto-Check Ship Guardian");
+        autoCheckShipGuardianAction->setCheckable(true);
+        connect(autoCheckShipGuardianAction, SIGNAL(toggled(bool)), this, SLOT(onAutoCheckShipGuardian(bool)));
+
+        guardZoneMenu->addAction("Check Ship Guardian Now", this, SLOT(onCheckShipGuardianNow()));
+
+        guardZoneMenu->addSeparator();
+        // Auto-check menu items
+        QAction *autoCheckAction = guardZoneMenu->addAction("Enable Auto-Check");
+        autoCheckAction->setCheckable(true);
+        autoCheckAction->setChecked(true);  // PERBAIKAN: Default checked sesuai dengan backend setting
+        connect(autoCheckAction, &QAction::toggled, this, &MainWindow::onToggleGuardZoneAutoCheck);
+
+        QAction *configAutoCheckAction = guardZoneMenu->addAction("Configure Auto-Check...");
+        connect(configAutoCheckAction, &QAction::triggered, this, &MainWindow::onConfigureGuardZoneAutoCheck);
+
+        guardZoneMenu->addSeparator();
+        QAction *realTimeStatusAction = guardZoneMenu->addAction("Show Real-Time Status");
+        connect(realTimeStatusAction, &QAction::triggered, this, &MainWindow::onShowGuardZoneStatus);
+    }
+
+    if (AppConfig::isDevelopment()) {
+        QMenu *simulationMenu = menuBar()->addMenu("&Simulation");
+
+        simulationMenu->addAction("Start AIS Target Simulation", this, SLOT(onStartSimulation()));
+        simulationMenu->addAction("Stop Simulation", this, SLOT(onStopSimulation()));
+
+        simulationMenu->addSeparator();
+    }
+
+    // QAction *autoCheckAction = simulationMenu->addAction("Auto-Check GuardZone");
+    // autoCheckAction->setCheckable(true);
+    // connect(autoCheckAction, SIGNAL(toggled(bool)), this, SLOT(onAutoCheckGuardZone(bool)));
+
+    // ================================== AIS DVR MENU
+    if (AppConfig::isDevelopment()) {
+        QMenu *dvrMenu = menuBar()->addMenu("&AIS DVR");
+
+        startAisRecAction = dvrMenu->addAction("Start Record", this, SLOT(startAisRecord()) );
+        stopAisRecAction = dvrMenu->addAction("Stop Record", this, SLOT(stopAisRecord()) );
+
+        startAisRecAction->setEnabled(true);
+        stopAisRecAction->setEnabled(false);
+    }
+
+    if (AppConfig::isDevelopment()) {
+        QMenu *debugMenu = menuBar()->addMenu("&Debug");
+        debugMenu->addAction("NMEA Decode", this, SLOT(nmeaDecode()));
+    }
+
+    // ================================== CPA/TCPA MENU
+    if (AppConfig::isDevelopment()){
+        if (AppConfig::isDevelopment()) {
+            QMenu *cpaMenu = menuBar()->addMenu("&CPA/TCPA");
+
+            // Sub menu untuk CPA/TCPA
+            QAction *cpaSettingsAction = cpaMenu->addAction("CPA/TCPA Settings");
+            connect(cpaSettingsAction, SIGNAL(triggered()), this, SLOT(onCPASettings()));
+
+            cpaMenu->addSeparator();
+
+            QAction *showCPATargetsAction = cpaMenu->addAction("Show CPA/TCPA Monitor");
+            showCPATargetsAction->setCheckable(true);
+            showCPATargetsAction->setChecked(false);
+            connect(showCPATargetsAction, SIGNAL(triggered(bool)), this, SLOT(onShowCPATargets(bool)));
+
+            QAction *showTCPAInfoAction = cpaMenu->addAction("Show TCPA Info");
+            showTCPAInfoAction->setCheckable(true);
+            showTCPAInfoAction->setChecked(false);
+            connect(showTCPAInfoAction, SIGNAL(triggered(bool)), this, SLOT(onShowTCPAInfo(bool)));
+
+            cpaMenu->addSeparator();
+
+            QAction *cpaTcpaAlarmsAction = cpaMenu->addAction("Enable CPA/TCPA Alarms");
+            cpaTcpaAlarmsAction->setCheckable(true);
+            cpaTcpaAlarmsAction->setChecked(true);
+            connect(cpaTcpaAlarmsAction, SIGNAL(triggered(bool)), this, SLOT(onCPATCPAAlarms(bool)));
+
+            connect(m_cpatcpaDock, &QDockWidget::visibilityChanged, this, [=](bool visible) {
+                if (!visible) { showCPATargetsAction->setChecked(false);}
+                else { showCPATargetsAction->setChecked(true);}
+            });
+        }
+        else {
+            QMenu *cpaMenu = menuBar()->addMenu("&CPA/TCPA");
+
+            QAction *showCPATargetsAction = cpaMenu->addAction("Show CPA/TCPA Monitor");
+            showCPATargetsAction->setCheckable(true);
+            showCPATargetsAction->setChecked(false);
+            connect(showCPATargetsAction, SIGNAL(triggered(bool)), this, SLOT(onShowCPATargets(bool)));
+
+            QAction *cpaSettingsAction = cpaMenu->addAction("CPA/TCPA Settings");
+            connect(cpaSettingsAction, SIGNAL(triggered()), this, SLOT(onCPASettings()));
+
+            connect(m_cpatcpaDock, &QDockWidget::visibilityChanged, this, [=](bool visible) {
+                if (!visible) { showCPATargetsAction->setChecked(false);}
+                else { showCPATargetsAction->setChecked(true);}
+            });
+        }
+    }
+
+    // ================================== DISPLAY ORIENTATION MENU
+    if (AppConfig::isDevelopment()) {
+        QMenu *displayOrientationMenu = menuBar()->addMenu("&Chart Orientation");
+
+        // Buat grup eksklusif
+        QActionGroup *orientationGroup = new QActionGroup(this);
+        orientationGroup->setExclusive(true); // Hanya satu yang bisa aktif
+
+        // NORTH UP
+        QAction *northUpAction = displayOrientationMenu->addAction("North-Up Mode");
+        northUpAction->setCheckable(true);
+        northUpAction->setChecked(true);
+        orientationGroup->addAction(northUpAction);
+        connect(northUpAction, SIGNAL(triggered(bool)), this, SLOT(onNorthUp(bool)));
+
+        // HEAD UP
+        QAction *headUpAction = displayOrientationMenu->addAction("Head-Up Mode");
+        headUpAction->setCheckable(true);
+        headUpAction->setChecked(false);
+        orientationGroup->addAction(headUpAction);
+        connect(headUpAction, SIGNAL(triggered(bool)), this, SLOT(onHeadUp(bool)));
+
+        // COURSE UP
+        QAction *courseUpAction = displayOrientationMenu->addAction("Course-Up Mode");
+        courseUpAction->setCheckable(true);
+        courseUpAction->setChecked(false);
+        orientationGroup->addAction(courseUpAction);
+        connect(courseUpAction, SIGNAL(triggered(bool)), this, SLOT(onCourseUp(bool)));
+
+        // DISPLAY ORIENTATION
+        QMenu *osCenteringMenu = menuBar()->addMenu("&Ownship Centering");
+
+        // Buat grup eksklusif
+        QActionGroup *centeringGroup = new QActionGroup(this);
+        centeringGroup->setExclusive(true); // Hanya satu yang bisa aktif
+
+        // HEAD UP
+        QAction *centeringAction = osCenteringMenu->addAction("Centering Mode");
+        centeringAction->setCheckable(true);
+        centeringAction->setChecked(true);
+        centeringGroup->addAction(centeringAction);
+        connect(centeringAction, SIGNAL(triggered(bool)), this, SLOT(onCentered(bool)));
+
+        // NORTH UP
+        QAction *lookAheadAction = osCenteringMenu->addAction("Look-Ahead Mode");
+        lookAheadAction->setCheckable(true);
+        lookAheadAction->setChecked(false);
+        centeringGroup->addAction(lookAheadAction);
+        connect(lookAheadAction, SIGNAL(triggered(bool)), this, SLOT(onLookAhead(bool)));
+
+        // COURSE UP
+        QAction *manualAction = osCenteringMenu->addAction("Manual Offset Mode");
+        manualAction->setCheckable(true);
+        manualAction->setChecked(false);
+        centeringGroup->addAction(manualAction);
+        connect(manualAction, SIGNAL(triggered(bool)), this, SLOT(onManual(bool)));
+    }
+
+}
+
+// S-63 USER PERMIT GENERATE
+void MainWindow::userPermitGenerate(){
+    char *userpermit = nullptr;
+    unsigned char* hwid = (unsigned char*)"95C7-DAC8-182A-403D-257C-C";
+    //unsigned char* hwid = (unsigned char*)"6B4A-4473-2387-B940-5A7C-A";
+    unsigned char* mid = (unsigned char*)"BF";
+    unsigned char* mkey = (unsigned char*)"82115";
+
+    EcS63CreateUserPermit(hwid, mkey, mid, &userpermit);
+
+    qDebug() << userpermit;
+}
+
+// DVR PLUGIN
 void MainWindow::startAisRecord(){
     IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
 
@@ -298,16 +846,17 @@ void MainWindow::stopAisRecord(){
     }
 }
 
-void MainWindow::nmeaDecode(){
-    ecchart->setOwnShipTrail(true);
-
-    // ecchart->publishToMOOSDB("WAYPT_NAV", "pts={-7.12, 112.01}");
-}
-
 void MainWindow::onNmeaReceived(const QString& line) {
     if (aisDvr && aisDvr->isRecording()) {
         aisDvr->recordRawNmea(line);
     }
+}
+
+// DEBUG PURPOSE
+void MainWindow::nmeaDecode(){
+    ecchart->setOwnShipTrail(true);
+
+    // ecchart->publishToMOOSDB("WAYPT_NAV", "pts={-7.12, 112.01}");
 }
 
 void MainWindow::openSettingsDialog() {
@@ -337,9 +886,7 @@ void MainWindow::setDisplay(){
     DrawChart();
 }
 
-MainWindow::MainWindow(QWidget *parent)
-: QMainWindow(parent), ecchart(NULL)
-{
+MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL){
   // set the registration mode similar to the mode
   // for which the Kernel development license has been registered
   // EcKernelRegisterSetMode(EC_REGISTER_CHECK_DONGLE_7); // for Sentinel dongle
@@ -512,574 +1059,23 @@ MainWindow::MainWindow(QWidget *parent)
   connect(ecchart, SIGNAL(mouseMove(EcCoordinate, EcCoordinate)), this, SLOT( onMouseMove(EcCoordinate, EcCoordinate)));  
   connect(ecchart, SIGNAL(mouseRightClick(QPoint)), this, SLOT( onMouseRightClick(QPoint)));
 
-  // Status bar
-  posEdit = new QLineEdit(statusBar());
-  posEdit->setReadOnly(true);
-  int wi = QFontMetrics(posEdit->font()).horizontalAdvance("12 34.56 N 123 45.678 E");
-  posEdit->setFixedWidth(wi + 30);
+  // STATUS BAR
+  createStatusBar();
 
-  proEdit = new QLineEdit(statusBar());
-  proEdit->setReadOnly(true);
-  wi = QFontMetrics(proEdit->font()).horizontalAdvance("Cylindrical Equidistant");
-  proEdit->setFixedWidth(wi + 10);
+  // MENU BAR
+  createMenuBar();
 
-  sclEdit = new QLineEdit(statusBar());
-  sclEdit->setReadOnly(true);
-  wi = QFontMetrics(sclEdit->font()).horizontalAdvance("1:25000000");
-  sclEdit->setFixedWidth(wi + 10);
-
-  rngEdit = new QLineEdit(statusBar());
-  rngEdit->setReadOnly(true);
-  wi = QFontMetrics(rngEdit->font()).horizontalAdvance("2000");
-  rngEdit->setFixedWidth(wi + 10);
-
-  oriEdit = new QLineEdit(statusBar());
-  oriEdit->setReadOnly(true);
-  wi = QFontMetrics(oriEdit->font()).horizontalAdvance("2000");
-  oriEdit->setFixedWidth(wi + 10);
-  oriEdit->setText("0°");
-
-  // CONNECTION STATUS
-  moosLedCircle = new QLabel;
-  moosLedCircle->setFixedSize(12, 12);  // lingkaran 12x12
-  moosLedCircle->setStyleSheet("background-color: red; border-radius: 6px;");
-
-  moosStatusText = new QLabel(" MOOS: Disconnected");
-  moosStatusText->setStyleSheet("color: red; font-weight: bold;");
-
-  QWidget *moosStatusWidget = new QWidget;
-  QHBoxLayout *statusLayout = new QHBoxLayout(moosStatusWidget);
-  statusLayout->setContentsMargins(5, 0, 10, 0); // spasi antar widget
-  statusLayout->addWidget(moosLedCircle);
-  statusLayout->addWidget(moosStatusText);
-
-  // Tambahkan ke paling kiri status bar
-  statusBar()->addWidget(moosStatusWidget);  // kiri
-
-  connect(ecchart, &EcWidget::aisSubCreated, this, [this](AISSubscriber* sub) {
-      qDebug() << "aisSub created, now connecting signal...";
-      connect(sub, &AISSubscriber::connectionStatusChanged, this, [this](bool connected) {
-          qDebug() << "[MainWindow] connectionStatusChanged called, connected =" << connected;
-          if (connected) {
-              moosLedCircle->setStyleSheet("background-color: green; border-radius: 6px;");
-              moosStatusText->setText(" MOOS: Connected");
-              moosStatusText->setStyleSheet("color: green; font-weight: bold;");
-          } else {
-              moosLedCircle->setStyleSheet("background-color: red; border-radius: 6px;");
-              moosStatusText->setText(" MOOS: Disconnected");
-              moosStatusText->setStyleSheet("color: red; font-weight: bold;");
-          }
-      });
-
-      connect(ecchart->getAisSub(), &AISSubscriber::connectionStatusChanged,
-              this, &MainWindow::onMoosConnectionStatusChanged);
-  });
-
-  statusBar()->addPermanentWidget(new QLabel("Chart Rotation:", statusBar()));
-  statusBar()->addPermanentWidget(oriEdit, 0);
-  statusBar()->addPermanentWidget(new QLabel("Range:", statusBar()));
-  statusBar()->addPermanentWidget(rngEdit, 0);
-  statusBar()->addPermanentWidget(new QLabel("Scale:", statusBar()));
-  statusBar()->addPermanentWidget(sclEdit, 0);
-  statusBar()->addPermanentWidget(new QLabel("Projection:", statusBar()));
-  statusBar()->addPermanentWidget(proEdit, 0);
-  statusBar()->addPermanentWidget(new QLabel("Cursor:", statusBar()));
-  statusBar()->addPermanentWidget(posEdit, 0);
-
-
-  /*
-  // DELETE LATER
-  // File menu
-  QMenu *fileMenu = menuBar()->addMenu("&File");
-
-  fileMenu->addAction("E&xit", this, SLOT(close()))->setShortcut(tr("Ctrl+x", "File|Exit"));
-  // fileMenu->addAction("Reload", this, SLOT(onReload()));
-  */
-
-  // IMPORT MENU
-  QMenu *importMenu = menuBar()->addMenu("&Import");
-
-  dencActionGroup = new QActionGroup(this);
-
-  QAction * action = dencActionGroup->addAction("Tree");
-  connect(action, SIGNAL(triggered()), this, SLOT(onImportTree()));
-  importMenu->addAction(action);
-
-  action = dencActionGroup->addAction("S-57 Exchange Set");
-  connect(action, SIGNAL(triggered()), this, SLOT(onImportS57()));
-  importMenu->addAction(action);
-
-  importMenu->addSeparator();
-
-  action = dencActionGroup->addAction("IHO Certificate");
-  connect(action, SIGNAL(triggered()), this, SLOT(onImportIHOCertificate()));
-  importMenu->addAction(action);
-
-  action = dencActionGroup->addAction("S-63 Permits");
-  connect(action, SIGNAL(triggered()), this, SLOT(onImportS63Permits()));
-  importMenu->addAction(action);
-
-  action = dencActionGroup->addAction("S-63 Exchange Set");
-  connect(action, SIGNAL(triggered()), this, SLOT(onImportS63()));
-  importMenu->addAction(action);
-
-  dencActionGroup->setEnabled(!dencPath.isEmpty());
-
-  // LAYERS MENU
-  QMenu *viewMenu = menuBar()->addMenu("&Layers");
-
-  QActionGroup *lActionGroup = new QActionGroup(this);
-  simplifiedAction  = lActionGroup->addAction("Simplified");
-  fullChartAction   = lActionGroup->addAction("Full Chart");
-  simplifiedAction->setCheckable(true);
-  fullChartAction->setCheckable(true);
-  if(lookupTable == EC_LOOKUP_SIMPLIFIED)
-      simplifiedAction->setChecked(true);
-  else
-      fullChartAction->setChecked(true);
-  connect(lActionGroup, SIGNAL(triggered(QAction *)), this, SLOT(onLookup(QAction *)));
-
-  viewMenu->addAction(simplifiedAction);
-  viewMenu->addAction(fullChartAction);
-
-  viewMenu->addSeparator();
-
-  QActionGroup *vActionGroup = new QActionGroup(this);
-  baseAction = vActionGroup->addAction("Display Base");
-  standardAction    = vActionGroup->addAction("Standard");
-  otherAction       = vActionGroup->addAction("Detailed");
-  baseAction->setCheckable(true);
-  standardAction->setCheckable(true);
-  otherAction->setCheckable(true);
-  if(displayCategory == EC_OTHER)
-      otherAction->setChecked(true);
-  else if(displayCategory == EC_STANDARD)
-      standardAction->setChecked(true);
-  else
-      baseAction->setChecked(true);
-
-  connect(vActionGroup, SIGNAL(triggered(QAction *)), this, SLOT(onDisplayCategory(QAction *)));
-
-  viewMenu->addAction(baseAction);
-  viewMenu->addAction(standardAction);
-  viewMenu->addAction(otherAction);
-  viewMenu->addSeparator();
-
-  QAction *lightsAction = viewMenu->addAction("Lights");
-  lightsAction->setCheckable(true);
-  lightsAction->setChecked(showLights);
-  connect(lightsAction, SIGNAL(toggled(bool)), this, SLOT(onLights(bool)));
-
-  QAction *textAction = viewMenu->addAction("Text");
-  textAction->setCheckable(true);
-  textAction->setChecked(showText);
-  connect(textAction, SIGNAL(toggled(bool)), this, SLOT(onText(bool)));
-
-  QAction *soundingsAction = viewMenu->addAction("Soundings");
-  soundingsAction->setCheckable(true);
-  soundingsAction->setChecked(showSoundings);
-  connect(soundingsAction, SIGNAL(toggled(bool)), this, SLOT(onSoundings(bool)));
-
-  viewMenu->addSeparator();
-
-  QAction *gridAction = viewMenu->addAction("Grid");
-  gridAction->setCheckable(true);
-  gridAction->setChecked(showGrid);
-  connect(gridAction, SIGNAL(toggled(bool)), this, SLOT(onGrid(bool)));
-
-  viewMenu->addSeparator();
-
-  //QAction *aisAction = viewMenu->addAction("AIS targets");
-  QAction *aisAction = viewMenu->addAction("Own ship");
-  aisAction->setCheckable(true);
-  aisAction->setChecked(showAIS);
-  connect(aisAction, SIGNAL(toggled(bool)), this, SLOT(onAIS(bool)));
+  // S-56 USER PERMIT GENERATE
+  // userPermitGenerate();
 
   if (AppConfig::isDevelopment()) {
-      QAction *trackAction = viewMenu->addAction("Track Ship");
-      trackAction->setCheckable(true);
-      trackAction->setChecked(trackShip);
-      connect(trackAction, SIGNAL(toggled(bool)), this, SLOT(onTrack(bool)));
-  }
-
-  viewMenu->addSeparator();
-
-  if (AppConfig::isDevelopment()){
-      QAction *trailAction = viewMenu->addAction("Clear Trail");
-      connect(trailAction, &QAction::triggered, this, [=]() {
-          ecchart->clearOwnShipTrail();
-          update(); // misalnya untuk redraw
-      });
-
-      viewMenu->addSeparator();
-  }
-
-  // DISPLAY MENU
-  QMenu *colorMenu = menuBar()->addMenu("&Display");
-
-  QActionGroup *cActionGroup = new QActionGroup(this);
-  dayAction    = cActionGroup->addAction("Day");
-  duskAction = cActionGroup->addAction("Dusk");
-  nightAction = cActionGroup->addAction("Night");
-  dayAction->setCheckable(true);
-  duskAction->setCheckable(true);
-  nightAction->setCheckable(true);
-  dayAction->setChecked(true);
-  connect(cActionGroup, SIGNAL(triggered(QAction *)), this, SLOT(onColorScheme(QAction *)));
-
-  colorMenu->addAction(dayAction);
-  colorMenu->addAction(duskAction);
-  colorMenu->addAction(nightAction);
-
-  colorMenu->addSeparator();
-
-  QAction *greyAction = colorMenu->addAction("Grey Mode");
-  greyAction->setCheckable(true);
-  connect(greyAction, SIGNAL(toggled(bool)), this, SLOT(onGreyMode(bool)));
-
-  // QAction *searchAction = viewMenu->addAction("Search");
-  // connect(searchAction, &QAction::triggered, this, &MainWindow::onSearch);
-
-  // CONTROL
-  QMenu *drawMenu = menuBar()->addMenu("&Control");
-
-  drawMenu->addAction("Zoom In", this, SLOT(onZoomIn()))->setShortcut(tr("PgUp", "Draw|Zoom In"));
-  drawMenu->addAction("Zoom Out", this, SLOT(onZoomOut()))->setShortcut(tr("PgDown", "Draw|Zoom out"));
-
-  drawMenu->addSeparator();
-
-  drawMenu->addAction("Shift Left", this, SLOT(onLeft()))->setShortcut(tr("Left", "Draw|Left"));
-  drawMenu->addAction("Shift Right", this, SLOT(onRight()))->setShortcut(tr("Right", "Draw|Right"));
-  drawMenu->addAction("Shift Up", this, SLOT(onUp()))->setShortcut(tr("Up", "Draw|Up"));
-  drawMenu->addAction("Shift Down", this, SLOT(onDown()))->setShortcut(tr("Down", "Draw|Down"));
-
-  drawMenu->addSeparator();
-
-  drawMenu->addAction("Rotate Clockwise", this, SLOT(onRotateCW()))->setShortcut(tr("+", "Draw|Rotate Clockwise"));
-  drawMenu->addAction("Rotate AntiClockwise", this, SLOT(onRotateCCW()))->setShortcut(tr("-", "Draw|Rotate Anticlockwise"));
-
-  drawMenu->addSeparator();
-
-  QActionGroup *pActionGroup = new QActionGroup(this);
-  autoProjectionAction = pActionGroup->addAction("Automatic");
-  mercatorAction       = pActionGroup->addAction("Mercator");
-  gnomonicAction       = pActionGroup->addAction("Gnomonic");
-  stereographicAction  = pActionGroup->addAction("Stereographic");
-  autoProjectionAction->setCheckable(true);
-  mercatorAction->setCheckable(true);
-  gnomonicAction->setCheckable(true);
-  stereographicAction->setCheckable(true);
-  mercatorAction->setChecked(true);
-  connect(pActionGroup, SIGNAL(triggered(QAction *)), this, SLOT(onProjection(QAction *)));
-
-  // drawMenu->addAction(autoProjectionAction);
-  // drawMenu->addAction(mercatorAction);
-  // drawMenu->addAction(gnomonicAction);
-  // drawMenu->addAction(stereographicAction);
-
-
-  // ROUTE MENU
-  setupRoutePanel();
-
-  // Route - Comprehensive navigation planning
-  QMenu *routeMenu = menuBar()->addMenu("&Route");
-
-  routeMenu->addAction("Create New Route", this, SLOT(onCreateRoute()));
-  routeMenu->addSeparator();
-  routeMenu->addAction("Edit Route Points", this, SLOT(onEditRoute()));
-  routeMenu->addAction("Insert Waypoint", this, SLOT(onInsertWaypoint()));
-  routeMenu->addAction("Move Waypoint", this, SLOT(onMoveWaypoint()));
-  routeMenu->addAction("Delete Waypoint", this, SLOT(onDeleteWaypoint()));
-  routeMenu->addAction("Delete Route", this, SLOT(onDeleteRoute()));
-  routeMenu->addSeparator();
-  routeMenu->addAction("Import Route...", this, SLOT(onImportRoute()));
-  routeMenu->addAction("Export Route...", this, SLOT(onExportRoute()));
-  routeMenu->addAction("Export All Routes...", this, SLOT(onExportAllRoutes()));
-  routeMenu->addAction("Clear All Routes", this, SLOT(onClearRoutes()));
-
-  // MOOSDB MENU
-  QMenu *moosMenu = menuBar()->addMenu("&MOOSDB");
-  moosMenu->addAction("Restart Connection", this, SLOT(subscribeMOOSDB()) );
-  moosMenu->addAction("Stop Connection", this, SLOT(stopSubscribeMOOSDB()) );
-
-  // AIS
-  if (AppConfig::isDevelopment()) {
-      QMenu *aisMenu = menuBar()->addMenu("&AIS");
-      aisMenu->addAction( tr( "Run AIS" ), this, SLOT( runAis() ) );
-      aisMenu->addAction( tr( "Load AIS Logfile" ), this, SLOT( slotLoadAisFile() ) );
-      aisMenu->addAction( tr( "Load AIS Variable" ), this, SLOT( slotLoadAisVariable() ) );
-      aisMenu->addAction( tr( "Stop Load AIS Variable" ), this, SLOT( slotStopLoadAisVariable() ) );
-      // aisMenu->addAction( tr( "Connect to AIS Server" ), this, SLOT( slotConnectToAisServer() ) );
-  }
-
-  // SIDEBAR MENU
-  createDockWindows();
-
-  // SETTINGS MANAGER MENU
-  QMenu *settingMenu = menuBar()->addMenu("&Settings");
-  settingMenu->addAction("Setting Manager", this, SLOT(openSettingsDialog()) );
-
-
-  // Setup CPA/TCPA Panel after createDockWindows
-  setupCPATCPAPanel();
-  if (m_cpatcpaPanel) {
-      ecchart->setCPAPanelToAIS(m_cpatcpaPanel);
-  }
-  
-  // Delay refresh route panel untuk memastikan data sudah fully loaded
-  QTimer::singleShot(100, [this]() {
-      if (routePanel) {
-          routePanel->refreshRouteList();
-          qDebug() << "[MAINWINDOW] Route panel refreshed after data load";
-      }
-  });
-  
-  createActions();
-
-  // PERBAIKAN: Manual sync UI dengan state backend setelah actions dibuat
-  // Gunakan QTimer untuk delay sync agar guardzone dari file sudah fully loaded
-  QTimer::singleShot(500, [this]() {
-      bool hasAttached = ecchart && ecchart->hasAttachedGuardZone();
-      qDebug() << "[STARTUP-SYNC-DELAYED] Checking hasAttachedGuardZone:" << hasAttached;
-      
-      if (hasAttached) {
-          // Jika ada guardzone attached, sync UI
-          if (attachToShipAction) {
-              attachToShipAction->blockSignals(true);
-              attachToShipAction->setChecked(true);
-              attachToShipAction->blockSignals(false);
-              qDebug() << "[STARTUP-SYNC-DELAYED] Manual sync: found attached guardzone, set UI to checked";
-          } else {
-              qDebug() << "[STARTUP-SYNC-DELAYED] ERROR: attachToShipAction is null!";
-          }
-      } else {
-          qDebug() << "[STARTUP-SYNC-DELAYED] No attached guardzone found, keeping UI unchecked";
-      }
-  });
-
-  qDebug() << "[STARTUP] MainWindow startup completed, UI synchronized with backend state";
-
-  // GuardZone
-  // ========== INITIALIZE GUARDZONE PANEL POINTERS ==========
-  guardZonePanel = nullptr;
-  guardZoneDock = nullptr;
-  // ========================================================
-
-  // ========== INITIALIZE ALERT PANEL POINTERS ==========
-  alertPanel = nullptr;
-  alertDock = nullptr;
-  // ===================================================
-
-  // GuardZone menu
-  if (AppConfig::isDevelopment()) {
-      QMenu *guardZoneMenu = menuBar()->addMenu("&GuardZone");
-
-      QAction *enableGuardZoneAction = guardZoneMenu->addAction("Enable GuardZone");
-      enableGuardZoneAction->setCheckable(true);
-      enableGuardZoneAction->setChecked(true);  // PERBAIKAN: Default checked
-      connect(enableGuardZoneAction, SIGNAL(toggled(bool)), this, SLOT(onEnableGuardZone(bool)));
-
-      guardZoneMenu->addSeparator();
-
-      guardZoneMenu->addAction("Create Circular GuardZone", this, SLOT(onCreateCircularGuardZone()));
-      guardZoneMenu->addAction("Create Polygon GuardZone", this, SLOT(onCreatePolygonGuardZone()));
-
-      guardZoneMenu->addSeparator();
-
-      guardZoneMenu->addAction("Check for Threats", this, SLOT(onCheckGuardZone()));
-
-      attachToShipAction = guardZoneMenu->addAction("Attach to Ship");
-      attachToShipAction->setCheckable(true);
-      attachToShipAction->setChecked(false);  // PERBAIKAN: Set default false, akan diupdate oleh signal dari EcWidget
-      connect(attachToShipAction, SIGNAL(toggled(bool)), this, SLOT(onAttachGuardZoneToShip(bool)));
-
-      guardZoneMenu->addSeparator();
-
-      // ========== TAMBAHAN BARU: SUB MENU TEST GUARDZONE ==========
-      QAction *testGuardZoneAction = guardZoneMenu->addAction("Test guardzone");
-      testGuardZoneAction->setCheckable(true);
-      connect(testGuardZoneAction, SIGNAL(toggled(bool)), this, SLOT(onTestGuardZone(bool)));
-      // ===========================================================
-
-      guardZoneMenu->addSeparator();
-
-      QAction *autoCheckShipGuardianAction = guardZoneMenu->addAction("Auto-Check Ship Guardian");
-      autoCheckShipGuardianAction->setCheckable(true);
-      connect(autoCheckShipGuardianAction, SIGNAL(toggled(bool)), this, SLOT(onAutoCheckShipGuardian(bool)));
-
-      guardZoneMenu->addAction("Check Ship Guardian Now", this, SLOT(onCheckShipGuardianNow()));
-
-      guardZoneMenu->addSeparator();
-      // Auto-check menu items
-      QAction *autoCheckAction = guardZoneMenu->addAction("Enable Auto-Check");
-      autoCheckAction->setCheckable(true);
-      autoCheckAction->setChecked(true);  // PERBAIKAN: Default checked sesuai dengan backend setting
-      connect(autoCheckAction, &QAction::toggled, this, &MainWindow::onToggleGuardZoneAutoCheck);
-
-      QAction *configAutoCheckAction = guardZoneMenu->addAction("Configure Auto-Check...");
-      connect(configAutoCheckAction, &QAction::triggered, this, &MainWindow::onConfigureGuardZoneAutoCheck);
-
-      guardZoneMenu->addSeparator();
-      QAction *realTimeStatusAction = guardZoneMenu->addAction("Show Real-Time Status");
-      connect(realTimeStatusAction, &QAction::triggered, this, &MainWindow::onShowGuardZoneStatus);
-  }
-
-  if (AppConfig::isDevelopment()) {
-      QMenu *simulationMenu = menuBar()->addMenu("&Simulation");
-
-      simulationMenu->addAction("Start AIS Target Simulation", this, SLOT(onStartSimulation()));
-      simulationMenu->addAction("Stop Simulation", this, SLOT(onStopSimulation()));
-
-      simulationMenu->addSeparator();
-  }
-
-  // QAction *autoCheckAction = simulationMenu->addAction("Auto-Check GuardZone");
-  // autoCheckAction->setCheckable(true);
-  // connect(autoCheckAction, SIGNAL(toggled(bool)), this, SLOT(onAutoCheckGuardZone(bool)));
-
-  // DVR
-  if (AppConfig::isDevelopment()) {
-      QMenu *dvrMenu = menuBar()->addMenu("&AIS DVR");
-
-      startAisRecAction = dvrMenu->addAction("Start Record", this, SLOT(startAisRecord()) );
-      stopAisRecAction = dvrMenu->addAction("Stop Record", this, SLOT(stopAisRecord()) );
-
-      startAisRecAction->setEnabled(true);
-      stopAisRecAction->setEnabled(false);
-  }
-
-  if (AppConfig::isDevelopment()) {
-      QMenu *debugMenu = menuBar()->addMenu("&Debug");
-      debugMenu->addAction("NMEA Decode", this, SLOT(nmeaDecode()));
-  }
-
-  ///====================== IGNORE =============================
-  // CPA/TCPA menu
-  if (AppConfig::isDevelopment()){
-      if (AppConfig::isDevelopment()) {
-          QMenu *cpaMenu = menuBar()->addMenu("&CPA/TCPA");
-
-          // Sub menu untuk CPA/TCPA
-          QAction *cpaSettingsAction = cpaMenu->addAction("CPA/TCPA Settings");
-          connect(cpaSettingsAction, SIGNAL(triggered()), this, SLOT(onCPASettings()));
-
-          cpaMenu->addSeparator();
-
-          QAction *showCPATargetsAction = cpaMenu->addAction("Show CPA/TCPA Monitor");
-          showCPATargetsAction->setCheckable(true);
-          showCPATargetsAction->setChecked(false);
-          connect(showCPATargetsAction, SIGNAL(triggered(bool)), this, SLOT(onShowCPATargets(bool)));
-
-          QAction *showTCPAInfoAction = cpaMenu->addAction("Show TCPA Info");
-          showTCPAInfoAction->setCheckable(true);
-          showTCPAInfoAction->setChecked(false);
-          connect(showTCPAInfoAction, SIGNAL(triggered(bool)), this, SLOT(onShowTCPAInfo(bool)));
-
-          cpaMenu->addSeparator();
-
-          QAction *cpaTcpaAlarmsAction = cpaMenu->addAction("Enable CPA/TCPA Alarms");
-          cpaTcpaAlarmsAction->setCheckable(true);
-          cpaTcpaAlarmsAction->setChecked(true);
-          connect(cpaTcpaAlarmsAction, SIGNAL(triggered(bool)), this, SLOT(onCPATCPAAlarms(bool)));
-
-          connect(m_cpatcpaDock, &QDockWidget::visibilityChanged, this, [=](bool visible) {
-              if (!visible) { showCPATargetsAction->setChecked(false);}
-              else { showCPATargetsAction->setChecked(true);}
-          });
-      }
-      else {
-          QMenu *cpaMenu = menuBar()->addMenu("&CPA/TCPA");
-
-          QAction *showCPATargetsAction = cpaMenu->addAction("Show CPA/TCPA Monitor");
-          showCPATargetsAction->setCheckable(true);
-          showCPATargetsAction->setChecked(false);
-          connect(showCPATargetsAction, SIGNAL(triggered(bool)), this, SLOT(onShowCPATargets(bool)));
-
-          QAction *cpaSettingsAction = cpaMenu->addAction("CPA/TCPA Settings");
-          connect(cpaSettingsAction, SIGNAL(triggered()), this, SLOT(onCPASettings()));
-
-          connect(m_cpatcpaDock, &QDockWidget::visibilityChanged, this, [=](bool visible) {
-              if (!visible) { showCPATargetsAction->setChecked(false);}
-              else { showCPATargetsAction->setChecked(true);}
-          });
-      }
-  }
-
-  if (AppConfig::isDevelopment()) {
-      // DISPLAY ORIENTATION
-      QMenu *displayOrientationMenu = menuBar()->addMenu("&Chart Orientation");
-
-      // Buat grup eksklusif
-      QActionGroup *orientationGroup = new QActionGroup(this);
-      orientationGroup->setExclusive(true); // Hanya satu yang bisa aktif
-
-      // NORTH UP
-      QAction *northUpAction = displayOrientationMenu->addAction("North-Up Mode");
-      northUpAction->setCheckable(true);
-      northUpAction->setChecked(true);
-      orientationGroup->addAction(northUpAction);
-      connect(northUpAction, SIGNAL(triggered(bool)), this, SLOT(onNorthUp(bool)));
-
-      // HEAD UP
-      QAction *headUpAction = displayOrientationMenu->addAction("Head-Up Mode");
-      headUpAction->setCheckable(true);
-      headUpAction->setChecked(false);
-      orientationGroup->addAction(headUpAction);
-      connect(headUpAction, SIGNAL(triggered(bool)), this, SLOT(onHeadUp(bool)));
-
-      // COURSE UP
-      QAction *courseUpAction = displayOrientationMenu->addAction("Course-Up Mode");
-      courseUpAction->setCheckable(true);
-      courseUpAction->setChecked(false);
-      orientationGroup->addAction(courseUpAction);
-      connect(courseUpAction, SIGNAL(triggered(bool)), this, SLOT(onCourseUp(bool)));
-
-      // DISPLAY ORIENTATION
-      QMenu *osCenteringMenu = menuBar()->addMenu("&Ownship Centering");
-
-      // Buat grup eksklusif
-      QActionGroup *centeringGroup = new QActionGroup(this);
-      centeringGroup->setExclusive(true); // Hanya satu yang bisa aktif
-
-      // HEAD UP
-      QAction *centeringAction = osCenteringMenu->addAction("Centering Mode");
-      centeringAction->setCheckable(true);
-      centeringAction->setChecked(true);
-      centeringGroup->addAction(centeringAction);
-      connect(centeringAction, SIGNAL(triggered(bool)), this, SLOT(onCentered(bool)));
-
-      // NORTH UP
-      QAction *lookAheadAction = osCenteringMenu->addAction("Look-Ahead Mode");
-      lookAheadAction->setCheckable(true);
-      lookAheadAction->setChecked(false);
-      centeringGroup->addAction(lookAheadAction);
-      connect(lookAheadAction, SIGNAL(triggered(bool)), this, SLOT(onLookAhead(bool)));
-
-      // COURSE UP
-      QAction *manualAction = osCenteringMenu->addAction("Manual Offset Mode");
-      manualAction->setCheckable(true);
-      manualAction->setChecked(false);
-      centeringGroup->addAction(manualAction);
-      connect(manualAction, SIGNAL(triggered(bool)), this, SLOT(onManual(bool)));
-  }
-
-  // Load Plugin
-  // loadPluginAis();
-
-    // char *userpermit = nullptr;
-    // unsigned char* hwid = (unsigned char*)"95C7-DAC8-182A-403D-257C-C";
-    // //unsigned char* hwid = (unsigned char*)"6B4A-4473-2387-B940-5A7C-A";
-    // unsigned char* mid = (unsigned char*)"BF";
-    // unsigned char* mkey = (unsigned char*)"82115";
-
-    // EcS63CreateUserPermit(hwid, mkey, mid, &userpermit);
-
-    // qDebug() << userpermit;
-
-
-  if (AppConfig::isDevelopment()) {
+      // GUARDZONE PANEL
       setupGuardZonePanel();
+
+      // AIS TARGET PANEL
       setupAISTargetPanel();
+
+      // OBSTACLE DETECTION PANEL
       setupObstacleDetectionPanel();
   }
 
@@ -1125,7 +1121,7 @@ MainWindow::MainWindow(QWidget *parent)
       qDebug() << "[STARTUP] Menu states synchronized with backend: GuardZone=true, AutoCheck=true";
   }
 
-  // Start subscribe MOOSDB
+  // AUTO CONNECT TO MOOSDB
   if (AppConfig::isProduction()){
       ecchart->startAISSubscribe();
   }
@@ -1408,6 +1404,8 @@ void MainWindow::onDisplayCategory(QAction *a)
     dc = EC_OTHER;
 
   ecchart->SetDisplayCategory(dc);
+  ecchart->setDisplayCategoryInternal(dc);
+
   DrawChart();
 }
 
@@ -3890,7 +3888,7 @@ void MainWindow::setupCPATCPAPanel()
     m_cpatcpaPanel->setEcWidget(ecchart);
 
     // Create dock widget untuk panel
-    m_cpatcpaDock = new QDockWidget(tr("CPA/TCPA Monitor"), this);
+    m_cpatcpaDock = new QDockWidget(tr("CPA/TCPA Monitor Panel"), this);
     m_cpatcpaDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     m_cpatcpaDock->setWidget(m_cpatcpaPanel);
 
