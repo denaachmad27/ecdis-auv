@@ -31,21 +31,13 @@ void RouteListItem::updateDisplayText(const RouteInfo& routeInfo, EcWidget* ecWi
     
     setText(combinedText);
     
-    // Use consistent color mapping but with modern approach
-    static const QList<QColor> routeColors = {
-        QColor(255, 140, 0),   // Orange untuk single waypoints (routeId 0)
-        QColor(255, 100, 100), // Merah untuk Route 1
-        QColor(100, 200, 100), // Hijau untuk Route 2
-        QColor(100, 150, 255), // Biru untuk Route 3
-        QColor(255, 200, 100), // Kuning untuk Route 4
-        QColor(200, 100, 255), // Magenta untuk Route 5
-        QColor(100, 200, 255), // Cyan untuk Route 6
-        QColor(200, 150, 100), // Coklat untuk Route 7
-        QColor(150, 200, 100), // Hijau muda untuk Route 8
-        QColor(150, 150, 200)  // Biru muda untuk Route 9
-    };
-    
-    QColor color = routeColors[routeInfo.routeId % routeColors.size()];
+    // Use single color for all routes to match getRouteColor() logic
+    QColor color;
+    if (routeInfo.routeId == 0) {
+        color = QColor(255, 140, 0); // Orange for single waypoints
+    } else {
+        color = QColor(0, 100, 255); // Blue for all routes
+    }
     
     // Create modern gradient-like effect with the route color
     setData(Qt::ForegroundRole, QBrush(color));

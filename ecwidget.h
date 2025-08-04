@@ -716,6 +716,7 @@ public slots:
   bool isRouteVisible(int routeId) const;
   void setSelectedRoute(int routeId);
   int getSelectedRoute() const { return selectedRouteId; }
+  int getNextAvailableRouteId() const; // Find lowest available route ID
 
   // Guardzone
   void performAutoGuardZoneCheck();

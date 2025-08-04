@@ -5,6 +5,7 @@
 #include <QDir>
 #include <QMessageBox>
 #include <QTimer>
+#include <QSet>
 
 #include "mainwindow.h"
 #include "pickwindow.h"
@@ -1856,14 +1857,23 @@ void MainWindow::onDeleteRoute()
 {
     if (!ecchart) return;
 
-    // Get available routes with waypoints
-    QList<EcWidget::Route> allRoutes = ecchart->getRoutes();
-    QList<EcWidget::Route> routes;
+    // Get only active routes that have waypoints currently on the map
+    QSet<int> activeRouteIds;
+    QList<EcWidget::Waypoint> activeWaypoints = ecchart->getWaypoints();
     
-    // Filter routes yang memiliki waypoint
-    for (const auto& route : allRoutes) {
+    // Find which route IDs actually have waypoints on the map
+    for (const auto& wp : activeWaypoints) {
+        if (wp.routeId > 0) {
+            activeRouteIds.insert(wp.routeId);
+        }
+    }
+    
+    // Build list of routes that exist on the map
+    QList<EcWidget::Route> routes;
+    for (int routeId : activeRouteIds) {
+        EcWidget::Route route = ecchart->getRouteById(routeId);
         if (!route.waypoints.isEmpty()) {
-            routes.append(route);
+            routes.append(route);  
         }
     }
     
@@ -2053,14 +2063,23 @@ void MainWindow::onExportRoute()
 {
     if (!ecchart) return;
 
-    // Get available routes with waypoints
-    QList<EcWidget::Route> allRoutes = ecchart->getRoutes();
-    QList<EcWidget::Route> routes;
+    // Get only active routes that have waypoints currently on the map
+    QSet<int> activeRouteIds;
+    QList<EcWidget::Waypoint> activeWaypoints = ecchart->getWaypoints();
     
-    // Filter routes yang memiliki waypoint
-    for (const auto& route : allRoutes) {
+    // Find which route IDs actually have waypoints on the map
+    for (const auto& wp : activeWaypoints) {
+        if (wp.routeId > 0) {
+            activeRouteIds.insert(wp.routeId);
+        }
+    }
+    
+    // Build list of routes that exist on the map
+    QList<EcWidget::Route> routes;
+    for (int routeId : activeRouteIds) {
+        EcWidget::Route route = ecchart->getRouteById(routeId);
         if (!route.waypoints.isEmpty()) {
-            routes.append(route);
+            routes.append(route);  
         }
     }
     
@@ -2168,14 +2187,23 @@ void MainWindow::onExportAllRoutes()
 {
     if (!ecchart) return;
 
-    // Get available routes with waypoints
-    QList<EcWidget::Route> allRoutes = ecchart->getRoutes();
-    QList<EcWidget::Route> routes;
+    // Get only active routes that have waypoints currently on the map
+    QSet<int> activeRouteIds;
+    QList<EcWidget::Waypoint> activeWaypoints = ecchart->getWaypoints();
     
-    // Filter routes yang memiliki waypoint
-    for (const auto& route : allRoutes) {
+    // Find which route IDs actually have waypoints on the map
+    for (const auto& wp : activeWaypoints) {
+        if (wp.routeId > 0) {
+            activeRouteIds.insert(wp.routeId);
+        }
+    }
+    
+    // Build list of routes that exist on the map
+    QList<EcWidget::Route> routes;
+    for (int routeId : activeRouteIds) {
+        EcWidget::Route route = ecchart->getRouteById(routeId);
         if (!route.waypoints.isEmpty()) {
-            routes.append(route);
+            routes.append(route);  
         }
     }
     

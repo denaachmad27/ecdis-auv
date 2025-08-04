@@ -1,7 +1,7 @@
 // AppConfig.cpp
 #include "AppConfig.h"
 
-AppConfig::Mode AppConfig::_mode = AppConfig::Mode::Production;
+AppConfig::Mode AppConfig::_mode = AppConfig::Mode::Development;
 
 void AppConfig::setMode(Mode mode) {
     _mode = mode;

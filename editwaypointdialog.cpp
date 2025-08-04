@@ -10,21 +10,24 @@ EditWaypointDialog::EditWaypointDialog(QWidget *parent)
 
     labelEdit = new QLineEdit(this);
     remarkEdit = new QLineEdit(this);
+    remarkEdit->hide(); // Hide remark field
     turnRadiusSpin = new QDoubleSpinBox(this);
     turnRadiusSpin->setRange(0.0, 1000.0);
     turnRadiusSpin->setSuffix(" nm");
     turnRadiusSpin->setValue(10.0);
+    turnRadiusSpin->hide(); // Hide turning radius field
 
     activeCheck = new QCheckBox("Active", this);
     activeCheck->setChecked(true);
+    activeCheck->hide(); // Hide active checkbox
 
     buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
 
     QFormLayout *formLayout = new QFormLayout;
     formLayout->addRow("Waypoint Label", labelEdit);
-    formLayout->addRow("Remark", remarkEdit);
-    formLayout->addRow("Turning Radius [nautical miles]", turnRadiusSpin);
-    formLayout->addRow(activeCheck);
+    // formLayout->addRow("Remark", remarkEdit); // Hidden
+    // formLayout->addRow("Turning Radius [nautical miles]", turnRadiusSpin); // Hidden
+    // formLayout->addRow(activeCheck); // Hidden
 
     QVBoxLayout *mainLayout = new QVBoxLayout;
     mainLayout->addLayout(formLayout);

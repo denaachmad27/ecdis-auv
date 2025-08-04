@@ -3156,21 +3156,13 @@ bool EcWidget::createWaypointInRoute(int routeId, double lat, double lon, const 
 
 QColor EcWidget::getRouteColor(int routeId)
 {
-    // Consistent color mapping based on routeId
-    static const QList<QColor> routeColors = {
-        QColor(255, 140, 0),   // Orange untuk single waypoints (routeId 0)
-        QColor(255, 100, 100), // Merah untuk Route 1
-        QColor(100, 255, 100), // Hijau untuk Route 2
-        QColor(100, 100, 255), // Biru untuk Route 3
-        QColor(255, 255, 100), // Kuning untuk Route 4
-        QColor(255, 100, 255), // Magenta untuk Route 5
-        QColor(100, 255, 255), // Cyan untuk Route 6
-        QColor(200, 150, 100), // Coklat untuk Route 7
-        QColor(150, 200, 100), // Hijau muda untuk Route 8
-        QColor(100, 150, 200)  // Biru muda untuk Route 9
-    };
-    
-    return routeColors[routeId % routeColors.size()];
+    // Use single color for all routes to avoid color issues after import
+    // Single waypoints (routeId 0) get orange, all routes get blue
+    if (routeId == 0) {
+        return QColor(255, 140, 0); // Orange for single waypoints
+    } else {
+        return QColor(0, 100, 255); // Blue for all routes
+    }
 }
 
 bool EcWidget::deleteRoute(int routeId)
@@ -3249,6 +3241,29 @@ void EcWidget::setSelectedRoute(int routeId)
     QTimer::singleShot(100, this, [this]() {
         this->Draw();
     });
+}
+
+int EcWidget::getNextAvailableRouteId() const
+{
+    // Find lowest available route ID starting from 1
+    QSet<int> usedRouteIds;
+    
+    // Collect all route IDs currently in use
+    for (const auto& wp : waypointList) {
+        if (wp.routeId > 0) {
+            usedRouteIds.insert(wp.routeId);
+        }
+    }
+    
+    // Find the first available ID starting from 1
+    for (int id = 1; id <= 1000; ++id) { // Reasonable upper limit
+        if (!usedRouteIds.contains(id)) {
+            return id;
+        }
+    }
+    
+    // Fallback if somehow we have 1000 routes
+    return usedRouteIds.size() + 1;
 }
 
 void EcWidget::forceRedraw()
@@ -3690,12 +3705,7 @@ void EcWidget::moveWaypointAt(int x, int y)
             saveWaypoints();
             Draw();
 
-            // Tampilkan Pick Report setelah pindah waypoint
-            QList<EcFeature> pickedList;
-            GetPickedFeaturesSubs(pickedList, newLat, newLon);
-            PickWindow *pw = new PickWindow(this, dictInfo, denc);
-            pw->fill(pickedList);
-            pw->exec();
+            // Pick Report removed - no longer shown after waypoint move
 
             // Reset ghost waypoint
             ghostWaypoint.visible = false;
@@ -3728,7 +3738,7 @@ void EcWidget::editWaypointAt(int x, int y)
                     waypointList[i].label = dialog.getLabel();
                     waypointList[i].remark = dialog.getRemark();
                     waypointList[i].turningRadius = dialog.getTurnRadius();
-                    waypointList[i].active = dialog.isActive();
+                    // waypointList[i].active = dialog.isActive(); // Keep original active state
 
                     saveWaypoints();
                     Draw();
@@ -3816,7 +3826,7 @@ void EcWidget::drawLeglineLabels()
                                .arg(QString::number(bearing, 'f', 0))
                                .arg(degree);
 
-            painter.drawText(midX + 5, midY - 5, text);
+            painter.drawText(midX + 20, midY - 15, text);
         }
     }
 
@@ -3891,6 +3901,32 @@ void EcWidget::drawRouteLinesOverlay(QPainter& painter)
             int x1, y1, x2, y2;
             if (LatLonToXy(wp1.lat, wp1.lon, x1, y1) && LatLonToXy(wp2.lat, wp2.lon, x2, y2)) {
                 painter.drawLine(x1, y1, x2, y2);
+                
+                // Draw arrow to show direction
+                double angle = atan2(y2 - y1, x2 - x1);
+                double arrowLength = 15;
+                double arrowAngle = M_PI / 6; // 30 degrees
+                
+                // Calculate arrow head position (middle of leg line)
+                double midX = x1 + 0.5 * (x2 - x1);
+                double midY = y1 + 0.5 * (y2 - y1);
+                
+                // Arrow head points
+                int arrowX1 = midX - arrowLength * cos(angle - arrowAngle);
+                int arrowY1 = midY - arrowLength * sin(angle - arrowAngle);
+                int arrowX2 = midX - arrowLength * cos(angle + arrowAngle);
+                int arrowY2 = midY - arrowLength * sin(angle + arrowAngle);
+                
+                // Draw arrow head with solid pen
+                QPen arrowPen = painter.pen();
+                arrowPen.setStyle(Qt::SolidLine);
+                painter.setPen(arrowPen);
+                painter.drawLine(midX, midY, arrowX1, arrowY1);
+                painter.drawLine(midX, midY, arrowX2, arrowY2);
+                
+                // Restore original pen for route lines
+                arrowPen.setStyle(Qt::DashLine);
+                painter.setPen(arrowPen);
             }
         }
     }
@@ -3977,7 +4013,34 @@ void EcWidget::drawRouteLines()
             int x1, y1, x2, y2;
             if (LatLonToXy(wp1.lat, wp1.lon, x1, y1) && LatLonToXy(wp2.lat, wp2.lon, x2, y2)) {
                 painter.drawLine(x1, y1, x2, y2);
-                qDebug() << "[ROUTE-DRAW] Drew line between" << wp1.label << "and" << wp2.label 
+                
+                // Draw arrow to show direction
+                double angle = atan2(y2 - y1, x2 - x1);
+                double arrowLength = 15;
+                double arrowAngle = M_PI / 6; // 30 degrees
+                
+                // Calculate arrow head position (middle of leg line)
+                double midX = x1 + 0.5 * (x2 - x1);
+                double midY = y1 + 0.5 * (y2 - y1);
+                
+                // Arrow head points
+                int arrowX1 = midX - arrowLength * cos(angle - arrowAngle);
+                int arrowY1 = midY - arrowLength * sin(angle - arrowAngle);
+                int arrowX2 = midX - arrowLength * cos(angle + arrowAngle);
+                int arrowY2 = midY - arrowLength * sin(angle + arrowAngle);
+                
+                // Draw arrow head with solid pen
+                QPen arrowPen = painter.pen();
+                arrowPen.setStyle(Qt::SolidLine);
+                painter.setPen(arrowPen);
+                painter.drawLine(midX, midY, arrowX1, arrowY1);
+                painter.drawLine(midX, midY, arrowX2, arrowY2);
+                
+                // Restore original pen for route lines
+                arrowPen.setStyle(Qt::DashLine);
+                painter.setPen(arrowPen);
+                
+                qDebug() << "[ROUTE-DRAW] Drew line with arrow between" << wp1.label << "and" << wp2.label 
                          << "in route" << routeId;
             }
         }
@@ -4042,8 +4105,8 @@ void EcWidget::loadWaypoints()
             }
         }
         
-        // Set currentRouteId to be higher than existing routes
-        currentRouteId = maxRouteId + 1;
+        // Set currentRouteId to the next available route ID (not just maxRouteId + 1)
+        currentRouteId = getNextAvailableRouteId();
 
         qDebug() << "[INFO] Loaded" << validWaypoints << "waypoints from" << filePath << "- Max Route ID:" << maxRouteId;
         qDebug() << "[INFO] Total waypoints in list after loadWaypoints:" << waypointList.size();
@@ -4144,39 +4207,32 @@ void EcWidget::clearWaypoints()
     if (waypointList.isEmpty())
         return;
 
-    // Show confirmation dialog
-    QMessageBox msgBox;
-    msgBox.setWindowTitle(tr("Clear Waypoints"));
-    msgBox.setText(tr("Are you sure you want to remove all waypoints?"));
-    msgBox.setInformativeText(tr("This action cannot be undone."));
-    msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
-    msgBox.setDefaultButton(QMessageBox::No);
-    msgBox.setIcon(QMessageBox::Warning);
-
-    if (msgBox.exec() == QMessageBox::Yes)
-    {
-        qDebug() << "[INFO] Clearing all waypoints";
-
-        // 🎯 Hapus waypoint menggunakan SevenCs jika handle valid
-        for (int i = waypointList.size() - 1; i >= 0; i--)
-        {
-            if (waypointList[i].isValid())
-            {
-                Bool result = EcRouteDeleteWaypoint(dictInfo, waypointList[i].featureHandle);
-                if (!result) {
-                    qDebug() << "[WARNING] Failed to delete waypoint" << i << "from SevenCs";
-                }
-            }
-        }
-
-        waypointList.clear();
-        saveWaypoints(); // Save empty list to file
-        drawWaypointCell();
-        Draw(); // Redraw without waypoints
-
-        QMessageBox::information(this, tr("Waypoints Cleared"),
-                                 tr("All waypoints have been removed."));
-    }
+    qDebug() << "[INFO] Clearing all waypoints - no confirmation needed (already confirmed by caller)";
+    
+    // Skip individual SevenCs deletion to prevent hang - just clear everything
+    int waypointCount = waypointList.size();
+    
+    // Clear data structures
+    waypointList.clear();
+    routeList.clear();
+    routeVisibility.clear();
+    
+    // Reset route variables
+    currentRouteId = 1;
+    routeWaypointCounter = 1;
+    selectedRouteId = -1;
+    
+    // Save empty state
+    saveWaypoints();
+    saveRoutes();
+    
+    // Redraw
+    Draw();
+    
+    // Emit signal to refresh route panel
+    emit waypointCreated();
+    
+    qDebug() << "[INFO] Cleared" << waypointCount << "waypoints and all routes";
 }
 
 bool EcWidget::exportWaypointsToFile(const QString &filename)
@@ -10778,8 +10834,8 @@ void EcWidget::endRouteMode()
                 tr("Route R%1 created with %2 waypoints").arg(currentRouteId).arg(waypointsInRoute));
         }
         
-        // Prepare for next route
-        currentRouteId++;
+        // Prepare for next route - find next available route ID
+        currentRouteId = getNextAvailableRouteId();
         routeWaypointCounter = 1;
     }
     
