@@ -500,6 +500,7 @@ void MainWindow::createMenuBar(){
     QMenu *routeMenu = menuBar()->addMenu("&Route");
 
     routeMenu->addAction("Create New Route", this, SLOT(onCreateRoute()));
+    routeMenu->addAction("Create Route by Form...", this, SLOT(onCreateRouteByForm()));
     routeMenu->addSeparator();
     routeMenu->addAction("Edit Route Points", this, SLOT(onEditRoute()));
     routeMenu->addAction("Insert Waypoint", this, SLOT(onInsertWaypoint()));
@@ -743,22 +744,6 @@ void MainWindow::createMenuBar(){
             cpaTcpaAlarmsAction->setCheckable(true);
             cpaTcpaAlarmsAction->setChecked(true);
             connect(cpaTcpaAlarmsAction, SIGNAL(triggered(bool)), this, SLOT(onCPATCPAAlarms(bool)));
-
-            connect(m_cpatcpaDock, &QDockWidget::visibilityChanged, this, [=](bool visible) {
-                if (!visible) { showCPATargetsAction->setChecked(false);}
-                else { showCPATargetsAction->setChecked(true);}
-            });
-        }
-        else {
-            QMenu *cpaMenu = menuBar()->addMenu("&CPA/TCPA");
-
-            QAction *showCPATargetsAction = cpaMenu->addAction("Show CPA/TCPA Monitor");
-            showCPATargetsAction->setCheckable(true);
-            showCPATargetsAction->setChecked(false);
-            connect(showCPATargetsAction, SIGNAL(triggered(bool)), this, SLOT(onShowCPATargets(bool)));
-
-            QAction *cpaSettingsAction = cpaMenu->addAction("CPA/TCPA Settings");
-            connect(cpaSettingsAction, SIGNAL(triggered()), this, SLOT(onCPASettings()));
 
             connect(m_cpatcpaDock, &QDockWidget::visibilityChanged, this, [=](bool visible) {
                 if (!visible) { showCPATargetsAction->setChecked(false);}
@@ -1089,50 +1074,16 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL){
   // MENU BAR
   createMenuBar();
 
-  // S-56 USER PERMIT GENERATE
-  // userPermitGenerate();
 
-  if (AppConfig::isDevelopment()) {
-      // GUARDZONE PANEL
-      setupGuardZonePanel();
 
-      // AIS TARGET PANEL
-      setupAISTargetPanel();
+  /*
+  // DELETE LATER
+  // File menu
+  QMenu *fileMenu = menuBar()->addMenu("&File");
 
-      // OBSTACLE DETECTION PANEL
-      setupObstacleDetectionPanel();
-  }
-
-  //setupAlertPanel();
-  //setupTestingMenu();
-
-  // Initialize CPA/TCPA system
-  m_cpaCalculator = new CPATCPACalculator(this);
-  m_cpaUpdateTimer = new QTimer(this);
-  connect(m_cpaUpdateTimer, SIGNAL(timeout()), this, SLOT(updateCPATCPAForAllTargets()));
-
-  // Setup CPA/TCPA Panel - will be called after createDockWindows
-  //setupCPATCPAPanel();
-  //ecchart->setCPAPanelToAIS(m_cpatcpaPanel);
-
-  // Connect to settings changes
-  connect(&CPATCPASettings::instance(), &CPATCPASettings::settingsChanged, this, [this]() {
-      int interval = CPATCPASettings::instance().getAlarmUpdateInterval() * 1000;
-      m_cpaUpdateTimer->setInterval(interval);
-      qDebug() << "CPA/TCPA update interval changed to:" << interval << "ms";
-  });
-
-  // Start timer with current settings
-  int interval = CPATCPASettings::instance().getAlarmUpdateInterval() * 1000;
-  m_cpaUpdateTimer->setInterval(interval);
-  m_cpaUpdateTimer->start();
-
-  qDebug() << "CPA/TCPA system initialized with update interval:" << interval << "ms";
-
-#ifdef _DEBUG
-      // Testing menu hanya untuk debug build
-      setupTestingMenu();
-#endif
+  fileMenu->addAction("E&xit", this, SLOT(close()))->setShortcut(tr("Ctrl+x", "File|Exit"));
+  // fileMenu->addAction("Reload", this, SLOT(onReload()));
+  */
 
   // PERBAIKAN: Pastikan menu states sinkron dengan backend states saat startup
   if (ecchart) {
@@ -4004,6 +3955,8 @@ void MainWindow::setupRoutePanel()
             this, &MainWindow::onRouteVisibilityChanged);
     connect(routePanel, &RoutePanel::requestCreateRoute,
             this, &MainWindow::onCreateRoute);
+    connect(routePanel, &RoutePanel::requestEditRoute,
+            this, &MainWindow::onEditRouteByForm);
     connect(routePanel, &RoutePanel::statusMessage, 
             this, [this](const QString& message) {
                 statusBar()->showMessage(message, 3000);
@@ -4202,4 +4155,18 @@ void MainWindow::onCreateRoute()
     routesStatusText->setText(tr("Route Mode: Click to add waypoints. Press ESC or right-click to end route creation"));
     //statusBar()->showMessage(tr("Route Mode: Click to add waypoints. Press ESC or right-click to end route creation"), 0);
     setWindowTitle(QString(APP_TITLE) + " - Create Route");
+}
+
+void MainWindow::onCreateRouteByForm()
+{
+    if (!ecchart) return;
+    
+    ecchart->showCreateRouteDialog();
+}
+
+void MainWindow::onEditRouteByForm(int routeId)
+{
+    if (!ecchart) return;
+    
+    ecchart->showEditRouteDialog(routeId);
 }

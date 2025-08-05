@@ -138,6 +138,8 @@ protected slots:
 
     // Route - Comprehensive navigation planning
     void onCreateRoute();
+    void onCreateRouteByForm();
+    void onEditRouteByForm(int routeId);
     void onToggleRoutePanel();
     void onEditRoute();
     void onInsertWaypoint();

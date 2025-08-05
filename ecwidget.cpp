@@ -9,6 +9,8 @@
 #endif
 
 #include "ecwidget.h"
+#include "waypointdialog.h"
+#include "routeformdialog.h"
 #include "alertsystem.h"
 #include "ais.h"
 #include "pickwindow.h"
@@ -1005,7 +1007,7 @@ void EcWidget::waypointDraw(){
 
         QColor waypointColor = getRouteColor(wp.routeId);
 
-        drawSingleWaypoint(wp.lat, wp.lon, wp.label, waypointColor);
+        drawWaypointWithLabel(wp.lat, wp.lon, wp.label, waypointColor);
     }
 
     drawLeglineLabels();
@@ -2660,8 +2662,10 @@ void EcWidget::drawAISCell()
   drawRedDotTracker();
 
   // OWNSHIP DRAW
-  waypointDraw();
   ownShipDraw();
+
+  // Add waypointDraw() to fix route and waypoint label flickering
+  waypointDraw();
 
   update();
 
@@ -3382,7 +3386,7 @@ void EcWidget::drawWaypointMarker(double lat, double lon)
 }
 
 
-void EcWidget::drawSingleWaypoint(double lat, double lon, const QString& label, const QColor& color)
+void EcWidget::drawWaypointWithLabel(double lat, double lon, const QString& label, const QColor& color)
 {
     int x, y;
 
@@ -3406,8 +3410,8 @@ void EcWidget::drawSingleWaypoint(double lat, double lon, const QString& label, 
     QFontMetrics fm(font);
     QRect textRect = fm.boundingRect(label);
     
-    // Tentukan posisi label yang optimal untuk menghindari tindihan
-    QPoint labelPos = findOptimalLabelPosition(x, y, textRect.size(), 18); // 18px minimum distance from waypoint
+    // Use fixed label position instead of findOptimalLabelPosition
+    QPoint labelPos(x + 10, y - 10); // Fixed offset: 10px right and 10px up from waypoint
     
     // Gambar teks label tanpa background
     painter.setBrush(Qt::NoBrush);
@@ -3931,13 +3935,14 @@ void EcWidget::drawRouteLinesOverlay(QPainter& painter)
                 
                 // Draw arrow head with solid pen
                 QPen arrowPen = painter.pen();
+                Qt::PenStyle originalStyle = arrowPen.style();
                 arrowPen.setStyle(Qt::SolidLine);
                 painter.setPen(arrowPen);
                 painter.drawLine(midX, midY, arrowX1, arrowY1);
                 painter.drawLine(midX, midY, arrowX2, arrowY2);
                 
-                // Restore original pen for route lines
-                arrowPen.setStyle(Qt::DashLine);
+                // Restore original pen style for route lines
+                arrowPen.setStyle(originalStyle);
                 painter.setPen(arrowPen);
             }
         }
@@ -4043,17 +4048,18 @@ void EcWidget::drawRouteLines()
                 
                 // Draw arrow head with solid pen
                 QPen arrowPen = painter.pen();
+                Qt::PenStyle originalStyle = arrowPen.style();
                 arrowPen.setStyle(Qt::SolidLine);
                 painter.setPen(arrowPen);
                 painter.drawLine(midX, midY, arrowX1, arrowY1);
                 painter.drawLine(midX, midY, arrowX2, arrowY2);
                 
-                // Restore original pen for route lines
-                arrowPen.setStyle(Qt::DashLine);
+                // Restore original pen style for route lines
+                arrowPen.setStyle(originalStyle);
                 painter.setPen(arrowPen);
                 
                 qDebug() << "[ROUTE-DRAW] Drew line with arrow between" << wp1.label << "and" << wp2.label 
-                         << "in route" << routeId;
+                         << "in route" << routeId << "style:" << (originalStyle == Qt::SolidLine ? "solid" : "dash");
             }
         }
     }
@@ -11510,5 +11516,255 @@ void EcWidget::convertSingleWaypointsToRoutes()
         
         qDebug() << "[ROUTE-CONVERSION] Conversion completed successfully";
     }
+}
+
+// Waypoint Form Functions
+void EcWidget::showAddWaypointDialog()
+{
+    WaypointDialog dialog(this);
+    
+    // Set default route based on current route mode
+    if (isRouteMode) {
+        dialog.setRouteId(currentRouteId);
+    }
+    
+    if (dialog.exec() == QDialog::Accepted) {
+        double lat = dialog.getLatitude();
+        double lon = dialog.getLongitude();
+        QString label = dialog.getLabel();
+        QString remark = dialog.getRemark();
+        int routeId = dialog.getRouteId();
+        double turningRadius = dialog.getTurningRadius();
+        
+        createWaypointFromForm(lat, lon, label, remark, routeId, turningRadius);
+    }
+}
+
+void EcWidget::showCreateRouteDialog()
+{
+    RouteFormDialog dialog(this, this);
+    
+    if (dialog.exec() == QDialog::Accepted) {
+        QString routeName = dialog.getRouteName();
+        QString routeDescription = dialog.getRouteDescription();
+        int routeId = dialog.getRouteId();
+        QList<RouteWaypointData> waypoints = dialog.getWaypoints();
+        
+        // Create route with all waypoints
+        if (!waypoints.isEmpty()) {
+            // Set route mode and current route ID
+            isRouteMode = true;
+            currentRouteId = routeId;
+            
+            // Create route object for route management
+            Route newRoute;
+            newRoute.routeId = routeId;
+            newRoute.name = routeName;
+            newRoute.description = routeDescription;
+            newRoute.createdDate = QDateTime::currentDateTime();
+            newRoute.modifiedDate = newRoute.createdDate;
+            
+            // Convert waypoints to RouteWaypoint format
+            for (const RouteWaypointData& wp : waypoints) {
+                RouteWaypoint routeWp;
+                routeWp.lat = wp.lat;
+                routeWp.lon = wp.lon;
+                routeWp.label = wp.label;
+                routeWp.remark = wp.remark;
+                routeWp.turningRadius = wp.turningRadius;
+                routeWp.active = wp.active;
+                newRoute.waypoints.append(routeWp);
+            }
+            
+            // Calculate route data (distance, time)
+            calculateRouteData(newRoute);
+            
+            // Add route to routeList
+            routeList.append(newRoute);
+            
+            // Ensure new route is visible by default
+            setRouteVisibility(routeId, true);
+            
+            // Create all waypoints for this route in the chart
+            for (const RouteWaypointData& wp : waypoints) {
+                createWaypointFromForm(wp.lat, wp.lon, wp.label, wp.remark, routeId, wp.turningRadius);
+            }
+            
+            // Emit signal to notify route panel about new route/waypoints
+            emit waypointCreated();
+            
+            // Save routes to file
+            saveRoutes();
+            
+            // Log route creation
+            if (mainWindow && mainWindow->logText) {
+                QString logMessage = QString("Route '%1' created with %2 waypoints (ID: %3) - Distance: %.2f NM")
+                    .arg(routeName)
+                    .arg(waypoints.size())
+                    .arg(routeId)
+                    .arg(newRoute.totalDistance);
+                mainWindow->logText->append(logMessage);
+            }
+            
+            // Refresh display
+            update();
+        }
+    }
+}
+
+void EcWidget::showEditRouteDialog(int routeId)
+{
+    RouteFormDialog dialog(this, this);
+    
+    // Load existing route data
+    dialog.loadRouteData(routeId);
+    
+    if (dialog.exec() == QDialog::Accepted) {
+        QString routeName = dialog.getRouteName();
+        QString routeDescription = dialog.getRouteDescription();
+        QList<RouteWaypointData> waypoints = dialog.getWaypoints();
+        
+        // Update route with modified waypoints
+        if (!waypoints.isEmpty()) {
+            // Find existing route in routeList
+            for (int i = 0; i < routeList.size(); ++i) {
+                if (routeList[i].routeId == routeId) {
+                    // Update route information
+                    routeList[i].name = routeName;
+                    routeList[i].description = routeDescription;
+                    routeList[i].modifiedDate = QDateTime::currentDateTime();
+                    
+                    // Clear existing waypoints and add new ones
+                    routeList[i].waypoints.clear();
+                    for (const RouteWaypointData& wp : waypoints) {
+                        RouteWaypoint routeWp;
+                        routeWp.lat = wp.lat;
+                        routeWp.lon = wp.lon;
+                        routeWp.label = wp.label;
+                        routeWp.remark = wp.remark;
+                        routeWp.turningRadius = wp.turningRadius;
+                        routeWp.active = wp.active;
+                        routeList[i].waypoints.append(routeWp);
+                    }
+                    
+                    // Recalculate route data
+                    calculateRouteData(routeList[i]);
+                    
+                    break;
+                }
+            }
+            
+            // Preserve route visibility before updating
+            bool wasVisible = isRouteVisible(routeId);
+            
+            // Remove existing waypoints for this route from chart
+            waypointList.erase(std::remove_if(waypointList.begin(), waypointList.end(),
+                [routeId](const Waypoint& wp) { return wp.routeId == routeId; }),
+                waypointList.end());
+            
+            // Create updated waypoints in the chart
+            currentRouteId = routeId;
+            for (const RouteWaypointData& wp : waypoints) {
+                createWaypointFromForm(wp.lat, wp.lon, wp.label, wp.remark, routeId, wp.turningRadius);
+            }
+            
+            // Restore route visibility
+            setRouteVisibility(routeId, wasVisible);
+            
+            // Emit signal to notify route panel about route update
+            emit waypointCreated();
+            
+            // Save routes to file
+            saveRoutes();
+            
+            // Log route update
+            if (mainWindow && mainWindow->logText) {
+                QString logMessage = QString("Route '%1' updated with %2 waypoints (ID: %3)")
+                    .arg(routeName)
+                    .arg(waypoints.size())
+                    .arg(routeId);
+                mainWindow->logText->append(logMessage);
+            }
+            
+            // Refresh display
+            update();
+        }
+    }
+}
+
+void EcWidget::createWaypointFromForm(double lat, double lon, const QString& label, const QString& remark, int routeId, double turningRadius)
+{
+    Waypoint newWaypoint;
+    
+    // Set coordinates
+    newWaypoint.lat = lat;
+    newWaypoint.lon = lon;
+    
+    // Set turning radius
+    newWaypoint.turningRadius = turningRadius;
+    newWaypoint.active = true;
+    
+    // Generate label if empty
+    if (label.isEmpty()) {
+        if (routeId > 0) {
+            // Count waypoints in this route
+            int waypointCount = 0;
+            for (const auto& wp : waypointList) {
+                if (wp.routeId == routeId) {
+                    waypointCount++;
+                }
+            }
+            newWaypoint.label = QString("R%1-WP%2").arg(routeId).arg(waypointCount + 1, 3, 10, QChar('0'));
+        } else {
+            newWaypoint.label = QString("WP%1").arg(waypointList.size() + 1, 3, 10, QChar('0'));
+        }
+    } else {
+        newWaypoint.label = label;
+    }
+    
+    // Set remark
+    if (remark.isEmpty()) {
+        if (routeId > 0) {
+            newWaypoint.remark = QString("Route %1 waypoint").arg(routeId);
+        } else {
+            newWaypoint.remark = "Single waypoint";
+        }
+    } else {
+        newWaypoint.remark = remark;
+    }
+    
+    // Set route ID
+    newWaypoint.routeId = routeId;
+    
+    // Initialize feature handle
+    newWaypoint.featureHandle.id = EC_NOCELLID;
+    newWaypoint.featureHandle.offset = 0;
+    
+    // Add to waypoint list
+    waypointList.append(newWaypoint);
+    
+    // Create waypoint cell if needed
+    if (routeId == 0) {
+        // Single waypoint - create cell
+        createSingleWaypoint(newWaypoint);
+    } else {
+        // Route waypoint - no cell creation needed
+        qDebug() << "[INFO] Route waypoint created:" << newWaypoint.label;
+    }
+    
+    // Save waypoints
+    saveWaypoints();
+    
+    // Update current route if needed
+    if (routeId > 0) {
+        saveCurrentRoute();
+    }
+    
+    // Redraw
+    Draw();
+    update();
+    
+    qDebug() << "[INFO] Waypoint created from form - Label:" << newWaypoint.label 
+             << "Lat:" << lat << "Lon:" << lon << "Route:" << routeId;
 }
 

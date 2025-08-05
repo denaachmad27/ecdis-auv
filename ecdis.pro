@@ -62,6 +62,8 @@ HEADERS += mainwindow.h ecwidget.h pickwindow.h ais.h \
     aistargetpanel.h \
     obstacledetectionpanel.h \
     routepanel.h \
+    waypointdialog.h \
+    routeformdialog.h \
 
 SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     AISSubscriber.cpp \
@@ -88,6 +90,8 @@ SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     aistargetpanel.cpp \
     obstacledetectionpanel.cpp \
     routepanel.cpp \
+    waypointdialog.cpp \
+    routeformdialog.cpp \
 
 RESOURCES += \
     resources.qrc

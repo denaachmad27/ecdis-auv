@@ -243,6 +243,7 @@ public:
 
   void drawWaypointMarker(EcCoordinate lat, EcCoordinate lon);
   void drawSingleWaypoint(EcCoordinate lat, EcCoordinate lon, const QString& label, const QColor& color = QColor(255, 140, 0));
+  void drawWaypointWithLabel(double lat, double lon, const QString& label, const QColor& color);
   QPoint findOptimalLabelPosition(int waypointX, int waypointY, const QSize& textSize, int minDistance);
   void drawGhostWaypoint(EcCoordinate lat, EcCoordinate lon, const QString& label);
   void saveWaypoints();
@@ -568,6 +569,12 @@ public:
   // Waypoint
   void SetWaypointPos(EcCoordinate lat, EcCoordinate lon);
   bool drawUdo(void);
+  
+  // Waypoint form functions
+  void showAddWaypointDialog();
+  void showCreateRouteDialog();
+  void showEditRouteDialog(int routeId);
+  void createWaypointFromForm(double lat, double lon, const QString& label, const QString& remark, int routeId, double turningRadius);
   bool createUdoCell();
 
   bool getOwnShipTrail();

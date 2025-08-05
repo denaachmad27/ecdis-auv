@@ -189,9 +189,11 @@ void RoutePanel::setupConnections()
     // Checkbox connection
     connect(visibilityCheckBox, &QCheckBox::toggled, [this](bool checked) {
         if (selectedRouteId > 0 && ecWidget) {
+            qDebug() << "[ROUTE-PANEL] Visibility checkbox toggled for route" << selectedRouteId << "to" << checked;
             ecWidget->setRouteVisibility(selectedRouteId, checked);
             ecWidget->Draw(); // Use Draw() like route selection fix
             emit routeVisibilityChanged(selectedRouteId, checked);
+            emit statusMessage(QString("Route %1 %2").arg(selectedRouteId).arg(checked ? "shown" : "hidden"));
         }
     });
     
@@ -224,6 +226,9 @@ void RoutePanel::refreshRouteList()
 {
     if (!ecWidget) return;
     
+    // Preserve current selection
+    int previouslySelectedRouteId = selectedRouteId;
+    
     routeListWidget->clear();
     
     // Get all waypoints from EcWidget
@@ -248,12 +253,27 @@ void RoutePanel::refreshRouteList()
     qDebug() << "[ROUTE-PANEL] Found" << routeGroups.size() << "routes";
     
     // Create route info items
+    RouteListItem* itemToSelect = nullptr;
     for (auto it = routeGroups.begin(); it != routeGroups.end(); ++it) {
         int routeId = it.key();
         RouteInfo info = calculateRouteInfo(routeId);
         
         RouteListItem* item = new RouteListItem(info, routeListWidget);
         routeListWidget->addItem(item);
+        
+        // Remember item to re-select
+        if (routeId == previouslySelectedRouteId) {
+            itemToSelect = item;
+        }
+    }
+    
+    // Restore selection and update info display
+    if (itemToSelect && previouslySelectedRouteId > 0) {
+        routeListWidget->setCurrentItem(itemToSelect);
+        selectedRouteId = previouslySelectedRouteId;
+        RouteInfo info = calculateRouteInfo(selectedRouteId);
+        updateRouteInfoDisplay(info);
+        qDebug() << "[ROUTE-PANEL] Restored selection for route" << selectedRouteId << "visibility:" << info.visible;
     }
     
     // Update title with count
@@ -360,7 +380,14 @@ void RoutePanel::updateRouteInfoDisplay(const RouteInfo& info)
     waypointCountLabel->setText(QString("📌 %1 waypoints").arg(info.waypointCount));
     totalDistanceLabel->setText(QString("📏 %1").arg(formatDistance(info.totalDistance)));
     totalTimeLabel->setText("⏱️ -"); // ETA will be processed later
+    
+    // Block signals while updating checkbox to prevent unnecessary events
+    visibilityCheckBox->blockSignals(true);
     visibilityCheckBox->setChecked(info.visible);
+    visibilityCheckBox->blockSignals(false);
+    
+    qDebug() << "[ROUTE-PANEL] Updated info display for route" << info.routeId << "visibility:" << info.visible;
+    
     addToShipButton->setEnabled(true);
     
     routeInfoGroup->setEnabled(true);
@@ -461,7 +488,9 @@ void RoutePanel::onRouteItemDoubleClicked(QListWidgetItem* item)
 {
     RouteListItem* routeItem = dynamic_cast<RouteListItem*>(item);
     if (routeItem) {
-        onToggleRouteVisibility();
+        int routeId = routeItem->getRouteId();
+        emit requestEditRoute(routeId);
+        emit statusMessage(QString("Opening route editor for Route ID: %1").arg(routeId));
     }
 }
 

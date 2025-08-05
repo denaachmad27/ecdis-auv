@@ -87,6 +87,7 @@ signals:
     void routeVisibilityChanged(int routeId, bool visible);
     void statusMessage(const QString& message);
     void requestCreateRoute();
+    void requestEditRoute(int routeId);
 
 private:
     EcWidget* ecWidget;
