@@ -569,6 +569,12 @@ public:
   // Waypoint
   void SetWaypointPos(EcCoordinate lat, EcCoordinate lon);
   bool drawUdo(void);
+  
+  // Waypoint form functions
+  void showAddWaypointDialog();
+  void showCreateRouteDialog();
+  void showEditRouteDialog(int routeId);
+  void createWaypointFromForm(double lat, double lon, const QString& label, const QString& remark, int routeId, double turningRadius);
   bool createUdoCell();
 
   bool getOwnShipTrail();
