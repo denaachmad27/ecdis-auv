@@ -1479,7 +1479,7 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
                 activeFunction = PAN;
                 if (mainWindow) {
                     mainWindow->statusBar()->showMessage(tr("Waypoint inserted"), 3000);
-                    mainWindow->setWindowTitle("ECDIS AUV");
+                    mainWindow->setWindowTitle(APP_TITLE);
                 }
                 emit waypointCreated();
             }
@@ -1490,9 +1490,13 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
                 
                 // Update status for next waypoint
                 if (mainWindow) {
-                    mainWindow->statusBar()->showMessage(
-                        tr("Route Mode: Waypoint %1 created. Click for next waypoint or ESC/right-click to end")
-                        .arg(routeWaypointCounter), 0);
+                    // mainWindow->statusBar()->showMessage(
+                    //     tr("Route Mode: Waypoint %1 created. Click for next waypoint or ESC/right-click to end")
+                    //     .arg(routeWaypointCounter), 0);
+
+                    mainWindow->routesStatusText->setText(
+                                tr("Route Mode: Waypoint %1 created. Click for next waypoint or ESC/right-click to end").
+                                arg(routeWaypointCounter));
                 }
                 
                 routeWaypointCounter++;
@@ -6391,7 +6395,7 @@ void EcWidget::saveGuardZones()
     rootObject["version"] = "1.1";  // Increment version
     rootObject["saved_on"] = QDateTime::currentDateTime().toString(Qt::ISODate);
     rootObject["nextGuardZoneId"] = nextGuardZoneId;
-    rootObject["app_version"] = "ECDIS_v1.0";
+    rootObject["app_version"] = "ECDIS_v1.1";
     rootObject["statistics"] = QJsonObject{
         {"total_count", guardZones.size()},
         {"valid_count", validCount},
@@ -10852,8 +10856,10 @@ void EcWidget::endRouteMode()
     
     // Update status
     if (mainWindow) {
-        mainWindow->statusBar()->showMessage(tr("Route creation ended"), 3000);
-        mainWindow->setWindowTitle("ECDIS AUV");
+        //mainWindow->statusBar()->showMessage(tr("Route creation ended"), 3000);
+        mainWindow->routesStatusText->setText(tr("Route creation ended"));
+
+        mainWindow->setWindowTitle(APP_TITLE);
     }
     
     qDebug() << "[ROUTE] Route mode ended. Next route ID will be:" << currentRouteId;

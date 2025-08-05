@@ -34,6 +34,7 @@ class AISSubscriber;
 #define M_KEY "10121"
 // data server id
 #define DSID "0"
+#define APP_TITLE "ECDIS AUV v1.1"
 
 class MainWindow : public QMainWindow
 {
@@ -70,6 +71,9 @@ public:
 
     void onNmeaReceived(const QString&);
     void oriEditSetText(const double&);
+
+    // ROUTES STATUS BAR
+    QLabel *routesStatusText;
 
 public slots:
     void onEnableRedDotTracker(bool enabled);
@@ -306,6 +310,10 @@ private:
     void createStatusBar();
     void createMenuBar();
     void userPermitGenerate();
+
+    // MOOSDB MENU
+    QAction *restartAction;
+    QAction *stopAction;
 };
 
 #endif // _mainwindow_h_

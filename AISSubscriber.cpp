@@ -10,14 +10,13 @@ AISSubscriber::AISSubscriber(QObject *parent) : QObject(parent) {}
 void AISSubscriber::connectToHost(const QString &host, quint16 port) {
     if (socket) return;
 
+    hasReceivedData = false;
     socket = new QTcpSocket(this);
 
     connect(socket, &QTcpSocket::readyRead, this, &AISSubscriber::onReadyRead);
     connect(socket, &QTcpSocket::disconnected, this, &AISSubscriber::onDisconnected);
-    connect(socket, &QTcpSocket::connected, this, [this]() {
-        qDebug() << "[AISSubscriber] Socket connected";
-        qDebug() << "this AISSubscriber emit:" << this;  // dari dalam AISSubscriber
-        emit connectionStatusChanged(true);  // ✅ emit jika connected
+    connect(socket, &QTcpSocket::connected, this, []() {
+        qDebug() << "Socket connected";
     });
     connect(socket, QOverload<QAbstractSocket::SocketError>::of(&QTcpSocket::errorOccurred),
             this, &AISSubscriber::onSocketError);
@@ -38,6 +37,14 @@ void AISSubscriber::disconnectFromHost() {
 void AISSubscriber::onReadyRead() {
     QByteArray data = socket->readAll();
     data = data.simplified().trimmed().replace("\r", "");
+
+    // CONNECTION STATUS FLAG
+    if (!hasReceivedData) {
+        hasReceivedData = true;
+        qDebug() << "[AISSubscriber] Data received. Connection status changed";
+
+        emit connectionStatusChanged(true);
+    }
 
     QList<QByteArray> lines;
 

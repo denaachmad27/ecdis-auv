@@ -13,7 +13,7 @@ const int CPATCPASettings::DEFAULT_UPDATE_INTERVAL = 500;
 CPATCPASettings::CPATCPASettings(QObject *parent)
     : QObject(parent)
 {
-    m_settings = new QSettings("YourCompany", "ECDISApp", this);
+    m_settings = new QSettings("Solusi247", "ECDIS", this);
     resetToDefaults();
     loadSettings();
 }

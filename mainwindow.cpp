@@ -179,6 +179,7 @@ void MainWindow::createActions()
     // QAction *aboutQtAct = helpMenu->addAction(tr("About &Qt"), qApp, &QApplication::aboutQt);
     // aboutQtAct->setStatusTip(tr("Show the Qt library's About box"));
 
+
     // ========== GUARDZONE PANEL SHORTCUTS ==========
     QAction* toggleGuardZonePanelAction = new QAction(tr("Toggle GuardZone Panel"), this);
     toggleGuardZonePanelAction->setShortcut(QKeySequence("Ctrl+G"));
@@ -203,6 +204,9 @@ void MainWindow::onMoosConnectionStatusChanged(bool connected)
 {
     connectAct->setEnabled(!connected);       // Disable connect if already connected
     disconnectAct->setEnabled(connected);     // Enable disconnect if connected
+
+    restartAction->setEnabled(!connected);
+    stopAction->setEnabled(connected);
 }
 
 void MainWindow::createStatusBar(){
@@ -238,7 +242,7 @@ void MainWindow::createStatusBar(){
     moosLedCircle->setFixedSize(12, 12);  // lingkaran 12x12
     moosLedCircle->setStyleSheet("background-color: red; border-radius: 6px;");
 
-    moosStatusText = new QLabel(" MOOS: Disconnected");
+    moosStatusText = new QLabel(" MOOSDB: Disconnected");
     moosStatusText->setStyleSheet("color: red; font-weight: bold;");
 
     QWidget *moosStatusWidget = new QWidget;
@@ -256,11 +260,11 @@ void MainWindow::createStatusBar(){
             qDebug() << "[MainWindow] connectionStatusChanged called, connected =" << connected;
             if (connected) {
                 moosLedCircle->setStyleSheet("background-color: green; border-radius: 6px;");
-                moosStatusText->setText(" MOOS: Connected");
+                moosStatusText->setText(" MOOSDB: Connected");
                 moosStatusText->setStyleSheet("color: green; font-weight: bold;");
             } else {
                 moosLedCircle->setStyleSheet("background-color: red; border-radius: 6px;");
-                moosStatusText->setText(" MOOS: Disconnected");
+                moosStatusText->setText(" MOOSDB: Disconnected");
                 moosStatusText->setStyleSheet("color: red; font-weight: bold;");
             }
         });
@@ -279,17 +283,32 @@ void MainWindow::createStatusBar(){
     statusBar()->addPermanentWidget(proEdit, 0);
     statusBar()->addPermanentWidget(new QLabel("Cursor:", statusBar()));
     statusBar()->addPermanentWidget(posEdit, 0);
+
+    // ROUTES STATUS BAR
+    routesStatusText = new QLabel("");
+
+    QWidget *routesStatusWidget = new QWidget;
+    QHBoxLayout *routesStatusLayout = new QHBoxLayout(routesStatusWidget);
+    routesStatusLayout->setContentsMargins(5, 0, 10, 0); // spasi antar widget
+    routesStatusLayout->addWidget(routesStatusText);
+
+    // Tambahkan ke paling kiri status bar
+    statusBar()->addWidget(routesStatusWidget);
 }
 
 // MENU BAR
 void MainWindow::createMenuBar(){
+
+
     /*
+     * {
     // DELETE LATER
     // File menu
     QMenu *fileMenu = menuBar()->addMenu("&File");
 
     fileMenu->addAction("E&xit", this, SLOT(close()))->setShortcut(tr("Ctrl+x", "File|Exit"));
     // fileMenu->addAction("Reload", this, SLOT(onReload()));
+    * }
     */
 
     // ================================== IMPORT MENU
@@ -494,9 +513,13 @@ void MainWindow::createMenuBar(){
     routeMenu->addAction("Clear All Routes", this, SLOT(onClearRoutes()));
 
     // ================================== MOOSDB MENU
-    QMenu *moosMenu = menuBar()->addMenu("&MOOSDB");
-    moosMenu->addAction("Restart Connection", this, SLOT(subscribeMOOSDB()) );
-    moosMenu->addAction("Stop Connection", this, SLOT(stopSubscribeMOOSDB()) );
+    QMenu *moosMenu = menuBar()->addMenu("&Connection");
+
+    restartAction = moosMenu->addAction("Start Connection", this, SLOT(subscribeMOOSDB()));
+    stopAction = moosMenu->addAction("Stop Connection", this, SLOT(stopSubscribeMOOSDB()));
+
+    restartAction->setEnabled(true);
+    stopAction->setEnabled(false);
 
     // ================================== AIS
     if (AppConfig::isDevelopment()) {
@@ -952,7 +975,7 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL){
   //                       .arg(subMinorVersion)
   //                       .arg((QT_VERSION & 0xff0000) >> 16)
   //                       .arg((QT_VERSION & 0xff00) >> 8);
-  QString titleString = QString("ECDIS")
+  QString titleString = QString(APP_TITLE)
                             .arg(subMinorVersion)
                             .arg((QT_VERSION & 0xff0000) >> 16)
                             .arg((QT_VERSION & 0xff00) >> 8);
@@ -1786,7 +1809,7 @@ void MainWindow::onEditRoute()
 {
     qDebug() << "Edit Route clicked";
 
-    setWindowTitle("ECDIS AUV - Edit Route Mode");
+    setWindowTitle(QString(APP_TITLE) + " - Edit Route Mode");
     statusBar()->showMessage("Click on waypoints to edit their properties");
 
     if (ecchart) {
@@ -1813,7 +1836,7 @@ void MainWindow::onInsertWaypoint()
 
     qDebug() << "Insert Waypoint clicked";
 
-    setWindowTitle("ECDIS AUV - Insert Waypoint Mode");
+    setWindowTitle(QString(APP_TITLE) + " - Insert Waypoint Mode");
     statusBar()->showMessage("Click on the chart between two waypoints to insert a new waypoint in the route");
 
     ecchart->setActiveFunction(EcWidget::INSERT_WAYP);
@@ -1833,7 +1856,7 @@ void MainWindow::onMoveWaypoint()
 
     qDebug() << "Move Waypoint clicked";
 
-    setWindowTitle("ECDIS AUV - Move Waypoint Mode");
+    setWindowTitle(QString(APP_TITLE) + " - Move Waypoint Mode");
     statusBar()->showMessage("Click and drag a waypoint to move it to a new position");
 
     ecchart->setActiveFunction(EcWidget::MOVE_WAYP);
@@ -1843,7 +1866,7 @@ void MainWindow::onDeleteWaypoint()
 {
     qDebug() << "Delete Waypoint clicked";
 
-    setWindowTitle("ECDIS AUV - Delete Waypoint Mode");
+    setWindowTitle(QString(APP_TITLE) + " - Delete Waypoint Mode");
     statusBar()->showMessage("Click on a waypoint to delete it from the route");
 
     if (ecchart) {
@@ -2159,7 +2182,7 @@ void MainWindow::onExportRoute()
 
     // Add export metadata
     QJsonObject metadata;
-    metadata["exportedBy"] = "ECDIS AUV";
+    metadata["exportedBy"] = APP_TITLE;
     metadata["exportDate"] = QDateTime::currentDateTime().toString(Qt::ISODate);
     metadata["version"] = "1.0";
     exportData["metadata"] = metadata;
@@ -2254,7 +2277,7 @@ void MainWindow::onExportAllRoutes()
 
         // Add export metadata
         QJsonObject metadata;
-        metadata["exportedBy"] = "ECDIS AUV";
+        metadata["exportedBy"] = APP_TITLE;
         metadata["exportDate"] = QDateTime::currentDateTime().toString(Qt::ISODate);
         metadata["version"] = "1.0";
         exportData["metadata"] = metadata;
@@ -2303,8 +2326,9 @@ void MainWindow::onClearRoutes()
 
 void MainWindow::onWaypointCreated()
 {
-    setWindowTitle("ECDIS AUV");
-    statusBar()->showMessage("Ready");
+    setWindowTitle(APP_TITLE);
+    //statusBar()->showMessage("Ready");
+    routesStatusText->setText("Ready");
 }
 
 void MainWindow::onClearWaypoints()
@@ -4175,6 +4199,7 @@ void MainWindow::onCreateRoute()
     
     ecchart->setActiveFunction(EcWidget::CREATE_ROUTE);
     ecchart->startRouteMode();
-    statusBar()->showMessage(tr("Route Mode: Click to add waypoints. Press ESC or right-click to end route creation"), 0);
-    setWindowTitle("ECDIS AUV - Create Route");
+    routesStatusText->setText(tr("Route Mode: Click to add waypoints. Press ESC or right-click to end route creation"));
+    //statusBar()->showMessage(tr("Route Mode: Click to add waypoints. Press ESC or right-click to end route creation"), 0);
+    setWindowTitle(QString(APP_TITLE) + " - Create Route");
 }

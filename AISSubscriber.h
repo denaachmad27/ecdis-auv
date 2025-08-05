@@ -62,6 +62,7 @@ public slots:
 
 private:
     QTcpSocket *socket = nullptr;
+    bool hasReceivedData = false;
 };
 
 #endif // AISSUBSCRIBER_H
