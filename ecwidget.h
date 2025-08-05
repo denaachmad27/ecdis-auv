@@ -243,6 +243,7 @@ public:
 
   void drawWaypointMarker(EcCoordinate lat, EcCoordinate lon);
   void drawSingleWaypoint(EcCoordinate lat, EcCoordinate lon, const QString& label, const QColor& color = QColor(255, 140, 0));
+  void drawWaypointWithLabel(double lat, double lon, const QString& label, const QColor& color);
   QPoint findOptimalLabelPosition(int waypointX, int waypointY, const QSize& textSize, int minDistance);
   void drawGhostWaypoint(EcCoordinate lat, EcCoordinate lon, const QString& label);
   void saveWaypoints();

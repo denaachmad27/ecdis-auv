@@ -1005,7 +1005,7 @@ void EcWidget::waypointDraw(){
 
         QColor waypointColor = getRouteColor(wp.routeId);
 
-        drawSingleWaypoint(wp.lat, wp.lon, wp.label, waypointColor);
+        drawWaypointWithLabel(wp.lat, wp.lon, wp.label, waypointColor);
     }
 
     drawLeglineLabels();
@@ -2656,8 +2656,10 @@ void EcWidget::drawAISCell()
   drawRedDotTracker();
 
   // OWNSHIP DRAW
-  waypointDraw();
   ownShipDraw();
+
+  // Add waypointDraw() to fix route and waypoint label flickering
+  waypointDraw();
 
   update();
 
@@ -3378,7 +3380,7 @@ void EcWidget::drawWaypointMarker(double lat, double lon)
 }
 
 
-void EcWidget::drawSingleWaypoint(double lat, double lon, const QString& label, const QColor& color)
+void EcWidget::drawWaypointWithLabel(double lat, double lon, const QString& label, const QColor& color)
 {
     int x, y;
 
@@ -3402,8 +3404,8 @@ void EcWidget::drawSingleWaypoint(double lat, double lon, const QString& label, 
     QFontMetrics fm(font);
     QRect textRect = fm.boundingRect(label);
     
-    // Tentukan posisi label yang optimal untuk menghindari tindihan
-    QPoint labelPos = findOptimalLabelPosition(x, y, textRect.size(), 18); // 18px minimum distance from waypoint
+    // Use fixed label position instead of findOptimalLabelPosition
+    QPoint labelPos(x + 10, y - 10); // Fixed offset: 10px right and 10px up from waypoint
     
     // Gambar teks label tanpa background
     painter.setBrush(Qt::NoBrush);
