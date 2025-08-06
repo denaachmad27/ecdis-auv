@@ -13,6 +13,7 @@
 #include "aistargetpanel.h"
 #include "obstacledetectionpanel.h"
 #include "routepanel.h"
+#include "SettingsData.h"
 
 #include <QPluginLoader>
 
@@ -74,6 +75,11 @@ public:
 
     // ROUTES STATUS BAR
     QLabel *routesStatusText;
+
+    // RECONNECT STATUS BAR
+    QLabel *reconnectStatusText;
+    void setReconnectStatusText(const QString);
+    SettingsData getSettingsForwarder();
 
 public slots:
     void onEnableRedDotTracker(bool enabled);
@@ -220,6 +226,7 @@ protected:
     QAction* attachToShipAction;
 
     IAisDvrPlugin* aisDvr;
+    AISSubscriber  *aisSub;
 
 private slots:
     // CPA/TCPA slots

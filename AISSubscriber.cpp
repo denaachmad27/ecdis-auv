@@ -4,22 +4,58 @@
 #include <QJsonValue>
 #include <QJsonParseError>
 #include <QDebug>
+#include "mainwindow.h"
 
-AISSubscriber::AISSubscriber(QObject *parent) : QObject(parent) {}
+AISSubscriber::AISSubscriber(QObject* parent)
+    : QObject(parent), socket(nullptr), reconnectTimer(new QTimer(this))
+{
+    int interval = 60000;
+    if (mainWindow){
+        interval = mainWindow->getSettingsForwarder().seconds * 1000;
+    }
+
+    reconnectTimer->setInterval(interval);
+    connect(reconnectTimer, &QTimer::timeout, this, &AISSubscriber::tryReconnect);
+
+    countdownTimer = new QTimer(this);
+    countdownTimer->setInterval(1000);
+    connect(countdownTimer, &QTimer::timeout, this, [this]() {
+        if (--countdownSeconds > 0) {
+            QString connection = "Reconnect in " + formatCountdownTime(countdownSeconds);
+            if (mainWindow){
+                mainWindow->setReconnectStatusText(connection);
+            }
+            qDebug() << connection;
+        } else {
+            countdownTimer->stop();  // countdown selesai
+            this->connectToHost(lastHost, lastPort);  // konek baru di sini
+        }
+    });
+}
 
 void AISSubscriber::connectToHost(const QString &host, quint16 port) {
-    if (socket) return;
+    lastHost = host;
+    lastPort = port;
+
+    if (socket) {
+        socket->abort();  // pastikan socket bersih
+        socket->deleteLater();
+    }
 
     hasReceivedData = false;
     socket = new QTcpSocket(this);
 
     connect(socket, &QTcpSocket::readyRead, this, &AISSubscriber::onReadyRead);
     connect(socket, &QTcpSocket::disconnected, this, &AISSubscriber::onDisconnected);
-    connect(socket, &QTcpSocket::connected, this, []() {
-        qDebug() << "Socket connected";
-    });
+    // connect(socket, &QTcpSocket::connected, this, &AISSubscriber::onConnected);
+
     connect(socket, QOverload<QAbstractSocket::SocketError>::of(&QTcpSocket::errorOccurred),
             this, &AISSubscriber::onSocketError);
+
+    QString connection = "Connecting to host " + host + ":" + QString::number(port);
+    if (mainWindow){
+        mainWindow->setReconnectStatusText(connection);
+    }
 
     socket->connectToHost(host, port);
 }
@@ -31,6 +67,8 @@ void AISSubscriber::disconnectFromHost() {
         socket = nullptr;
 
         qDebug() << "Disconnected";
+
+        startReconnectTimer();
     }
 }
 
@@ -43,7 +81,10 @@ void AISSubscriber::onReadyRead() {
         hasReceivedData = true;
         qDebug() << "[AISSubscriber] Data received. Connection status changed";
 
+        stopReconnectTimer();
         emit connectionStatusChanged(true);
+
+        mainWindow->setReconnectStatusText("");
     }
 
     QList<QByteArray> lines;
@@ -169,7 +210,79 @@ void AISSubscriber::onSocketError(QAbstractSocket::SocketError) {
     emit errorOccurred(socket->errorString());
 }
 
+// void AISSubscriber::onDisconnected() {
+//     emit disconnected();
+//     emit connectionStatusChanged(false);  // ✅ emit jika disconnect
+// }
+
 void AISSubscriber::onDisconnected() {
     emit disconnected();
+    qDebug() << "[AIS] Disconnected.";
+
     emit connectionStatusChanged(false);  // ✅ emit jika disconnect
+    startReconnectTimer();
+}
+
+void AISSubscriber::startReconnectTimer() {
+    // if (!reconnectTimer->isActive()) {
+    //     reconnectTimer->start();
+    //     qDebug() << "[AIS] Reconnect timer started.";
+    // }
+
+    if (reconnectTimer->isActive()) {
+        reconnectTimer->stop();  // matikan timer lama
+    }
+
+    int interval = 60;
+    if (mainWindow){
+        interval = mainWindow->getSettingsForwarder().seconds;
+    }
+
+    countdownSeconds = interval;
+    countdownTimer->start();
+}
+
+void AISSubscriber::stopReconnectTimer() {
+    if (reconnectTimer->isActive()) {
+        reconnectTimer->stop();
+        qDebug() << "[AIS] Reconnect timer stopped.";
+    }
+
+    if (countdownTimer->isActive()) {
+        countdownTimer->stop();
+    }
+}
+
+void AISSubscriber::tryReconnect() {
+    QString connection = "Trying to reconnect...";
+    if (mainWindow){
+        mainWindow->setReconnectStatusText(connection);
+    }
+
+    // connectToHost(lastHost, lastPort);
+}
+
+QString AISSubscriber::formatCountdownTime(int totalSeconds) {
+    int minutes = totalSeconds / 60;
+    int seconds = totalSeconds % 60;
+
+    if (minutes > 0 && seconds > 0) {
+        return QString("%1 minute%2 %3 second%4")
+        .arg(minutes)
+            .arg(minutes == 1 ? "" : "s")
+            .arg(seconds)
+            .arg(seconds == 1 ? "" : "s");
+    } else if (minutes > 0) {
+        return QString("%1 minute%2")
+        .arg(minutes)
+            .arg(minutes == 1 ? "" : "s");
+    } else {
+        return QString("%1 second%2")
+        .arg(seconds)
+            .arg(seconds == 1 ? "" : "s");
+    }
+}
+
+void AISSubscriber::setMainWindow(MainWindow* mw){
+    mainWindow = mw;
 }

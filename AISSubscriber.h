@@ -3,14 +3,21 @@
 
 #include <QObject>
 #include <QTcpSocket>
+#include <QTimer>
+
+// forward declerations1
+class MainWindow;
 
 class AISSubscriber : public QObject {
     Q_OBJECT
 
 public:
     explicit AISSubscriber(QObject *parent = nullptr);
-    void connectToHost(const QString &host, quint16 port);
     //void disconnectFromHost();
+    void setMainWindow(MainWindow*);
+
+    void startReconnectTimer();
+    void stopReconnectTimer();
 
 signals:
     // OWNSHIP
@@ -56,13 +63,25 @@ private slots:
     void onReadyRead();
     void onSocketError(QAbstractSocket::SocketError socketError);
     void onDisconnected();
+    void tryReconnect();
 
 public slots:
+    void connectToHost(const QString &host, quint16 port);
     void disconnectFromHost();
 
 private:
+    MainWindow* mainWindow = nullptr;
     QTcpSocket *socket = nullptr;
     bool hasReceivedData = false;
+
+    QTimer* reconnectTimer;
+    QTimer* countdownTimer;
+    int countdownSeconds;
+
+    QString lastHost;
+    quint16 lastPort;
+
+    QString formatCountdownTime(int totalSeconds);
 };
 
 #endif // AISSUBSCRIBER_H

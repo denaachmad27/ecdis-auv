@@ -39,6 +39,9 @@ void SettingsManager::load() {
     m_data.trailMode = settings.value("OwnShip/mode", 2).toInt();
     m_data.trailMinute = settings.value("OwnShip/interval", 1).toInt();
     m_data.trailDistance = settings.value("OwnShip/distance", 0.01).toDouble();
+
+    // RECONNECT
+    m_data.seconds = settings.value("MOOSDB/reconnecting", 60).toInt();
 }
 
 void SettingsManager::save(const SettingsData& data) {
@@ -75,6 +78,9 @@ void SettingsManager::save(const SettingsData& data) {
     settings.setValue("OwnShip/mode", data.trailMode);
     settings.setValue("OwnShip/interval", data.trailMinute);
     settings.setValue("OwnShip/distance", data.trailDistance);
+
+    // RECONNECTING
+    settings.setValue("MOOSDB/reconnecting", data.seconds);
 }
 
 const SettingsData& SettingsManager::data() const {

@@ -657,6 +657,7 @@ public:
 
   void startAISSubscribe();
   void startAISConnection();
+  void startConnectionAgain();
   void stopAISConnection();
   void processAISJson(const QByteArray&);
   void processData(double, double, double, double, double, double, double, double, double);

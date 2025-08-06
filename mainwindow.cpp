@@ -284,6 +284,18 @@ void MainWindow::createStatusBar(){
     statusBar()->addPermanentWidget(new QLabel("Cursor:", statusBar()));
     statusBar()->addPermanentWidget(posEdit, 0);
 
+    // RECONNECTING STATUS BAR
+    reconnectStatusText = new QLabel("");
+
+    QWidget *reconnectStatusWidget = new QWidget;
+    QHBoxLayout *reconnectStatusLayout = new QHBoxLayout(reconnectStatusWidget);
+    reconnectStatusLayout->setContentsMargins(5, 0, 10, 0); // spasi antar widget
+    reconnectStatusLayout->addWidget(reconnectStatusText);
+    reconnectStatusText->setText("HAHA Boy");
+
+    // Tambahkan ke paling kiri status bar
+    statusBar()->addWidget(reconnectStatusWidget);
+
     // ROUTES STATUS BAR
     routesStatusText = new QLabel("");
 
@@ -986,7 +998,6 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL){
   connect(ecchart, SIGNAL(waypointCreated()), this, SLOT(onWaypointCreated()));
   connect(ecchart, SIGNAL(attachToShipStateChanged(bool)), this, SLOT(onAttachToShipStateChanged(bool)));
 
-
   // Define the DENC path
 #ifdef _WIN32
   if (EcKernelGetEnv("APPDATA"))
@@ -1099,6 +1110,15 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL){
   // AUTO CONNECT TO MOOSDB
   if (AppConfig::isProduction()){
       ecchart->startAISSubscribe();
+
+      // FOR AISSubscriber
+      try {
+          aisSub = ecchart->getAisSub();
+          aisSub->setMainWindow(this);
+      }
+      catch (...){
+          qDebug() << "AISSubs init error";
+      }
   }
 }
 
@@ -1728,7 +1748,9 @@ void MainWindow::slotConnectToAisServer()
 void MainWindow::subscribeMOOSDB()
 {
     // NEW
-    ecchart->startAISSubscribe();
+    // ecchart->startAISSubscribe();
+
+    ecchart->startConnectionAgain();
     qDebug() << "MOOSDB IP: " + SettingsManager::instance().data().moosIp;
 }
 
@@ -4169,4 +4191,12 @@ void MainWindow::onEditRouteByForm(int routeId)
     if (!ecchart) return;
     
     ecchart->showEditRouteDialog(routeId);
+}
+
+void MainWindow::setReconnectStatusText(const QString text){
+    reconnectStatusText->setText(text);
+}
+
+SettingsData MainWindow::getSettingsForwarder(){
+    return SettingsManager::instance().data();
 }

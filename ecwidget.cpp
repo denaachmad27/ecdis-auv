@@ -1047,15 +1047,14 @@ void EcWidget::paintEvent (QPaintEvent *e)
 
       // Re-enabled with enhanced safety protections
       drawObstacleMarkers(painter); // Draw obstacle markers with color-coded dots
-  }
       
-  // TEMPORARY DISABLE: Route lines drawing to prevent crash during presentation
-  // drawRouteLinesOverlay(painter);
+      // TEMPORARY DISABLE: Route lines drawing to prevent crash during presentation
+      // drawRouteLinesOverlay(painter);
 
-  // Draw chart flashing overlay for dangerous obstacles
-  drawChartFlashOverlay(painter);
-
-  drawRedDotTracker();
+      // Draw chart flashing overlay for dangerous obstacles
+      drawChartFlashOverlay(painter);
+      drawRedDotTracker();
+  }
 
   // ========== DRAW TEST GUARDZONE ==========
 
@@ -2297,8 +2296,36 @@ void EcWidget::startAISConnection()
     threadAIS->start();
 }
 
+void EcWidget::startConnectionAgain()
+{
+    if (!deleteAISCell()) {
+        QMessageBox::warning(this, tr("ReadAISLogfile"), tr("Could not remove old AIS overlay cell. Please restart the program."));
+        return;
+    }
+    if (!createAISCell()) {
+        QMessageBox::warning(this, tr("ReadAISLogfile"), tr("Could not create AIS overlay cell. Please restart the program."));
+        return;
+    }
+
+    _aisObj->clearTargetData();
+    _aisObj->setAISCell(aisCellId);
+
+    if (subscriber) {
+        QString sshIP = SettingsManager::instance().data().moosIp;
+        quint16 sshPort = 5000;
+
+        QMetaObject::invokeMethod(subscriber, "connectToHost",
+                                  Qt::QueuedConnection,
+                                  Q_ARG(QString, sshIP),
+                                  Q_ARG(quint16, sshPort));
+    } else {
+        qWarning() << "[EcWidget] Subscriber not initialized.";
+    }
+}
+
 void EcWidget::stopAISConnection()
 {
+    /*
     if (subscriber) {
         // Hubungkan ke slot lambda sementara
         connect(subscriber, &AISSubscriber::disconnected, this, [this]() {
@@ -2312,7 +2339,7 @@ void EcWidget::stopAISConnection()
             }
 
             // Aman untuk kosongkan subscriber setelah benar-benar disconnect
-            subscriber = nullptr;
+            // subscriber = nullptr;
         });
 
         // Minta disconnect secara asinkron
@@ -2326,6 +2353,8 @@ void EcWidget::stopAISConnection()
             threadAIS = nullptr;
         }
     }
+    */
+    subscriber->disconnectFromHost();
 }
 
 void EcWidget::processData(double lat, double lon, double cog, double sog, double hdg, double spd, double dep, double yaw, double z){
@@ -2658,8 +2687,10 @@ void EcWidget::drawAISCell()
 
 #endif
 
-  // Draw red dot tracker overlay
-  drawRedDotTracker();
+  if (AppConfig::isDevelopment()){
+      // Draw red dot tracker overlay
+      drawRedDotTracker();
+  }
 
   // OWNSHIP DRAW
   ownShipDraw();
