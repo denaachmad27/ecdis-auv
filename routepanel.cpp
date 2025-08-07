@@ -273,7 +273,7 @@ void RoutePanel::refreshRouteList()
         selectedRouteId = previouslySelectedRouteId;
         RouteInfo info = calculateRouteInfo(selectedRouteId);
         updateRouteInfoDisplay(info);
-        qDebug() << "[ROUTE-PANEL] Restored selection for route" << selectedRouteId << "visibility:" << info.visible;
+        qDebug() << "[ROUTE-PANEL] Restored selection for route" << selectedRouteId << "name:" << info.name << "visibility:" << info.visible << "waypoints:" << info.waypointCount;
     }
     
     // Update title with count
@@ -285,10 +285,23 @@ RouteInfo RoutePanel::calculateRouteInfo(int routeId)
 {
     RouteInfo info;
     info.routeId = routeId;
-    info.name = QString("Route %1").arg(routeId);
     info.visible = ecWidget ? ecWidget->isRouteVisible(routeId) : true;
+    qDebug() << "[ROUTE-PANEL] calculateRouteInfo for route" << routeId << "visibility:" << info.visible;
     
-    if (!ecWidget) return info;
+    if (!ecWidget) {
+        info.name = QString("Route %1").arg(routeId);
+        return info;
+    }
+    
+    // Get actual route name from routeList
+    EcWidget::Route routeData = ecWidget->getRouteById(routeId);
+    if (routeData.routeId != 0) {
+        info.name = routeData.name;
+        qDebug() << "[ROUTE-PANEL] Found route name:" << info.name << "for route" << routeId;
+    } else {
+        info.name = QString("Route %1").arg(routeId);
+        qDebug() << "[ROUTE-PANEL] Route" << routeId << "not found in routeList, using default name";
+    }
     
     // Get waypoints for this route
     QList<EcWidget::Waypoint> waypoints = ecWidget->getWaypoints();
