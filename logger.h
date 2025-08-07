@@ -5,16 +5,20 @@
 #include <QTextEdit>
 #include <QFile>
 
-class Logger : public QObject {
+class Logger : public QObject
+{
     Q_OBJECT
-
 public:
-    Logger(QTextEdit *widget, QObject *parent = nullptr);
-    static void customHandler(QtMsgType type, const QMessageLogContext &, const QString &msg);
+    explicit Logger(QTextEdit *widget = nullptr, QObject *parent = nullptr);
+
+    static void customHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg);
 
 private:
     static QTextEdit *textEdit;
     static QFile logFile;
+    static QString currentDate;
+
+    static void rotateLogFileIfNeeded();
 };
 
 #endif // LOGGER_H
