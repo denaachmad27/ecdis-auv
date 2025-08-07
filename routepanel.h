@@ -30,20 +30,22 @@ struct RouteInfo {
     double totalDistance;
     double totalTime; // in hours
     bool visible;
+    bool attachedToShip;
     
-    RouteInfo() : routeId(0), name(""), waypointCount(0), totalDistance(0.0), totalTime(0.0), visible(true) {}
+    RouteInfo() : routeId(0), name(""), waypointCount(0), totalDistance(0.0), totalTime(0.0), visible(true), attachedToShip(false) {}
 };
 
 class RouteListItem : public QListWidgetItem
 {
 public:
-    RouteListItem(const RouteInfo& routeInfo, QListWidget* parent = nullptr);
+    RouteListItem(const RouteInfo& routeInfo, QListWidget* parent = nullptr, EcWidget* ecWidget = nullptr);
     
     void updateFromRouteInfo(const RouteInfo& routeInfo);
     int getRouteId() const { return routeId; }
 
 private:
     int routeId;
+    EcWidget* ecWidget;
     void updateDisplayText(const RouteInfo& routeInfo, EcWidget* ecWidget = nullptr);
 };
 
