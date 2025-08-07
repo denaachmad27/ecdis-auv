@@ -75,7 +75,7 @@ void RouteFormDialog::setupUI()
     // Setup tabs
     setupRouteInfoTab();
     setupWaypointsTab();
-    setupAdvancedTab();
+    setupAdvancedTab(); // Still needed for component initialization but tab is hidden
     
     // Status label
     statusLabel = new QLabel(this);
@@ -149,6 +149,17 @@ void RouteFormDialog::setupRouteInfoTab()
     
     mainLayout->addWidget(statsGroup);
     
+    // HIDDEN COMPONENTS - Create but don't display (moved from Advanced tab)
+    autoLabelCheckBox = new QCheckBox("Auto-generate waypoint labels");
+    autoLabelCheckBox->setVisible(false); // Hidden from UI but available for functionality
+    
+    defaultTurningRadiusSpinBox = new QDoubleSpinBox();
+    defaultTurningRadiusSpinBox->setRange(0.1, 10.0);
+    defaultTurningRadiusSpinBox->setSingleStep(0.1);
+    defaultTurningRadiusSpinBox->setDecimals(1);
+    defaultTurningRadiusSpinBox->setSuffix(" NM");
+    defaultTurningRadiusSpinBox->setVisible(false); // Hidden from UI but available for functionality
+    
     // Add stretch to push content to top
     mainLayout->addStretch();
     
@@ -173,6 +184,9 @@ void RouteFormDialog::setupWaypointsTab()
     headers << "#" << "Label" << "Latitude" << "Longitude" << "Turn Radius" << "Remark" << "Active";
     waypointTable->setHorizontalHeaderLabels(headers);
     
+    // HIDE Turn Radius column (index 4)
+    waypointTable->setColumnHidden(4, true);
+    
     // Add tooltips for headers
     waypointTable->horizontalHeaderItem(0)->setToolTip("Sequential waypoint number");
     waypointTable->horizontalHeaderItem(1)->setToolTip("Waypoint identifier/name");
@@ -188,11 +202,21 @@ void RouteFormDialog::setupWaypointsTab()
         "    gridline-color: #d0d0d0;"
         "    border: 1px solid #c0c0c0;"
         "    selection-background-color: #3daee9;"
+        "    selection-color: #ffffff;"
         "    alternate-background-color: #f5f5f5;"
         "}"
         "QTableWidget::item {"
         "    padding: 8px;"
         "    border: none;"
+        "    color: #333;"
+        "}"
+        "QTableWidget::item:selected {"
+        "    background-color: #3daee9;"
+        "    color: #ffffff;"
+        "}"
+        "QTableWidget::item:hover {"
+        "    background-color: #e3f2fd;"
+        "    color: #333;"
         "}"
         "QHeaderView::section {"
         "    background-color: #e8e8e8;"
@@ -289,34 +313,23 @@ void RouteFormDialog::setupAdvancedTab()
     QWidget *advancedWidget = new QWidget();
     QFormLayout *formLayout = new QFormLayout(advancedWidget);
     
-    // Auto-label waypoints
-    autoLabelCheckBox = new QCheckBox("Auto-generate waypoint labels");
-    formLayout->addRow("Labeling:", autoLabelCheckBox);
+    // DISABLED: Advanced tab functionality removed
+    // Components have been moved to setupRouteInfoTab() (hidden) or disabled
+    // autoLabelCheckBox and defaultTurningRadiusSpinBox now created in setupRouteInfoTab()
     
-    // Default turning radius
-    defaultTurningRadiusSpinBox = new QDoubleSpinBox();
-    defaultTurningRadiusSpinBox->setRange(0.1, 10.0);
-    defaultTurningRadiusSpinBox->setSingleStep(0.1);
-    defaultTurningRadiusSpinBox->setDecimals(1);
-    defaultTurningRadiusSpinBox->setSuffix(" NM");
-    formLayout->addRow("Default Turn Radius:", defaultTurningRadiusSpinBox);
-    
-    // Route type
+    // Create remaining components but don't add them to UI (to prevent crashes)
     routeTypeComboBox = new QComboBox();
     routeTypeComboBox->addItems({"Navigation", "Survey", "Emergency", "Training", "Test"});
-    formLayout->addRow("Route Type:", routeTypeComboBox);
+    routeTypeComboBox->setVisible(false); // Hidden
     
-    // Route speed
     routeSpeedEdit = new QLineEdit();
     routeSpeedEdit->setValidator(new QDoubleValidator(0.1, 50.0, 1, this));
-    routeSpeedEdit->setPlaceholderText("Knots");
-    formLayout->addRow("Default Speed:", routeSpeedEdit);
+    routeSpeedEdit->setVisible(false); // Hidden
     
-    // Reverse route option
     reverseRouteCheckBox = new QCheckBox("Create reverse route automatically");
-    formLayout->addRow("Options:", reverseRouteCheckBox);
+    reverseRouteCheckBox->setVisible(false); // Hidden
     
-    tabWidget->addTab(advancedWidget, "Advanced");
+    // Don't add the tab to UI since Advanced tab is disabled
 }
 
 void RouteFormDialog::connectSignals()
@@ -415,7 +428,7 @@ void RouteFormDialog::showWaypointInputDialog(int editIndex)
     radiusSpin->setSingleStep(0.1);
     radiusSpin->setDecimals(1);
     radiusSpin->setSuffix(" NM");
-    radiusSpin->setValue(defaultTurningRadiusSpinBox->value());
+    radiusSpin->setValue(0.5); // Use default value since defaultTurningRadiusSpinBox is hidden
     
     activeCheck->setChecked(true);
     
@@ -435,7 +448,8 @@ void RouteFormDialog::showWaypointInputDialog(int editIndex)
     layout->addRow("Label:", labelEdit);
     layout->addRow("Latitude:", latEdit);
     layout->addRow("Longitude:", lonEdit);
-    layout->addRow("Turn Radius:", radiusSpin);
+    // layout->addRow("Turn Radius:", radiusSpin); // HIDDEN: Turn radius field disabled
+    radiusSpin->setVisible(false); // HIDDEN: Hide turn radius spinbox
     layout->addRow("Remark:", remarkEdit);
     layout->addRow("Active:", activeCheck);
     
@@ -469,9 +483,14 @@ void RouteFormDialog::showWaypointInputDialog(int editIndex)
         }
         
         if (editIndex >= 0) {
+            // Log coordinate changes for debugging
+            qDebug() << "[WAYPOINT-EDIT] Waypoint" << editIndex + 1 << "coordinates changed from"
+                     << waypoints[editIndex].lat << "," << waypoints[editIndex].lon
+                     << "to" << wp.lat << "," << wp.lon;
             waypoints[editIndex] = wp;
             statusLabel->setText(QString("✓ Waypoint %1 (%2) updated successfully").arg(editIndex + 1).arg(wp.label));
         } else {
+            qDebug() << "[WAYPOINT-ADD] New waypoint added at" << wp.lat << "," << wp.lon;
             waypoints.append(wp);
             statusLabel->setText(QString("✓ Waypoint %1 (%2) added successfully - Total: %3 waypoints").arg(waypoints.size()).arg(wp.label).arg(waypoints.size()));
         }
@@ -542,6 +561,7 @@ void RouteFormDialog::updateWaypointList()
     
     // Update statistics
     double totalDistance = calculateRouteDistance();
+    qDebug() << "[ROUTE-FORM] Route distance calculated:" << totalDistance << "NM, formatted:" << formatDistance(totalDistance);
     routeStatsLabel->setText(QString("Waypoints: %1 | Distance: %2")
         .arg(waypoints.size())
         .arg(formatDistance(totalDistance)));

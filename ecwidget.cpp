@@ -997,16 +997,19 @@ void EcWidget::Draw()
 }
 
 void EcWidget::waypointDraw(){
+    qDebug() << "[WAYPOINT-DRAW] Drawing" << waypointList.size() << "waypoints";
+    
     // Gambar waypoint dengan warna konsisten
     for (const Waypoint &wp : waypointList)
     {
         // Check visibility - skip hidden routes
         if (wp.routeId > 0 && !isRouteVisible(wp.routeId)) {
+            qDebug() << "[WAYPOINT-DRAW] Skipping waypoint" << wp.label << "from hidden route" << wp.routeId;
             continue; // Skip waypoints from hidden routes
         }
 
+        qDebug() << "[WAYPOINT-DRAW] Drawing waypoint" << wp.label << "route:" << wp.routeId;
         QColor waypointColor = getRouteColor(wp.routeId);
-
         drawWaypointWithLabel(wp.lat, wp.lon, wp.label, waypointColor);
     }
 
@@ -1035,7 +1038,7 @@ void EcWidget::paintEvent (QPaintEvent *e)
 
   // Draw ghost waypoint saat move mode
   if (ghostWaypoint.visible) {
-      drawGhostWaypoint(ghostWaypoint.lat, ghostWaypoint.lon, ghostWaypoint.label);
+      drawGhostWaypoint(painter, ghostWaypoint.lat, ghostWaypoint.lon, ghostWaypoint.label);
   }
 
   if (AppConfig::isDevelopment()){
@@ -3184,19 +3187,9 @@ bool EcWidget::createWaypointInRoute(int routeId, double lat, double lon, const 
     // Add to waypoint list
     waypointList.append(newWaypoint);
     
-    qDebug() << "[ROUTE] Added waypoint" << newWaypoint.label << "to route" << routeId;
+    qDebug() << "[CREATE-WAYPOINT] Added waypoint" << newWaypoint.label << "to route" << routeId << ". Total waypoints:" << waypointList.size();
     
-    // Save waypoints to JSON
-    saveWaypoints();
-    
-    // Update routeList for consistency
-    updateRouteList(routeId);
-    
-    // Save route information
-    saveRoutes();
-    
-    // Force complete chart redraw
-    forceRedraw();
+    // Note: Don't save or redraw here - will be done in batch after all waypoints are created
     
     return true;
 }
@@ -3271,7 +3264,11 @@ void EcWidget::setRouteVisibility(int routeId, bool visible)
 
 bool EcWidget::isRouteVisible(int routeId) const
 {
-    return routeVisibility.value(routeId, true); // Default visible
+    // SIMPLE: Return visibility state as controlled by user via checkbox
+    bool visible = routeVisibility.value(routeId, true); // Default visible for new routes
+    qDebug() << "[ROUTE] isRouteVisible(" << routeId << ") returns:" << visible << "from user control";
+    
+    return visible;
 }
 
 void EcWidget::setSelectedRoute(int routeId)
@@ -3554,15 +3551,19 @@ QPoint EcWidget::findOptimalLabelPosition(int waypointX, int waypointY, const QS
     return fallbackPos;
 }
 
-void EcWidget::drawGhostWaypoint(double lat, double lon, const QString& label)
+void EcWidget::drawGhostWaypoint(QPainter& painter, double lat, double lon, const QString& label)
 {
     int x, y;
 
     if (!LatLonToXy(lat, lon, x, y))
         return;
 
-    QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
+
+    // Draw ghost route lines first (behind waypoint)
+    if (ghostWaypoint.routeId > 0 && ghostWaypoint.waypointIndex >= 0) {
+        drawGhostRouteLines(painter, lat, lon, ghostWaypoint.routeId, ghostWaypoint.waypointIndex);
+    }
 
     // Style ghost waypoint: semi-transparent dengan outline dashed
     QPen pen(QColor(255, 140, 0, 120)); // Orange semi-transparent
@@ -3580,8 +3581,106 @@ void EcWidget::drawGhostWaypoint(double lat, double lon, const QString& label)
     painter.setPen(QColor(0, 0, 0, 120)); // Black semi-transparent
     painter.setFont(QFont("Arial", 8));
     painter.drawText(x + 10, y - 10, label);
+}
 
-    painter.end();
+void EcWidget::drawGhostRouteLines(QPainter& painter, double ghostLat, double ghostLon, int routeId, int waypointIndex)
+{
+    if (routeId <= 0 || waypointIndex < 0) return;
+    
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    
+    // Find all waypoints in the same route
+    QList<int> routeWaypointIndices;
+    for (int i = 0; i < waypointList.size(); ++i) {
+        if (waypointList[i].routeId == routeId) {
+            routeWaypointIndices.append(i);
+        }
+    }
+    
+    if (routeWaypointIndices.size() < 2) return;
+    
+    // Sort waypoints by their order in the route (by original index)
+    std::sort(routeWaypointIndices.begin(), routeWaypointIndices.end());
+    
+    // Find position of moving waypoint in the route
+    int movingWaypointPosition = -1;
+    for (int i = 0; i < routeWaypointIndices.size(); ++i) {
+        if (routeWaypointIndices[i] == waypointIndex) {
+            movingWaypointPosition = i;
+            break;
+        }
+    }
+    
+    if (movingWaypointPosition < 0) return;
+    
+    // Setup ghost line style
+    QPen ghostPen(QColor(255, 140, 0, 100)); // Orange semi-transparent
+    ghostPen.setWidth(3);
+    ghostPen.setStyle(Qt::DashLine);
+    painter.setPen(ghostPen);
+    
+    int ghostX, ghostY;
+    if (!LatLonToXy(ghostLat, ghostLon, ghostX, ghostY)) return;
+    
+    // Draw line to previous waypoint (if exists)
+    if (movingWaypointPosition > 0) {
+        int prevIndex = routeWaypointIndices[movingWaypointPosition - 1];
+        int prevX, prevY;
+        if (LatLonToXy(waypointList[prevIndex].lat, waypointList[prevIndex].lon, prevX, prevY)) {
+            painter.drawLine(prevX, prevY, ghostX, ghostY);
+            
+            // Draw arrow direction indicator (from previous to ghost)
+            double angle = atan2(ghostY - prevY, ghostX - prevX);
+            double arrowLength = 12;
+            double arrowAngle = M_PI / 6; // 30 degrees
+            
+            int arrowX1 = ghostX - arrowLength * cos(angle - arrowAngle);
+            int arrowY1 = ghostY - arrowLength * sin(angle - arrowAngle);
+            int arrowX2 = ghostX - arrowLength * cos(angle + arrowAngle);
+            int arrowY2 = ghostY - arrowLength * sin(angle + arrowAngle);
+            
+            QPen arrowPen(QColor(255, 140, 0, 150));
+            arrowPen.setWidth(2);
+            arrowPen.setStyle(Qt::SolidLine);
+            painter.setPen(arrowPen);
+            
+            painter.drawLine(ghostX, ghostY, arrowX1, arrowY1);
+            painter.drawLine(ghostX, ghostY, arrowX2, arrowY2);
+        }
+    }
+    
+    // Draw line to next waypoint (if exists)
+    if (movingWaypointPosition < routeWaypointIndices.size() - 1) {
+        int nextIndex = routeWaypointIndices[movingWaypointPosition + 1];
+        int nextX, nextY;
+        if (LatLonToXy(waypointList[nextIndex].lat, waypointList[nextIndex].lon, nextX, nextY)) {
+            ghostPen.setStyle(Qt::DashLine);
+            painter.setPen(ghostPen);
+            painter.drawLine(ghostX, ghostY, nextX, nextY);
+            
+            // Draw arrow direction indicator (from ghost to next)
+            double angle = atan2(nextY - ghostY, nextX - ghostX);
+            double arrowLength = 12;
+            double arrowAngle = M_PI / 6; // 30 degrees
+            
+            // Calculate arrow head position (middle of leg line)
+            double midX = ghostX + 0.5 * (nextX - ghostX);
+            double midY = ghostY + 0.5 * (nextY - ghostY);
+            
+            int arrowX1 = midX - arrowLength * cos(angle - arrowAngle);
+            int arrowY1 = midY - arrowLength * sin(angle - arrowAngle);
+            int arrowX2 = midX - arrowLength * cos(angle + arrowAngle);
+            int arrowY2 = midY - arrowLength * sin(angle + arrowAngle);
+            
+            QPen arrowPen(QColor(255, 140, 0, 150));
+            arrowPen.setWidth(2);
+            arrowPen.setStyle(Qt::SolidLine);
+            painter.setPen(arrowPen);
+            
+            painter.drawLine(midX, midY, arrowX1, arrowY1);
+            painter.drawLine(midX, midY, arrowX2, arrowY2);
+        }
+    }
 }
 
 void EcWidget::saveWaypoints()
@@ -3710,8 +3809,10 @@ void EcWidget::moveWaypointAt(int x, int y)
                     ghostWaypoint.lat = waypointList[i].lat;
                     ghostWaypoint.lon = waypointList[i].lon;
                     ghostWaypoint.label = waypointList[i].label;
+                    ghostWaypoint.routeId = waypointList[i].routeId;
+                    ghostWaypoint.waypointIndex = i;
                     
-                    qDebug() << "[DEBUG] Waypoint selected for moving:" << i;
+                    qDebug() << "[DEBUG] Waypoint selected for moving:" << i << "route:" << waypointList[i].routeId;
                     return;
                 }
             }
@@ -3749,8 +3850,35 @@ void EcWidget::moveWaypointAt(int x, int y)
             // Update koordinat di struct waypoint (untuk kedua kasus)
             wp.lat = newLat;
             wp.lon = newLon;
-            saveWaypoints();
+            
+            // Preserve route visibility during move
+            int routeId = wp.routeId;
+            bool wasRouteVisible = (routeId > 0) ? isRouteVisible(routeId) : true;
+            
+            qDebug() << "[WAYPOINT-MOVE] Route" << routeId << "visibility before move operations:" << wasRouteVisible;
+            
+            // Save waypoints or routes depending on type
+            if (routeId > 0) {
+                // Route waypoint - update route data and save routes
+                updateRouteFromWaypoint(routeId);
+                
+                // PRESERVE EXISTING VISIBILITY - DO NOT FORCE CHANGE
+                qDebug() << "[WAYPOINT-MOVE] Route" << routeId << "preserving existing visibility:" << wasRouteVisible;
+                
+                saveRoutes();
+                
+                qDebug() << "[WAYPOINT-MOVE] Route" << routeId << "saved without changing visibility";
+                
+                qDebug() << "[WAYPOINT-MOVE] Route waypoint moved, route" << routeId << "final visibility:" << isRouteVisible(routeId);
+            } else {
+                // Single waypoint - save to waypoints.json
+                saveWaypoints();
+                qDebug() << "[WAYPOINT-MOVE] Single waypoint moved";
+            }
+            
             Draw();
+
+            // NO DELAYED VISIBILITY CHANGES - Let user control via checkbox only
 
             // Pick Report removed - no longer shown after waypoint move
 
@@ -3912,8 +4040,11 @@ void EcWidget::drawRouteLinesOverlay(QPainter& painter)
         
         // Check visibility
         if (!isRouteVisible(routeId)) {
+            qDebug() << "[ROUTE-OVERLAY] Route" << routeId << "is not visible, skipping line drawing";
             continue;
         }
+        
+        qDebug() << "[ROUTE-OVERLAY] Drawing lines for route" << routeId << "with" << indices.size() << "waypoints";
         
         if (indices.size() < 2) {
             continue;
@@ -11026,6 +11157,7 @@ void EcWidget::saveRoutes()
         routeObject["modifiedDate"] = route.modifiedDate.toString(Qt::ISODate);
         routeObject["totalDistance"] = route.totalDistance;
         routeObject["estimatedTime"] = route.estimatedTime;
+        routeObject["visible"] = isRouteVisible(route.routeId); // Save visibility state
         
         // Save waypoints with full coordinate data
         QJsonArray waypointsArray;
@@ -11088,6 +11220,52 @@ void EcWidget::saveRoutes()
     }
 }
 
+void EcWidget::updateRouteFromWaypoint(int routeId)
+{
+    qDebug() << "[UPDATE-ROUTE] Updating route" << routeId << "from waypoint changes";
+    
+    // Preserve visibility before route update
+    bool wasVisible = isRouteVisible(routeId);
+    qDebug() << "[UPDATE-ROUTE] Route" << routeId << "visibility before update:" << wasVisible;
+    
+    // Find the route in routeList
+    for (int i = 0; i < routeList.size(); ++i) {
+        if (routeList[i].routeId == routeId) {
+            Route& route = routeList[i];
+            
+            // Clear existing waypoints in route
+            route.waypoints.clear();
+            
+            // Update waypoints from waypointList
+            for (const Waypoint& wp : waypointList) {
+                if (wp.routeId == routeId) {
+                    RouteWaypoint routeWp;
+                    routeWp.lat = wp.lat;
+                    routeWp.lon = wp.lon;
+                    routeWp.label = wp.label;
+                    routeWp.remark = wp.remark;
+                    routeWp.turningRadius = wp.turningRadius;
+                    routeWp.active = wp.active;
+                    route.waypoints.append(routeWp);
+                }
+            }
+            
+            // Update route metadata
+            route.modifiedDate = QDateTime::currentDateTime();
+            
+            // Recalculate route distance and time
+            calculateRouteData(route);
+            
+            qDebug() << "[UPDATE-ROUTE] Updated route" << routeId << "with" << route.waypoints.size() << "waypoints";
+            
+            // PRESERVE VISIBILITY - DO NOT MODIFY
+            qDebug() << "[UPDATE-ROUTE] Route" << routeId << "visibility preserved (not modified):" << wasVisible;
+            
+            break;
+        }
+    }
+}
+
 void EcWidget::loadRoutes()
 {
     QString filePath = getRouteFilePath();
@@ -11120,6 +11298,12 @@ void EcWidget::loadRoutes()
             route.modifiedDate = QDateTime::fromString(routeObject["modifiedDate"].toString(), Qt::ISODate);
             route.totalDistance = routeObject["totalDistance"].toDouble();
             route.estimatedTime = routeObject["estimatedTime"].toDouble();
+            
+            // Load visibility state from file (respecting user's saved preferences)
+            bool routeVisible = routeObject["visible"].toBool(true); // Default to visible for new routes only
+            
+            setRouteVisibility(route.routeId, routeVisible);
+            qDebug() << "[ROUTE-LOAD] Route" << route.routeId << "loaded with saved visibility:" << routeVisible;
             
             // Load waypoints with coordinates
             QJsonArray waypointsArray = routeObject["waypoints"].toArray();
@@ -11305,8 +11489,23 @@ void EcWidget::saveCurrentRoute()
 
 EcWidget::Route EcWidget::getRouteById(int routeId) const
 {
-    for (const EcWidget::Route& route : routeList) {
+    for (EcWidget::Route& route : const_cast<QList<EcWidget::Route>&>(routeList)) {
         if (route.routeId == routeId) {
+            // CRITICAL: Sync with latest waypoint data before returning
+            route.waypoints.clear();
+            for (const Waypoint& wp : waypointList) {
+                if (wp.routeId == routeId) {
+                    EcWidget::RouteWaypoint routeWp;
+                    routeWp.lat = wp.lat;
+                    routeWp.lon = wp.lon;
+                    routeWp.label = wp.label; // PRESERVE custom names from waypointList
+                    routeWp.remark = wp.remark;
+                    routeWp.turningRadius = wp.turningRadius;
+                    routeWp.active = wp.active;
+                    route.waypoints.append(routeWp);
+                }
+            }
+            qDebug() << "[GET-ROUTE] Synced route" << routeId << "with" << route.waypoints.size() << "waypoints from waypointList";
             return route;
         }
     }
@@ -11430,8 +11629,8 @@ void EcWidget::insertWaypointAt(EcCoordinate lat, EcCoordinate lon)
     // Insert waypoint at the correct position
     waypointList.insert(insertIndex, newWaypoint);
     
-    // Update labels for waypoints after insertion point
-    updateRouteLabels(targetRouteId);
+    // DON'T UPDATE LABELS - preserve custom waypoint names set by user
+    qDebug() << "[INSERT] Skipping label update to preserve custom waypoint names";
 
     qDebug() << "[INSERT] Inserted waypoint" << newWaypoint.label << "into route" << targetRouteId;
 
@@ -11613,19 +11812,32 @@ void EcWidget::showCreateRouteDialog()
             // Add route to routeList
             routeList.append(newRoute);
             
-            // Ensure new route is visible by default
-            setRouteVisibility(routeId, true);
+            qDebug() << "[ROUTE-CREATE] Creating" << waypoints.size() << "waypoints for route" << routeId;
             
-            // Create all waypoints for this route in the chart
+            // Create all waypoints for this route in the chart FIRST
             for (const RouteWaypointData& wp : waypoints) {
+                qDebug() << "[ROUTE-CREATE] Creating waypoint" << wp.label << "at" << wp.lat << "," << wp.lon;
                 createWaypointFromForm(wp.lat, wp.lon, wp.label, wp.remark, routeId, wp.turningRadius);
             }
             
+            qDebug() << "[ROUTE-CREATE] After waypoint creation, waypointList size:" << waypointList.size();
+            
+            // INITIAL VISIBILITY: Set new routes visible by default (one time only)
+            qDebug() << "[ROUTE-CREATE] Setting initial visibility for new route" << routeId;
+            setRouteVisibility(routeId, true); // Initial visibility only
+            qDebug() << "[ROUTE-CREATE] New route" << routeId << "initial visibility set to visible";
+            
+            // Save routes to file  
+            saveRoutes();
+            
+            qDebug() << "[ROUTE-CREATE] Route" << routeId << "saved with initial visibility:" << isRouteVisible(routeId);
+            
+            // Force chart redraw to show the new route immediately
+            Draw();
+            update();
+            
             // Emit signal to notify route panel about new route/waypoints
             emit waypointCreated();
-            
-            // Save routes to file
-            saveRoutes();
             
             // Log route creation
             if (mainWindow && mainWindow->logText) {
@@ -11636,9 +11848,6 @@ void EcWidget::showCreateRouteDialog()
                     .arg(newRoute.totalDistance);
                 mainWindow->logText->append(logMessage);
             }
-            
-            // Refresh display
-            update();
         }
     }
 }
@@ -11657,15 +11866,27 @@ void EcWidget::showEditRouteDialog(int routeId)
         
         // Update route with modified waypoints
         if (!waypoints.isEmpty()) {
+            qDebug() << "[ROUTE-EDIT] Starting route update for route" << routeId << "with" << waypoints.size() << "waypoints";
+            qDebug() << "[ROUTE-EDIT] Current routeList size:" << routeList.size();
+            
+            // FIRST: Preserve route visibility IMMEDIATELY to prevent race conditions  
+            bool wasVisible = isRouteVisible(routeId);
+            qDebug() << "[ROUTE-EDIT] Route" << routeId << "was visible:" << wasVisible << "before edit - preserving immediately";
+            
             // Find existing route in routeList
+            bool routeFound = false;
             for (int i = 0; i < routeList.size(); ++i) {
+                qDebug() << "[ROUTE-EDIT] Checking routeList[" << i << "] with routeId:" << routeList[i].routeId;
                 if (routeList[i].routeId == routeId) {
+                    qDebug() << "[ROUTE-EDIT] Updating route in routeList, old name:" << routeList[i].name << "new name:" << routeName;
+                    
                     // Update route information
                     routeList[i].name = routeName;
                     routeList[i].description = routeDescription;
                     routeList[i].modifiedDate = QDateTime::currentDateTime();
                     
                     // Clear existing waypoints and add new ones
+                    qDebug() << "[ROUTE-EDIT] Clearing" << routeList[i].waypoints.size() << "existing waypoints, adding" << waypoints.size() << "new ones";
                     routeList[i].waypoints.clear();
                     for (const RouteWaypointData& wp : waypoints) {
                         RouteWaypoint routeWp;
@@ -11676,22 +11897,34 @@ void EcWidget::showEditRouteDialog(int routeId)
                         routeWp.turningRadius = wp.turningRadius;
                         routeWp.active = wp.active;
                         routeList[i].waypoints.append(routeWp);
+                        qDebug() << "[ROUTE-EDIT] Added waypoint" << wp.label << "at" << wp.lat << "," << wp.lon;
                     }
                     
                     // Recalculate route data
                     calculateRouteData(routeList[i]);
                     
+                    qDebug() << "[ROUTE-EDIT] Route" << routeId << "updated successfully in routeList, new name:" << routeList[i].name;
+                    routeFound = true;
                     break;
                 }
             }
             
-            // Preserve route visibility before updating
-            bool wasVisible = isRouteVisible(routeId);
+            if (!routeFound) {
+                qDebug() << "[ROUTE-EDIT-ERROR] Route" << routeId << "NOT found in routeList! This should not happen.";
+            }
             
             // Remove existing waypoints for this route from chart
+            int removedCount = 0;
             waypointList.erase(std::remove_if(waypointList.begin(), waypointList.end(),
-                [routeId](const Waypoint& wp) { return wp.routeId == routeId; }),
+                [routeId, &removedCount](const Waypoint& wp) { 
+                    if (wp.routeId == routeId) {
+                        removedCount++;
+                        return true;
+                    }
+                    return false;
+                }),
                 waypointList.end());
+            qDebug() << "[ROUTE-EDIT] Removed" << removedCount << "waypoints for route" << routeId << "from waypointList";
             
             // Create updated waypoints in the chart
             currentRouteId = routeId;
@@ -11699,14 +11932,19 @@ void EcWidget::showEditRouteDialog(int routeId)
                 createWaypointFromForm(wp.lat, wp.lon, wp.label, wp.remark, routeId, wp.turningRadius);
             }
             
-            // Restore route visibility
-            setRouteVisibility(routeId, wasVisible);
+            // PRESERVE EXISTING VISIBILITY - DO NOT MODIFY
+            qDebug() << "[ROUTE-EDIT] Route" << routeId << "preserving existing visibility:" << wasVisible;
+            
+            // Save routes to file BEFORE emitting signals
+            saveRoutes();
             
             // Emit signal to notify route panel about route update
             emit waypointCreated();
             
-            // Save routes to file
-            saveRoutes();
+            qDebug() << "[ROUTE-EDIT] Route" << routeId << "edited without changing visibility";
+            
+            // Ensure chart is refreshed
+            update();
             
             // Log route update
             if (mainWindow && mainWindow->logText) {
@@ -11725,6 +11963,8 @@ void EcWidget::showEditRouteDialog(int routeId)
 
 void EcWidget::createWaypointFromForm(double lat, double lon, const QString& label, const QString& remark, int routeId, double turningRadius)
 {
+    qDebug() << "[CREATE-WAYPOINT] Creating waypoint" << label << "at" << lat << "," << lon << "for route" << routeId;
+    
     Waypoint newWaypoint;
     
     // Set coordinates

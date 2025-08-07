@@ -245,7 +245,8 @@ public:
   void drawSingleWaypoint(EcCoordinate lat, EcCoordinate lon, const QString& label, const QColor& color = QColor(255, 140, 0));
   void drawWaypointWithLabel(double lat, double lon, const QString& label, const QColor& color);
   QPoint findOptimalLabelPosition(int waypointX, int waypointY, const QSize& textSize, int minDistance);
-  void drawGhostWaypoint(EcCoordinate lat, EcCoordinate lon, const QString& label);
+  void drawGhostWaypoint(QPainter& painter, EcCoordinate lat, EcCoordinate lon, const QString& label);
+  void drawGhostRouteLines(QPainter& painter, EcCoordinate ghostLat, EcCoordinate ghostLon, int routeId, int waypointIndex);
   void saveWaypoints();
   void removeWaypointAt(int x, int y);
   void moveWaypointAt(int x, int y);
@@ -263,6 +264,7 @@ public:
   
   // Route management functions
   void saveRoutes();
+  void updateRouteFromWaypoint(int routeId);
   void loadRoutes();
   QString getRouteFilePath() const;
   void saveCurrentRoute();
@@ -940,8 +942,10 @@ private:
       double lat;
       double lon;
       QString label;
+      int routeId;
+      int waypointIndex;  // Index of waypoint being moved
       
-      GhostWaypoint() : visible(false), lat(0), lon(0) {}
+      GhostWaypoint() : visible(false), lat(0), lon(0), routeId(0), waypointIndex(-1) {}
   } ghostWaypoint;
 
   void showWaypointError(const QString &message);
