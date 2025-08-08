@@ -25,7 +25,7 @@
 
 #include "aisdecoder.h"
 #include "aivdoencoder.h"
-#include "appconfig.h";
+#include "appconfig.h"
 
 QTextEdit *informationText;
 
@@ -822,6 +822,10 @@ void MainWindow::createMenuBar(){
         connect(manualAction, SIGNAL(triggered(bool)), this, SLOT(onManual(bool)));
     }
 
+
+    // ================================== ABOUT MENU
+    QMenu *aboutMenu = menuBar()->addMenu("&About");
+    aboutMenu->addAction("Release Notes", this, SLOT(openReleaseNotesDialog()) );
 }
 
 // S-63 USER PERMIT GENERATE
@@ -892,6 +896,68 @@ void MainWindow::openSettingsDialog() {
             ecchart->getGuardZoneManager()->applyDefaultFiltersToExistingGuardZones();
         }
     }
+}
+
+
+void MainWindow::openReleaseNotesDialog() {
+    QDialog dialog(this);
+    dialog.setWindowTitle("Release Notes - ECDIS v1.1");
+    dialog.resize(500, 450);
+
+    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+
+    QTextEdit *textEdit = new QTextEdit(&dialog);
+    textEdit->setReadOnly(true);
+    textEdit->setHtml(R"(
+        <h3><b>ECDIS v1.1 Release Notes</b></h3>
+        <hr>
+
+        <h3>New Features</h3>
+        <div style="font-size: 14px; margin-left: 0;">• Vertical Action Bar</div>
+        <div style="font-size: 14px; margin-left: 0;">• Sidebar Modules</div>
+        <div style="font-size: 14px; margin-left: 0;">• Settings Manager</div>
+        <div style="font-size: 14px; margin-left: 0;">• Route and Waypoint Management</div>
+        <div style="font-size: 14px; margin-left: 0;">• CPA/TCPA Calculation</div>
+        <div style="font-size: 14px; margin-left: 0;">• AIS Target Display</div>
+
+        <h3>Enhancements</h3>
+        <div style="font-size: 14px; margin-left: 0;">• MOOSDB Connection Stability</div>
+        <div style="font-size: 14px; margin-left: 0;">• UI Refinements</div>
+        <div style="font-size: 14px; margin-left: 0;">• TCP Subscribe and Publish</div>
+        )");
+
+    layout->addWidget(textEdit);
+
+    // Layout tombol
+    QHBoxLayout *buttonLayout = new QHBoxLayout();
+    QPushButton *closeButton = new QPushButton("Close", &dialog);
+
+    // Modern style
+    closeButton->setStyleSheet(R"(
+        QPushButton {
+            background-color: #0078D7;
+            color: white;
+            padding: 6px 16px;
+            border-radius: 6px;
+            font-weight: bold;
+        }
+        QPushButton:hover {
+            background-color: #005a9e;
+        }
+        QPushButton:pressed {
+            background-color: #004578;
+        }
+    )");
+
+    QObject::connect(closeButton, &QPushButton::clicked, &dialog, &QDialog::accept);
+
+    buttonLayout->addStretch();
+    buttonLayout->addWidget(closeButton);
+    buttonLayout->addStretch();
+
+    layout->addLayout(buttonLayout);
+
+    dialog.exec();
 }
 
 void MainWindow::setDisplay(){
