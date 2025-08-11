@@ -3,6 +3,7 @@
 #include "guardzonemanager.h"
 #include <QDebug>
 #include <QElapsedTimer>
+#include <stdexcept>
 
 // ========== GuardZoneListItem Implementation ==========
 GuardZoneListItem::GuardZoneListItem(const GuardZone& guardZone, QListWidget* parent)

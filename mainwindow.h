@@ -167,7 +167,9 @@ protected slots:
     void onImportWaypoints();
 
     void openSettingsDialog();
+    void openReleaseNotesDialog();
     void setDisplay();
+
     // Guardzone
     void onEnableGuardZone(bool enabled);
     void onCreateCircularGuardZone();

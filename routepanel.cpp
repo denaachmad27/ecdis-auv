@@ -2,12 +2,13 @@
 #include "ecwidget.h"
 #include <QContextMenuEvent>
 #include <QInputDialog>
+#include <QTimer>
 #include <QtMath>
 
 // ====== RouteListItem Implementation ======
 
-RouteListItem::RouteListItem(const RouteInfo& routeInfo, QListWidget* parent)
-    : QListWidgetItem(parent), routeId(routeInfo.routeId)
+RouteListItem::RouteListItem(const RouteInfo& routeInfo, QListWidget* parent, EcWidget* ecWidget)
+    : QListWidgetItem(parent), routeId(routeInfo.routeId), ecWidget(ecWidget)
 {
     updateFromRouteInfo(routeInfo);
 }
@@ -15,28 +16,37 @@ RouteListItem::RouteListItem(const RouteInfo& routeInfo, QListWidget* parent)
 void RouteListItem::updateFromRouteInfo(const RouteInfo& routeInfo)
 {
     routeId = routeInfo.routeId;
-    updateDisplayText(routeInfo, nullptr);
+    updateDisplayText(routeInfo, ecWidget);
 }
 
 void RouteListItem::updateDisplayText(const RouteInfo& routeInfo, EcWidget* ecWidget)
 {
-    // Single line display: name and distance
-    QString statusIcon = routeInfo.visible ? "🟢" : "⚫";
+    // Show (active) status for attached routes
+    QString activeStatus = routeInfo.attachedToShip ? " (active)" : "";
     
-    // Single line format: status + name + distance
-    QString combinedText = QString("%1 🗺️ %2 - 📏 %3 NM")
-                          .arg(statusIcon)
+    // Single line format: name + distance + active status
+    QString combinedText = QString("🗺️ %1 - 📏 %2 NM%3")
                           .arg(routeInfo.name)
-                          .arg(routeInfo.totalDistance, 0, 'f', 1);
+                          .arg(routeInfo.totalDistance, 0, 'f', 1)
+                          .arg(activeStatus);
     
     setText(combinedText);
     
-    // Use single color for all routes to match getRouteColor() logic
+    // Use colors based on attachment status to match getRouteColor() logic
     QColor color;
     if (routeInfo.routeId == 0) {
         color = QColor(255, 140, 0); // Orange for single waypoints
     } else {
-        color = QColor(0, 100, 255); // Blue for all routes
+        // Check if any route is attached to ship
+        bool hasAttachedRoute = ecWidget ? ecWidget->hasAttachedRoute() : false;
+        
+        if (!hasAttachedRoute) {
+            color = QColor(0, 100, 255); // Blue for all routes when none attached
+        } else if (routeInfo.attachedToShip) {
+            color = QColor(0, 100, 255); // Blue for attached route
+        } else {
+            color = QColor(128, 128, 128); // Gray for non-attached routes
+        }
     }
     
     // Create modern gradient-like effect with the route color
@@ -117,12 +127,12 @@ void RoutePanel::setupUI()
     infoLayout->addWidget(new QLabel("ETA:"), 3, 0);
     infoLayout->addWidget(totalTimeLabel, 3, 1);
     
-    // Visibility checkbox and Add to ship button & detach
+    // Visibility checkbox and ship attachment buttons
     visibilityCheckBox = new QCheckBox("Show on Chart");
     addToShipButton = new QPushButton("Attach to Ship");
     detachFromShipButton = new QPushButton("Detach from Ship");
 
-    addToShipButton->setToolTip("Add this route to ship navigation");
+    addToShipButton->setToolTip("Attach this route to ship navigation (only one route can be attached)");
     detachFromShipButton->setToolTip("Remove this route from ship navigation");
 
     // Awal: addToShip aktif, detachFromShip pasif
@@ -138,16 +148,7 @@ void RoutePanel::setupUI()
     infoLayout->addLayout(actionLayout, 4, 0, 1, 2);
     mainLayout->addWidget(routeInfoGroup);
 
-    // Interaksi: toggle enable/disable antar tombol
-    connect(addToShipButton, &QPushButton::clicked, [=]() {
-        addToShipButton->setEnabled(false);
-        detachFromShipButton->setEnabled(true);
-    });
-
-    connect(detachFromShipButton, &QPushButton::clicked, [=]() {
-        addToShipButton->setEnabled(true);
-        detachFromShipButton->setEnabled(false);
-    });
+    // Button states are now managed by updateRouteInfoDisplay based on actual attachment status
     
     // Control Buttons (consistent with CPA/TCPA button layout)
     QHBoxLayout* buttonLayout = new QHBoxLayout();
@@ -186,7 +187,7 @@ void RoutePanel::setupConnections()
     connect(refreshButton, &QPushButton::clicked, this, &RoutePanel::onRefreshClicked);
     connect(clearAllButton, &QPushButton::clicked, this, &RoutePanel::onClearAllClicked);
     
-    // Checkbox connection
+    // Checkbox connections
     connect(visibilityCheckBox, &QCheckBox::toggled, [this](bool checked) {
         if (selectedRouteId > 0 && ecWidget) {
             qDebug() << "[ROUTE-PANEL] Visibility checkbox toggled for route" << selectedRouteId << "to" << checked;
@@ -197,21 +198,55 @@ void RoutePanel::setupConnections()
         }
     });
     
-    // Add to ship button connection (placeholder)
+    // Add to ship button connection
     connect(addToShipButton, &QPushButton::clicked, [this]() {
-        // TODO: Implementation will be handled by other programmer
-        if (selectedRouteId > 0) {
+        if (selectedRouteId > 0 && ecWidget) {
+            // Attach this route to ship (detaches others)
+            ecWidget->attachRouteToShip(selectedRouteId);
             publishToMOOSDB();
             ecWidget->clearOwnShipTrail();
             ecWidget->setOwnShipTrail(true);
+            
+            // Update button states
+            addToShipButton->setEnabled(false);
+            detachFromShipButton->setEnabled(true);
+            
+            // Don't refresh route list immediately, let forceRedraw handle the update
+            // refreshRouteList(); // This might be causing the visibility issue
+            
+            // Use a timer to refresh the list after attachment is complete
+            QTimer::singleShot(100, [this]() {
+                refreshRouteList();
+            });
+            
+            emit statusMessage(QString("Route %1 attached to ship").arg(selectedRouteId));
         }
     });
 
     // Detach from ship button
     connect(detachFromShipButton, &QPushButton::clicked, [this]() {
-        if (selectedRouteId > 0) {
+        if (selectedRouteId > 0 && ecWidget) {
+            // Preserve visibility before detaching
+            bool currentVisibility = ecWidget->isRouteVisible(selectedRouteId);
+            
+            // Detach this route from ship (this will make all routes blue again)
+            ecWidget->attachRouteToShip(-1); // Detach all routes
             ecWidget->publishToMOOSDB("WAYPT_NAV", "");
             ecWidget->setOwnShipTrail(false);
+            
+            // Ensure visibility is maintained
+            ecWidget->setRouteVisibility(selectedRouteId, currentVisibility);
+            
+            // Update button states
+            addToShipButton->setEnabled(true);
+            detachFromShipButton->setEnabled(false);
+            
+            // Use a timer to refresh the list after detachment is complete
+            QTimer::singleShot(100, [this]() {
+                refreshRouteList();
+            });
+            
+            emit statusMessage(QString("Route %1 detached from ship").arg(selectedRouteId));
         }
     });
     
@@ -228,6 +263,8 @@ void RoutePanel::refreshRouteList()
     
     // Preserve current selection
     int previouslySelectedRouteId = selectedRouteId;
+    
+    qDebug() << "[ROUTE-PANEL] refreshRouteList() called with selectedRouteId:" << selectedRouteId;
     
     routeListWidget->clear();
     
@@ -258,7 +295,7 @@ void RoutePanel::refreshRouteList()
         int routeId = it.key();
         RouteInfo info = calculateRouteInfo(routeId);
         
-        RouteListItem* item = new RouteListItem(info, routeListWidget);
+        RouteListItem* item = new RouteListItem(info, routeListWidget, ecWidget);
         routeListWidget->addItem(item);
         
         // Remember item to re-select
@@ -269,10 +306,27 @@ void RoutePanel::refreshRouteList()
     
     // Restore selection and update info display
     if (itemToSelect && previouslySelectedRouteId > 0) {
+        // Block selection change signals during restore to prevent unnecessary redraws
+        routeListWidget->blockSignals(true);
         routeListWidget->setCurrentItem(itemToSelect);
+        routeListWidget->blockSignals(false);
+        
+        qDebug() << "[SELECTED-ROUTE] RoutePanel restoring selectedRouteId to" << previouslySelectedRouteId;
         selectedRouteId = previouslySelectedRouteId;
         RouteInfo info = calculateRouteInfo(selectedRouteId);
         updateRouteInfoDisplay(info);
+        
+        // CRITICAL: Sync with EcWidget's selectedRouteId during restore
+        if (ecWidget) {
+            int ecWidgetSelectedRoute = ecWidget->getSelectedRoute();
+            if (ecWidgetSelectedRoute != selectedRouteId) {
+                qDebug() << "[SELECTED-ROUTE] SYNC: EcWidget selectedRouteId differs (" << ecWidgetSelectedRoute << "vs" << selectedRouteId << "), syncing...";
+                ecWidget->setSelectedRoute(selectedRouteId);
+            } else {
+                qDebug() << "[SELECTED-ROUTE] SYNC: EcWidget already has correct selectedRouteId (" << selectedRouteId << "), skipping sync";
+            }
+        }
+        
         qDebug() << "[ROUTE-PANEL] Restored selection for route" << selectedRouteId << "name:" << info.name << "visibility:" << info.visible << "waypoints:" << info.waypointCount;
     }
     
@@ -286,7 +340,9 @@ RouteInfo RoutePanel::calculateRouteInfo(int routeId)
     RouteInfo info;
     info.routeId = routeId;
     info.visible = ecWidget ? ecWidget->isRouteVisible(routeId) : true;
-    qDebug() << "[ROUTE-PANEL] calculateRouteInfo for route" << routeId << "visibility:" << info.visible;
+    info.attachedToShip = ecWidget ? ecWidget->isRouteAttachedToShip(routeId) : false;
+    qDebug() << "[ROUTE-PANEL] *** calculateRouteInfo for route" << routeId << "visibility:" << info.visible << "attachedToShip:" << info.attachedToShip;
+    qDebug() << "[ROUTE-PANEL] *** selectedRouteId:" << selectedRouteId << "calling from calculateRouteInfo";
     
     if (!ecWidget) {
         info.name = QString("Route %1").arg(routeId);
@@ -394,14 +450,26 @@ void RoutePanel::updateRouteInfoDisplay(const RouteInfo& info)
     totalDistanceLabel->setText(QString("📏 %1").arg(formatDistance(info.totalDistance)));
     totalTimeLabel->setText("⏱️ -"); // ETA will be processed later
     
+    qDebug() << "[ROUTE-PANEL] *** SETTING CHECKBOX TO:" << info.visible << "for route" << info.routeId;
+    qDebug() << "[ROUTE-PANEL] *** selectedRouteId:" << selectedRouteId << "checkbox about to be set";
+    
     // Block signals while updating checkbox to prevent unnecessary events
     visibilityCheckBox->blockSignals(true);
     visibilityCheckBox->setChecked(info.visible);
     visibilityCheckBox->blockSignals(false);
     
-    qDebug() << "[ROUTE-PANEL] Updated info display for route" << info.routeId << "visibility:" << info.visible;
+    qDebug() << "[ROUTE-PANEL] *** CHECKBOX SET COMPLETED - checkbox checked:" << visibilityCheckBox->isChecked();
     
-    addToShipButton->setEnabled(true);
+    // Update button states based on attachment status
+    if (info.attachedToShip) {
+        addToShipButton->setEnabled(false);
+        detachFromShipButton->setEnabled(true);
+    } else {
+        addToShipButton->setEnabled(true);
+        detachFromShipButton->setEnabled(false);
+    }
+    
+    qDebug() << "[ROUTE-PANEL] *** Updated info display for route" << info.routeId << "visibility:" << info.visible << "attachedToShip:" << info.attachedToShip;
     
     routeInfoGroup->setEnabled(true);
     
@@ -416,8 +484,14 @@ void RoutePanel::clearRouteInfoDisplay()
     waypointCountLabel->setText("📌 -");
     totalDistanceLabel->setText("📏 -");
     totalTimeLabel->setText("⏱️ -");
+    
+    // CRITICAL FIX: Block signals to prevent unwanted toggle events
+    visibilityCheckBox->blockSignals(true);
     visibilityCheckBox->setChecked(false);
+    visibilityCheckBox->blockSignals(false);
+    
     addToShipButton->setEnabled(false);
+    detachFromShipButton->setEnabled(false);
     
     routeInfoGroup->setEnabled(false);
     
@@ -454,7 +528,37 @@ void RoutePanel::onRouteDeleted()
 void RoutePanel::onWaypointAdded()
 {
     qDebug() << "[ROUTE-PANEL] onWaypointAdded() called";
-    refreshRouteList();
+    
+    // Only refresh if there are actual routes (avoid refresh during route creation)
+    if (!ecWidget) return;
+    
+    QList<EcWidget::Waypoint> waypoints = ecWidget->getWaypoints();
+    QMap<int, QList<EcWidget::Waypoint>> routeGroups;
+    for (const auto& wp : waypoints) {
+        if (wp.routeId > 0) {
+            routeGroups[wp.routeId].append(wp);
+        }
+    }
+    
+    // Only refresh if we have actual complete routes
+    bool hasCompleteRoutes = false;
+    for (auto it = routeGroups.begin(); it != routeGroups.end(); ++it) {
+        if (it.value().size() >= 2) { // Route needs at least 2 waypoints
+            hasCompleteRoutes = true;
+            break;
+        }
+    }
+    
+    if (hasCompleteRoutes) {
+        // Optimize delay based on selection state - shorter delay if route is selected
+        int refreshDelay = (selectedRouteId > 0) ? 100 : 200;
+        qDebug() << "[ROUTE-PANEL] Scheduling refresh with delay:" << refreshDelay << "ms (selectedRouteId:" << selectedRouteId << ")";
+        
+        // Use a timer to delay refresh and avoid excessive redraws during route creation
+        QTimer::singleShot(refreshDelay, [this]() {
+            refreshRouteList();
+        });
+    }
 }
 
 void RoutePanel::onWaypointRemoved()
@@ -479,15 +583,17 @@ void RoutePanel::onRouteItemSelectionChanged()
     
     RouteListItem* item = dynamic_cast<RouteListItem*>(selectedItems.first());
     if (item) {
-        selectedRouteId = item->getRouteId();
+        int newSelectedRouteId = item->getRouteId();
+        qDebug() << "[SELECTED-ROUTE] RoutePanel changing selectedRouteId from" << selectedRouteId << "to" << newSelectedRouteId;
+        selectedRouteId = newSelectedRouteId;
         RouteInfo info = calculateRouteInfo(selectedRouteId);
         updateRouteInfoDisplay(info);
         
-        // Set visual feedback in chart
+        // Set visual feedback in chart - SYNC with EcWidget's selectedRouteId
         if (ecWidget) {
+            qDebug() << "[SELECTED-ROUTE] Syncing EcWidget selectedRouteId to" << selectedRouteId;
             ecWidget->setSelectedRoute(selectedRouteId);
-            // Additional redraw call for safety
-            ecWidget->immediateRedraw();
+            // Note: setSelectedRoute already calls forceRedraw() internally, no need for additional redraw
         }
         
         emit routeSelectionChanged(selectedRouteId);
@@ -677,13 +783,15 @@ void RoutePanel::onRouteProperties()
         "📌 <b>Waypoints:</b> %3<br>"
         "📏 <b>Total Distance:</b> %4<br>"
         "⏱️ <b>Estimated Time:</b> %5<br>"
-        "👁️ <b>Visibility:</b> %6"
+        "👁️ <b>Visibility:</b> %6<br>"
+        "⚡ <b>Status:</b> %7"
     ).arg(info.name)
      .arg(info.routeId)
      .arg(info.waypointCount)
      .arg(formatDistance(info.totalDistance))
      .arg(formatTime(info.totalTime))
-     .arg(info.visible ? "Visible" : "Hidden");
+     .arg(info.visible ? "Visible" : "Hidden")
+     .arg(info.attachedToShip ? "Attached to Ship" : "Not Attached");
     
     msgBox.setText(properties);
     msgBox.setIcon(QMessageBox::Information);

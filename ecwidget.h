@@ -229,9 +229,10 @@ public:
       QDateTime modifiedDate;
       double totalDistance;      // in nautical miles
       double estimatedTime;      // in hours
+      bool attachedToShip;       // Route attached to ship status
       QList<RouteWaypoint> waypoints; // Waypoints in this route with full data
       
-      Route() : routeId(0), totalDistance(0.0), estimatedTime(0.0) {
+      Route() : routeId(0), totalDistance(0.0), estimatedTime(0.0), attachedToShip(false) {
           createdDate = QDateTime::currentDateTime();
           modifiedDate = createdDate;
       }
@@ -727,6 +728,11 @@ public slots:
   void immediateRedraw(); // Immediate redraw for UI updates
   void setRouteVisibility(int routeId, bool visible);
   bool isRouteVisible(int routeId) const;
+  void setRouteAttachedToShip(int routeId, bool attached);
+  bool isRouteAttachedToShip(int routeId) const;
+  void attachRouteToShip(int routeId); // Attach route to ship, detach others
+  int getAttachedRouteId() const;
+  bool hasAttachedRoute() const; // Check if any route is attached
   void setSelectedRoute(int routeId);
   int getSelectedRoute() const { return selectedRouteId; }
   int getNextAvailableRouteId() const; // Find lowest available route ID
