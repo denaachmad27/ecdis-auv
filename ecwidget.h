@@ -10,6 +10,8 @@
 #include <QMutex>
 #include <QMutexLocker>
 #include <QTextEdit>
+#include <QMenu>
+#include <QAction>
 
 // SevenCs Kernel EC2007
 #ifdef _WIN32
@@ -252,6 +254,13 @@ public:
   void removeWaypointAt(int x, int y);
   void moveWaypointAt(int x, int y);
   void editWaypointAt(int x, int y);
+  
+  // Context menu functions
+  int findWaypointAt(int x, int y);
+  int findLeglineAt(int x, int y, int& routeId, int& segmentIndex);
+  void showWaypointContextMenu(const QPoint& pos, int waypointIndex);
+  void showLeglineContextMenu(const QPoint& pos, int routeId, int segmentIndex);
+  void showMapContextMenu(const QPoint& pos);
   bool resetWaypointCell();
   void drawLeglineLabels();
   void drawRouteLines(); // Gambar garis route dengan warna berbeda per route (DEPRECATED)

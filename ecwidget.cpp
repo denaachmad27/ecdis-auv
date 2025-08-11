@@ -34,6 +34,8 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QFile>
+#include <QMenu>
+#include <QAction>
 
 // Guardzone
 #include "IAisDvrPlugin.h"
@@ -1537,6 +1539,21 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
             return;
         }
 
+        // Check if right-clicked on a waypoint first
+        int clickedWaypointIndex = findWaypointAt(e->x(), e->y());
+        if (clickedWaypointIndex != -1) {
+            showWaypointContextMenu(e->pos(), clickedWaypointIndex);
+            return; // Return early - jangan lanjut ke normal right click
+        }
+
+        // Check if right-clicked on a legline
+        int leglineRouteId, leglineSegmentIndex;
+        int leglineDistance = findLeglineAt(e->x(), e->y(), leglineRouteId, leglineSegmentIndex);
+        if (leglineDistance != -1) {
+            showLeglineContextMenu(e->pos(), leglineRouteId, leglineSegmentIndex);
+            return; // Return early - jangan lanjut ke normal right click
+        }
+
         // Check if right-clicked on a guardzone
         if (guardZoneManager) {
             int clickedGuardZoneId = guardZoneManager->getGuardZoneAtPosition(e->x(), e->y());
@@ -1547,11 +1564,9 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
             }
         }
 
-        // Normal right click behavior (existing)
-        activeFunction = PAN;
-        pickX = e->x();
-        pickY = e->y();
-        emit mouseRightClick(e->pos());
+        // Show map context menu (Create Route)
+        showMapContextMenu(e->pos());
+        return;
     }
 }
 
@@ -1641,6 +1656,29 @@ void EcWidget::mouseMoveEvent(QMouseEvent *e)
             if (!lastGhostUpdate.isValid() || lastGhostUpdate.msecsTo(currentTime) >= 16) {
                 update(); // Trigger repaint untuk ghost waypoint
                 lastGhostUpdate = currentTime;
+            }
+        }
+    }
+
+    // Handle ghost waypoint preview saat create route
+    if (activeFunction == CREATE_ROUTE && isRouteMode) {
+        EcCoordinate lat, lon;
+        if (XyToLatLon(e->x(), e->y(), lat, lon)) {
+            // Update ghost waypoint position for create route
+            ghostWaypoint.visible = true;
+            ghostWaypoint.lat = lat;
+            ghostWaypoint.lon = lon;
+            ghostWaypoint.label = QString("WP%1").arg(routeWaypointCounter);
+            ghostWaypoint.routeId = currentRouteId;
+            ghostWaypoint.waypointIndex = routeWaypointCounter - 1; // Index untuk next waypoint
+            
+            // Throttle update untuk performance
+            static QTime lastCreateGhostUpdate;
+            QTime currentTime = QTime::currentTime();
+            
+            if (!lastCreateGhostUpdate.isValid() || lastCreateGhostUpdate.msecsTo(currentTime) >= 16) {
+                update(); // Trigger repaint untuk ghost waypoint dan leglines
+                lastCreateGhostUpdate = currentTime;
             }
         }
     }
@@ -3711,15 +3749,75 @@ void EcWidget::drawGhostWaypoint(QPainter& painter, double lat, double lon, cons
     // Gambar ghost donut
     painter.drawEllipse(QPoint(x, y), 8, 8);
 
-    // Gambar ghost label
-    painter.setPen(QColor(0, 0, 0, 120)); // Black semi-transparent
-    painter.setFont(QFont("Arial", 8));
-    painter.drawText(x + 10, y - 10, label);
+    // Gambar ghost label dengan info tambahan
+    painter.setPen(QColor(0, 0, 0, 150)); // Black semi-transparent
+    painter.setFont(QFont("Arial", 8, QFont::Bold));
+    
+    QString displayText = label;
+    
+    // Tambahkan informasi jarak dan bearing jika ada waypoint referensi
+    if (ghostWaypoint.routeId > 0) {
+        // Cari waypoint referensi untuk perhitungan jarak dan bearing
+        const Waypoint* refWaypoint = nullptr;
+        
+        if (activeFunction == CREATE_ROUTE) {
+            // Untuk CREATE_ROUTE, gunakan waypoint terakhir dalam route
+            QList<int> routeIndices;
+            for (int i = 0; i < waypointList.size(); ++i) {
+                if (waypointList[i].routeId == ghostWaypoint.routeId) {
+                    routeIndices.append(i);
+                }
+            }
+            if (!routeIndices.isEmpty()) {
+                std::sort(routeIndices.begin(), routeIndices.end());
+                refWaypoint = &waypointList[routeIndices.last()];
+            }
+        } else if (activeFunction == MOVE_WAYP && moveSelectedIndex != -1) {
+            // Untuk MOVE_WAYP, cari waypoint sebelumnya dalam route
+            QList<int> routeIndices;
+            for (int i = 0; i < waypointList.size(); ++i) {
+                if (waypointList[i].routeId == ghostWaypoint.routeId) {
+                    routeIndices.append(i);
+                }
+            }
+            std::sort(routeIndices.begin(), routeIndices.end());
+            
+            int movingPos = -1;
+            for (int i = 0; i < routeIndices.size(); ++i) {
+                if (routeIndices[i] == moveSelectedIndex) {
+                    movingPos = i;
+                    break;
+                }
+            }
+            
+            if (movingPos > 0) {
+                refWaypoint = &waypointList[routeIndices[movingPos - 1]];
+            }
+        }
+        
+        // Hitung jarak dan bearing jika ada waypoint referensi
+        if (refWaypoint) {
+            double distance = haversine(refWaypoint->lat, refWaypoint->lon, lat, lon);
+            double bearing = atan2(sin((lon - refWaypoint->lon) * M_PI / 180.0) * cos(lat * M_PI / 180.0),
+                                 cos(refWaypoint->lat * M_PI / 180.0) * sin(lat * M_PI / 180.0) - 
+                                 sin(refWaypoint->lat * M_PI / 180.0) * cos(lat * M_PI / 180.0) * 
+                                 cos((lon - refWaypoint->lon) * M_PI / 180.0)) * 180.0 / M_PI;
+            
+            // Konversi bearing ke 0-360 derajat
+            if (bearing < 0) bearing += 360;
+            
+            displayText += QString("\nDist: %1 NM\nBrg: %2°")
+                          .arg(distance, 0, 'f', 2)
+                          .arg(bearing, 0, 'f', 1);
+        }
+    }
+    
+    painter.drawText(x + 12, y - 15, displayText);
 }
 
 void EcWidget::drawGhostRouteLines(QPainter& painter, double ghostLat, double ghostLon, int routeId, int waypointIndex)
 {
-    if (routeId <= 0 || waypointIndex < 0) return;
+    if (routeId <= 0) return;
     
     painter.setRenderHint(QPainter::Antialiasing, true);
     
@@ -3731,7 +3829,98 @@ void EcWidget::drawGhostRouteLines(QPainter& painter, double ghostLat, double gh
         }
     }
     
-    if (routeWaypointIndices.size() < 2) return;
+    // Handle CREATE_ROUTE mode: draw line from last waypoint to ghost position
+    if (activeFunction == CREATE_ROUTE && routeWaypointIndices.size() >= 1) {
+        // Sort waypoints by their order in the route (by original index)
+        std::sort(routeWaypointIndices.begin(), routeWaypointIndices.end());
+        
+        // Get last waypoint in current route
+        int lastWaypointIndex = routeWaypointIndices.last();
+        const Waypoint& lastWaypoint = waypointList[lastWaypointIndex];
+        
+        // Setup ghost line style
+        QPen ghostPen(QColor(255, 140, 0, 120)); // Orange semi-transparent
+        ghostPen.setWidth(3);
+        ghostPen.setStyle(Qt::DashLine);
+        painter.setPen(ghostPen);
+        
+        int ghostX, ghostY;
+        int lastX, lastY;
+        if (LatLonToXy(ghostLat, ghostLon, ghostX, ghostY) && 
+            LatLonToXy(lastWaypoint.lat, lastWaypoint.lon, lastX, lastY)) {
+            
+            // Draw line from last waypoint to ghost position
+            painter.drawLine(lastX, lastY, ghostX, ghostY);
+            
+            // Calculate distance and bearing
+            double distance = haversine(lastWaypoint.lat, lastWaypoint.lon, ghostLat, ghostLon);
+            double bearing = atan2(sin((ghostLon - lastWaypoint.lon) * M_PI / 180.0) * cos(ghostLat * M_PI / 180.0),
+                                 cos(lastWaypoint.lat * M_PI / 180.0) * sin(ghostLat * M_PI / 180.0) - 
+                                 sin(lastWaypoint.lat * M_PI / 180.0) * cos(ghostLat * M_PI / 180.0) * 
+                                 cos((ghostLon - lastWaypoint.lon) * M_PI / 180.0)) * 180.0 / M_PI;
+            
+            // Konversi bearing ke 0-360 derajat
+            if (bearing < 0) bearing += 360;
+            
+            // Draw arrow direction indicator
+            double angle = atan2(ghostY - lastY, ghostX - lastX);
+            double arrowLength = 15;
+            double arrowAngle = M_PI / 6; // 30 degrees
+            
+            // Calculate arrow head position (middle of leg line)
+            double midX = lastX + 0.5 * (ghostX - lastX);
+            double midY = lastY + 0.5 * (ghostY - lastY);
+            
+            int arrowX1 = midX - arrowLength * cos(angle - arrowAngle);
+            int arrowY1 = midY - arrowLength * sin(angle - arrowAngle);
+            int arrowX2 = midX - arrowLength * cos(angle + arrowAngle);
+            int arrowY2 = midY - arrowLength * sin(angle + arrowAngle);
+            
+            QPen arrowPen(QColor(255, 140, 0, 150));
+            arrowPen.setWidth(2);
+            arrowPen.setStyle(Qt::SolidLine);
+            painter.setPen(arrowPen);
+            
+            painter.drawLine(midX, midY, arrowX1, arrowY1);
+            painter.drawLine(midX, midY, arrowX2, arrowY2);
+            
+            // Draw distance and bearing label on leg line
+            QString legInfo = QString("%1 NM / %2°")
+                             .arg(distance, 0, 'f', 2)
+                             .arg(bearing, 0, 'f', 1);
+            
+            painter.setFont(QFont("Arial", 8, QFont::Bold));
+            QPen textPen(QColor(255, 140, 0, 200));
+            painter.setPen(textPen);
+            
+            // Position label slightly offset from middle of line
+            QFontMetrics fm(painter.font());
+            int textWidth = fm.horizontalAdvance(legInfo);
+            int textHeight = fm.height();
+            
+            // Calculate perpendicular offset for text positioning
+            double perpAngle = angle + M_PI / 2;
+            int textX = midX - textWidth/2 + 10 * cos(perpAngle);
+            int textY = midY + textHeight/4 + 10 * sin(perpAngle);
+            
+            // Draw background rectangle for better readability
+            QRect textRect(textX - 2, textY - textHeight + 2, textWidth + 4, textHeight);
+            QPen bgPen(QColor(255, 255, 255, 180));
+            QBrush bgBrush(QColor(255, 255, 255, 120));
+            painter.setPen(bgPen);
+            painter.setBrush(bgBrush);
+            painter.drawRect(textRect);
+            
+            // Draw text
+            painter.setPen(textPen);
+            painter.setBrush(Qt::NoBrush);
+            painter.drawText(textX, textY, legInfo);
+        }
+        return;
+    }
+    
+    // Handle MOVE_WAYP mode: existing logic
+    if (waypointIndex < 0 || routeWaypointIndices.size() < 2) return;
     
     // Sort waypoints by their order in the route (by original index)
     std::sort(routeWaypointIndices.begin(), routeWaypointIndices.end());
@@ -3759,9 +3948,20 @@ void EcWidget::drawGhostRouteLines(QPainter& painter, double ghostLat, double gh
     // Draw line to previous waypoint (if exists)
     if (movingWaypointPosition > 0) {
         int prevIndex = routeWaypointIndices[movingWaypointPosition - 1];
+        const Waypoint& prevWaypoint = waypointList[prevIndex];
         int prevX, prevY;
-        if (LatLonToXy(waypointList[prevIndex].lat, waypointList[prevIndex].lon, prevX, prevY)) {
+        if (LatLonToXy(prevWaypoint.lat, prevWaypoint.lon, prevX, prevY)) {
             painter.drawLine(prevX, prevY, ghostX, ghostY);
+            
+            // Calculate distance and bearing
+            double distance = haversine(prevWaypoint.lat, prevWaypoint.lon, ghostLat, ghostLon);
+            double bearing = atan2(sin((ghostLon - prevWaypoint.lon) * M_PI / 180.0) * cos(ghostLat * M_PI / 180.0),
+                                 cos(prevWaypoint.lat * M_PI / 180.0) * sin(ghostLat * M_PI / 180.0) - 
+                                 sin(prevWaypoint.lat * M_PI / 180.0) * cos(ghostLat * M_PI / 180.0) * 
+                                 cos((ghostLon - prevWaypoint.lon) * M_PI / 180.0)) * 180.0 / M_PI;
+            
+            // Konversi bearing ke 0-360 derajat
+            if (bearing < 0) bearing += 360;
             
             // Draw arrow direction indicator (from previous to ghost)
             double angle = atan2(ghostY - prevY, ghostX - prevX);
@@ -3780,17 +3980,63 @@ void EcWidget::drawGhostRouteLines(QPainter& painter, double ghostLat, double gh
             
             painter.drawLine(ghostX, ghostY, arrowX1, arrowY1);
             painter.drawLine(ghostX, ghostY, arrowX2, arrowY2);
+            
+            // Draw distance and bearing label on leg line (incoming)
+            QString legInfo = QString("%1 NM / %2°")
+                             .arg(distance, 0, 'f', 2)
+                             .arg(bearing, 0, 'f', 1);
+            
+            painter.setFont(QFont("Arial", 7, QFont::Bold));
+            QPen textPen(QColor(255, 140, 0, 200));
+            painter.setPen(textPen);
+            
+            // Position label at 1/3 of the line from previous waypoint
+            double labelX = prevX + 0.33 * (ghostX - prevX);
+            double labelY = prevY + 0.33 * (ghostY - prevY);
+            
+            // Calculate perpendicular offset for text positioning
+            double perpAngle = angle + M_PI / 2;
+            QFontMetrics fm(painter.font());
+            int textWidth = fm.horizontalAdvance(legInfo);
+            int textHeight = fm.height();
+            
+            int textX = labelX - textWidth/2 + 8 * cos(perpAngle);
+            int textY = labelY + textHeight/4 + 8 * sin(perpAngle);
+            
+            // Draw background rectangle for better readability
+            QRect textRect(textX - 2, textY - textHeight + 2, textWidth + 4, textHeight);
+            QPen bgPen(QColor(255, 255, 255, 160));
+            QBrush bgBrush(QColor(255, 255, 255, 100));
+            painter.setPen(bgPen);
+            painter.setBrush(bgBrush);
+            painter.drawRect(textRect);
+            
+            // Draw text
+            painter.setPen(textPen);
+            painter.setBrush(Qt::NoBrush);
+            painter.drawText(textX, textY, legInfo);
         }
     }
     
     // Draw line to next waypoint (if exists)
     if (movingWaypointPosition < routeWaypointIndices.size() - 1) {
         int nextIndex = routeWaypointIndices[movingWaypointPosition + 1];
+        const Waypoint& nextWaypoint = waypointList[nextIndex];
         int nextX, nextY;
-        if (LatLonToXy(waypointList[nextIndex].lat, waypointList[nextIndex].lon, nextX, nextY)) {
+        if (LatLonToXy(nextWaypoint.lat, nextWaypoint.lon, nextX, nextY)) {
             ghostPen.setStyle(Qt::DashLine);
             painter.setPen(ghostPen);
             painter.drawLine(ghostX, ghostY, nextX, nextY);
+            
+            // Calculate distance and bearing
+            double distance = haversine(ghostLat, ghostLon, nextWaypoint.lat, nextWaypoint.lon);
+            double bearing = atan2(sin((nextWaypoint.lon - ghostLon) * M_PI / 180.0) * cos(nextWaypoint.lat * M_PI / 180.0),
+                                 cos(ghostLat * M_PI / 180.0) * sin(nextWaypoint.lat * M_PI / 180.0) - 
+                                 sin(ghostLat * M_PI / 180.0) * cos(nextWaypoint.lat * M_PI / 180.0) * 
+                                 cos((nextWaypoint.lon - ghostLon) * M_PI / 180.0)) * 180.0 / M_PI;
+            
+            // Konversi bearing ke 0-360 derajat
+            if (bearing < 0) bearing += 360;
             
             // Draw arrow direction indicator (from ghost to next)
             double angle = atan2(nextY - ghostY, nextX - ghostX);
@@ -3813,7 +4059,285 @@ void EcWidget::drawGhostRouteLines(QPainter& painter, double ghostLat, double gh
             
             painter.drawLine(midX, midY, arrowX1, arrowY1);
             painter.drawLine(midX, midY, arrowX2, arrowY2);
+            
+            // Draw distance and bearing label on leg line (outgoing)
+            QString legInfo = QString("%1 NM / %2°")
+                             .arg(distance, 0, 'f', 2)
+                             .arg(bearing, 0, 'f', 1);
+            
+            painter.setFont(QFont("Arial", 7, QFont::Bold));
+            QPen textPen(QColor(255, 140, 0, 200));
+            painter.setPen(textPen);
+            
+            // Position label at 2/3 of the line toward next waypoint
+            double labelX = ghostX + 0.67 * (nextX - ghostX);
+            double labelY = ghostY + 0.67 * (nextY - ghostY);
+            
+            // Calculate perpendicular offset for text positioning
+            double perpAngle = angle - M_PI / 2; // Opposite side from incoming line
+            QFontMetrics fm(painter.font());
+            int textWidth = fm.horizontalAdvance(legInfo);
+            int textHeight = fm.height();
+            
+            int textX = labelX - textWidth/2 + 8 * cos(perpAngle);
+            int textY = labelY + textHeight/4 + 8 * sin(perpAngle);
+            
+            // Draw background rectangle for better readability
+            QRect textRect(textX - 2, textY - textHeight + 2, textWidth + 4, textHeight);
+            QPen bgPen(QColor(255, 255, 255, 160));
+            QBrush bgBrush(QColor(255, 255, 255, 100));
+            painter.setPen(bgPen);
+            painter.setBrush(bgBrush);
+            painter.drawRect(textRect);
+            
+            // Draw text
+            painter.setPen(textPen);
+            painter.setBrush(Qt::NoBrush);
+            painter.drawText(textX, textY, legInfo);
         }
+    }
+}
+
+// ====== CONTEXT MENU IMPLEMENTATIONS ======
+
+int EcWidget::findWaypointAt(int x, int y)
+{
+    for (int i = 0; i < waypointList.size(); ++i) {
+        int wx, wy;
+        if (LatLonToXy(waypointList[i].lat, waypointList[i].lon, wx, wy)) {
+            if (qAbs(x - wx) <= 10 && qAbs(y - wy) <= 10) {
+                return i; // Return waypoint index
+            }
+        }
+    }
+    return -1; // No waypoint found
+}
+
+int EcWidget::findLeglineAt(int x, int y, int& routeId, int& segmentIndex)
+{
+    const int tolerance = 8; // pixels
+    
+    // Group waypoints by route
+    QMap<int, QList<int>> routeWaypoints;
+    for (int i = 0; i < waypointList.size(); ++i) {
+        if (waypointList[i].routeId > 0) {
+            routeWaypoints[waypointList[i].routeId].append(i);
+        }
+    }
+    
+    // Check each route's leglines
+    for (auto it = routeWaypoints.begin(); it != routeWaypoints.end(); ++it) {
+        int currentRouteId = it.key();
+        QList<int> indices = it.value();
+        
+        if (indices.size() < 2) continue;
+        
+        // Sort waypoints by their original index (creation order)
+        std::sort(indices.begin(), indices.end());
+        
+        // Check each leg segment in this route
+        for (int i = 0; i < indices.size() - 1; ++i) {
+            const Waypoint& wp1 = waypointList[indices[i]];
+            const Waypoint& wp2 = waypointList[indices[i + 1]];
+            
+            int x1, y1, x2, y2;
+            if (LatLonToXy(wp1.lat, wp1.lon, x1, y1) && LatLonToXy(wp2.lat, wp2.lon, x2, y2)) {
+                // Calculate distance from point to line segment
+                double distance = distanceToLineSegment(x, y, x1, y1, x2, y2);
+                
+                if (distance <= tolerance) {
+                    routeId = currentRouteId;
+                    segmentIndex = i; // Index of the first waypoint in the segment
+                    return (int)distance; // Return distance as success indicator
+                }
+            }
+        }
+    }
+    
+    return -1; // No legline found
+}
+
+void EcWidget::showWaypointContextMenu(const QPoint& pos, int waypointIndex)
+{
+    if (waypointIndex < 0 || waypointIndex >= waypointList.size()) return;
+    
+    const Waypoint& waypoint = waypointList[waypointIndex];
+    
+    QMenu contextMenu(this);
+    
+    // Edit waypoint properties
+    QAction* editAction = contextMenu.addAction(tr("Edit Route Point"));
+    editAction->setIcon(QIcon(":/images/edit.png"));
+    
+    // Move waypoint
+    QAction* moveAction = contextMenu.addAction(tr("Move Waypoint"));
+    moveAction->setIcon(QIcon(":/images/move.png"));
+    
+    contextMenu.addSeparator();
+    
+    // Delete waypoint
+    QAction* deleteWaypointAction = contextMenu.addAction(tr("Delete Waypoint"));
+    deleteWaypointAction->setIcon(QIcon(":/images/delete.png"));
+    
+    // Delete route (only if waypoint is part of a route)
+    QAction* deleteRouteAction = nullptr;
+    if (waypoint.routeId > 0) {
+        deleteRouteAction = contextMenu.addAction(tr("Delete Route"));
+        deleteRouteAction->setIcon(QIcon(":/images/delete_route.png"));
+    }
+    
+    // Execute menu
+    QAction* selectedAction = contextMenu.exec(mapToGlobal(pos));
+    
+    if (!selectedAction) return;
+    
+    // Handle selected action
+    if (selectedAction == editAction) {
+        // Switch to edit waypoint mode and edit this waypoint
+        editWaypointAt(pos.x(), pos.y());
+    }
+    else if (selectedAction == moveAction) {
+        // Switch to move waypoint mode
+        setActiveFunction(MOVE_WAYP);
+        moveSelectedIndex = waypointIndex;
+        
+        // Setup ghost waypoint for immediate preview
+        ghostWaypoint.visible = true;
+        ghostWaypoint.lat = waypoint.lat;
+        ghostWaypoint.lon = waypoint.lon;
+        ghostWaypoint.label = waypoint.label;
+        ghostWaypoint.routeId = waypoint.routeId;
+        ghostWaypoint.waypointIndex = waypointIndex;
+        
+        if (mainWindow) {
+            mainWindow->setWindowTitle(QString(APP_TITLE) + " - Move Waypoint Mode");
+            mainWindow->statusBar()->showMessage("Move the waypoint to a new position and click to confirm");
+        }
+        
+        qDebug() << "[CONTEXT-MENU] Waypoint" << waypointIndex << "selected for moving";
+    }
+    else if (selectedAction == deleteWaypointAction) {
+        // Delete individual waypoint
+        removeWaypointAt(pos.x(), pos.y());
+    }
+    else if (selectedAction == deleteRouteAction && waypoint.routeId > 0) {
+        // Delete entire route
+        QString routeName = QString("Route %1").arg(waypoint.routeId);
+        
+        // Count waypoints in route
+        int waypointCount = 0;
+        for (const Waypoint& wp : waypointList) {
+            if (wp.routeId == waypoint.routeId) {
+                waypointCount++;
+            }
+        }
+        
+        // Confirm deletion
+        QMessageBox::StandardButton reply = QMessageBox::question(this,
+            tr("Confirm Delete Route"),
+            tr("Are you sure you want to delete %1?\n\nThis will remove all %2 waypoints in this route.\nThis action cannot be undone.")
+                .arg(routeName).arg(waypointCount),
+            QMessageBox::Yes | QMessageBox::No);
+        
+        if (reply == QMessageBox::Yes) {
+            if (deleteRoute(waypoint.routeId)) {
+                QMessageBox::information(this, tr("Route Deleted"), 
+                    tr("%1 has been deleted with %2 waypoints.").arg(routeName).arg(waypointCount));
+            }
+        }
+    }
+}
+
+void EcWidget::showLeglineContextMenu(const QPoint& pos, int routeId, int segmentIndex)
+{
+    if (routeId <= 0) return;
+    
+    QMenu contextMenu(this);
+    
+    // Insert waypoint at clicked position
+    QAction* insertWaypointAction = contextMenu.addAction(tr("Insert Waypoint"));
+    insertWaypointAction->setIcon(QIcon(":/images/waypoint_add.png"));
+    
+    contextMenu.addSeparator();
+    
+    // Delete route
+    QAction* deleteRouteAction = contextMenu.addAction(tr("Delete Route"));
+    deleteRouteAction->setIcon(QIcon(":/images/delete_route.png"));
+    
+    // Execute menu
+    QAction* selectedAction = contextMenu.exec(mapToGlobal(pos));
+    
+    if (!selectedAction) return;
+    
+    // Handle selected action
+    if (selectedAction == insertWaypointAction) {
+        // Convert click position to lat/lon
+        EcCoordinate lat, lon;
+        if (XyToLatLon(pos.x(), pos.y(), lat, lon)) {
+            // Switch to insert waypoint mode
+            setActiveFunction(INSERT_WAYP);
+            
+            // Store the insertion point for insertWaypointAt function
+            insertWaypointAt(lat, lon);
+            
+            if (mainWindow) {
+                mainWindow->setWindowTitle(QString(APP_TITLE) + " - Waypoint Inserted");
+                mainWindow->statusBar()->showMessage(tr("Waypoint inserted into route"), 3000);
+            }
+            
+            qDebug() << "[CONTEXT-MENU] Insert waypoint at" << lat << lon << "in route" << routeId;
+        }
+    }
+    else if (selectedAction == deleteRouteAction) {
+        // Delete entire route
+        QString routeName = QString("Route %1").arg(routeId);
+        
+        // Count waypoints in route
+        int waypointCount = 0;
+        for (const Waypoint& wp : waypointList) {
+            if (wp.routeId == routeId) {
+                waypointCount++;
+            }
+        }
+        
+        // Confirm deletion
+        QMessageBox::StandardButton reply = QMessageBox::question(this,
+            tr("Confirm Delete Route"),
+            tr("Are you sure you want to delete %1?\n\nThis will remove all %2 waypoints in this route.\nThis action cannot be undone.")
+                .arg(routeName).arg(waypointCount),
+            QMessageBox::Yes | QMessageBox::No);
+        
+        if (reply == QMessageBox::Yes) {
+            if (deleteRoute(routeId)) {
+                QMessageBox::information(this, tr("Route Deleted"), 
+                    tr("%1 has been deleted with %2 waypoints.").arg(routeName).arg(waypointCount));
+            }
+        }
+    }
+}
+
+void EcWidget::showMapContextMenu(const QPoint& pos)
+{
+    QMenu contextMenu(this);
+    
+    // Create Route option
+    QAction* createRouteAction = contextMenu.addAction(tr("Create Route"));
+    createRouteAction->setIcon(QIcon(":/images/route.png"));
+    
+    // Execute menu
+    QAction* selectedAction = contextMenu.exec(mapToGlobal(pos));
+    
+    if (selectedAction == createRouteAction) {
+        // Start route creation mode
+        startRouteMode();
+        setActiveFunction(CREATE_ROUTE);
+        
+        if (mainWindow) {
+            mainWindow->setWindowTitle(QString(APP_TITLE) + " - Create Route");
+            mainWindow->routesStatusText->setText(tr("Route Mode: Click to add waypoints. Press ESC or right-click to end route creation"));
+        }
+        
+        qDebug() << "[CONTEXT-MENU] Create Route mode started";
     }
 }
 
@@ -11156,6 +11680,9 @@ void EcWidget::endRouteMode()
     
     isRouteMode = false;
     activeFunction = PAN;
+    
+    // Clear ghost waypoint
+    ghostWaypoint.visible = false;
     
     // Update status
     if (mainWindow) {
