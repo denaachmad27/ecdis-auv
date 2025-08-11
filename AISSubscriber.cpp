@@ -7,28 +7,24 @@
 #include "mainwindow.h"
 
 AISSubscriber::AISSubscriber(QObject* parent)
-    : QObject(parent), socket(nullptr), reconnectTimer(new QTimer(this))
+    : QObject(parent),
+    socket(nullptr),
+    countdownTimer(new QTimer(this)),
+    reconnectAttempts(0),
+    baseDelay(5000),         // 5 detik
+    maxDelay(3600000)        // 1 jam
 {
-    int interval = 60000;
-    if (mainWindow){
-        interval = mainWindow->getSettingsForwarder().seconds * 1000;
-    }
-
-    reconnectTimer->setInterval(interval);
-    connect(reconnectTimer, &QTimer::timeout, this, &AISSubscriber::tryReconnect);
-
-    countdownTimer = new QTimer(this);
-    countdownTimer->setInterval(1000);
+    countdownTimer->setInterval(1000); // 1 detik per hitungan mundur
     connect(countdownTimer, &QTimer::timeout, this, [this]() {
         if (--countdownSeconds > 0) {
-            QString connection = "Reconnect in " + formatCountdownTime(countdownSeconds);
-            if (mainWindow){
-                mainWindow->setReconnectStatusText(connection);
+            QString message = "Reconnect in " + formatCountdownTime(countdownSeconds);
+            //qDebug() << message;
+            if (mainWindow) {
+                mainWindow->setReconnectStatusText(message);
             }
-            qDebug() << connection;
         } else {
-            countdownTimer->stop();  // countdown selesai
-            this->connectToHost(lastHost, lastPort);  // konek baru di sini
+            countdownTimer->stop();
+            this->connectToHost(lastHost, lastPort); // coba konek ulang
         }
     });
 }
@@ -68,7 +64,8 @@ void AISSubscriber::disconnectFromHost() {
 
         qDebug() << "Disconnected";
 
-        startReconnectTimer();
+        // Tunda reconnect 100ms supaya socket benar-benar bersih
+        QTimer::singleShot(100, this, &AISSubscriber::tryReconnect);
     }
 }
 
@@ -81,7 +78,9 @@ void AISSubscriber::onReadyRead() {
         hasReceivedData = true;
         qDebug() << "[AISSubscriber] Data received. Connection status changed";
 
-        stopReconnectTimer();
+        reconnectAttempts = 0; // reset backoff karena berhasil konek
+        countdownTimer->stop();
+
         emit connectionStatusChanged(true);
 
         mainWindow->setReconnectStatusText("");
@@ -205,61 +204,38 @@ void AISSubscriber::onReadyRead() {
     }
 }
 
-
 void AISSubscriber::onSocketError(QAbstractSocket::SocketError) {
     emit errorOccurred(socket->errorString());
 }
-
-// void AISSubscriber::onDisconnected() {
-//     emit disconnected();
-//     emit connectionStatusChanged(false);  // ✅ emit jika disconnect
-// }
 
 void AISSubscriber::onDisconnected() {
     emit disconnected();
     qDebug() << "[AIS] Disconnected.";
 
     emit connectionStatusChanged(false);  // ✅ emit jika disconnect
-    startReconnectTimer();
+    tryReconnect();
 }
 
-void AISSubscriber::startReconnectTimer() {
-    // if (!reconnectTimer->isActive()) {
-    //     reconnectTimer->start();
-    //     qDebug() << "[AIS] Reconnect timer started.";
-    // }
+void AISSubscriber::tryReconnect()
+{
+    // Hitung delay exponential
+    int delay = qMin(baseDelay * (1 << reconnectAttempts), maxDelay);
 
-    if (reconnectTimer->isActive()) {
-        reconnectTimer->stop();  // matikan timer lama
+    // Tambahkan jitter acak 0–1000 ms
+    delay += QRandomGenerator::global()->bounded(1000);
+
+    countdownSeconds = delay / 1000;
+    reconnectAttempts++;  // tingkatkan percobaan
+
+    QString status = QString("Will retry in %1")
+                         .arg(formatCountdownTime(countdownSeconds));
+    qDebug() << status;
+
+    if (mainWindow) {
+        mainWindow->setReconnectStatusText(status);
     }
 
-    int interval = 60;
-    if (mainWindow){
-        interval = mainWindow->getSettingsForwarder().seconds;
-    }
-
-    countdownSeconds = interval;
-    countdownTimer->start();
-}
-
-void AISSubscriber::stopReconnectTimer() {
-    if (reconnectTimer->isActive()) {
-        reconnectTimer->stop();
-        qDebug() << "[AIS] Reconnect timer stopped.";
-    }
-
-    if (countdownTimer->isActive()) {
-        countdownTimer->stop();
-    }
-}
-
-void AISSubscriber::tryReconnect() {
-    QString connection = "Trying to reconnect...";
-    if (mainWindow){
-        mainWindow->setReconnectStatusText(connection);
-    }
-
-    // connectToHost(lastHost, lastPort);
+    countdownTimer->start(); // mulai countdown
 }
 
 QString AISSubscriber::formatCountdownTime(int totalSeconds) {

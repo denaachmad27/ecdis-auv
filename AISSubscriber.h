@@ -16,9 +16,6 @@ public:
     //void disconnectFromHost();
     void setMainWindow(MainWindow*);
 
-    void startReconnectTimer();
-    void stopReconnectTimer();
-
 signals:
     // OWNSHIP
     void navLatReceived(const double lat);
@@ -74,7 +71,6 @@ private:
     QTcpSocket *socket = nullptr;
     bool hasReceivedData = false;
 
-    QTimer* reconnectTimer;
     QTimer* countdownTimer;
     int countdownSeconds;
 
@@ -82,6 +78,10 @@ private:
     quint16 lastPort;
 
     QString formatCountdownTime(int totalSeconds);
+
+    int reconnectAttempts;
+    const int baseDelay;   // e.g., 5000 ms
+    const int maxDelay;    // e.g., 3600000 ms
 };
 
 #endif // AISSUBSCRIBER_H

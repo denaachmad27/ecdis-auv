@@ -127,7 +127,6 @@ void MainWindow::createActions()
     connect(connectAct, SIGNAL(triggered()), this, SLOT(subscribeMOOSDB()));
     fileToolBar->addAction(connectAct);
     connectAct->setToolTip(tr("Reconnect MOOSDB"));
-    connectAct->setEnabled(true);
 
     const QIcon disconnectIcon = QIcon::fromTheme("import-disconnect", QIcon(":/images/disconnect.png"));
     disconnectAct = new QAction(disconnectIcon, tr("&Disconnect"), this);
@@ -135,7 +134,6 @@ void MainWindow::createActions()
     connect(disconnectAct, SIGNAL(triggered()), this, SLOT(stopSubscribeMOOSDB()));
     fileToolBar->addAction(disconnectAct);
     disconnectAct->setToolTip(tr("Disconnect MOOSDB"));
-    disconnectAct->setEnabled(false);
 
     const QIcon settingIcon = QIcon::fromTheme("import-setting", QIcon(":/images/setting.png"));
     QAction *settingAct = new QAction(settingIcon, tr("&Setting"), this);
@@ -202,8 +200,8 @@ void MainWindow::createActions()
 // STATUS BAR
 void MainWindow::onMoosConnectionStatusChanged(bool connected)
 {
-    connectAct->setEnabled(!connected);       // Disable connect if already connected
-    disconnectAct->setEnabled(connected);     // Enable disconnect if connected
+    connectAct->setVisible(!connected);       // Disable connect if already connected
+    disconnectAct->setVisible(connected);     // Enable disconnect if connected
 
     restartAction->setEnabled(!connected);
     stopAction->setEnabled(connected);
@@ -822,6 +820,7 @@ void MainWindow::createMenuBar(){
         connect(manualAction, SIGNAL(triggered(bool)), this, SLOT(onManual(bool)));
     }
 
+    // ================================== ABOUT MENU
 }
 
 // S-63 USER PERMIT GENERATE

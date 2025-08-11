@@ -41,13 +41,6 @@ void SettingsDialog::setupUI() {
     moosLayout->addRow("MOOSDB IP:", moosIpLineEdit);
     //moosLayout->addRow("MOOSDB Port:", moosPortLineEdit);
 
-    // RECONNECTING
-    secondsSpin = new QSpinBox;
-    secondsLabel = new QLabel("Reconnecting:");
-    secondsSpin->setRange(1, 3600);
-    secondsSpin->setSuffix(" s");
-    moosLayout->addRow(secondsLabel, secondsSpin);
-
     moosTab->setLayout(moosLayout);
 
 
@@ -424,10 +417,6 @@ void SettingsDialog::loadSettings() {
     soundAlarmCombo->setEnabled(soundEnabled);
     soundVolumeSlider->setEnabled(soundEnabled);
     soundVolumeLabel->setEnabled(soundEnabled);
-
-    // RECONNECTIONG
-    int seconds = settings.value("MOOSDB/reconnecting", 60).toInt();
-    secondsSpin->setValue(seconds);
 }
 
 void SettingsDialog::saveSettings() {
@@ -470,9 +459,6 @@ void SettingsDialog::saveSettings() {
     settings.setValue("Alert/sound_enabled", soundAlarmEnabledCheckBox->isChecked());
     settings.setValue("Alert/sound_file", soundAlarmCombo->currentText());
     settings.setValue("Alert/sound_volume", soundVolumeSlider->value());
-
-    // RECONNECTING
-    settings.setValue("MOOSDB/reconnecting", secondsSpin->value());
 }
 
 void SettingsDialog::updateAisWidgetsVisibility(const QString &text) {
@@ -522,9 +508,6 @@ SettingsData SettingsDialog::loadSettingsFromFile(const QString &filePath) {
     data.soundAlarmFile = settings.value("Alert/sound_file", "critical-alarm.wav").toString();
     data.soundAlarmVolume = settings.value("Alert/sound_volume", 80).toInt();
 
-    // RECONNECTING
-    data.seconds = settings.value("MOOSDB/reconnecting", 60).toInt();
-
     return data;
 }
 
@@ -562,9 +545,6 @@ void SettingsDialog::accept() {
     data.soundAlarmEnabled = soundAlarmEnabledCheckBox->isChecked();
     data.soundAlarmFile = soundAlarmCombo->currentText();
     data.soundAlarmVolume = soundVolumeSlider->value();
-
-    // RECONNECTING
-    data.seconds = secondsSpin->value();
 
     SettingsManager::instance().save(data);
 

@@ -36,9 +36,6 @@ struct SettingsData {
     int trailMode;
     int trailMinute;
     double trailDistance;
-
-    // RECONNECT FUNCTION
-    int seconds;
 };
 
 #endif // SETTINGSDATA_H

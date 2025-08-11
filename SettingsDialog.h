@@ -69,10 +69,6 @@ private:
     QLabel *trailLabelDistance;
     QSpinBox *trailSpin;
     QDoubleSpinBox *trailSpinDistance;
-
-    // RECONNECT
-    QSpinBox *secondsSpin;
-    QLabel *secondsLabel;
 };
 
 #endif // SETTINGSDIALOG_H
