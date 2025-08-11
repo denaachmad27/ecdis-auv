@@ -257,7 +257,9 @@ public:
   
   // Context menu functions
   int findWaypointAt(int x, int y);
+  int findLeglineAt(int x, int y, int& routeId, int& segmentIndex);
   void showWaypointContextMenu(const QPoint& pos, int waypointIndex);
+  void showLeglineContextMenu(const QPoint& pos, int routeId, int segmentIndex);
   void showMapContextMenu(const QPoint& pos);
   bool resetWaypointCell();
   void drawLeglineLabels();

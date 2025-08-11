@@ -1544,6 +1544,14 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
             return; // Return early - jangan lanjut ke normal right click
         }
 
+        // Check if right-clicked on a legline
+        int leglineRouteId, leglineSegmentIndex;
+        int leglineDistance = findLeglineAt(e->x(), e->y(), leglineRouteId, leglineSegmentIndex);
+        if (leglineDistance != -1) {
+            showLeglineContextMenu(e->pos(), leglineRouteId, leglineSegmentIndex);
+            return; // Return early - jangan lanjut ke normal right click
+        }
+
         // Check if right-clicked on a guardzone
         if (guardZoneManager) {
             int clickedGuardZoneId = guardZoneManager->getGuardZoneAtPosition(e->x(), e->y());
@@ -4103,6 +4111,50 @@ int EcWidget::findWaypointAt(int x, int y)
     return -1; // No waypoint found
 }
 
+int EcWidget::findLeglineAt(int x, int y, int& routeId, int& segmentIndex)
+{
+    const int tolerance = 8; // pixels
+    
+    // Group waypoints by route
+    QMap<int, QList<int>> routeWaypoints;
+    for (int i = 0; i < waypointList.size(); ++i) {
+        if (waypointList[i].routeId > 0) {
+            routeWaypoints[waypointList[i].routeId].append(i);
+        }
+    }
+    
+    // Check each route's leglines
+    for (auto it = routeWaypoints.begin(); it != routeWaypoints.end(); ++it) {
+        int currentRouteId = it.key();
+        QList<int> indices = it.value();
+        
+        if (indices.size() < 2) continue;
+        
+        // Sort waypoints by their original index (creation order)
+        std::sort(indices.begin(), indices.end());
+        
+        // Check each leg segment in this route
+        for (int i = 0; i < indices.size() - 1; ++i) {
+            const Waypoint& wp1 = waypointList[indices[i]];
+            const Waypoint& wp2 = waypointList[indices[i + 1]];
+            
+            int x1, y1, x2, y2;
+            if (LatLonToXy(wp1.lat, wp1.lon, x1, y1) && LatLonToXy(wp2.lat, wp2.lon, x2, y2)) {
+                // Calculate distance from point to line segment
+                double distance = distanceToLineSegment(x, y, x1, y1, x2, y2);
+                
+                if (distance <= tolerance) {
+                    routeId = currentRouteId;
+                    segmentIndex = i; // Index of the first waypoint in the segment
+                    return (int)distance; // Return distance as success indicator
+                }
+            }
+        }
+    }
+    
+    return -1; // No legline found
+}
+
 void EcWidget::showWaypointContextMenu(const QPoint& pos, int waypointIndex)
 {
     if (waypointIndex < 0 || waypointIndex >= waypointList.size()) return;
@@ -4187,6 +4239,74 @@ void EcWidget::showWaypointContextMenu(const QPoint& pos, int waypointIndex)
         
         if (reply == QMessageBox::Yes) {
             if (deleteRoute(waypoint.routeId)) {
+                QMessageBox::information(this, tr("Route Deleted"), 
+                    tr("%1 has been deleted with %2 waypoints.").arg(routeName).arg(waypointCount));
+            }
+        }
+    }
+}
+
+void EcWidget::showLeglineContextMenu(const QPoint& pos, int routeId, int segmentIndex)
+{
+    if (routeId <= 0) return;
+    
+    QMenu contextMenu(this);
+    
+    // Insert waypoint at clicked position
+    QAction* insertWaypointAction = contextMenu.addAction(tr("Insert Waypoint"));
+    insertWaypointAction->setIcon(QIcon(":/images/waypoint_add.png"));
+    
+    contextMenu.addSeparator();
+    
+    // Delete route
+    QAction* deleteRouteAction = contextMenu.addAction(tr("Delete Route"));
+    deleteRouteAction->setIcon(QIcon(":/images/delete_route.png"));
+    
+    // Execute menu
+    QAction* selectedAction = contextMenu.exec(mapToGlobal(pos));
+    
+    if (!selectedAction) return;
+    
+    // Handle selected action
+    if (selectedAction == insertWaypointAction) {
+        // Convert click position to lat/lon
+        EcCoordinate lat, lon;
+        if (XyToLatLon(pos.x(), pos.y(), lat, lon)) {
+            // Switch to insert waypoint mode
+            setActiveFunction(INSERT_WAYP);
+            
+            // Store the insertion point for insertWaypointAt function
+            insertWaypointAt(lat, lon);
+            
+            if (mainWindow) {
+                mainWindow->setWindowTitle(QString(APP_TITLE) + " - Waypoint Inserted");
+                mainWindow->statusBar()->showMessage(tr("Waypoint inserted into route"), 3000);
+            }
+            
+            qDebug() << "[CONTEXT-MENU] Insert waypoint at" << lat << lon << "in route" << routeId;
+        }
+    }
+    else if (selectedAction == deleteRouteAction) {
+        // Delete entire route
+        QString routeName = QString("Route %1").arg(routeId);
+        
+        // Count waypoints in route
+        int waypointCount = 0;
+        for (const Waypoint& wp : waypointList) {
+            if (wp.routeId == routeId) {
+                waypointCount++;
+            }
+        }
+        
+        // Confirm deletion
+        QMessageBox::StandardButton reply = QMessageBox::question(this,
+            tr("Confirm Delete Route"),
+            tr("Are you sure you want to delete %1?\n\nThis will remove all %2 waypoints in this route.\nThis action cannot be undone.")
+                .arg(routeName).arg(waypointCount),
+            QMessageBox::Yes | QMessageBox::No);
+        
+        if (reply == QMessageBox::Yes) {
+            if (deleteRoute(routeId)) {
                 QMessageBox::information(this, tr("Route Deleted"), 
                     tr("%1 has been deleted with %2 waypoints.").arg(routeName).arg(waypointCount));
             }
