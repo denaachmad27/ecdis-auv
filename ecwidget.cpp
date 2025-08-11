@@ -993,6 +993,8 @@ void EcWidget::Draw()
     }
     // ======================================================
 
+    // UPDATE WP TOOLBAR
+    mainWindow->updateToolboxPosition();
     update();
 }
 
