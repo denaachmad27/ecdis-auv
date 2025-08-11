@@ -2739,11 +2739,11 @@ void EcWidget::drawAISCell()
       drawRedDotTracker();
   }
 
-  // OWNSHIP DRAW
-  ownShipDraw();
-
   // Add waypointDraw() to fix route and waypoint label flickering
   waypointDraw();
+
+  // OWNSHIP DRAW
+  ownShipDraw();
 
   update();
 
@@ -4221,7 +4221,8 @@ void EcWidget::showWaypointContextMenu(const QPoint& pos, int waypointIndex)
         
         if (mainWindow) {
             mainWindow->setWindowTitle(QString(APP_TITLE) + " - Move Waypoint Mode");
-            mainWindow->statusBar()->showMessage("Move the waypoint to a new position and click to confirm");
+            //mainWindow->statusBar()->showMessage("Move the waypoint to a new position and click to confirm");
+            mainWindow->routesStatusText->setText(tr("Move the waypoint to a new position and click to confirm"));
         }
         
         qDebug() << "[CONTEXT-MENU] Waypoint" << waypointIndex << "selected for moving";

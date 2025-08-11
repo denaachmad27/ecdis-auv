@@ -2365,7 +2365,7 @@ void MainWindow::onWaypointCreated()
 {
     setWindowTitle(APP_TITLE);
     //statusBar()->showMessage("Ready");
-    routesStatusText->setText("Ready");
+    routesStatusText->setText("");
 }
 
 void MainWindow::onClearWaypoints()
