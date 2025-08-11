@@ -1664,67 +1664,6 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
     }
 
     //changeText();
-
-    // Kalau sudah ada toolbox, hapus dulu
-    if (toolbox) {
-        toolbox->close();
-        delete toolbox;
-        toolbox = nullptr;
-    }
-
-    // Buat dialog toolbox
-    toolbox = new QDialog(nullptr, Qt::Tool | Qt::FramelessWindowHint);
-    toolbox->setWindowTitle("Toolbox");
-
-    QHBoxLayout *layout = new QHBoxLayout(toolbox);
-    layout->setContentsMargins(5, 5, 5, 5);
-    layout->setSpacing(5);
-
-    // Tambahkan beberapa tombol
-    QToolButton *btn1 = new QToolButton();
-    btn1->setIcon(QIcon(":/images/connect.png"));
-    btn1->setIconSize(QSize(24, 24));
-    btn1->setToolTip("Route Management");
-    layout->addWidget(btn1);
-
-    QToolButton *btn2 = new QToolButton();
-    btn2->setIcon(QIcon(":/images/disconnect.png"));
-    btn2->setIconSize(QSize(24, 24));
-    btn2->setToolTip("Add Waypoint");
-    layout->addWidget(btn2);
-
-    QToolButton *btn3 = new QToolButton();
-    btn3->setIcon(QIcon(":/images/ais.png"));
-    btn3->setIconSize(QSize(24, 24));
-    btn3->setToolTip("AIS Targets");
-    layout->addWidget(btn3);
-
-    // Tentukan posisi toolbox
-    QPoint posT = QCursor::pos();
-    ecchart->XyToLatLon(pos.x(), pos.y(), toolboxLat, toolboxLon);
-
-    toolbox->adjustSize(); // hitung ukuran dialog setelah layout diisi
-    int toolboxHeight = toolbox->height();
-
-    // Geser agar toolbox berada tepat di atas kursor
-    posT.setY(posT.y() - toolboxHeight - 5); // -5 untuk jarak kecil dari kursor
-    posT.setX(posT.x() - toolbox->width() / 2); // supaya toolbox center di atas pointer
-
-    toolbox->move(posT);
-    toolbox->show();
-}
-
-void MainWindow::updateToolboxPosition() {
-    if (!toolbox) return;
-
-    // Konversi lat/lon -> pixel XY di chart
-    int px, py;
-    ecchart->LatLonToXy(toolboxLat, toolboxLon, px, py);
-
-    // Geser agar toolbox center di atas titik
-    QPoint globalPos = ecchart->mapToGlobal(QPoint(px - toolbox->width() / 2,
-                                                   py - toolbox->height() - 5));
-    toolbox->move(globalPos);
 }
 
 // void MainWindow::onMouseRightClick()

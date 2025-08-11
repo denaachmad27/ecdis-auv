@@ -1192,6 +1192,15 @@ private:
   // DISPLAY VAR
   int displayCategory;
 
+  QWidget* waypointToolbox = nullptr;
+  int currentWaypointIndex = -1;
+
+  void createWaypointToolbox(const QPoint& pos, int waypointIndex);
+  void hideWaypointToolbox();
+
+  QDialog *toolbox = nullptr;
+  EcCoordinate toolboxLat, toolboxLon;
+
 }; // EcWidget
 
 #endif // _ec_widget_h_

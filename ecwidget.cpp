@@ -996,7 +996,7 @@ void EcWidget::Draw()
     // ======================================================
 
     // UPDATE WP TOOLBAR
-    mainWindow->updateToolboxPosition();
+    //hideWaypointToolbox();
     update();
 }
 
@@ -1377,6 +1377,7 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
 
 void EcWidget::mousePressEvent(QMouseEvent *e)
 {
+    hideWaypointToolbox();
     setFocus();
 
     // ========== HANDLING EDIT GUARDZONE MODE VIA MANAGER ==========
@@ -1542,6 +1543,7 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
         // Check if right-clicked on a waypoint first
         int clickedWaypointIndex = findWaypointAt(e->x(), e->y());
         if (clickedWaypointIndex != -1) {
+            //createWaypointToolbox(e->pos(), clickedWaypointIndex);
             showWaypointContextMenu(e->pos(), clickedWaypointIndex);
             return; // Return early - jangan lanjut ke normal right click
         }
@@ -1568,6 +1570,8 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
         showMapContextMenu(e->pos());
         return;
     }
+
+
 }
 
 
@@ -4185,6 +4189,12 @@ void EcWidget::showWaypointContextMenu(const QPoint& pos, int waypointIndex)
         deleteRouteAction = contextMenu.addAction(tr("Delete Route"));
         deleteRouteAction->setIcon(QIcon(":/images/delete_route.png"));
     }
+
+    contextMenu.addSeparator();
+
+    // Publish waypoint
+    QAction* publishAction = contextMenu.addAction(tr("Publish Waypoint"));
+    publishAction->setIcon(QIcon(":/images/publish.png"));
     
     // Execute menu
     QAction* selectedAction = contextMenu.exec(mapToGlobal(pos));
@@ -4245,6 +4255,75 @@ void EcWidget::showWaypointContextMenu(const QPoint& pos, int waypointIndex)
                     tr("%1 has been deleted with %2 waypoints.").arg(routeName).arg(waypointCount));
             }
         }
+    }
+
+    else if (selectedAction == publishAction){
+        double lat, lon;
+        XyToLatLon(pos.x(), pos.y(), lat, lon);
+
+        QString result = QString("%1, %2")
+                            .arg(lat, 0, 'f', 6) // 6 angka di belakang koma
+                            .arg(lon, 0, 'f', 6);
+
+        publishToMOOSDB("WAYPT_NEXT", result);
+    }
+}
+
+void EcWidget::createWaypointToolbox(const QPoint& pos, int waypointIndex)
+{
+    // Kalau sudah ada toolbox, hapus dulu
+    if (toolbox) {
+        toolbox->close();
+        delete toolbox;
+        toolbox = nullptr;
+    }
+
+    // Buat dialog toolbox
+    toolbox = new QDialog(nullptr, Qt::Tool | Qt::FramelessWindowHint);
+    toolbox->setWindowTitle("Toolbox");
+
+    QHBoxLayout *layout = new QHBoxLayout(toolbox);
+    layout->setContentsMargins(5, 5, 5, 5);
+    layout->setSpacing(5);
+
+    // Tambahkan beberapa tombol
+    QToolButton *btn1 = new QToolButton();
+    btn1->setIcon(QIcon(":/images/connect.png"));
+    btn1->setIconSize(QSize(24, 24));
+    btn1->setToolTip("Route Management");
+    layout->addWidget(btn1);
+
+    QToolButton *btn2 = new QToolButton();
+    btn2->setIcon(QIcon(":/images/disconnect.png"));
+    btn2->setIconSize(QSize(24, 24));
+    btn2->setToolTip("Add Waypoint");
+    layout->addWidget(btn2);
+
+    QToolButton *btn3 = new QToolButton();
+    btn3->setIcon(QIcon(":/images/ais.png"));
+    btn3->setIconSize(QSize(24, 24));
+    btn3->setToolTip("AIS Targets");
+    layout->addWidget(btn3);
+
+    // Tentukan posisi toolbox
+    QPoint posT = QCursor::pos();
+    XyToLatLon(pos.x(), pos.y(), toolboxLat, toolboxLon);
+
+    toolbox->adjustSize(); // hitung ukuran dialog setelah layout diisi
+    int toolboxHeight = toolbox->height();
+
+    // Geser agar toolbox berada tepat di atas kursor
+    posT.setY(posT.y() - toolboxHeight - 5); // -5 untuk jarak kecil dari kursor
+    posT.setX(posT.x() - toolbox->width() / 2); // supaya toolbox center di atas pointer
+
+    toolbox->move(posT);
+    toolbox->show();
+}
+
+void EcWidget::hideWaypointToolbox()
+{
+    if (toolbox){
+        toolbox->close();
     }
 }
 

@@ -81,9 +81,6 @@ public:
     void setReconnectStatusText(const QString);
     SettingsData getSettingsForwarder();
 
-    // WP TOOLBAR
-    void updateToolboxPosition();
-
 public slots:
     void onEnableRedDotTracker(bool enabled);
     void onAttachRedDotToShip(bool attached);
@@ -328,9 +325,6 @@ private:
     // MOOSDB MENU
     QAction *restartAction;
     QAction *stopAction;
-
-    QDialog *toolbox = nullptr;
-    EcCoordinate toolboxLat, toolboxLon;
 };
 
 #endif // _mainwindow_h_
