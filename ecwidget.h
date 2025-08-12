@@ -271,6 +271,7 @@ public:
   int getWaypointCount() const { return waypointList.size(); }
   QList<Waypoint> getWaypoints() const { return waypointList; }
   void clearWaypoints();
+  void updateWaypointActiveStatus(int routeId, double lat, double lon, bool active);
   
   // Route management functions
   void saveRoutes();
@@ -586,7 +587,7 @@ public:
   void showAddWaypointDialog();
   void showCreateRouteDialog();
   void showEditRouteDialog(int routeId);
-  void createWaypointFromForm(double lat, double lon, const QString& label, const QString& remark, int routeId, double turningRadius);
+  void createWaypointFromForm(double lat, double lon, const QString& label, const QString& remark, int routeId, double turningRadius, bool active = true);
   bool createUdoCell();
 
   bool getOwnShipTrail();

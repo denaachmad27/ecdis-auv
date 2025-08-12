@@ -1,36 +1,37 @@
 #include "routepanel.h"
 #include "ecwidget.h"
+#include "routedetaildialog.h"
 #include <QContextMenuEvent>
 #include <QInputDialog>
 #include <QTimer>
 #include <QtMath>
 
-// ====== RouteListItem Implementation ======
+// ====== RouteTreeItem Implementation ======
 
-RouteListItem::RouteListItem(const RouteInfo& routeInfo, QListWidget* parent, EcWidget* ecWidget)
-    : QListWidgetItem(parent), routeId(routeInfo.routeId), ecWidget(ecWidget)
+RouteTreeItem::RouteTreeItem(const RouteInfo& routeInfo, QTreeWidget* parent, EcWidget* ecWidget)
+    : QTreeWidgetItem(parent), routeId(routeInfo.routeId), ecWidget(ecWidget)
 {
     updateFromRouteInfo(routeInfo);
 }
 
-void RouteListItem::updateFromRouteInfo(const RouteInfo& routeInfo)
+void RouteTreeItem::updateFromRouteInfo(const RouteInfo& routeInfo)
 {
     routeId = routeInfo.routeId;
-    updateDisplayText(routeInfo, ecWidget);
+    updateDisplayText(routeInfo);
 }
 
-void RouteListItem::updateDisplayText(const RouteInfo& routeInfo, EcWidget* ecWidget)
+void RouteTreeItem::updateDisplayText(const RouteInfo& routeInfo)
 {
     // Show (active) status for attached routes
     QString activeStatus = routeInfo.attachedToShip ? " (active)" : "";
     
-    // Single line format: name + distance + active status
-    QString combinedText = QString("🗺️ %1 - 📏 %2 NM%3")
-                          .arg(routeInfo.name)
-                          .arg(routeInfo.totalDistance, 0, 'f', 1)
-                          .arg(activeStatus);
+    // Route format: icon + name + distance + active status
+    QString routeText = QString("🗺️ %1 - 📏 %2 NM%3")
+                       .arg(routeInfo.name)
+                       .arg(routeInfo.totalDistance, 0, 'f', 1)
+                       .arg(activeStatus);
     
-    setText(combinedText);
+    setText(0, routeText);
     
     // Use colors based on attachment status to match getRouteColor() logic
     QColor color;
@@ -50,14 +51,43 @@ void RouteListItem::updateDisplayText(const RouteInfo& routeInfo, EcWidget* ecWi
     }
     
     // Create modern gradient-like effect with the route color
-    setData(Qt::ForegroundRole, QBrush(color));
+    setData(0, Qt::ForegroundRole, QBrush(color));
     
     // Set custom font for modern look
-    QFont font = this->font();
+    QFont font = this->font(0);
     font.setFamily("Segoe UI");
     font.setPixelSize(12);
     font.setWeight(QFont::Medium);
-    setFont(font);
+    setFont(0, font);
+}
+
+// ====== WaypointTreeItem Implementation ======
+
+WaypointTreeItem::WaypointTreeItem(const EcWidget::Waypoint& waypoint, RouteTreeItem* parent)
+    : QTreeWidgetItem(parent), waypointData(waypoint)
+{
+    updateDisplayText();
+}
+
+void WaypointTreeItem::updateDisplayText()
+{
+    QString waypointText = QString("📍 %1 (%.4f°N, %.4f°E)")
+                          .arg(waypointData.label.isEmpty() ? QString("WP-%1").arg(waypointData.routeId) : waypointData.label)
+                          .arg(waypointData.lat, 0, 'f', 4)
+                          .arg(waypointData.lon, 0, 'f', 4);
+    
+    setText(0, waypointText);
+    
+    // Style waypoint items differently
+    QFont font = this->font(0);
+    font.setFamily("Segoe UI");
+    font.setPixelSize(10);
+    font.setWeight(QFont::Normal);
+    font.setItalic(true);
+    setFont(0, font);
+    
+    // Use lighter color for waypoint items to show hierarchy
+    setData(0, Qt::ForegroundRole, QBrush(QColor(120, 120, 120)));
 }
 
 // ====== RoutePanel Implementation ======
@@ -89,16 +119,24 @@ void RoutePanel::setupUI()
     titleLabel->setStyleSheet("QLabel { font-weight: bold; font-size: 14px; }");
     mainLayout->addWidget(titleLabel);
     
+    // Routes Detail button - consistent with other panel buttons
+    routeDetailButton = new QPushButton("Routes Detail");
+    routeDetailButton->setToolTip("View detailed information about all routes");
+    mainLayout->addWidget(routeDetailButton);
+    
     // Route List Group (consistent with CPA/TCPA GroupBox style)
     QGroupBox* routeListGroup = new QGroupBox("Available Routes");
     QVBoxLayout* listGroupLayout = new QVBoxLayout();
     routeListGroup->setLayout(listGroupLayout);
     
-    routeListWidget = new QListWidget(this);
-    routeListWidget->setMinimumHeight(200);
-    routeListWidget->setSelectionMode(QAbstractItemView::SingleSelection);
-    routeListWidget->setContextMenuPolicy(Qt::CustomContextMenu);
-    listGroupLayout->addWidget(routeListWidget);
+    routeTreeWidget = new QTreeWidget(this);
+    routeTreeWidget->setMinimumHeight(200);
+    routeTreeWidget->setSelectionMode(QAbstractItemView::SingleSelection);
+    routeTreeWidget->setContextMenuPolicy(Qt::CustomContextMenu);
+    routeTreeWidget->setHeaderHidden(true); // Hide column headers
+    routeTreeWidget->setRootIsDecorated(true); // Show expand/collapse indicators
+    routeTreeWidget->setIndentation(20); // Set indentation for child items
+    listGroupLayout->addWidget(routeTreeWidget);
     
     // Add route button in list group
     addRouteButton = new QPushButton("Add New Route");
@@ -174,16 +212,17 @@ void RoutePanel::setupUI()
 
 void RoutePanel::setupConnections()
 {
-    // List widget connections
-    connect(routeListWidget, &QListWidget::itemSelectionChanged, 
+    // Tree widget connections
+    connect(routeTreeWidget, &QTreeWidget::itemSelectionChanged, 
             this, &RoutePanel::onRouteItemSelectionChanged);
-    connect(routeListWidget, &QListWidget::itemDoubleClicked, 
+    connect(routeTreeWidget, &QTreeWidget::itemDoubleClicked, 
             this, &RoutePanel::onRouteItemDoubleClicked);
-    connect(routeListWidget, &QListWidget::customContextMenuRequested, 
+    connect(routeTreeWidget, &QTreeWidget::customContextMenuRequested, 
             this, &RoutePanel::onShowContextMenu);
     
     // Button connections
     connect(addRouteButton, &QPushButton::clicked, this, &RoutePanel::onAddRouteClicked);
+    connect(routeDetailButton, &QPushButton::clicked, this, &RoutePanel::onRouteDetailClicked);
     connect(refreshButton, &QPushButton::clicked, this, &RoutePanel::onRefreshClicked);
     connect(clearAllButton, &QPushButton::clicked, this, &RoutePanel::onClearAllClicked);
     
@@ -266,7 +305,7 @@ void RoutePanel::refreshRouteList()
     
     qDebug() << "[ROUTE-PANEL] refreshRouteList() called with selectedRouteId:" << selectedRouteId;
     
-    routeListWidget->clear();
+    routeTreeWidget->clear();
     
     // Get all waypoints from EcWidget
     QList<EcWidget::Waypoint> waypoints = ecWidget->getWaypoints();
@@ -289,27 +328,36 @@ void RoutePanel::refreshRouteList()
     
     qDebug() << "[ROUTE-PANEL] Found" << routeGroups.size() << "routes";
     
-    // Create route info items
-    RouteListItem* itemToSelect = nullptr;
+    // Create route tree items with their waypoint children
+    RouteTreeItem* itemToSelect = nullptr;
     for (auto it = routeGroups.begin(); it != routeGroups.end(); ++it) {
         int routeId = it.key();
         RouteInfo info = calculateRouteInfo(routeId);
         
-        RouteListItem* item = new RouteListItem(info, routeListWidget, ecWidget);
-        routeListWidget->addItem(item);
+        // Create route item
+        RouteTreeItem* routeItem = new RouteTreeItem(info, routeTreeWidget, ecWidget);
+        
+        // Add waypoint children
+        QList<EcWidget::Waypoint> routeWaypoints = getWaypointById(routeId);
+        for (const auto& waypoint : routeWaypoints) {
+            WaypointTreeItem* waypointItem = new WaypointTreeItem(waypoint, routeItem);
+        }
+        
+        // Expand by default to show waypoints
+        routeItem->setExpanded(true);
         
         // Remember item to re-select
         if (routeId == previouslySelectedRouteId) {
-            itemToSelect = item;
+            itemToSelect = routeItem;
         }
     }
     
     // Restore selection and update info display
     if (itemToSelect && previouslySelectedRouteId > 0) {
         // Block selection change signals during restore to prevent unnecessary redraws
-        routeListWidget->blockSignals(true);
-        routeListWidget->setCurrentItem(itemToSelect);
-        routeListWidget->blockSignals(false);
+        routeTreeWidget->blockSignals(true);
+        routeTreeWidget->setCurrentItem(itemToSelect);
+        routeTreeWidget->blockSignals(false);
         
         qDebug() << "[SELECTED-ROUTE] RoutePanel restoring selectedRouteId to" << previouslySelectedRouteId;
         selectedRouteId = previouslySelectedRouteId;
@@ -333,6 +381,9 @@ void RoutePanel::refreshRouteList()
     // Update title with count
     int routeCount = routeGroups.size();
     titleLabel->setText(QString("Routes (%1)").arg(routeCount));
+    
+    // Expand all routes to show waypoints by default
+    routeTreeWidget->expandAll();
 }
 
 RouteInfo RoutePanel::calculateRouteInfo(int routeId)
@@ -573,17 +624,39 @@ void RoutePanel::onWaypointMoved()
 
 void RoutePanel::onRouteItemSelectionChanged()
 {
-    QList<QListWidgetItem*> selectedItems = routeListWidget->selectedItems();
+    QTreeWidgetItem* currentItem = routeTreeWidget->currentItem();
     
-    if (selectedItems.isEmpty()) {
+    if (!currentItem) {
         clearRouteInfoDisplay();
         selectedRouteId = -1;
         return;
     }
     
-    RouteListItem* item = dynamic_cast<RouteListItem*>(selectedItems.first());
-    if (item) {
-        int newSelectedRouteId = item->getRouteId();
+    // Handle selection of waypoint items differently
+    WaypointTreeItem* waypointItem = dynamic_cast<WaypointTreeItem*>(currentItem);
+    if (waypointItem) {
+        // When waypoint is selected, select its parent route
+        int waypointRouteId = waypointItem->getWaypoint().routeId;
+        if (waypointRouteId != selectedRouteId) {
+            selectedRouteId = waypointRouteId;
+            RouteInfo info = calculateRouteInfo(selectedRouteId);
+            updateRouteInfoDisplay(info);
+            
+            // Set visual feedback in chart
+            if (ecWidget) {
+                ecWidget->setSelectedRoute(selectedRouteId);
+            }
+            
+            emit routeSelectionChanged(selectedRouteId);
+            emit statusMessage(QString("Selected waypoint from Route %1").arg(selectedRouteId));
+        }
+        return;
+    }
+    
+    // Handle route item selection
+    RouteTreeItem* routeItem = dynamic_cast<RouteTreeItem*>(currentItem);
+    if (routeItem) {
+        int newSelectedRouteId = routeItem->getRouteId();
         qDebug() << "[SELECTED-ROUTE] RoutePanel changing selectedRouteId from" << selectedRouteId << "to" << newSelectedRouteId;
         selectedRouteId = newSelectedRouteId;
         RouteInfo info = calculateRouteInfo(selectedRouteId);
@@ -603,9 +676,11 @@ void RoutePanel::onRouteItemSelectionChanged()
     }
 }
 
-void RoutePanel::onRouteItemDoubleClicked(QListWidgetItem* item)
+void RoutePanel::onRouteItemDoubleClicked(QTreeWidgetItem* item, int column)
 {
-    RouteListItem* routeItem = dynamic_cast<RouteListItem*>(item);
+    Q_UNUSED(column);
+    
+    RouteTreeItem* routeItem = dynamic_cast<RouteTreeItem*>(item);
     if (routeItem) {
         int routeId = routeItem->getRouteId();
         emit requestEditRoute(routeId);
@@ -615,9 +690,9 @@ void RoutePanel::onRouteItemDoubleClicked(QListWidgetItem* item)
 
 void RoutePanel::onShowContextMenu(const QPoint& pos)
 {
-    QListWidgetItem* item = routeListWidget->itemAt(pos);
-    if (item) {
-        contextMenu->exec(routeListWidget->mapToGlobal(pos));
+    QTreeWidgetItem* item = routeTreeWidget->itemAt(pos);
+    if (item && dynamic_cast<RouteTreeItem*>(item)) { // Only show context menu for route items, not waypoints
+        contextMenu->exec(routeTreeWidget->mapToGlobal(pos));
     }
 }
 
@@ -625,6 +700,16 @@ void RoutePanel::onAddRouteClicked()
 {
     // Emit signal to main window to start route creation
     emit requestCreateRoute();
+}
+
+void RoutePanel::onRouteDetailClicked()
+{
+    // Create and show the route detail dialog
+    RouteDetailDialog* dialog = new RouteDetailDialog(ecWidget, this);
+    dialog->exec();
+    dialog->deleteLater();
+    
+    emit statusMessage("Routes detail dialog opened");
 }
 
 void RoutePanel::onRefreshClicked()
@@ -829,4 +914,23 @@ void RoutePanel::updateRouteInfo(int routeId)
         RouteInfo info = calculateRouteInfo(routeId);
         updateRouteInfoDisplay(info);
     }
+}
+
+// ====== New Helper Methods for Tree Widget ======
+
+RouteTreeItem* RoutePanel::findRouteItem(int routeId)
+{
+    for (int i = 0; i < routeTreeWidget->topLevelItemCount(); ++i) {
+        QTreeWidgetItem* item = routeTreeWidget->topLevelItem(i);
+        RouteTreeItem* routeItem = dynamic_cast<RouteTreeItem*>(item);
+        if (routeItem && routeItem->getRouteId() == routeId) {
+            return routeItem;
+        }
+    }
+    return nullptr;
+}
+
+bool RoutePanel::isWaypointItem(QTreeWidgetItem* item) const
+{
+    return dynamic_cast<WaypointTreeItem*>(item) != nullptr;
 }
