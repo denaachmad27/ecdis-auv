@@ -1012,8 +1012,13 @@ void EcWidget::waypointDraw(){
             continue; // Skip waypoints from hidden routes
         }
 
-        qDebug() << "[WAYPOINT-DRAW] Drawing waypoint" << wp.label << "route:" << wp.routeId;
-        QColor waypointColor = getRouteColor(wp.routeId);
+        qDebug() << "[WAYPOINT-DRAW] Drawing waypoint" << wp.label << "route:" << wp.routeId << "active:" << wp.active;
+        QColor waypointColor;
+        if (wp.active) {
+            waypointColor = getRouteColor(wp.routeId);
+        } else {
+            waypointColor = QColor(128, 128, 128); // Grey for inactive waypoints
+        }
         drawWaypointWithLabel(wp.lat, wp.lon, wp.label, waypointColor);
     }
 
@@ -4699,58 +4704,82 @@ void EcWidget::drawLeglineLabels()
 
     QPainter painter(&drawPixmap);
     painter.setRenderHint(QPainter::Antialiasing, true);
-    
-    // Menggunakan getRouteColor untuk konsistensi
-    
     painter.setFont(QFont("Arial", 8, QFont::Bold));
 
-    for (int i = 0; i < waypointList.size() - 1; ++i)
-    {
-        // Skip jika waypoint dari route yang berbeda
-        if (waypointList[i].routeId != waypointList[i + 1].routeId) {
-            continue; // Skip jika beda route
+    // Group waypoints by route ID first - same logic as drawRouteLines
+    QMap<int, QList<int>> routeWaypoints; // routeId -> list of waypoint indices
+    
+    for (int i = 0; i < waypointList.size(); ++i) {
+        int routeId = waypointList[i].routeId;
+        if (routeId > 0) { // Only route waypoints, skip single waypoints
+            routeWaypoints[routeId].append(i);
         }
+    }
+    
+    // Draw labels within each route separately
+    for (auto it = routeWaypoints.begin(); it != routeWaypoints.end(); ++it) {
+        int routeId = it.key();
+        QList<int> indices = it.value();
         
         // Check visibility - skip labels for hidden routes
-        int routeId = waypointList[i].routeId;
-        if (routeId > 0 && !isRouteVisible(routeId)) {
-            continue; // Skip labels from hidden routes
+        if (!isRouteVisible(routeId)) {
+            continue;
         }
         
-        EcCoordinate lat1 = waypointList[i].lat;
-        EcCoordinate lon1 = waypointList[i].lon;
-        EcCoordinate lat2 = waypointList[i+1].lat;
-        EcCoordinate lon2 = waypointList[i+1].lon;
-
-        double dist = 0.0;
-        double bearing = 0.0;
-
-        EcCalculateRhumblineDistanceAndBearing(
-            EC_GEO_DATUM_WGS84,
-            lat1, lon1,
-            lat2, lon2,
-            &dist, &bearing
-            );
-
-        // Posisi tengah garis
-        int x1, y1, x2, y2;
-        if (LatLonToXy(lat1, lon1, x1, y1) && LatLonToXy(lat2, lon2, x2, y2))
-        {
-            // Set warna teks sesuai dengan routeId
-            int routeId = waypointList[i].routeId;
-            QColor textColor = getRouteColor(routeId);
-            painter.setPen(textColor);
+        if (indices.size() < 2) {
+            continue;
+        }
+        
+        // Filter only active waypoints for this route
+        QList<int> activeIndices;
+        for (int idx : indices) {
+            if (waypointList[idx].active) {
+                activeIndices.append(idx);
+            }
+        }
+        
+        // Draw labels between consecutive ACTIVE waypoints only
+        for (int i = 0; i < activeIndices.size() - 1; ++i) {
+            int idx1 = activeIndices[i];
+            int idx2 = activeIndices[i + 1];
             
-            int midX = (x1 + x2) / 2;
-            int midY = (y1 + y2) / 2;
+            const Waypoint &wp1 = waypointList[idx1];
+            const Waypoint &wp2 = waypointList[idx2];
+            
+            EcCoordinate lat1 = wp1.lat;
+            EcCoordinate lon1 = wp1.lon;
+            EcCoordinate lat2 = wp2.lat;
+            EcCoordinate lon2 = wp2.lon;
 
-            QString degree = QString::fromUtf8("\u00B0"); // simbol derajat
-            QString text = QString("%1 NM @ %2%3")
-                               .arg(QString::number(dist, 'f', 1))
-                               .arg(QString::number(bearing, 'f', 0))
-                               .arg(degree);
+            double dist = 0.0;
+            double bearing = 0.0;
 
-            painter.drawText(midX + 20, midY - 15, text);
+            EcCalculateRhumblineDistanceAndBearing(
+                EC_GEO_DATUM_WGS84,
+                lat1, lon1,
+                lat2, lon2,
+                &dist, &bearing
+                );
+
+            // Posisi tengah garis
+            int x1, y1, x2, y2;
+            if (LatLonToXy(lat1, lon1, x1, y1) && LatLonToXy(lat2, lon2, x2, y2))
+            {
+                // Set warna teks sesuai dengan routeId
+                QColor textColor = getRouteColor(routeId);
+                painter.setPen(textColor);
+                
+                int midX = (x1 + x2) / 2;
+                int midY = (y1 + y2) / 2;
+
+                QString degree = QString::fromUtf8("\u00B0"); // simbol derajat
+                QString text = QString("%1 NM @ %2%3")
+                                   .arg(QString::number(dist, 'f', 1))
+                                   .arg(QString::number(bearing, 'f', 0))
+                                   .arg(degree);
+
+                painter.drawText(midX + 20, midY - 15, text);
+            }
         }
     }
 
@@ -4816,10 +4845,18 @@ void EcWidget::drawRouteLinesOverlay(QPainter& painter)
         
         painter.setPen(pen);
         
-        // Draw lines between consecutive waypoints in THIS route only
-        for (int i = 0; i < indices.size() - 1; ++i) {
-            int idx1 = indices[i];
-            int idx2 = indices[i + 1];
+        // Filter only active waypoints for this route
+        QList<int> activeIndices;
+        for (int idx : indices) {
+            if (waypointList[idx].active) {
+                activeIndices.append(idx);
+            }
+        }
+        
+        // Draw lines between consecutive ACTIVE waypoints only
+        for (int i = 0; i < activeIndices.size() - 1; ++i) {
+            int idx1 = activeIndices[i];
+            int idx2 = activeIndices[i + 1];
             
             const Waypoint &wp1 = waypointList[idx1];
             const Waypoint &wp2 = waypointList[idx2];
@@ -4930,10 +4967,18 @@ void EcWidget::drawRouteLines()
         
         // Draw lines for this route
         
-        // Draw lines between consecutive waypoints in THIS route only
-        for (int i = 0; i < indices.size() - 1; ++i) {
-            int idx1 = indices[i];
-            int idx2 = indices[i + 1];
+        // Filter only active waypoints for this route
+        QList<int> activeIndices;
+        for (int idx : indices) {
+            if (waypointList[idx].active) {
+                activeIndices.append(idx);
+            }
+        }
+        
+        // Draw lines between consecutive ACTIVE waypoints only
+        for (int i = 0; i < activeIndices.size() - 1; ++i) {
+            int idx1 = activeIndices[i];
+            int idx2 = activeIndices[i + 1];
             
             const Waypoint &wp1 = waypointList[idx1];
             const Waypoint &wp2 = waypointList[idx2];
@@ -5163,6 +5208,38 @@ void EcWidget::clearWaypoints()
     emit waypointCreated();
     
     qDebug() << "[INFO] Cleared" << waypointCount << "waypoints and all routes";
+}
+
+void EcWidget::updateWaypointActiveStatus(int routeId, double lat, double lon, bool active)
+{
+    // Find the waypoint by route ID and coordinates
+    for (auto& waypoint : waypointList) {
+        if (waypoint.routeId == routeId &&
+            qAbs(waypoint.lat - lat) < 0.000001 &&
+            qAbs(waypoint.lon - lon) < 0.000001) {
+            
+            // Update the active status
+            bool oldStatus = waypoint.active;
+            waypoint.active = active;
+            
+            qDebug() << "[WAYPOINT-ACTIVE] Updated waypoint at" << lat << "," << lon
+                     << "in route" << routeId << "from" << oldStatus << "to" << active;
+            
+            // Save the updated waypoints
+            saveWaypoints();
+            
+            // Redraw to reflect changes
+            Draw();
+            
+            // Emit signal to refresh UI
+            emit waypointCreated();
+            
+            return;
+        }
+    }
+    
+    qDebug() << "[WAYPOINT-ACTIVE] Warning: Waypoint not found at" << lat << "," << lon
+             << "in route" << routeId;
 }
 
 bool EcWidget::exportWaypointsToFile(const QString &filename)
@@ -12577,8 +12654,8 @@ void EcWidget::showCreateRouteDialog()
             
             // Create all waypoints for this route in the chart FIRST
             for (const RouteWaypointData& wp : waypoints) {
-                qDebug() << "[ROUTE-CREATE] Creating waypoint" << wp.label << "at" << wp.lat << "," << wp.lon;
-                createWaypointFromForm(wp.lat, wp.lon, wp.label, wp.remark, routeId, wp.turningRadius);
+                qDebug() << "[ROUTE-CREATE] Creating waypoint" << wp.label << "at" << wp.lat << "," << wp.lon << "active:" << wp.active;
+                createWaypointFromForm(wp.lat, wp.lon, wp.label, wp.remark, routeId, wp.turningRadius, wp.active);
             }
             
             qDebug() << "[ROUTE-CREATE] After waypoint creation, waypointList size:" << waypointList.size();
@@ -12690,7 +12767,7 @@ void EcWidget::showEditRouteDialog(int routeId)
             // Create updated waypoints in the chart
             currentRouteId = routeId;
             for (const RouteWaypointData& wp : waypoints) {
-                createWaypointFromForm(wp.lat, wp.lon, wp.label, wp.remark, routeId, wp.turningRadius);
+                createWaypointFromForm(wp.lat, wp.lon, wp.label, wp.remark, routeId, wp.turningRadius, wp.active);
             }
             
             // PRESERVE EXISTING VISIBILITY - DO NOT MODIFY
@@ -12722,7 +12799,7 @@ void EcWidget::showEditRouteDialog(int routeId)
     }
 }
 
-void EcWidget::createWaypointFromForm(double lat, double lon, const QString& label, const QString& remark, int routeId, double turningRadius)
+void EcWidget::createWaypointFromForm(double lat, double lon, const QString& label, const QString& remark, int routeId, double turningRadius, bool active)
 {
     qDebug() << "[CREATE-WAYPOINT] Creating waypoint" << label << "at" << lat << "," << lon << "for route" << routeId;
     
@@ -12732,9 +12809,9 @@ void EcWidget::createWaypointFromForm(double lat, double lon, const QString& lab
     newWaypoint.lat = lat;
     newWaypoint.lon = lon;
     
-    // Set turning radius
+    // Set turning radius and active status
     newWaypoint.turningRadius = turningRadius;
-    newWaypoint.active = true;
+    newWaypoint.active = active;
     
     // Generate label if empty
     if (label.isEmpty()) {

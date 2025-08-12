@@ -6,8 +6,8 @@
 #include <QWidget>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
-#include <QListWidget>
-#include <QListWidgetItem>
+#include <QTreeWidget>
+#include <QTreeWidgetItem>
 #include <QPushButton>
 #include <QLabel>
 #include <QCheckBox>
@@ -19,6 +19,7 @@
 #include <QAction>
 #include <QMessageBox>
 #include <QTimer>
+#include <QSet>
 
 // Forward declarations
 class EcWidget;
@@ -35,18 +36,32 @@ struct RouteInfo {
     RouteInfo() : routeId(0), name(""), waypointCount(0), totalDistance(0.0), totalTime(0.0), visible(true), attachedToShip(false) {}
 };
 
-class RouteListItem : public QListWidgetItem
+
+// Tree widget item for routes (parent items)
+class RouteTreeItem : public QTreeWidgetItem
 {
 public:
-    RouteListItem(const RouteInfo& routeInfo, QListWidget* parent = nullptr, EcWidget* ecWidget = nullptr);
+    RouteTreeItem(const RouteInfo& routeInfo, QTreeWidget* parent = nullptr, EcWidget* ecWidget = nullptr);
     
     void updateFromRouteInfo(const RouteInfo& routeInfo);
     int getRouteId() const { return routeId; }
-
+    
 private:
     int routeId;
     EcWidget* ecWidget;
-    void updateDisplayText(const RouteInfo& routeInfo, EcWidget* ecWidget = nullptr);
+    void updateDisplayText(const RouteInfo& routeInfo);
+};
+
+// Tree widget item for waypoints (child items)
+class WaypointTreeItem : public QTreeWidgetItem
+{
+public:
+    WaypointTreeItem(const EcWidget::Waypoint& waypoint, RouteTreeItem* parent = nullptr);
+    const EcWidget::Waypoint& getWaypoint() const { return waypointData; }
+    
+private:
+    EcWidget::Waypoint waypointData;
+    void updateDisplayText();
 };
 
 class RoutePanel : public QWidget
@@ -72,9 +87,10 @@ public slots:
 
 private slots:
     void onRouteItemSelectionChanged();
-    void onRouteItemDoubleClicked(QListWidgetItem* item);
+    void onRouteItemDoubleClicked(QTreeWidgetItem* item, int column);
     void onShowContextMenu(const QPoint& pos);
     void onAddRouteClicked();
+    void onRouteDetailClicked();
     void onRefreshClicked();
     void onClearAllClicked();
     
@@ -97,11 +113,12 @@ private:
     // UI Components
     QVBoxLayout* mainLayout;
     QLabel* titleLabel;
-    QListWidget* routeListWidget;
+    QTreeWidget* routeTreeWidget;
     
     // Control buttons
     QHBoxLayout* buttonLayout;
     QPushButton* addRouteButton;
+    QPushButton* routeDetailButton;
     QPushButton* refreshButton;
     QPushButton* clearAllButton;
     
@@ -135,6 +152,8 @@ private:
     int selectedRouteId;
     QList<EcWidget::Waypoint> getWaypointById(int routeId);
     void publishToMOOSDB();
+    RouteTreeItem* findRouteItem(int routeId);
+    bool isWaypointItem(QTreeWidgetItem* item) const;
 };
 
 #endif // ROUTEPANEL_H
