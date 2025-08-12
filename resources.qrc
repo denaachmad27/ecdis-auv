@@ -9,5 +9,19 @@
         <file>images/zoom-in.png</file>
         <file>images/zoom-out.png</file>
         <file>images/setting.png</file>
+        <file>icon/create_route.png</file>
+        <file>icon/create_wp.png</file>
+        <file>icon/delete_route.png</file>
+        <file>icon/delete_wp.png</file>
+        <file>icon/edit.png</file>
+        <file>icon/move.png</file>
+        <file>icon/publish.png</file>
+        <file>images/connect-white.png</file>
+        <file>images/disconnect-white.png</file>
+        <file>images/rotate-left-white.png</file>
+        <file>images/rotate-right-white.png</file>
+        <file>images/setting-white.png</file>
+        <file>images/zoom-in-white.png</file>
+        <file>images/zoom-out-white.png</file>
     </qresource>
 </RCC>

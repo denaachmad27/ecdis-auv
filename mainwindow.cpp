@@ -27,7 +27,20 @@
 #include "aivdoencoder.h"
 #include "appconfig.h"
 
+#include <dwmapi.h>
+#pragma comment(lib, "Dwmapi.lib")
+
 QTextEdit *informationText;
+
+// DARK MODE
+void MainWindow::setTitleBarDark(bool dark) {
+    BOOL enable = dark;
+    HWND hwnd = reinterpret_cast<HWND>(winId());
+    if (FAILED(DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &enable, sizeof(enable)))) {
+        const DWORD DWMWA_USE_IMMERSIVE_DARK_MODE_OLD = 19;
+        DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE_OLD, &enable, sizeof(enable));
+    }
+}
 
 // DOCK WINDOW
 void MainWindow::createDockWindows()
@@ -61,8 +74,8 @@ void MainWindow::createActions()
     QToolBar *fileToolBar = addToolBar(tr("File"));
     addToolBar(Qt::LeftToolBarArea, fileToolBar);
 
-    fileToolBar->setIconSize(QSize(35, 35));
-    fileToolBar->setStyleSheet("QToolButton { margin-right: 5px; margin-left: 5px; margin-bottom: 5px; margin-top: 5px}");
+    fileToolBar->setIconSize(QSize(30, 30));
+    fileToolBar->setStyleSheet("QToolButton { margin-right: 7px; margin-left: 7px; margin-bottom: 7px; margin-top: 7px}");
     // fileToolBar->setStyleSheet(R"(
     //     QToolButton {
     //         padding: 8px;
@@ -82,51 +95,40 @@ void MainWindow::createActions()
     // importAct->setToolTip(tr("Import"));
 
     const QIcon zoomInIcon = QIcon::fromTheme("import-zoomin", QIcon(":/images/zoom-in.png"));
-    QAction *zoomInAct = new QAction(zoomInIcon, tr("&Zoom In"), this);
+    zoomInAct = new QAction(zoomInIcon, tr("&Zoom In"), this);
     zoomInAct->setShortcuts(QKeySequence::New);
-    //zoomInAct->setStatusTip(tr("Zoom in"));
     connect(zoomInAct, SIGNAL(triggered()), this, SLOT(onZoomIn()));
     fileToolBar->addAction(zoomInAct);
     zoomInAct->setToolTip(tr("Zoom in"));
 
     const QIcon zoomOutIcon = QIcon::fromTheme("import-zoomout", QIcon(":/images/zoom-out.png"));
-    QAction *zoomOutAct = new QAction(zoomOutIcon, tr("&Zoom Out"), this);
+    zoomOutAct = new QAction(zoomOutIcon, tr("&Zoom Out"), this);
     zoomOutAct->setShortcuts(QKeySequence::New);
-    //zoomOutAct->setStatusTip(tr("Zoom out"));
     connect(zoomOutAct, SIGNAL(triggered()), this, SLOT(onZoomOut()));
     fileToolBar->addAction(zoomOutAct);
     zoomOutAct->setToolTip(tr("Zoom out"));
 
     const QIcon rotateLeftIcon = QIcon::fromTheme("import-rotateleft", QIcon(":/images/rotate-left.png"));
-    QAction *rotateLeftAct = new QAction(rotateLeftIcon, tr("&Rotate Left"), this);
+    rotateLeftAct = new QAction(rotateLeftIcon, tr("&Rotate Left"), this);
     rotateLeftAct->setShortcuts(QKeySequence::New);
-    //rotateLeftAct->setStatusTip(tr("Rotate Left"));
     connect(rotateLeftAct, SIGNAL(triggered()), this, SLOT(onRotateCW()));
     fileToolBar->addAction(rotateLeftAct);
     rotateLeftAct->setToolTip(tr("Rotate left"));
 
     const QIcon rotateRightIcon = QIcon::fromTheme("import-rotateright", QIcon(":/images/rotate-right.png"));
-    QAction *rotateRightAct = new QAction(rotateRightIcon, tr("&Rotate Right"), this);
+    rotateRightAct = new QAction(rotateRightIcon, tr("&Rotate Right"), this);
     rotateRightAct->setShortcuts(QKeySequence::New);
-    //rotateRightAct->setStatusTip(tr("Rotate Right"));
     connect(rotateRightAct, SIGNAL(triggered()), this, SLOT(onRotateCCW()));
     fileToolBar->addAction(rotateRightAct);
     rotateRightAct->setToolTip(tr("Rotate right"));
-
-    // const QIcon aisIcon = QIcon::fromTheme("import-ais", QIcon(":/images/ais.png"));
-    // QAction *aisAct = new QAction(aisIcon, tr("&Ais"), this);
-    // aisAct->setShortcuts(QKeySequence::New);
-    // //aisAct->setStatusTip(tr("Ais"));
-    // connect(aisAct, SIGNAL(triggered()), this, SLOT(onAIS()));
-    // fileToolBar->addAction(aisAct);
-    // aisAct->setToolTip(tr("AIS"));
 
     const QIcon connectIcon = QIcon::fromTheme("import-connect", QIcon(":/images/connect.png"));
     connectAct = new QAction(connectIcon, tr("&Connect"), this);
     connectAct->setShortcuts(QKeySequence::New);
     connect(connectAct, SIGNAL(triggered()), this, SLOT(subscribeMOOSDB()));
     fileToolBar->addAction(connectAct);
-    connectAct->setToolTip(tr("Reconnect MOOSDB"));
+    connectAct->setToolTip(tr("Connect MOOSDB"));
+    connectAct->setVisible(true);       // Disable connect if already connected
 
     const QIcon disconnectIcon = QIcon::fromTheme("import-disconnect", QIcon(":/images/disconnect.png"));
     disconnectAct = new QAction(disconnectIcon, tr("&Disconnect"), this);
@@ -134,9 +136,10 @@ void MainWindow::createActions()
     connect(disconnectAct, SIGNAL(triggered()), this, SLOT(stopSubscribeMOOSDB()));
     fileToolBar->addAction(disconnectAct);
     disconnectAct->setToolTip(tr("Disconnect MOOSDB"));
+    disconnectAct->setVisible(false);     // Enable disconnect if connected
 
     const QIcon settingIcon = QIcon::fromTheme("import-setting", QIcon(":/images/setting.png"));
-    QAction *settingAct = new QAction(settingIcon, tr("&Setting"), this);
+    settingAct = new QAction(settingIcon, tr("&Setting"), this);
     settingAct->setShortcuts(QKeySequence::New);
     //settingAct->setStatusTip(tr("setting MOOSDB"));
     connect(settingAct, SIGNAL(triggered()), this, SLOT(openSettingsDialog()));
@@ -596,6 +599,30 @@ void MainWindow::createMenuBar(){
         dock->hide();
     }
 
+    // ================================== THEME MENU
+    QMenu *themeMenu = menuBar()->addMenu("&Theme");
+
+    QActionGroup *themeGroup = new QActionGroup(this);
+    themeGroup->setExclusive(true);
+
+
+    QAction *lightAction = themeMenu->addAction("Light");
+    lightAction->setCheckable(true);
+    themeGroup->addAction(lightAction);
+
+    QAction *dimAction = themeMenu->addAction("Dim");
+    dimAction->setCheckable(true);
+    themeGroup->addAction(dimAction);
+
+    QAction *darkAction = themeMenu->addAction("Dark");
+    darkAction->setCheckable(true);
+    darkAction->setChecked(true);
+    themeGroup->addAction(darkAction);
+
+    connect(dimAction, &QAction::triggered, this, &MainWindow::setDimMode);
+    connect(darkAction, &QAction::triggered, this, &MainWindow::setDarkMode);
+    connect(lightAction, &QAction::triggered, this, &MainWindow::setLightMode);
+
     // ================================== SETTINGS MANAGER MENU
     QMenu *settingMenu = menuBar()->addMenu("&Settings");
     settingMenu->addAction("Setting Manager", this, SLOT(openSettingsDialog()) );
@@ -824,6 +851,20 @@ void MainWindow::createMenuBar(){
     // ================================== ABOUT MENU
     QMenu *aboutMenu = menuBar()->addMenu("&About");
     aboutMenu->addAction("Release Notes", this, SLOT(openReleaseNotesDialog()) );
+
+    // Set default → dark
+    if (AppConfig::isDark()){
+        darkAction->setChecked(true);
+        setDarkMode();
+    }
+    else if (AppConfig::isDim()){
+        dimAction->setChecked(true);
+        setDimMode();
+    }
+    else {
+        lightAction->setChecked(true);
+        setLightMode();
+    }
 }
 
 // S-63 USER PERMIT GENERATE
@@ -1644,6 +1685,8 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
         ecchart->TrackTarget(mmsiStr);
 
         qDebug() << "Track Target MMSI:" << mmsiStr;
+
+        return;
     }
     else {
         AISTargetData ais;
@@ -1656,6 +1699,8 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
         ecchart->TrackTarget("");
 
         qDebug() << "Track Ownship";
+
+        return;
     }
 
 
@@ -1664,6 +1709,7 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
     }
 
     //changeText();
+    //ecchart->waypointRightClick(pos);
 }
 
 // void MainWindow::onMouseRightClick()
@@ -4263,4 +4309,92 @@ void MainWindow::setReconnectStatusText(const QString text){
 
 SettingsData MainWindow::getSettingsForwarder(){
     return SettingsManager::instance().data();
+}
+
+// ========= DARK MODE SLOTS ============
+void MainWindow::applyPalette(const QPalette &palette, const QString &styleName) {
+    qApp->setStyle(QStyleFactory::create(styleName));
+    qApp->setPalette(palette);
+
+    // Paksa refresh semua widget
+    for (QWidget *w : qApp->allWidgets()) {
+        w->setStyle(QStyleFactory::create(styleName));
+        w->update();
+    }
+}
+
+void MainWindow::setDarkMode() {
+    AppConfig::setTheme(AppConfig::AppTheme::Dark);
+
+    QPalette dark;
+    dark.setColor(QPalette::Window, QColor(53,53,53));
+    dark.setColor(QPalette::WindowText, Qt::white);
+    dark.setColor(QPalette::Base, QColor(42,42,42));
+    dark.setColor(QPalette::AlternateBase, QColor(66,66,66));
+    dark.setColor(QPalette::Text, Qt::white);
+    dark.setColor(QPalette::Button, QColor(53,53,53));
+    dark.setColor(QPalette::ButtonText, Qt::white);
+    dark.setColor(QPalette::Highlight, QColor(42,130,218));
+    dark.setColor(QPalette::HighlightedText, Qt::black);
+
+    applyPalette(dark, "Fusion");
+    setTitleBarDark(true);
+
+    updateIcon(true);
+}
+
+void MainWindow::setLightMode() {
+    AppConfig::setTheme(AppConfig::AppTheme::Light);
+
+    QPalette light = style()->standardPalette();
+    applyPalette(light, "Fusion");
+    setTitleBarDark(false);
+
+    updateIcon(false);
+}
+
+void MainWindow::setDimMode()
+{
+    AppConfig::setTheme(AppConfig::AppTheme::Dim);
+
+    // Ganti warna dasar aplikasi (biru tua)
+    QPalette dimPalette;
+    dimPalette.setColor(QPalette::Window, QColor(25, 35, 55));       // biru tua
+    dimPalette.setColor(QPalette::WindowText, Qt::white);
+    dimPalette.setColor(QPalette::Base, QColor(20, 30, 50));         // area input
+    dimPalette.setColor(QPalette::AlternateBase, QColor(35, 45, 65));
+    dimPalette.setColor(QPalette::ToolTipBase, Qt::white);
+    dimPalette.setColor(QPalette::ToolTipText, Qt::black);
+    dimPalette.setColor(QPalette::Text, Qt::white);
+    dimPalette.setColor(QPalette::Button, QColor(30, 45, 70));
+    dimPalette.setColor(QPalette::ButtonText, Qt::white);
+    dimPalette.setColor(QPalette::BrightText, Qt::red);
+    dimPalette.setColor(QPalette::Highlight, QColor(70, 100, 150));
+    dimPalette.setColor(QPalette::HighlightedText, Qt::white);
+
+    applyPalette(dimPalette, "Fusion");
+    setTitleBarDark(true);
+
+    updateIcon(true);
+}
+
+void MainWindow::updateIcon(bool dark){
+    if (dark){
+        connectAct->setIcon(QIcon(":/images/connect-white.png"));
+        disconnectAct->setIcon(QIcon(":/images/disconnect-white.png"));
+        zoomInAct->setIcon(QIcon(":/images/zoom-in-white.png"));
+        zoomOutAct->setIcon(QIcon(":/images/zoom-out-white.png"));
+        rotateRightAct->setIcon(QIcon(":/images/rotate-right-white.png"));
+        rotateLeftAct->setIcon(QIcon(":/images/rotate-left-white.png"));
+        settingAct->setIcon(QIcon(":/images/setting-white.png"));
+    }
+    else {
+        connectAct->setIcon(QIcon(":/images/connect.png"));
+        disconnectAct->setIcon(QIcon(":/images/disconnect.png"));
+        zoomInAct->setIcon(QIcon(":/images/zoom-in.png"));
+        zoomOutAct->setIcon(QIcon(":/images/zoom-out.png"));
+        rotateRightAct->setIcon(QIcon(":/images/rotate-right.png"));
+        rotateLeftAct->setIcon(QIcon(":/images/rotate-left.png"));
+        settingAct->setIcon(QIcon(":/images/setting.png"));
+    }
 }

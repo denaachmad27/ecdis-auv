@@ -1456,6 +1456,68 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
     // ========== END GUARDZONE CREATION MODE ==========
 
     // ========== EXISTING WAYPOINT AND OTHER LOGIC (unchanged) ==========
+    waypointLeftClick(e);
+    waypointRightClick(e);
+}
+
+void EcWidget::waypointRightClick(QMouseEvent *e){
+    if (e->button() == Qt::RightButton && !creatingGuardZone) {
+
+        // Check if in route mode - right-click to end route
+        if (activeFunction == CREATE_ROUTE) {
+            // Show confirmation dialog
+            QMessageBox::StandardButton result = QMessageBox::question(this,
+                tr("End Route"),
+                tr("Do you want to end the current route creation?"),
+                QMessageBox::Yes | QMessageBox::No,
+                QMessageBox::Yes);
+
+            if (result == QMessageBox::Yes) {
+                endRouteMode();
+            }
+            return;
+        }
+
+        // Check if right-clicked on a waypoint first
+        int clickedWaypointIndex = findWaypointAt(e->x(), e->y());
+        if (clickedWaypointIndex != -1) {
+            //createWaypointToolbox(pos, clickedWaypointIndex);
+            showWaypointContextMenu(e->pos(), clickedWaypointIndex);
+            return; // Return early - jangan lanjut ke normal right click
+        }
+
+        // Check if right-clicked on a legline
+        int leglineRouteId, leglineSegmentIndex;
+        int leglineDistance = findLeglineAt(e->x(), e->y(), leglineRouteId, leglineSegmentIndex);
+        if (leglineDistance != -1) {
+            showLeglineContextMenu(e->pos(), leglineRouteId, leglineSegmentIndex);
+            return; // Return early - jangan lanjut ke normal right click
+        }
+
+        // Check if right-clicked on a guardzone
+        if (guardZoneManager) {
+            int clickedGuardZoneId = guardZoneManager->getGuardZoneAtPosition(e->x(), e->y());
+
+            if (clickedGuardZoneId != -1) {
+                guardZoneManager->showGuardZoneContextMenu(e->pos(), clickedGuardZoneId);
+                return; // Return early - jangan lanjut ke normal right click
+            }
+        }
+
+        // Show map context menu (Create Route)
+        showMapContextMenu(e->pos());
+
+        // =================== IMPORTANT!! DONT CHANGE IT! ===================
+        pickX = e->x();
+        pickY = e->y();
+        emit mouseRightClick(e->pos());
+        // ===================================================================
+
+        return;
+    }
+}
+
+void EcWidget::waypointLeftClick(QMouseEvent *e){
     if (e->button() == Qt::LeftButton)
     {
         EcCoordinate lat, lon;
@@ -1483,7 +1545,7 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
             {
                 // Insert waypoint mode - find closest route segment and insert
                 insertWaypointAt(lat, lon);
-                
+
                 // Return to PAN mode after insertion
                 activeFunction = PAN;
                 if (mainWindow) {
@@ -1496,7 +1558,7 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
             {
                 // Route mode - continuous waypoint creation
                 createWaypointAt(lat, lon);
-                
+
                 // Update status for next waypoint
                 if (mainWindow) {
                     // mainWindow->statusBar()->showMessage(
@@ -1507,12 +1569,12 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
                                 tr("Route Mode: Waypoint %1 created. Click for next waypoint or ESC/right-click to end").
                                 arg(routeWaypointCounter));
                 }
-                
+
                 routeWaypointCounter++;
-                
+
                 // Emit signal to update route panel
                 emit waypointCreated();
-                
+
                 // Stay in CREATE_ROUTE mode for continuous creation
             }
             else
@@ -1523,64 +1585,13 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
             }
         }
     }
-    else if (e->button() == Qt::RightButton && !creatingGuardZone) {
-        
-        // Check if in route mode - right-click to end route
-        if (activeFunction == CREATE_ROUTE) {
-            // Show confirmation dialog
-            QMessageBox::StandardButton result = QMessageBox::question(this,
-                tr("End Route"),
-                tr("Do you want to end the current route creation?"),
-                QMessageBox::Yes | QMessageBox::No,
-                QMessageBox::Yes);
-            
-            if (result == QMessageBox::Yes) {
-                endRouteMode();
-            }
-            return;
-        }
-
-        // Check if right-clicked on a waypoint first
-        int clickedWaypointIndex = findWaypointAt(e->x(), e->y());
-        if (clickedWaypointIndex != -1) {
-            //createWaypointToolbox(e->pos(), clickedWaypointIndex);
-            showWaypointContextMenu(e->pos(), clickedWaypointIndex);
-            return; // Return early - jangan lanjut ke normal right click
-        }
-
-        // Check if right-clicked on a legline
-        int leglineRouteId, leglineSegmentIndex;
-        int leglineDistance = findLeglineAt(e->x(), e->y(), leglineRouteId, leglineSegmentIndex);
-        if (leglineDistance != -1) {
-            showLeglineContextMenu(e->pos(), leglineRouteId, leglineSegmentIndex);
-            return; // Return early - jangan lanjut ke normal right click
-        }
-
-        // Check if right-clicked on a guardzone
-        if (guardZoneManager) {
-            int clickedGuardZoneId = guardZoneManager->getGuardZoneAtPosition(e->x(), e->y());
-
-            if (clickedGuardZoneId != -1) {
-                guardZoneManager->showGuardZoneContextMenu(e->pos(), clickedGuardZoneId);
-                return; // Return early - jangan lanjut ke normal right click
-            }
-        }
-
-        // Show map context menu (Create Route)
-        showMapContextMenu(e->pos());
-        return;
-    }
-
-
 }
-
 
 
 /*---------------------------------------------------------------------------*/
 
 void EcWidget::mouseMoveEvent(QMouseEvent *e)
 {
-
     // Simpan posisi mouse terakhir
     lastMousePos = e->pos();
 
@@ -4171,30 +4182,30 @@ void EcWidget::showWaypointContextMenu(const QPoint& pos, int waypointIndex)
     
     // Edit waypoint properties
     QAction* editAction = contextMenu.addAction(tr("Edit Route Point"));
-    editAction->setIcon(QIcon(":/images/edit.png"));
+    editAction->setIcon(QIcon(":/icon/edit.png"));
     
     // Move waypoint
     QAction* moveAction = contextMenu.addAction(tr("Move Waypoint"));
-    moveAction->setIcon(QIcon(":/images/move.png"));
+    moveAction->setIcon(QIcon(":/icon/move.png"));
     
     contextMenu.addSeparator();
     
     // Delete waypoint
     QAction* deleteWaypointAction = contextMenu.addAction(tr("Delete Waypoint"));
-    deleteWaypointAction->setIcon(QIcon(":/images/delete.png"));
+    deleteWaypointAction->setIcon(QIcon(":/icon/delete_wp.png"));
     
     // Delete route (only if waypoint is part of a route)
     QAction* deleteRouteAction = nullptr;
     if (waypoint.routeId > 0) {
         deleteRouteAction = contextMenu.addAction(tr("Delete Route"));
-        deleteRouteAction->setIcon(QIcon(":/images/delete_route.png"));
+        deleteRouteAction->setIcon(QIcon(":/icon/delete_route.png"));
     }
 
     contextMenu.addSeparator();
 
     // Publish waypoint
     QAction* publishAction = contextMenu.addAction(tr("Publish Waypoint"));
-    publishAction->setIcon(QIcon(":/images/publish.png"));
+    publishAction->setIcon(QIcon(":/icon/publish.png"));
     
     // Execute menu
     QAction* selectedAction = contextMenu.exec(mapToGlobal(pos));
@@ -4336,13 +4347,13 @@ void EcWidget::showLeglineContextMenu(const QPoint& pos, int routeId, int segmen
     
     // Insert waypoint at clicked position
     QAction* insertWaypointAction = contextMenu.addAction(tr("Insert Waypoint"));
-    insertWaypointAction->setIcon(QIcon(":/images/waypoint_add.png"));
+    insertWaypointAction->setIcon(QIcon(":/icon/create_wp.png"));
     
     contextMenu.addSeparator();
     
     // Delete route
     QAction* deleteRouteAction = contextMenu.addAction(tr("Delete Route"));
-    deleteRouteAction->setIcon(QIcon(":/images/delete_route.png"));
+    deleteRouteAction->setIcon(QIcon(":/icon/delete_route.png"));
     
     // Execute menu
     QAction* selectedAction = contextMenu.exec(mapToGlobal(pos));
@@ -4402,7 +4413,7 @@ void EcWidget::showMapContextMenu(const QPoint& pos)
     
     // Create Route option
     QAction* createRouteAction = contextMenu.addAction(tr("Create Route"));
-    createRouteAction->setIcon(QIcon(":/images/route.png"));
+    createRouteAction->setIcon(QIcon(":/icon/create_route.png"));
     
     // Execute menu
     QAction* selectedAction = contextMenu.exec(mapToGlobal(pos));

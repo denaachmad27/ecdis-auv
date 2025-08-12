@@ -1,3 +1,4 @@
+#include "appconfig.h"
 #include "logger.h"
 #include <QTextStream>
 #include <QDateTime>
@@ -54,7 +55,12 @@ void Logger::customHandler(QtMsgType type, const QMessageLogContext &, const QSt
     switch (type) {
     case QtDebugMsg:
         level = "DEBUG";
-        color = "#000000";  // hitam
+        if (AppConfig::isLight()){
+            color = "#000000";  // hitam
+        }
+        else {
+            color = "#FFFFFF";  // white
+        }
         break;
     case QtWarningMsg:
         level = "WARNING";

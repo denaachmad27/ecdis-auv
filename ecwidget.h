@@ -581,6 +581,7 @@ public:
   // Waypoint
   void SetWaypointPos(EcCoordinate lat, EcCoordinate lon);
   bool drawUdo(void);
+  ActiveFunction    activeFunction;
   
   // Waypoint form functions
   void showAddWaypointDialog();
@@ -600,6 +601,8 @@ public:
   void cancelCreateGuardZone();
   void checkGuardZone();
   QString getGuardZoneFilePath() const;
+  bool creatingGuardZone;
+  GuardZoneManager* guardZoneManager;
 
   // Fungsi deteksi obstacles untuk Ship Guardian Zone
   bool checkShipGuardianZone();
@@ -718,6 +721,10 @@ public:
 
   // DISPLAY CATEGORY
   void setDisplayCategoryInternal(int category);
+
+  // WP CLICK
+  void waypointRightClick(QMouseEvent *e);
+  void waypointLeftClick(QMouseEvent *e);
 
 public slots:
   void updateAISTargetsList();
@@ -849,7 +856,6 @@ protected:
 
   // Waypoint
   EcFeature         wp1;
-  ActiveFunction    activeFunction;
   EcCoordinate      wplat, wplon;
   int range;
   virtual void drawWaypointCell ();
@@ -978,12 +984,10 @@ private:
   double calculateCrossProduct(double pointLat, double pointLon, double lat1, double lon1, double lat2, double lon2);
   bool isPointInSemicircle(double lat, double lon, const GuardZone* gz);
 
-  GuardZoneManager* guardZoneManager;
   QList<GuardZone> guardZones;
   int nextGuardZoneId;
 
   // Create GuardZone variables
-  bool creatingGuardZone;
   ::GuardZoneShape newGuardZoneShape;
   QVector<QPointF> guardZonePoints;
   QPoint currentMousePos;

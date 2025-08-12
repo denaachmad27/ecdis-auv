@@ -101,3 +101,5 @@ DISTFILES += \
 SUBDIRS += \
 
 CONFIG += plugin
+
+LIBS += -ldwmapi

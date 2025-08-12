@@ -18,3 +18,26 @@ bool AppConfig::isDevelopment() {
 bool AppConfig::isProduction() {
     return _mode == Mode::Production;
 }
+
+
+AppConfig::AppTheme AppConfig::_theme = AppConfig::AppTheme::Dark;
+
+void AppConfig::setTheme(AppTheme theme) {
+    _theme = theme;
+}
+
+AppConfig::AppTheme AppConfig::theme() {
+    return _theme;
+}
+
+bool AppConfig::isLight() {
+    return _theme == AppTheme::Light;
+}
+
+bool AppConfig::isDim() {
+    return _theme == AppTheme::Dim;
+}
+
+bool AppConfig::isDark() {
+    return _theme == AppTheme::Dark;
+}

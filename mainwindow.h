@@ -37,6 +37,10 @@ class AISSubscriber;
 #define DSID "0"
 #define APP_TITLE "ECDIS AUV v1.1"
 
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+#endif
+
 class MainWindow : public QMainWindow
 {
   Q_OBJECT
@@ -258,6 +262,11 @@ private slots:
     void onConfigureGuardZoneAutoCheck();
     void onShowGuardZoneStatus();
 
+    // DARK MODE
+    void setDarkMode();
+    void setLightMode();
+    void setDimMode();
+
 private:
     GuardZonePanel* guardZonePanel;
     QDockWidget* guardZoneDock;
@@ -316,6 +325,11 @@ private:
     // Connection icon
     QAction *connectAct;
     QAction *disconnectAct;
+    QAction *zoomInAct;
+    QAction *zoomOutAct;
+    QAction *rotateRightAct;
+    QAction *rotateLeftAct;
+    QAction *settingAct;
 
     // BAR BAR
     void createStatusBar();
@@ -325,6 +339,11 @@ private:
     // MOOSDB MENU
     QAction *restartAction;
     QAction *stopAction;
+
+    // THEME COLOR
+    void setTitleBarDark(bool dark);
+    void applyPalette(const QPalette &palette, const QString &styleName);
+    void updateIcon(bool dark);
 };
 
 #endif // _mainwindow_h_
