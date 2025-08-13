@@ -1065,6 +1065,11 @@ void EcWidget::paintEvent (QPaintEvent *e)
   if (ghostWaypoint.visible) {
       drawGhostWaypoint(painter, ghostWaypoint.lat, ghostWaypoint.lon, ghostWaypoint.label);
   }
+  
+  // Draw highlighted waypoint for route panel selection
+  if (highlightedWaypoint.visible) {
+      drawHighlightedWaypoint(painter, highlightedWaypoint.lat, highlightedWaypoint.lon, highlightedWaypoint.label);
+  }
 
   if (AppConfig::isDevelopment()){
       drawGuardZone();
@@ -3850,6 +3855,52 @@ void EcWidget::drawGhostWaypoint(QPainter& painter, double lat, double lon, cons
     }
     
     painter.drawText(x + 12, y - 15, displayText);
+}
+
+void EcWidget::drawHighlightedWaypoint(QPainter& painter, double lat, double lon, const QString& label)
+{
+    int x, y;
+
+    if (!LatLonToXy(lat, lon, x, y))
+        return;
+
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    // Style highlighted waypoint: bright yellow/gold with pulsing effect
+    static int frame = 0;
+    frame++;
+    
+    // Create pulsing effect
+    int pulseRadius = 12 + (int)(4 * sin(frame * 0.2));
+    int opacity = 150 + (int)(50 * sin(frame * 0.3));
+    
+    // Outer glow ring
+    QPen glowPen(QColor(255, 215, 0, opacity / 3)); // Gold glow
+    glowPen.setWidth(3);
+    painter.setPen(glowPen);
+    painter.setBrush(Qt::NoBrush);
+    painter.drawEllipse(QPoint(x, y), pulseRadius + 5, pulseRadius + 5);
+    
+    // Main highlight ring
+    QPen highlightPen(QColor(255, 215, 0, opacity)); // Bright gold
+    highlightPen.setWidth(4);
+    painter.setPen(highlightPen);
+    QBrush highlightBrush(QColor(255, 255, 0, opacity / 4)); // Yellow fill
+    painter.setBrush(highlightBrush);
+    painter.drawEllipse(QPoint(x, y), pulseRadius, pulseRadius);
+    
+    // Inner core
+    QPen corePen(QColor(255, 140, 0, 255)); // Solid orange core
+    corePen.setWidth(2);
+    painter.setPen(corePen);
+    QBrush coreBrush(QColor(255, 165, 0, 200)); // Orange fill
+    painter.setBrush(coreBrush);
+    painter.drawEllipse(QPoint(x, y), 6, 6);
+
+    // No additional label - let the original waypoint label remain unchanged
+    
+    // Schedule next frame for animation
+    QTimer::singleShot(50, this, [this]() { update(); });
 }
 
 void EcWidget::drawGhostRouteLines(QPainter& painter, double ghostLat, double ghostLon, int routeId, int waypointIndex)
@@ -12932,5 +12983,47 @@ void EcWidget::createWaypointFromForm(double lat, double lon, const QString& lab
     
     qDebug() << "[INFO] Waypoint created from form - Label:" << newWaypoint.label 
              << "Lat:" << lat << "Lon:" << lon << "Route:" << routeId;
+}
+
+// Waypoint highlighting methods for route panel visualization
+void EcWidget::highlightWaypoint(int routeId, int waypointIndex)
+{
+    // Clear previous highlight
+    clearWaypointHighlight();
+    
+    // Find the waypoint to highlight
+    int currentIndex = 0;
+    for (const auto& wp : waypointList) {
+        if (wp.routeId == routeId) {
+            if (currentIndex == waypointIndex) {
+                // Set highlight data
+                highlightedWaypoint.visible = true;
+                highlightedWaypoint.lat = wp.lat;
+                highlightedWaypoint.lon = wp.lon;
+                highlightedWaypoint.label = wp.label;
+                highlightedWaypoint.routeId = routeId;
+                highlightedWaypoint.waypointIndex = waypointIndex;
+                
+                qDebug() << "[HIGHLIGHT] Highlighting waypoint" << wp.label 
+                         << "at" << wp.lat << "," << wp.lon << "route" << routeId << "index" << waypointIndex;
+                
+                // Trigger map update
+                update();
+                return;
+            }
+            currentIndex++;
+        }
+    }
+    
+    qDebug() << "[HIGHLIGHT] Waypoint not found - route:" << routeId << "index:" << waypointIndex;
+}
+
+void EcWidget::clearWaypointHighlight()
+{
+    if (highlightedWaypoint.visible) {
+        highlightedWaypoint.visible = false;
+        qDebug() << "[HIGHLIGHT] Cleared waypoint highlight";
+        update();
+    }
 }
 

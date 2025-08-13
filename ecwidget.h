@@ -250,6 +250,7 @@ public:
   QPoint findOptimalLabelPosition(int waypointX, int waypointY, const QSize& textSize, int minDistance);
   void drawGhostWaypoint(QPainter& painter, EcCoordinate lat, EcCoordinate lon, const QString& label);
   void drawGhostRouteLines(QPainter& painter, EcCoordinate ghostLat, EcCoordinate ghostLon, int routeId, int waypointIndex);
+  void drawHighlightedWaypoint(QPainter& painter, double lat, double lon, const QString& label);
   void saveWaypoints();
   void removeWaypointAt(int x, int y);
   void moveWaypointAt(int x, int y);
@@ -273,6 +274,10 @@ public:
   void clearWaypoints();
   void updateWaypointActiveStatus(int routeId, double lat, double lon, bool active);
   void replaceWaypointsForRoute(int routeId, const QList<Waypoint>& newWaypoints);
+  
+  // Waypoint highlighting for route panel visualization
+  void highlightWaypoint(int routeId, int waypointIndex);
+  void clearWaypointHighlight();
   
   // Route management functions
   void saveRoutes();
@@ -970,6 +975,18 @@ private:
       
       GhostWaypoint() : visible(false), lat(0), lon(0), routeId(0), waypointIndex(-1) {}
   } ghostWaypoint;
+  
+  // Highlighted waypoint for route panel selection visualization
+  struct HighlightedWaypoint {
+      bool visible;
+      double lat;
+      double lon;
+      QString label;
+      int routeId;
+      int waypointIndex;
+      
+      HighlightedWaypoint() : visible(false), lat(0), lon(0), routeId(0), waypointIndex(-1) {}
+  } highlightedWaypoint;
 
   void showWaypointError(const QString &message);
 

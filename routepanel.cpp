@@ -282,12 +282,14 @@ void RoutePanel::setupUI()
     routeTreeWidget = new QTreeWidget(this);
     routeTreeWidget->setMinimumHeight(200);
     routeTreeWidget->setSelectionMode(QAbstractItemView::SingleSelection);
+    routeTreeWidget->setSelectionBehavior(QAbstractItemView::SelectRows); // Select entire rows
     routeTreeWidget->setContextMenuPolicy(Qt::CustomContextMenu);
     routeTreeWidget->setHeaderHidden(true); // Hide column headers
     routeTreeWidget->setRootIsDecorated(true); // Show expand/collapse indicators
     routeTreeWidget->setIndentation(20); // Reduced indentation for more compact layout
     routeTreeWidget->setUniformRowHeights(false); // Allow different row heights
     routeTreeWidget->setAlternatingRowColors(true); // Enable alternating row colors
+    routeTreeWidget->setAllColumnsShowFocus(true); // Ensure full row selection highlighting
     
     // Apply theme-aware professional styling
     routeTreeWidget->setStyleSheet(getThemeAwareStyleSheet());
@@ -950,6 +952,10 @@ void RoutePanel::onRouteItemSelectionChanged()
     if (!currentItem) {
         clearRouteInfoDisplay();
         selectedRouteId = -1;
+        // Clear waypoint highlight when nothing is selected
+        if (ecWidget) {
+            ecWidget->clearWaypointHighlight();
+        }
         updateButtonStates();
         return;
     }
@@ -973,6 +979,17 @@ void RoutePanel::onRouteItemSelectionChanged()
             emit statusMessage(QString("Selected waypoint from Route %1").arg(selectedRouteId));
         }
         
+        // HIGHLIGHT WAYPOINT: Find waypoint index and highlight it on map
+        if (ecWidget) {
+            QTreeWidgetItem* parent = waypointItem->parent();
+            if (parent) {
+                int waypointIndex = parent->indexOfChild(waypointItem);
+                ecWidget->highlightWaypoint(waypointRouteId, waypointIndex);
+                qDebug() << "[WAYPOINT-HIGHLIGHT] Highlighting waypoint" << waypointItem->getWaypoint().label 
+                         << "route:" << waypointRouteId << "index:" << waypointIndex;
+            }
+        }
+        
         // Update button states for waypoint selection
         updateButtonStates();
         return;
@@ -991,6 +1008,8 @@ void RoutePanel::onRouteItemSelectionChanged()
         if (ecWidget) {
             qDebug() << "[SELECTED-ROUTE] Syncing EcWidget selectedRouteId to" << selectedRouteId;
             ecWidget->setSelectedRoute(selectedRouteId);
+            // Clear waypoint highlight when route is selected (not waypoint)
+            ecWidget->clearWaypointHighlight();
             // Note: setSelectedRoute already calls forceRedraw() internally, no need for additional redraw
         }
         
