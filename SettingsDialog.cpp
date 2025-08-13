@@ -37,8 +37,10 @@ void SettingsDialog::setupUI() {
     QWidget *moosTab = new QWidget;
     QFormLayout *moosLayout = new QFormLayout;
     moosIpLineEdit = new QLineEdit;
+    moosIpLineEdit->setDisabled(true);
     moosPortLineEdit = new QLineEdit;
     moosLayout->addRow("MOOSDB IP:", moosIpLineEdit);
+
     //moosLayout->addRow("MOOSDB Port:", moosPortLineEdit);
 
     moosTab->setLayout(moosLayout);
