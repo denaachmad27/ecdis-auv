@@ -560,8 +560,20 @@ void EcWidget::SetScale (int newScale)
 
 void EcWidget::SetHeading (double newHeading)
 {
+  // ROUTE FIX: Flush SevenCs cache when heading changes significantly to prevent stale route rendering
+  static double lastHeading = -999.0;
+  bool headingChanged = (qAbs(newHeading - lastHeading) > 0.1);
+  
   currentHeading = newHeading;
   if (currentScale > maxScale) currentScale = maxScale; // in case the world overview has been shown before
+  
+  // Flush SevenCs drawing cache when heading changes to prevent double route display
+  if (headingChanged && view && initialized) {
+    qDebug() << "[ROUTE-FIX] Heading changed significantly, flushing SevenCs cache";
+    EcDrawFlushCache(view);
+    lastHeading = newHeading;
+  }
+  
   // Check projection because it depends on viewport
   SetProjection(projectionMode);
 }
@@ -979,12 +991,16 @@ void EcWidget::draw(bool upd)
 void EcWidget::Draw()
 {
     draw(true);
-    if(showAIS){
+    
+    // ROUTE FIX: Enhanced conditional drawAISCell() for route stability
+    // Always call drawAISCell() if routes exist to ensure proper pixmap management
+    bool hasRoutes = !waypointList.isEmpty();
+    if(showAIS || hasRoutes){
         drawAISCell();
+    } else {
+        // Only call waypointDraw() if no AIS and no routes (fallback case)
+        waypointDraw();
     }
-
-    // Draw Waypoint
-    waypointDraw();
 
     // Tidak perlu memanggil drawGuardZone() di sini,
     // karena akan dipanggil secara otomatis di paintEvent
@@ -2755,7 +2771,8 @@ void EcWidget::drawAISCell()
       drawRedDotTracker();
   }
 
-  // Add waypointDraw() to fix route and waypoint label flickering
+  // ROUTE FIX: Enhanced waypointDraw() to fix route and waypoint label flickering
+  // Always ensure routes are drawn even when AIS cell operations occur
   waypointDraw();
 
   // OWNSHIP DRAW
@@ -4907,7 +4924,7 @@ void EcWidget::drawRouteLines()
 {
     if (waypointList.size() < 2) return;
     
-    // EMERGENCY SAFETY CHECK for presentation
+    // ROUTE FIX: Enhanced safety checks for coordinate transformation
     try {
         QPainter painter(&drawPixmap);
         if (!painter.isActive()) {
@@ -4915,6 +4932,12 @@ void EcWidget::drawRouteLines()
             return;
         }
         painter.setRenderHint(QPainter::Antialiasing, true);
+        
+        // ROUTE FIX: Validate coordinate transformation is ready
+        if (!view || !initialized) {
+            qDebug() << "[ROUTE-LINES-ERROR] View not initialized properly - aborting";
+            return;
+        }
     
     // Warna untuk route yang berbeda (harus sama dengan warna waypoint)
     // APPROACH BARU: Group waypoints by route ID first, then draw lines within each route
