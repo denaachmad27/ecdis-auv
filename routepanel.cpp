@@ -151,17 +151,41 @@ RoutePanel::RoutePanel(EcWidget* ecWidget, QWidget *parent)
 // Helper function to get theme-aware colors
 QString RoutePanel::getThemeAwareStyleSheet()
 {
-    bool isDark = AppConfig::isDark();
-    
     // Define color scheme based on theme
-    QString bgColor = isDark ? "#2b2b2b" : "#ffffff";
-    QString borderColor = isDark ? "#555555" : "#d0d0d0";
-    QString textColor = isDark ? "#ffffff" : "#000000";
-    QString selectedBgColor = isDark ? "#0078d4" : "#3daee9";
-    QString selectedTextColor = "#ffffff";
-    QString hoverBgColor = isDark ? "#404040" : "#e3f2fd";
-    QString hoverTextColor = isDark ? "#ffffff" : "#333333";
-    QString alternateRowColor = isDark ? "#333333" : "#f8f8f8";
+    QString bgColor, borderColor, textColor;
+    QString selectedBgColor, selectedTextColor;
+    QString hoverBgColor, hoverTextColor, alternateRowColor;
+
+    if (AppConfig::isDark()) {
+        bgColor = "#2b2b2b";
+        borderColor = "#555555";
+        textColor = "#ffffff";
+        selectedBgColor = "#0078d4";
+        selectedTextColor = "#ffffff";
+        hoverBgColor = "#404040";
+        hoverTextColor = "#ffffff";
+        alternateRowColor = "#333333";
+    }
+    else if (AppConfig::isLight()) {
+        bgColor = "#ffffff";
+        borderColor = "#d0d0d0";
+        textColor = "#000000";
+        selectedBgColor = "#3daee9";
+        selectedTextColor = "#ffffff";
+        hoverBgColor = "#e3f2fd";
+        hoverTextColor = "#333333";
+        alternateRowColor = "#f8f8f8";
+    }
+    else if (AppConfig::isDim()) {
+        bgColor            = "#1e2a38";  // dasar biru keabu-abuan
+        borderColor        = "#3a4a5a";  // biru-abu lebih terang untuk border
+        textColor          = "#ffffff";  // teks putih
+        selectedBgColor    = "#355273";  // biru lembut untuk seleksi
+        selectedTextColor  = "#ffffff";
+        hoverBgColor       = "#2b3b4c";  // sedikit lebih terang dari background
+        hoverTextColor     = "#ffffff";
+        alternateRowColor  = "#243447";  // untuk baris selang-seling
+    }
     
     return QString(
         "QTreeWidget {"

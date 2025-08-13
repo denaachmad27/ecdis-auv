@@ -1,5 +1,6 @@
 #include "routeformdialog.h"
 #include "ecwidget.h"
+#include "appconfig.h"
 #include <QApplication>
 #include <QMessageBox>
 #include <QFileDialog>
@@ -79,7 +80,12 @@ void RouteFormDialog::setupUI()
     
     // Status label
     statusLabel = new QLabel(this);
-    statusLabel->setStyleSheet("QLabel { color: blue; font-style: italic; }");
+    if (AppConfig::isLight()){
+        statusLabel->setStyleSheet("QLabel { color: blue; font-style: italic; }");
+    }
+    else {
+        statusLabel->setStyleSheet("QLabel { color: white; font-style: italic; }");
+    }
     mainLayout->addWidget(statusLabel);
     
     // Button layout
@@ -143,7 +149,12 @@ void RouteFormDialog::setupRouteInfoTab()
     QVBoxLayout *statsLayout = new QVBoxLayout(statsGroup);
     
     routeStatsLabel = new QLabel("Waypoints: 0 | Distance: 0.00 NM");
-    routeStatsLabel->setStyleSheet("QLabel { color: #006600; font-weight: bold; font-size: 11pt; padding: 5px; }");
+    if (AppConfig::isLight()){
+        routeStatsLabel->setStyleSheet("QLabel { color: #006600; font-weight: bold; font-size: 11pt; padding: 5px; }");
+    }
+    else {
+        routeStatsLabel->setStyleSheet("QLabel { color: #FFFFFF; font-weight: bold; font-size: 11pt; padding: 5px; }");
+    }
     routeStatsLabel->setAlignment(Qt::AlignCenter);
     statsLayout->addWidget(routeStatsLabel);
     

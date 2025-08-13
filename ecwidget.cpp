@@ -2441,6 +2441,28 @@ void EcWidget::stopAISConnection()
     subscriber->disconnectFromHost();
 }
 
+void EcWidget::stopAllThread()
+{
+    if (threadAIS && subscriber) {
+        // Minta worker berhenti
+        emit stopAISConnection();
+
+        // Minta thread keluar event loop
+        threadAIS->quit();
+
+        // Tunggu thread benar-benar mati
+        threadAIS->wait();
+
+        // Bersihkan
+        subscriber->deleteLater();
+        threadAIS->deleteLater();
+
+        subscriber = nullptr;
+        threadAIS = nullptr;
+    }
+}
+
+
 void EcWidget::processData(double lat, double lon, double cog, double sog, double hdg, double spd, double dep, double yaw, double z){
     QString nmea = AIVDOEncoder::encodeAIVDO1(lat, lon, cog, sog/10, hdg, 0, 1);
 

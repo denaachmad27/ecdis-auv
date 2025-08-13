@@ -292,7 +292,6 @@ void MainWindow::createStatusBar(){
     QHBoxLayout *reconnectStatusLayout = new QHBoxLayout(reconnectStatusWidget);
     reconnectStatusLayout->setContentsMargins(5, 0, 10, 0); // spasi antar widget
     reconnectStatusLayout->addWidget(reconnectStatusText);
-    reconnectStatusText->setText("HAHA Boy");
 
     // Tambahkan ke paling kiri status bar
     statusBar()->addWidget(reconnectStatusWidget);
@@ -1745,9 +1744,13 @@ void MainWindow::closeEvent(QCloseEvent *e)
 {
   if (ecchart)
   {
+    ecchart->stopAllThread();
+
     delete ecchart;
     ecchart = NULL;
   }
+
+
   e->accept();
 }
 
@@ -4337,10 +4340,16 @@ void MainWindow::setDarkMode() {
     dark.setColor(QPalette::Highlight, QColor(42,130,218));
     dark.setColor(QPalette::HighlightedText, Qt::black);
 
+    // Atur warna khusus saat disabled
+    dark.setColor(QPalette::Disabled, QPalette::ButtonText, QColor(128,128,128));
+    dark.setColor(QPalette::Disabled, QPalette::Text, QColor(128,128,128));
+    dark.setColor(QPalette::Disabled, QPalette::WindowText, QColor(128,128,128));
+
     applyPalette(dark, "Fusion");
     setTitleBarDark(true);
 
     updateIcon(true);
+    emit routePanel->updateThemeAwareStyles();
 }
 
 void MainWindow::setLightMode() {
@@ -4351,6 +4360,7 @@ void MainWindow::setLightMode() {
     setTitleBarDark(false);
 
     updateIcon(false);
+    emit routePanel->updateThemeAwareStyles();
 }
 
 void MainWindow::setDimMode()
@@ -4372,10 +4382,16 @@ void MainWindow::setDimMode()
     dimPalette.setColor(QPalette::Highlight, QColor(70, 100, 150));
     dimPalette.setColor(QPalette::HighlightedText, Qt::white);
 
+    // Atur warna khusus saat disabled
+    dimPalette.setColor(QPalette::Disabled, QPalette::ButtonText, QColor(128,128,128));
+    dimPalette.setColor(QPalette::Disabled, QPalette::Text, QColor(128,128,128));
+    dimPalette.setColor(QPalette::Disabled, QPalette::WindowText, QColor(128,128,128));
+
     applyPalette(dimPalette, "Fusion");
     setTitleBarDark(true);
 
     updateIcon(true);
+    emit routePanel->updateThemeAwareStyles();
 }
 
 void MainWindow::updateIcon(bool dark){
