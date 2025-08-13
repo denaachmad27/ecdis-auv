@@ -1,6 +1,7 @@
 #include "routepanel.h"
 #include "ecwidget.h"
 #include "routedetaildialog.h"
+#include "appconfig.h"
 #include <QContextMenuEvent>
 #include <QInputDialog>
 #include <QTimer>
@@ -30,12 +31,12 @@ void RouteTreeItem::updateFromRouteInfo(const RouteInfo& routeInfo)
 
 void RouteTreeItem::updateDisplayText(const RouteInfo& routeInfo)
 {
-    // Show (active) status for attached routes and (hidden) for invisible routes
-    QString activeStatus = routeInfo.attachedToShip ? " (active)" : "";
-    QString visibilityStatus = !routeInfo.visible ? " [HIDDEN]" : "";
+    // Simplified, professional route display without excessive emojis
+    QString activeStatus = routeInfo.attachedToShip ? " (Active)" : "";
+    QString visibilityStatus = !routeInfo.visible ? " [Hidden]" : "";
     
-    // Route format: icon + name + distance + status (remove manual arrows, let Qt handle them)
-    QString routeText = QString("🗺️ %1 - 📏 %2 NM%3%4")
+    // Clean, professional route format
+    QString routeText = QString("%1 - %2 NM%3%4")
                        .arg(routeInfo.name)
                        .arg(routeInfo.totalDistance, 0, 'f', 1)
                        .arg(activeStatus)
@@ -43,54 +44,41 @@ void RouteTreeItem::updateDisplayText(const RouteInfo& routeInfo)
     
     setText(0, routeText);
     
-    // Use colors based on attachment status to match getRouteColor() logic
-    QColor color;
-    if (routeInfo.routeId == 0) {
-        color = QColor(255, 140, 0); // Orange for single waypoints
-    } else {
-        // Check if any route is attached to ship
-        bool hasAttachedRoute = ecWidget ? ecWidget->hasAttachedRoute() : false;
-        
-        if (!hasAttachedRoute) {
-            color = QColor(0, 100, 255); // Blue for all routes when none attached
-        } else if (routeInfo.attachedToShip) {
-            color = QColor(0, 100, 255); // Blue for attached route
-        } else {
-            color = QColor(128, 128, 128); // Gray for non-attached routes
-        }
-    }
+    // Theme-aware colors
+    bool isDark = AppConfig::isDark();
+    QColor defaultTextColor = isDark ? QColor(255, 255, 255) : QColor(0, 0, 0);
+    QColor activeColor = isDark ? QColor(100, 200, 255) : QColor(0, 100, 200);
+    QColor inactiveColor = isDark ? QColor(160, 160, 160) : QColor(120, 120, 120);
+    QColor hiddenColor = isDark ? QColor(100, 100, 100) : QColor(150, 150, 150);
     
-    // Set custom font for modern look - increased size
+    // Professional font styling
     QFont font = this->font(0);
     font.setFamily("Segoe UI");
-    font.setPixelSize(14); // Increased from 12 to 14
+    font.setPixelSize(13); // Slightly smaller for better hierarchy
     font.setWeight(QFont::Medium);
     
-    // Apply different styling for hidden routes
+    // Apply styling based on route state
     if (!routeInfo.visible) {
-        // Hidden routes - gray out everything with stronger contrast
-        setData(0, Qt::ForegroundRole, QBrush(QColor(100, 100, 100))); // Even darker gray for better visibility
-        setData(0, Qt::BackgroundRole, QBrush(QColor(245, 245, 245))); // Light gray background
-        
-        // Make font italic and lighter for hidden routes
+        // Hidden routes - muted appearance
+        setData(0, Qt::ForegroundRole, QBrush(hiddenColor));
         QFont hiddenFont = font;
         hiddenFont.setItalic(true);
         hiddenFont.setWeight(QFont::Light);
         setFont(0, hiddenFont);
+    } else if (routeInfo.attachedToShip) {
+        // Active route - prominent but not overwhelming
+        setData(0, Qt::ForegroundRole, QBrush(activeColor));
+        QFont activeFont = font;
+        activeFont.setWeight(QFont::DemiBold);
+        setFont(0, activeFont);
     } else {
-        // Visible routes - normal styling with proper colors
-        setData(0, Qt::ForegroundRole, QBrush(color));
-        
-        // Add subtle background for route items to distinguish from waypoints
-        if (routeInfo.attachedToShip) {
-            setData(0, Qt::BackgroundRole, QBrush(QColor(230, 245, 255))); // Light blue for active route
-        } else {
-            setData(0, Qt::BackgroundRole, QBrush(QColor(248, 248, 248))); // Light gray for inactive routes
-        }
-        
-        // Apply normal font for visible routes
+        // Inactive route - normal appearance
+        setData(0, Qt::ForegroundRole, QBrush(defaultTextColor));
         setFont(0, font);
     }
+    
+    // Remove custom background colors - let the tree widget handle it
+    setData(0, Qt::BackgroundRole, QVariant());
 }
 
 // ====== WaypointTreeItem Implementation ======
@@ -109,47 +97,44 @@ void WaypointTreeItem::updateWaypoint(const EcWidget::Waypoint& waypoint)
 
 void WaypointTreeItem::updateDisplayText()
 {
-    // Use different icons and better visual indicators for active/inactive waypoints
-    QString icon = waypointData.active ? "📍" : "⭕";
-    QString statusText = waypointData.active ? "" : " [INACTIVE]";
+    // Clean, professional waypoint display without excessive icons
+    QString statusText = waypointData.active ? "" : " [Inactive]";
+    QString waypointName = waypointData.label.isEmpty() ? QString("WP-%1").arg(waypointData.routeId) : waypointData.label;
     
-    // Better coordinate formatting - 6 decimal places for precision
-    QString waypointText = QString("%1 %2 (%3°, %4°)%5")
-                          .arg(icon)
-                          .arg(waypointData.label.isEmpty() ? QString("WP-%1").arg(waypointData.routeId) : waypointData.label)
-                          .arg(waypointData.lat, 0, 'f', 6)
-                          .arg(waypointData.lon, 0, 'f', 6)
+    // Compact coordinate formatting - 4 decimal places for readability
+    QString waypointText = QString("  %1 (%2°, %3°)%4")
+                          .arg(waypointName)
+                          .arg(waypointData.lat, 0, 'f', 4)
+                          .arg(waypointData.lon, 0, 'f', 4)
                           .arg(statusText);
     
     setText(0, waypointText);
     
-    // Improved styling with larger font
+    // Theme-aware colors
+    bool isDark = AppConfig::isDark();
+    QColor defaultTextColor = isDark ? QColor(220, 220, 220) : QColor(60, 60, 60);
+    QColor inactiveColor = isDark ? QColor(140, 140, 140) : QColor(150, 150, 150);
+    
+    // Professional font styling - smaller than route items for hierarchy
     QFont font = this->font(0);
     font.setFamily("Segoe UI");
-    font.setPixelSize(12); // Increased from 10 to 12
+    font.setPixelSize(11); // Smaller than route items for better hierarchy
     font.setWeight(QFont::Normal);
-    font.setItalic(false); // Remove italic for better readability
-    setFont(0, font);
     
-    // Better color differentiation for active/inactive waypoints
+    // Apply styling based on waypoint state
     if (waypointData.active) {
-        setData(0, Qt::ForegroundRole, QBrush(QColor(40, 120, 40))); // Dark green for active
-        setData(0, Qt::BackgroundRole, QBrush(QColor(245, 255, 245))); // Very light green background
-        
-        // Normal font weight for active waypoints
-        QFont activeFont = font;
-        activeFont.setWeight(QFont::Normal);
-        setFont(0, activeFont);
+        setData(0, Qt::ForegroundRole, QBrush(defaultTextColor));
+        setFont(0, font);
     } else {
-        setData(0, Qt::ForegroundRole, QBrush(QColor(120, 120, 120))); // Darker gray for better contrast
-        setData(0, Qt::BackgroundRole, QBrush(QColor(245, 245, 245))); // Light gray background
-        
-        // Strike-through effect for inactive waypoints
+        // Inactive waypoints - muted appearance
+        setData(0, Qt::ForegroundRole, QBrush(inactiveColor));
         QFont inactiveFont = font;
-        inactiveFont.setStrikeOut(true); // Add strike-through
-        inactiveFont.setWeight(QFont::Light); // Lighter weight
+        inactiveFont.setItalic(true);
         setFont(0, inactiveFont);
     }
+    
+    // Remove custom background colors - let the tree widget handle it
+    setData(0, Qt::BackgroundRole, QVariant());
 }
 
 // ====== RoutePanel Implementation ======
@@ -161,6 +146,60 @@ RoutePanel::RoutePanel(EcWidget* ecWidget, QWidget *parent)
     setupConnections();
     
     // Don't refresh here - will be refreshed by MainWindow after data is loaded
+}
+
+// Helper function to get theme-aware colors
+QString RoutePanel::getThemeAwareStyleSheet()
+{
+    bool isDark = AppConfig::isDark();
+    
+    // Define color scheme based on theme
+    QString bgColor = isDark ? "#2b2b2b" : "#ffffff";
+    QString borderColor = isDark ? "#555555" : "#d0d0d0";
+    QString textColor = isDark ? "#ffffff" : "#000000";
+    QString selectedBgColor = isDark ? "#0078d4" : "#3daee9";
+    QString selectedTextColor = "#ffffff";
+    QString hoverBgColor = isDark ? "#404040" : "#e3f2fd";
+    QString hoverTextColor = isDark ? "#ffffff" : "#333333";
+    QString alternateRowColor = isDark ? "#333333" : "#f8f8f8";
+    
+    return QString(
+        "QTreeWidget {"
+        "    background-color: %1;"
+        "    border: 1px solid %2;"
+        "    border-radius: 6px;"
+        "    padding: 4px;"
+        "    color: %3;"
+        "    alternate-background-color: %8;"
+        "}"
+        "QTreeWidget::item {"
+        "    padding: 6px 8px;"
+        "    border: none;"
+        "    min-height: 28px;"
+        "    border-radius: 3px;"
+        "    color: %3;"
+        "}"
+        "QTreeWidget::item:selected {"
+        "    background-color: %4;"
+        "    color: %5;"
+        "    border-radius: 3px;"
+        "}"
+        "QTreeWidget::item:hover {"
+        "    background-color: %6;"
+        "    color: %7;"
+        "    border-radius: 3px;"
+        "}"
+    ).arg(bgColor).arg(borderColor).arg(textColor).arg(selectedBgColor)
+     .arg(selectedTextColor).arg(hoverBgColor).arg(hoverTextColor).arg(alternateRowColor);
+}
+
+void RoutePanel::updateThemeAwareStyles()
+{
+    // Update tree widget styling when theme changes
+    routeTreeWidget->setStyleSheet(getThemeAwareStyleSheet());
+    
+    // Force refresh of all items to update their colors
+    refreshRouteList();
 }
 
 RoutePanel::~RoutePanel()
@@ -246,45 +285,12 @@ void RoutePanel::setupUI()
     routeTreeWidget->setContextMenuPolicy(Qt::CustomContextMenu);
     routeTreeWidget->setHeaderHidden(true); // Hide column headers
     routeTreeWidget->setRootIsDecorated(true); // Show expand/collapse indicators
-    routeTreeWidget->setIndentation(25); // Increased indentation for better hierarchy
+    routeTreeWidget->setIndentation(20); // Reduced indentation for more compact layout
     routeTreeWidget->setUniformRowHeights(false); // Allow different row heights
+    routeTreeWidget->setAlternatingRowColors(true); // Enable alternating row colors
     
-    // Set better styling for improved readability
-    routeTreeWidget->setStyleSheet(
-        "QTreeWidget {"
-        "    background-color: #ffffff;"
-        "    border: 1px solid #d0d0d0;"
-        "    border-radius: 4px;"
-        "    padding: 5px;"
-        "}"
-        "QTreeWidget::item {"
-        "    padding: 8px 4px;" // Increased padding for better spacing
-        "    border: none;"
-        "    min-height: 24px;" // Minimum height for better touch targets
-        "}"
-        "QTreeWidget::item:selected {"
-        "    background-color: #3daee9;"
-        "    color: #ffffff;"
-        "    border-radius: 3px;"
-        "}"
-        "QTreeWidget::item:hover {"
-        "    background-color: #e3f2fd;"
-        "    border-radius: 3px;"
-        "}"
-        "QTreeWidget::branch {"
-        "    width: 20px;"
-        "    height: 20px;"
-        "    margin: 2px;"
-        "}"
-        "QTreeWidget::branch:has-children:closed {"
-        "    background: transparent;"
-        "    border: none;"
-        "}"
-        "QTreeWidget::branch:has-children:open {"
-        "    background: transparent;"
-        "    border: none;"
-        "}"
-    );
+    // Apply theme-aware professional styling
+    routeTreeWidget->setStyleSheet(getThemeAwareStyleSheet());
     
     listGroupLayout->addWidget(routeTreeWidget);
     
@@ -580,12 +586,16 @@ void RoutePanel::refreshRouteList()
             WaypointTreeItem* waypointItem = new WaypointTreeItem(waypoint, routeItem);
         }
         
-        // Expand by default to show waypoints
-        routeItem->setExpanded(true);
+        qDebug() << "[ROUTE-PANEL] Route" << routeId << "created with" << routeWaypoints.size() << "children";
         
         // Remember item to re-select
         if (routeId == previouslySelectedRouteId) {
             itemToSelect = routeItem;
+            // Expand selected route to show its waypoints
+            routeItem->setExpanded(true);
+        } else {
+            // Start collapsed to show expand/collapse indicators
+            routeItem->setExpanded(false);
         }
     }
     
@@ -619,8 +629,8 @@ void RoutePanel::refreshRouteList()
     int routeCount = routeGroups.size();
     titleLabel->setText(QString("Routes (%1)").arg(routeCount));
     
-    // Expand all routes to show waypoints by default
-    routeTreeWidget->expandAll();
+    // Note: Routes are now collapsed by default to show expand/collapse indicators
+    // Only selected route will be expanded automatically
 }
 
 RouteInfo RoutePanel::calculateRouteInfo(int routeId)

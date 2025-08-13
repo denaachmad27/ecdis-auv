@@ -85,6 +85,9 @@ public slots:
     void onWaypointAdded();
     void onWaypointRemoved();
     void onWaypointMoved();
+    
+    // Theme update
+    void updateThemeAwareStyles();
 
 private slots:
     void onRouteItemSelectionChanged();
@@ -129,6 +132,9 @@ signals:
 
 private:
     EcWidget* ecWidget;
+    
+    // Helper functions
+    QString getThemeAwareStyleSheet();
     
     // UI Components
     QVBoxLayout* mainLayout;
