@@ -1482,9 +1482,25 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
     // ========== END GUARDZONE CREATION MODE ==========
 
     // ========== EXISTING WAYPOINT AND OTHER LOGIC (unchanged) ==========
-    waypointLeftClick(e);
-    waypointRightClick(e);
+    // waypointLeftClick(e);
+    // waypointRightClick(e);
+
+    // =================== IMPORTANT!! DONT CHANGE IT! ===================
+    if (e->button() == Qt::LeftButton){
+        EcCoordinate lat, lon;
+        if (XyToLatLon(e->x(), e->y(), lat, lon)){
+            SetCenter(lat, lon);
+            Draw();
+        }
+    }
+    else {
+        pickX = e->x();
+        pickY = e->y();
+        emit mouseRightClick(e->pos());
+    }
+    // ===================================================================
 }
+
 
 void EcWidget::waypointRightClick(QMouseEvent *e){
     if (e->button() == Qt::RightButton && !creatingGuardZone) {
@@ -2853,18 +2869,6 @@ void EcWidget::ownShipDraw(){
                 painter.end();
             }
         }
-
-        if (SettingsManager::instance().data().orientationMode == HeadUp){
-            SetHeading(ownShipData.heading);
-            mainWindow->oriEditSetText(ownShipData.heading);
-        }
-        else if (SettingsManager::instance().data().orientationMode == CourseUp){
-            SetHeading(SettingsManager::instance().data().courseUpHeading);
-            mainWindow->oriEditSetText(SettingsManager::instance().data().courseUpHeading);
-        }
-        else {
-            SetHeading(0);
-        }
     }
 }
 
@@ -3009,6 +3013,21 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon, double head )
                         SetCenter(lat, lon);
                     }
                 }
+            }
+
+            DisplayOrientationMode orientation = SettingsManager::instance().data().orientationMode;
+
+            if (orientation == HeadUp){
+                SetHeading(head);
+                mainWindow->oriEditSetText(head);
+            }
+            else if (orientation  == CourseUp){
+                SetHeading(SettingsManager::instance().data().courseUpHeading);
+                mainWindow->oriEditSetText(SettingsManager::instance().data().courseUpHeading);
+            }
+            else {
+                SetHeading(0);
+                mainWindow->oriEditSetText(0);
             }
         }
 
@@ -10961,7 +10980,6 @@ void EcWidget::drawObstacleDetectionArea(QPainter& painter)
         qDebug() << "[OBSTACLE-AREA-ERROR] Unknown exception in drawObstacleDetectionArea";
     }
 }
-
 
 // SHOW ALERT (PRIVATE HELPER)
 void EcWidget::showShipGuardianAlert(const QList<DetectedObstacle>& obstacles)

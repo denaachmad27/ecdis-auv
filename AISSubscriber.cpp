@@ -39,6 +39,8 @@ void AISSubscriber::connectToHost(const QString &host, quint16 port) {
     }
 
     hasReceivedData = false;
+    dataFlag = false;
+
     socket = new QTcpSocket(this);
 
     connect(socket, &QTcpSocket::readyRead, this, &AISSubscriber::onReadyRead);
@@ -63,6 +65,7 @@ void AISSubscriber::disconnectFromHost() {
         socket = nullptr;
 
         qDebug() << "Disconnected";
+        dataFlag = false;
 
         // Tunda reconnect 100ms supaya socket benar-benar bersih
         QTimer::singleShot(100, this, &AISSubscriber::tryReconnect);
@@ -76,6 +79,7 @@ void AISSubscriber::onReadyRead() {
     // CONNECTION STATUS FLAG
     if (!hasReceivedData) {
         hasReceivedData = true;
+        dataFlag = true;
         qDebug() << "[AISSubscriber] Data received. Connection status changed";
 
         reconnectAttempts = 0; // reset backoff karena berhasil konek

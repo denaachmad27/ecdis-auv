@@ -15,6 +15,7 @@ public:
     explicit AISSubscriber(QObject *parent = nullptr);
     //void disconnectFromHost();
     void setMainWindow(MainWindow*);
+    bool dataFlag = false;
 
 signals:
     // OWNSHIP
