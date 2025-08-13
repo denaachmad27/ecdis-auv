@@ -58,6 +58,7 @@ class WaypointTreeItem : public QTreeWidgetItem
 public:
     WaypointTreeItem(const EcWidget::Waypoint& waypoint, RouteTreeItem* parent = nullptr);
     const EcWidget::Waypoint& getWaypoint() const { return waypointData; }
+    void updateWaypoint(const EcWidget::Waypoint& waypoint);
     
 private:
     EcWidget::Waypoint waypointData;
@@ -89,16 +90,35 @@ private slots:
     void onRouteItemSelectionChanged();
     void onRouteItemDoubleClicked(QTreeWidgetItem* item, int column);
     void onShowContextMenu(const QPoint& pos);
+    
+    // Route Management
     void onAddRouteClicked();
-    void onRouteDetailClicked();
+    void onImportRoutesClicked();
+    void onExportRoutesClicked();
     void onRefreshClicked();
     void onClearAllClicked();
+    
+    // Waypoint Management
+    void onAddWaypointClicked();
+    void onEditWaypointClicked();
+    void onDeleteWaypointClicked();
+    void onMoveWaypointUp();
+    void onMoveWaypointDown();
+    void onDuplicateWaypointClicked();
+    void onToggleWaypointActive();
     
     // Context menu actions
     void onRenameRoute();
     void onToggleRouteVisibility();
     void onDeleteRoute();
     void onRouteProperties();
+    void onEditWaypointFromContext();
+    void onDuplicateWaypointFromContext();
+    void onDeleteWaypointFromContext();
+    void onInsertWaypointBefore();
+    void onInsertWaypointAfter();
+    void onMoveWaypointUpFromContext();
+    void onMoveWaypointDownFromContext();
 
 signals:
     void routeSelectionChanged(int routeId);
@@ -115,12 +135,23 @@ private:
     QLabel* titleLabel;
     QTreeWidget* routeTreeWidget;
     
-    // Control buttons
-    QHBoxLayout* buttonLayout;
+    // Control buttons - Route Management
+    QHBoxLayout* routeButtonLayout;
     QPushButton* addRouteButton;
-    QPushButton* routeDetailButton;
+    QPushButton* importRoutesButton;
+    QPushButton* exportRoutesButton;
     QPushButton* refreshButton;
     QPushButton* clearAllButton;
+    
+    // Waypoint Management buttons
+    QHBoxLayout* waypointButtonLayout;
+    QPushButton* addWaypointButton;
+    QPushButton* editWaypointButton;
+    QPushButton* deleteWaypointButton;
+    QPushButton* moveUpButton;
+    QPushButton* moveDownButton;
+    QPushButton* duplicateWaypointButton;
+    QPushButton* toggleActiveButton;
     
     // Route info group
     QGroupBox* routeInfoGroup;
@@ -141,13 +172,39 @@ private:
     QString formatTime(double hours);
     void updateRouteInfoDisplay(const RouteInfo& info);
     void clearRouteInfoDisplay();
+    void updateButtonStates();
+    void updateWaypointButtonStates();
+    
+    // Waypoint operations
+    void showWaypointEditDialog(int routeId, int waypointIndex = -1);
+    void reorderWaypoint(int routeId, int fromIndex, int toIndex);
+    void duplicateWaypoint(int routeId, int waypointIndex);
+    void toggleWaypointActiveStatus(int routeId, int waypointIndex);
+    QTreeWidgetItem* getSelectedWaypointItem();
+    int getWaypointIndex(QTreeWidgetItem* waypointItem);
+    int getRouteIdFromItem(QTreeWidgetItem* item);
     
     // Context menu
-    QMenu* contextMenu;
-    QAction* renameAction;
+    QMenu* routeContextMenu;
+    QMenu* waypointContextMenu;
+    
+    // Route context menu actions
+    QAction* renameRouteAction;
     QAction* toggleVisibilityAction;
-    QAction* deleteAction;
-    QAction* propertiesAction;
+    QAction* deleteRouteAction;
+    QAction* routePropertiesAction;
+    QAction* duplicateRouteAction;
+    QAction* exportRouteAction;
+    
+    // Waypoint context menu actions
+    QAction* editWaypointAction;
+    QAction* duplicateWaypointAction;
+    QAction* deleteWaypointAction;
+    QAction* toggleActiveAction;
+    QAction* insertBeforeAction;
+    QAction* insertAfterAction;
+    QAction* moveUpAction;
+    QAction* moveDownAction;
     
     int selectedRouteId;
     QList<EcWidget::Waypoint> getWaypointById(int routeId);

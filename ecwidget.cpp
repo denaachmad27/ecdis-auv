@@ -3319,8 +3319,8 @@ bool EcWidget::deleteRoute(int routeId)
     saveWaypoints();
     saveRoutes();
     
-    // Force complete chart redraw
-    forceRedraw();
+    // Force complete chart redraw - use Draw() to ensure AIS and waypoints are redrawn
+    Draw();
     
     return true;
 }
@@ -3333,7 +3333,7 @@ void EcWidget::setRouteVisibility(int routeId, bool visible)
     
     routeVisibility[routeId] = visible;
     qDebug() << "[ROUTE] *** Set route" << routeId << "visibility to" << visible;
-    forceRedraw(); // Refresh chart
+    Draw(); // Use Draw() instead of forceRedraw() to ensure AIS and waypoints are redrawn
 }
 
 bool EcWidget::isRouteVisible(int routeId) const
@@ -3444,8 +3444,8 @@ void EcWidget::attachRouteToShip(int routeId)
     saveRoutes();
     qDebug() << "[ROUTE] Saved routes with preserved visibility";
     
-    // Refresh chart to update colors
-    forceRedraw();
+    // Refresh chart to update colors - use Draw() to ensure AIS and waypoints are redrawn
+    Draw(); // Changed from forceRedraw() to Draw() to include drawAISCell() and waypointDraw()
 }
 
 int EcWidget::getAttachedRouteId() const
@@ -5240,6 +5240,40 @@ void EcWidget::updateWaypointActiveStatus(int routeId, double lat, double lon, b
     
     qDebug() << "[WAYPOINT-ACTIVE] Warning: Waypoint not found at" << lat << "," << lon
              << "in route" << routeId;
+}
+
+void EcWidget::replaceWaypointsForRoute(int routeId, const QList<Waypoint>& newWaypoints)
+{
+    qDebug() << "[WAYPOINT-REORDER] Replacing waypoints for route" << routeId << "with" << newWaypoints.size() << "waypoints";
+    
+    // Remove all existing waypoints for this route
+    waypointList.erase(
+        std::remove_if(waypointList.begin(), waypointList.end(),
+            [routeId](const Waypoint& wp) {
+                return wp.routeId == routeId;
+            }),
+        waypointList.end());
+    
+    // Add new waypoints in the specified order
+    for (const auto& wp : newWaypoints) {
+        if (wp.routeId == routeId) { // Only add waypoints for this route
+            waypointList.append(wp);
+        }
+    }
+    
+    qDebug() << "[WAYPOINT-REORDER] Total waypoints after reorder:" << waypointList.size();
+    
+    // Save updated waypoints
+    saveWaypoints();
+    
+    // Update routes to reflect new waypoint order
+    updateRouteFromWaypoint(routeId);
+    
+    // Redraw to show new order
+    Draw();
+    
+    // Emit signal to refresh UI components
+    emit waypointCreated();
 }
 
 bool EcWidget::exportWaypointsToFile(const QString &filename)

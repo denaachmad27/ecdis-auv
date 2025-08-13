@@ -272,6 +272,7 @@ public:
   QList<Waypoint> getWaypoints() const { return waypointList; }
   void clearWaypoints();
   void updateWaypointActiveStatus(int routeId, double lat, double lon, bool active);
+  void replaceWaypointsForRoute(int routeId, const QList<Waypoint>& newWaypoints);
   
   // Route management functions
   void saveRoutes();

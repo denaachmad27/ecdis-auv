@@ -5,6 +5,14 @@
 #include <QInputDialog>
 #include <QTimer>
 #include <QtMath>
+#include <QFormLayout>
+#include <QTime>
+#include <QFileDialog>
+#include <QStandardPaths>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QFile>
 
 // ====== RouteTreeItem Implementation ======
 
@@ -22,14 +30,16 @@ void RouteTreeItem::updateFromRouteInfo(const RouteInfo& routeInfo)
 
 void RouteTreeItem::updateDisplayText(const RouteInfo& routeInfo)
 {
-    // Show (active) status for attached routes
+    // Show (active) status for attached routes and (hidden) for invisible routes
     QString activeStatus = routeInfo.attachedToShip ? " (active)" : "";
+    QString visibilityStatus = !routeInfo.visible ? " [HIDDEN]" : "";
     
-    // Route format: icon + name + distance + active status
-    QString routeText = QString("🗺️ %1 - 📏 %2 NM%3")
+    // Route format: icon + name + distance + status (remove manual arrows, let Qt handle them)
+    QString routeText = QString("🗺️ %1 - 📏 %2 NM%3%4")
                        .arg(routeInfo.name)
                        .arg(routeInfo.totalDistance, 0, 'f', 1)
-                       .arg(activeStatus);
+                       .arg(activeStatus)
+                       .arg(visibilityStatus);
     
     setText(0, routeText);
     
@@ -50,15 +60,37 @@ void RouteTreeItem::updateDisplayText(const RouteInfo& routeInfo)
         }
     }
     
-    // Create modern gradient-like effect with the route color
-    setData(0, Qt::ForegroundRole, QBrush(color));
-    
-    // Set custom font for modern look
+    // Set custom font for modern look - increased size
     QFont font = this->font(0);
     font.setFamily("Segoe UI");
-    font.setPixelSize(12);
+    font.setPixelSize(14); // Increased from 12 to 14
     font.setWeight(QFont::Medium);
-    setFont(0, font);
+    
+    // Apply different styling for hidden routes
+    if (!routeInfo.visible) {
+        // Hidden routes - gray out everything with stronger contrast
+        setData(0, Qt::ForegroundRole, QBrush(QColor(100, 100, 100))); // Even darker gray for better visibility
+        setData(0, Qt::BackgroundRole, QBrush(QColor(245, 245, 245))); // Light gray background
+        
+        // Make font italic and lighter for hidden routes
+        QFont hiddenFont = font;
+        hiddenFont.setItalic(true);
+        hiddenFont.setWeight(QFont::Light);
+        setFont(0, hiddenFont);
+    } else {
+        // Visible routes - normal styling with proper colors
+        setData(0, Qt::ForegroundRole, QBrush(color));
+        
+        // Add subtle background for route items to distinguish from waypoints
+        if (routeInfo.attachedToShip) {
+            setData(0, Qt::BackgroundRole, QBrush(QColor(230, 245, 255))); // Light blue for active route
+        } else {
+            setData(0, Qt::BackgroundRole, QBrush(QColor(248, 248, 248))); // Light gray for inactive routes
+        }
+        
+        // Apply normal font for visible routes
+        setFont(0, font);
+    }
 }
 
 // ====== WaypointTreeItem Implementation ======
@@ -69,25 +101,55 @@ WaypointTreeItem::WaypointTreeItem(const EcWidget::Waypoint& waypoint, RouteTree
     updateDisplayText();
 }
 
+void WaypointTreeItem::updateWaypoint(const EcWidget::Waypoint& waypoint)
+{
+    waypointData = waypoint;
+    updateDisplayText();
+}
+
 void WaypointTreeItem::updateDisplayText()
 {
-    QString waypointText = QString("📍 %1 (%.4f°N, %.4f°E)")
+    // Use different icons and better visual indicators for active/inactive waypoints
+    QString icon = waypointData.active ? "📍" : "⭕";
+    QString statusText = waypointData.active ? "" : " [INACTIVE]";
+    
+    // Better coordinate formatting - 6 decimal places for precision
+    QString waypointText = QString("%1 %2 (%3°, %4°)%5")
+                          .arg(icon)
                           .arg(waypointData.label.isEmpty() ? QString("WP-%1").arg(waypointData.routeId) : waypointData.label)
-                          .arg(waypointData.lat, 0, 'f', 4)
-                          .arg(waypointData.lon, 0, 'f', 4);
+                          .arg(waypointData.lat, 0, 'f', 6)
+                          .arg(waypointData.lon, 0, 'f', 6)
+                          .arg(statusText);
     
     setText(0, waypointText);
     
-    // Style waypoint items differently
+    // Improved styling with larger font
     QFont font = this->font(0);
     font.setFamily("Segoe UI");
-    font.setPixelSize(10);
+    font.setPixelSize(12); // Increased from 10 to 12
     font.setWeight(QFont::Normal);
-    font.setItalic(true);
+    font.setItalic(false); // Remove italic for better readability
     setFont(0, font);
     
-    // Use lighter color for waypoint items to show hierarchy
-    setData(0, Qt::ForegroundRole, QBrush(QColor(120, 120, 120)));
+    // Better color differentiation for active/inactive waypoints
+    if (waypointData.active) {
+        setData(0, Qt::ForegroundRole, QBrush(QColor(40, 120, 40))); // Dark green for active
+        setData(0, Qt::BackgroundRole, QBrush(QColor(245, 255, 245))); // Very light green background
+        
+        // Normal font weight for active waypoints
+        QFont activeFont = font;
+        activeFont.setWeight(QFont::Normal);
+        setFont(0, activeFont);
+    } else {
+        setData(0, Qt::ForegroundRole, QBrush(QColor(120, 120, 120))); // Darker gray for better contrast
+        setData(0, Qt::BackgroundRole, QBrush(QColor(245, 245, 245))); // Light gray background
+        
+        // Strike-through effect for inactive waypoints
+        QFont inactiveFont = font;
+        inactiveFont.setStrikeOut(true); // Add strike-through
+        inactiveFont.setWeight(QFont::Light); // Lighter weight
+        setFont(0, inactiveFont);
+    }
 }
 
 // ====== RoutePanel Implementation ======
@@ -119,13 +181,62 @@ void RoutePanel::setupUI()
     titleLabel->setStyleSheet("QLabel { font-weight: bold; font-size: 14px; }");
     mainLayout->addWidget(titleLabel);
     
-    // Routes Detail button - consistent with other panel buttons
-    routeDetailButton = new QPushButton("Routes Detail");
-    routeDetailButton->setToolTip("View detailed information about all routes");
-    mainLayout->addWidget(routeDetailButton);
+    // Route Management Buttons Group
+    QGroupBox* routeManagementGroup = new QGroupBox("Route Management");
+    routeManagementGroup->setStyleSheet(
+        "QGroupBox {"
+        "    font-weight: bold;"
+        "    border: 2px solid #c0c0c0;"
+        "    border-radius: 5px;"
+        "    margin-top: 10px;"
+        "    padding-top: 10px;"
+        "}"
+        "QGroupBox::title {"
+        "    subcontrol-origin: margin;"
+        "    left: 10px;"
+        "    padding: 0 5px 0 5px;"
+        "}"
+    );
+    QHBoxLayout* routeManagementLayout = new QHBoxLayout();
+    routeManagementGroup->setLayout(routeManagementLayout);
+    
+    addRouteButton = new QPushButton("Add Route");
+    importRoutesButton = new QPushButton("Import");
+    exportRoutesButton = new QPushButton("Export");
+    refreshButton = new QPushButton("Refresh");
+    clearAllButton = new QPushButton("Clear All");
+    
+    addRouteButton->setToolTip("Create new route");
+    importRoutesButton->setToolTip("Import routes from CSV file");
+    exportRoutesButton->setToolTip("Export all routes to CSV file");
+    refreshButton->setToolTip("Refresh route list");
+    clearAllButton->setToolTip("Clear all routes");
+    
+    routeManagementLayout->addWidget(addRouteButton);
+    routeManagementLayout->addWidget(importRoutesButton);
+    routeManagementLayout->addWidget(exportRoutesButton);
+    routeManagementLayout->addStretch();
+    routeManagementLayout->addWidget(refreshButton);
+    routeManagementLayout->addWidget(clearAllButton);
+    
+    mainLayout->addWidget(routeManagementGroup);
     
     // Route List Group (consistent with CPA/TCPA GroupBox style)
     QGroupBox* routeListGroup = new QGroupBox("Available Routes");
+    routeListGroup->setStyleSheet(
+        "QGroupBox {"
+        "    font-weight: bold;"
+        "    border: 2px solid #c0c0c0;"
+        "    border-radius: 5px;"
+        "    margin-top: 10px;"
+        "    padding-top: 10px;"
+        "}"
+        "QGroupBox::title {"
+        "    subcontrol-origin: margin;"
+        "    left: 10px;"
+        "    padding: 0 5px 0 5px;"
+        "}"
+    );
     QVBoxLayout* listGroupLayout = new QVBoxLayout();
     routeListGroup->setLayout(listGroupLayout);
     
@@ -135,14 +246,102 @@ void RoutePanel::setupUI()
     routeTreeWidget->setContextMenuPolicy(Qt::CustomContextMenu);
     routeTreeWidget->setHeaderHidden(true); // Hide column headers
     routeTreeWidget->setRootIsDecorated(true); // Show expand/collapse indicators
-    routeTreeWidget->setIndentation(20); // Set indentation for child items
+    routeTreeWidget->setIndentation(25); // Increased indentation for better hierarchy
+    routeTreeWidget->setUniformRowHeights(false); // Allow different row heights
+    
+    // Set better styling for improved readability
+    routeTreeWidget->setStyleSheet(
+        "QTreeWidget {"
+        "    background-color: #ffffff;"
+        "    border: 1px solid #d0d0d0;"
+        "    border-radius: 4px;"
+        "    padding: 5px;"
+        "}"
+        "QTreeWidget::item {"
+        "    padding: 8px 4px;" // Increased padding for better spacing
+        "    border: none;"
+        "    min-height: 24px;" // Minimum height for better touch targets
+        "}"
+        "QTreeWidget::item:selected {"
+        "    background-color: #3daee9;"
+        "    color: #ffffff;"
+        "    border-radius: 3px;"
+        "}"
+        "QTreeWidget::item:hover {"
+        "    background-color: #e3f2fd;"
+        "    border-radius: 3px;"
+        "}"
+        "QTreeWidget::branch {"
+        "    width: 20px;"
+        "    height: 20px;"
+        "    margin: 2px;"
+        "}"
+        "QTreeWidget::branch:has-children:closed {"
+        "    background: transparent;"
+        "    border: none;"
+        "}"
+        "QTreeWidget::branch:has-children:open {"
+        "    background: transparent;"
+        "    border: none;"
+        "}"
+    );
+    
     listGroupLayout->addWidget(routeTreeWidget);
     
-    // Add route button in list group
-    addRouteButton = new QPushButton("Add New Route");
-    addRouteButton->setToolTip("Create new route");
-    listGroupLayout->addWidget(addRouteButton);
+    // Waypoint Management Buttons Group
+    QGroupBox* waypointManagementGroup = new QGroupBox("Waypoint Management");
+    waypointManagementGroup->setStyleSheet(
+        "QGroupBox {"
+        "    font-weight: bold;"
+        "    border: 2px solid #c0c0c0;"
+        "    border-radius: 5px;"
+        "    margin-top: 10px;"
+        "    padding-top: 10px;"
+        "}"
+        "QGroupBox::title {"
+        "    subcontrol-origin: margin;"
+        "    left: 10px;"
+        "    padding: 0 5px 0 5px;"
+        "}"
+    );
+    QGridLayout* waypointManagementLayout = new QGridLayout();
+    waypointManagementGroup->setLayout(waypointManagementLayout);
     
+    addWaypointButton = new QPushButton("+ Add");
+    editWaypointButton = new QPushButton("✎ Edit");
+    deleteWaypointButton = new QPushButton("✕ Delete");
+    moveUpButton = new QPushButton("↑ Up");
+    moveDownButton = new QPushButton("↓ Down");
+    duplicateWaypointButton = new QPushButton("⧉ Duplicate");
+    toggleActiveButton = new QPushButton("●/○ Toggle");
+    
+    addWaypointButton->setToolTip("Add new waypoint to selected route");
+    editWaypointButton->setToolTip("Edit selected waypoint");
+    deleteWaypointButton->setToolTip("Delete selected waypoint");
+    moveUpButton->setToolTip("Move waypoint up in route");
+    moveDownButton->setToolTip("Move waypoint down in route");
+    duplicateWaypointButton->setToolTip("Duplicate selected waypoint");
+    toggleActiveButton->setToolTip("Toggle waypoint active/inactive status");
+    
+    // Initially disable all waypoint buttons until selection
+    editWaypointButton->setEnabled(false);
+    deleteWaypointButton->setEnabled(false);
+    moveUpButton->setEnabled(false);
+    moveDownButton->setEnabled(false);
+    duplicateWaypointButton->setEnabled(false);
+    toggleActiveButton->setEnabled(false);
+    
+    // Layout buttons in 2 rows
+    waypointManagementLayout->addWidget(addWaypointButton, 0, 0);
+    waypointManagementLayout->addWidget(editWaypointButton, 0, 1);
+    waypointManagementLayout->addWidget(deleteWaypointButton, 0, 2);
+    waypointManagementLayout->addWidget(duplicateWaypointButton, 0, 3);
+    waypointManagementLayout->addWidget(moveUpButton, 1, 0);
+    waypointManagementLayout->addWidget(moveDownButton, 1, 1);
+    waypointManagementLayout->addWidget(toggleActiveButton, 1, 2);
+    waypointManagementLayout->setColumnStretch(3, 1); // Stretch last column
+    
+    listGroupLayout->addWidget(waypointManagementGroup);
     mainLayout->addWidget(routeListGroup);
     
     // Route Details Group (similar to Own Ship group in CPA/TCPA)
@@ -188,24 +387,32 @@ void RoutePanel::setupUI()
 
     // Button states are now managed by updateRouteInfoDisplay based on actual attachment status
     
-    // Control Buttons (consistent with CPA/TCPA button layout)
-    QHBoxLayout* buttonLayout = new QHBoxLayout();
-    refreshButton = new QPushButton("Refresh");
-    clearAllButton = new QPushButton("Clear All");
+    // Context menus
+    // Route context menu
+    routeContextMenu = new QMenu(this);
+    renameRouteAction = routeContextMenu->addAction("Rename Route");
+    duplicateRouteAction = routeContextMenu->addAction("Duplicate Route");
+    exportRouteAction = routeContextMenu->addAction("Export Route");
+    routeContextMenu->addSeparator();
+    toggleVisibilityAction = routeContextMenu->addAction("Toggle Visibility");
+    routeContextMenu->addSeparator();
+    deleteRouteAction = routeContextMenu->addAction("Delete Route");
+    routePropertiesAction = routeContextMenu->addAction("Properties");
     
-    buttonLayout->addWidget(refreshButton);
-    buttonLayout->addStretch();
-    buttonLayout->addWidget(clearAllButton);
-    
-    mainLayout->addLayout(buttonLayout);
-    
-    // Context menu (simple)
-    contextMenu = new QMenu(this);
-    renameAction = contextMenu->addAction("Rename Route");
-    toggleVisibilityAction = contextMenu->addAction("Toggle Visibility");
-    contextMenu->addSeparator();
-    deleteAction = contextMenu->addAction("Delete Route");
-    propertiesAction = contextMenu->addAction("Properties");
+    // Waypoint context menu
+    waypointContextMenu = new QMenu(this);
+    editWaypointAction = waypointContextMenu->addAction("Edit Waypoint");
+    duplicateWaypointAction = waypointContextMenu->addAction("Duplicate Waypoint");
+    waypointContextMenu->addSeparator();
+    insertBeforeAction = waypointContextMenu->addAction("Insert Waypoint Before");
+    insertAfterAction = waypointContextMenu->addAction("Insert Waypoint After");
+    waypointContextMenu->addSeparator();
+    moveUpAction = waypointContextMenu->addAction("Move Up");
+    moveDownAction = waypointContextMenu->addAction("Move Down");
+    waypointContextMenu->addSeparator();
+    toggleActiveAction = waypointContextMenu->addAction("Toggle Active/Inactive");
+    waypointContextMenu->addSeparator();
+    deleteWaypointAction = waypointContextMenu->addAction("Delete Waypoint");
     
     clearRouteInfoDisplay();
 }
@@ -220,11 +427,21 @@ void RoutePanel::setupConnections()
     connect(routeTreeWidget, &QTreeWidget::customContextMenuRequested, 
             this, &RoutePanel::onShowContextMenu);
     
-    // Button connections
+    // Route Management Button connections
     connect(addRouteButton, &QPushButton::clicked, this, &RoutePanel::onAddRouteClicked);
-    connect(routeDetailButton, &QPushButton::clicked, this, &RoutePanel::onRouteDetailClicked);
+    connect(importRoutesButton, &QPushButton::clicked, this, &RoutePanel::onImportRoutesClicked);
+    connect(exportRoutesButton, &QPushButton::clicked, this, &RoutePanel::onExportRoutesClicked);
     connect(refreshButton, &QPushButton::clicked, this, &RoutePanel::onRefreshClicked);
     connect(clearAllButton, &QPushButton::clicked, this, &RoutePanel::onClearAllClicked);
+    
+    // Waypoint Management Button connections
+    connect(addWaypointButton, &QPushButton::clicked, this, &RoutePanel::onAddWaypointClicked);
+    connect(editWaypointButton, &QPushButton::clicked, this, &RoutePanel::onEditWaypointClicked);
+    connect(deleteWaypointButton, &QPushButton::clicked, this, &RoutePanel::onDeleteWaypointClicked);
+    connect(moveUpButton, &QPushButton::clicked, this, &RoutePanel::onMoveWaypointUp);
+    connect(moveDownButton, &QPushButton::clicked, this, &RoutePanel::onMoveWaypointDown);
+    connect(duplicateWaypointButton, &QPushButton::clicked, this, &RoutePanel::onDuplicateWaypointClicked);
+    connect(toggleActiveButton, &QPushButton::clicked, this, &RoutePanel::onToggleWaypointActive);
     
     // Checkbox connections
     connect(visibilityCheckBox, &QCheckBox::toggled, [this](bool checked) {
@@ -289,11 +506,31 @@ void RoutePanel::setupConnections()
         }
     });
     
-    // Context menu connections
-    connect(renameAction, &QAction::triggered, this, &RoutePanel::onRenameRoute);
+    // Route Context menu connections
+    connect(renameRouteAction, &QAction::triggered, this, &RoutePanel::onRenameRoute);
+    connect(duplicateRouteAction, &QAction::triggered, [this]() { 
+        // TODO: Implement duplicate route functionality
+        emit statusMessage("Duplicate route functionality not yet implemented");
+    });
+    connect(exportRouteAction, &QAction::triggered, [this]() {
+        // TODO: Implement export single route functionality  
+        emit statusMessage("Export single route functionality not yet implemented");
+    });
     connect(toggleVisibilityAction, &QAction::triggered, this, &RoutePanel::onToggleRouteVisibility);
-    connect(deleteAction, &QAction::triggered, this, &RoutePanel::onDeleteRoute);
-    connect(propertiesAction, &QAction::triggered, this, &RoutePanel::onRouteProperties);
+    connect(deleteRouteAction, &QAction::triggered, this, &RoutePanel::onDeleteRoute);
+    connect(routePropertiesAction, &QAction::triggered, this, &RoutePanel::onRouteProperties);
+    
+    // Waypoint Context menu connections
+    connect(editWaypointAction, &QAction::triggered, this, &RoutePanel::onEditWaypointFromContext);
+    connect(duplicateWaypointAction, &QAction::triggered, this, &RoutePanel::onDuplicateWaypointFromContext);
+    connect(insertBeforeAction, &QAction::triggered, this, &RoutePanel::onInsertWaypointBefore);
+    connect(insertAfterAction, &QAction::triggered, this, &RoutePanel::onInsertWaypointAfter);
+    connect(moveUpAction, &QAction::triggered, this, &RoutePanel::onMoveWaypointUpFromContext);
+    connect(moveDownAction, &QAction::triggered, this, &RoutePanel::onMoveWaypointDownFromContext);
+    connect(toggleActiveAction, &QAction::triggered, [this]() {
+        onToggleWaypointActive(); // Reuse button functionality
+    });
+    connect(deleteWaypointAction, &QAction::triggered, this, &RoutePanel::onDeleteWaypointFromContext);
 }
 
 void RoutePanel::refreshRouteList()
@@ -556,6 +793,80 @@ void RoutePanel::clearRouteInfoDisplay()
     routeInfoGroup->setStyleSheet(routeInfoGroup->styleSheet().replace("#007bff", "#e9ecef"));
 }
 
+// ====== Helper Functions ======
+
+void RoutePanel::updateButtonStates()
+{
+    QTreeWidgetItem* currentItem = routeTreeWidget->currentItem();
+    
+    // Route selection states
+    bool hasRouteSelected = (selectedRouteId > 0);
+    
+    // Waypoint selection states
+    bool hasWaypointSelected = false;
+    bool canMoveUp = false;
+    bool canMoveDown = false;
+    WaypointTreeItem* waypointItem = dynamic_cast<WaypointTreeItem*>(currentItem);
+    
+    if (waypointItem && waypointItem->parent()) {
+        hasWaypointSelected = true;
+        
+        // Check if waypoint can move up/down
+        QTreeWidgetItem* parent = waypointItem->parent();
+        int waypointIndex = parent->indexOfChild(waypointItem);
+        canMoveUp = (waypointIndex > 0);
+        canMoveDown = (waypointIndex < parent->childCount() - 1);
+    }
+    
+    // Enable Add Waypoint button only if route is selected
+    addWaypointButton->setEnabled(hasRouteSelected);
+    
+    // Enable waypoint operations only if waypoint is selected
+    editWaypointButton->setEnabled(hasWaypointSelected);
+    deleteWaypointButton->setEnabled(hasWaypointSelected);
+    duplicateWaypointButton->setEnabled(hasWaypointSelected);
+    toggleActiveButton->setEnabled(hasWaypointSelected);
+    
+    // Enable move buttons based on position
+    moveUpButton->setEnabled(canMoveUp);
+    moveDownButton->setEnabled(canMoveDown);
+    
+    // Enable export if there are any routes
+    bool hasRoutes = (routeTreeWidget->topLevelItemCount() > 0);
+    exportRoutesButton->setEnabled(hasRoutes);
+}
+
+QTreeWidgetItem* RoutePanel::getSelectedWaypointItem()
+{
+    QTreeWidgetItem* currentItem = routeTreeWidget->currentItem();
+    return dynamic_cast<WaypointTreeItem*>(currentItem);
+}
+
+int RoutePanel::getWaypointIndex(QTreeWidgetItem* waypointItem)
+{
+    if (!waypointItem || !waypointItem->parent()) return -1;
+    return waypointItem->parent()->indexOfChild(waypointItem);
+}
+
+int RoutePanel::getRouteIdFromItem(QTreeWidgetItem* item)
+{
+    if (!item) return -1;
+    
+    // If it's a waypoint, get route ID from parent
+    WaypointTreeItem* waypointItem = dynamic_cast<WaypointTreeItem*>(item);
+    if (waypointItem) {
+        return waypointItem->getWaypoint().routeId;
+    }
+    
+    // If it's a route, get route ID directly
+    RouteTreeItem* routeItem = dynamic_cast<RouteTreeItem*>(item);
+    if (routeItem) {
+        return routeItem->getRouteId();
+    }
+    
+    return -1;
+}
+
 // ====== Slots Implementation ======
 
 void RoutePanel::onRouteCreated()
@@ -629,6 +940,7 @@ void RoutePanel::onRouteItemSelectionChanged()
     if (!currentItem) {
         clearRouteInfoDisplay();
         selectedRouteId = -1;
+        updateButtonStates();
         return;
     }
     
@@ -650,6 +962,9 @@ void RoutePanel::onRouteItemSelectionChanged()
             emit routeSelectionChanged(selectedRouteId);
             emit statusMessage(QString("Selected waypoint from Route %1").arg(selectedRouteId));
         }
+        
+        // Update button states for waypoint selection
+        updateButtonStates();
         return;
     }
     
@@ -674,6 +989,9 @@ void RoutePanel::onRouteItemSelectionChanged()
         // Emit status message for route selection
         emit statusMessage(QString("Selected Route %1").arg(selectedRouteId));
     }
+    
+    // Update button states for route selection
+    updateButtonStates();
 }
 
 void RoutePanel::onRouteItemDoubleClicked(QTreeWidgetItem* item, int column)
@@ -691,8 +1009,16 @@ void RoutePanel::onRouteItemDoubleClicked(QTreeWidgetItem* item, int column)
 void RoutePanel::onShowContextMenu(const QPoint& pos)
 {
     QTreeWidgetItem* item = routeTreeWidget->itemAt(pos);
-    if (item && dynamic_cast<RouteTreeItem*>(item)) { // Only show context menu for route items, not waypoints
-        contextMenu->exec(routeTreeWidget->mapToGlobal(pos));
+    if (!item) return;
+    
+    if (dynamic_cast<RouteTreeItem*>(item)) {
+        // Route item - show route context menu
+        selectedRouteId = dynamic_cast<RouteTreeItem*>(item)->getRouteId();
+        routeContextMenu->exec(routeTreeWidget->mapToGlobal(pos));
+    } else if (dynamic_cast<WaypointTreeItem*>(item)) {
+        // Waypoint item - show waypoint context menu
+        routeTreeWidget->setCurrentItem(item); // Select the waypoint
+        waypointContextMenu->exec(routeTreeWidget->mapToGlobal(pos));
     }
 }
 
@@ -702,15 +1028,6 @@ void RoutePanel::onAddRouteClicked()
     emit requestCreateRoute();
 }
 
-void RoutePanel::onRouteDetailClicked()
-{
-    // Create and show the route detail dialog
-    RouteDetailDialog* dialog = new RouteDetailDialog(ecWidget, this);
-    dialog->exec();
-    dialog->deleteLater();
-    
-    emit statusMessage("Routes detail dialog opened");
-}
 
 void RoutePanel::onRefreshClicked()
 {
@@ -933,4 +1250,561 @@ RouteTreeItem* RoutePanel::findRouteItem(int routeId)
 bool RoutePanel::isWaypointItem(QTreeWidgetItem* item) const
 {
     return dynamic_cast<WaypointTreeItem*>(item) != nullptr;
+}
+
+// ====== Waypoint Operation Functions ======
+
+void RoutePanel::showWaypointEditDialog(int routeId, int waypointIndex)
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(waypointIndex >= 0 ? "Edit Waypoint" : "Add Waypoint");
+    dialog.setModal(true);
+    dialog.resize(400, 300);
+    
+    QFormLayout* layout = new QFormLayout(&dialog);
+    
+    QLineEdit* labelEdit = new QLineEdit();
+    QLineEdit* latEdit = new QLineEdit();
+    QLineEdit* lonEdit = new QLineEdit();
+    QLineEdit* remarkEdit = new QLineEdit();
+    QCheckBox* activeCheck = new QCheckBox();
+    
+    // Set validators
+    latEdit->setValidator(new QDoubleValidator(-90.0, 90.0, 6, &dialog));
+    lonEdit->setValidator(new QDoubleValidator(-180.0, 180.0, 6, &dialog));
+    
+    activeCheck->setChecked(true);
+    
+    // If editing, populate with existing data
+    if (waypointIndex >= 0 && ecWidget) {
+        QList<EcWidget::Waypoint> waypoints = ecWidget->getWaypoints();
+        QList<EcWidget::Waypoint> routeWaypoints;
+        
+        for (const auto& wp : waypoints) {
+            if (wp.routeId == routeId) {
+                routeWaypoints.append(wp);
+            }
+        }
+        
+        if (waypointIndex < routeWaypoints.size()) {
+            const EcWidget::Waypoint& wp = routeWaypoints[waypointIndex];
+            labelEdit->setText(wp.label);
+            latEdit->setText(QString::number(wp.lat, 'f', 6));
+            lonEdit->setText(QString::number(wp.lon, 'f', 6));
+            remarkEdit->setText(wp.remark);
+            activeCheck->setChecked(wp.active);
+        }
+    } else {
+        // Auto-generate label for new waypoint
+        labelEdit->setText(QString("WP-%1").arg(QTime::currentTime().toString("hhmmss")));
+    }
+    
+    layout->addRow("Label:", labelEdit);
+    layout->addRow("Latitude:", latEdit);
+    layout->addRow("Longitude:", lonEdit);
+    layout->addRow("Remark:", remarkEdit);
+    layout->addRow("Active:", activeCheck);
+    
+    QHBoxLayout* buttonLayout = new QHBoxLayout();
+    QPushButton* okBtn = new QPushButton("OK");
+    QPushButton* cancelBtn = new QPushButton("Cancel");
+    
+    buttonLayout->addStretch();
+    buttonLayout->addWidget(okBtn);
+    buttonLayout->addWidget(cancelBtn);
+    
+    layout->addRow(buttonLayout);
+    
+    connect(okBtn, &QPushButton::clicked, &dialog, &QDialog::accept);
+    connect(cancelBtn, &QPushButton::clicked, &dialog, &QDialog::reject);
+    
+    if (dialog.exec() == QDialog::Accepted) {
+        double lat = latEdit->text().toDouble();
+        double lon = lonEdit->text().toDouble();
+        QString label = labelEdit->text().trimmed();
+        QString remark = remarkEdit->text().trimmed();
+        bool active = activeCheck->isChecked();
+        
+        // Validate coordinates
+        if (lat < -90.0 || lat > 90.0 || lon < -180.0 || lon > 180.0) {
+            QMessageBox::warning(this, "Invalid Coordinates", 
+                "Please enter valid coordinates:\nLatitude: -90.0 to 90.0\nLongitude: -180.0 to 180.0");
+            return;
+        }
+        
+        if (ecWidget) {
+            if (waypointIndex >= 0) {
+                // Edit existing waypoint - delete old and create new
+                QList<EcWidget::Waypoint> waypoints = ecWidget->getWaypoints();
+                QList<EcWidget::Waypoint> routeWaypoints;
+                
+                for (const auto& wp : waypoints) {
+                    if (wp.routeId == routeId) {
+                        routeWaypoints.append(wp);
+                    }
+                }
+                
+                if (waypointIndex < routeWaypoints.size()) {
+                    // Update the waypoint data
+                    routeWaypoints[waypointIndex].lat = lat;
+                    routeWaypoints[waypointIndex].lon = lon;
+                    routeWaypoints[waypointIndex].label = label;
+                    routeWaypoints[waypointIndex].remark = remark;
+                    routeWaypoints[waypointIndex].active = active;
+                    
+                    // Replace waypoints for route
+                    ecWidget->replaceWaypointsForRoute(routeId, routeWaypoints);
+                    refreshRouteList();
+                    emit statusMessage(QString("Waypoint '%1' updated successfully").arg(label));
+                }
+            } else {
+                // Add new waypoint
+                ecWidget->createWaypointFromForm(lat, lon, label, remark, routeId, active);
+                refreshRouteList();
+                emit statusMessage(QString("Waypoint '%1' added successfully").arg(label));
+            }
+        }
+    }
+}
+
+void RoutePanel::reorderWaypoint(int routeId, int fromIndex, int toIndex)
+{
+    if (!ecWidget) return;
+    
+    QList<EcWidget::Waypoint> waypoints = ecWidget->getWaypoints();
+    QList<EcWidget::Waypoint> routeWaypoints;
+    
+    // Get waypoints for this route
+    for (const auto& wp : waypoints) {
+        if (wp.routeId == routeId) {
+            routeWaypoints.append(wp);
+        }
+    }
+    
+    if (fromIndex < 0 || fromIndex >= routeWaypoints.size() || 
+        toIndex < 0 || toIndex >= routeWaypoints.size()) {
+        return;
+    }
+    
+    // Perform the reorder
+    EcWidget::Waypoint waypoint = routeWaypoints.takeAt(fromIndex);
+    routeWaypoints.insert(toIndex, waypoint);
+    
+    // Update EcWidget with new order
+    ecWidget->replaceWaypointsForRoute(routeId, routeWaypoints);
+    refreshRouteList();
+    
+    // Restore selection to the moved waypoint
+    RouteTreeItem* routeItem = findRouteItem(routeId);
+    if (routeItem && routeItem->childCount() > toIndex) {
+        QTreeWidgetItem* movedWaypoint = routeItem->child(toIndex);
+        routeTreeWidget->setCurrentItem(movedWaypoint);
+        routeItem->setExpanded(true);
+    }
+    
+    emit statusMessage(QString("Waypoint moved from position %1 to %2")
+        .arg(fromIndex + 1).arg(toIndex + 1));
+}
+
+void RoutePanel::duplicateWaypoint(int routeId, int waypointIndex)
+{
+    if (!ecWidget) return;
+    
+    QList<EcWidget::Waypoint> waypoints = ecWidget->getWaypoints();
+    QList<EcWidget::Waypoint> routeWaypoints;
+    
+    // Get waypoints for this route
+    for (const auto& wp : waypoints) {
+        if (wp.routeId == routeId) {
+            routeWaypoints.append(wp);
+        }
+    }
+    
+    if (waypointIndex < 0 || waypointIndex >= routeWaypoints.size()) {
+        return;
+    }
+    
+    // Create duplicate waypoint
+    EcWidget::Waypoint originalWaypoint = routeWaypoints[waypointIndex];
+    EcWidget::Waypoint duplicateWaypoint = originalWaypoint;
+    
+    // Modify label to indicate it's a duplicate
+    QString originalLabel = duplicateWaypoint.label;
+    if (originalLabel.isEmpty()) {
+        originalLabel = QString("WP-%1").arg(waypointIndex + 1);
+    }
+    duplicateWaypoint.label = QString("%1-Copy").arg(originalLabel);
+    
+    // Add duplicate to the end of the route
+    routeWaypoints.append(duplicateWaypoint);
+    
+    // Update EcWidget with new waypoints
+    ecWidget->replaceWaypointsForRoute(routeId, routeWaypoints);
+    refreshRouteList();
+    
+    // Select the new duplicate waypoint
+    RouteTreeItem* routeItem = findRouteItem(routeId);
+    if (routeItem && routeItem->childCount() > 0) {
+        QTreeWidgetItem* newWaypoint = routeItem->child(routeItem->childCount() - 1);
+        routeTreeWidget->setCurrentItem(newWaypoint);
+        routeItem->setExpanded(true);
+    }
+    
+    emit statusMessage(QString("Waypoint '%1' duplicated as '%2'")
+        .arg(originalLabel).arg(duplicateWaypoint.label));
+}
+
+void RoutePanel::toggleWaypointActiveStatus(int routeId, int waypointIndex)
+{
+    if (!ecWidget) return;
+    
+    QList<EcWidget::Waypoint> waypoints = ecWidget->getWaypoints();
+    QList<EcWidget::Waypoint> routeWaypoints;
+    
+    // Get waypoints for this route
+    for (const auto& wp : waypoints) {
+        if (wp.routeId == routeId) {
+            routeWaypoints.append(wp);
+        }
+    }
+    
+    if (waypointIndex < 0 || waypointIndex >= routeWaypoints.size()) {
+        return;
+    }
+    
+    // Toggle active status
+    EcWidget::Waypoint& waypoint = routeWaypoints[waypointIndex];
+    waypoint.active = !waypoint.active;
+    
+    // Update EcWidget
+    ecWidget->updateWaypointActiveStatus(routeId, waypoint.lat, waypoint.lon, waypoint.active);
+    refreshRouteList();
+    
+    // Restore selection
+    RouteTreeItem* routeItem = findRouteItem(routeId);
+    if (routeItem && routeItem->childCount() > waypointIndex) {
+        QTreeWidgetItem* waypointItem = routeItem->child(waypointIndex);
+        routeTreeWidget->setCurrentItem(waypointItem);
+        routeItem->setExpanded(true);
+    }
+    
+    QString statusText = waypoint.active ? "activated" : "deactivated";
+    emit statusMessage(QString("Waypoint '%1' %2")
+        .arg(waypoint.label.isEmpty() ? QString("WP-%1").arg(waypointIndex + 1) : waypoint.label)
+        .arg(statusText));
+}
+
+// ====== Route Management Slot Implementations ======
+
+void RoutePanel::onImportRoutesClicked()
+{
+    QString fileName = QFileDialog::getOpenFileName(
+        this,
+        "Import Routes from JSON",
+        QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation),
+        "JSON Files (*.json);;All Files (*)"
+    );
+    
+    if (fileName.isEmpty()) return;
+    
+    QFile file(fileName);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QMessageBox::warning(this, "Import Error", "Could not open file for reading.");
+        return;
+    }
+    
+    QByteArray jsonData = file.readAll();
+    file.close();
+    
+    QJsonParseError parseError;
+    QJsonDocument jsonDoc = QJsonDocument::fromJson(jsonData, &parseError);
+    
+    if (parseError.error != QJsonParseError::NoError) {
+        QMessageBox::warning(this, "Import Error", 
+            QString("Failed to parse JSON file:\n%1").arg(parseError.errorString()));
+        return;
+    }
+    
+    QJsonObject rootObject = jsonDoc.object();
+    QJsonArray routesArray = rootObject["routes"].toArray();
+    
+    if (routesArray.isEmpty()) {
+        QMessageBox::information(this, "Import Warning", "No routes found in the selected file.");
+        return;
+    }
+    
+    int importedCount = 0;
+    for (const QJsonValue& routeValue : routesArray) {
+        QJsonObject routeObject = routeValue.toObject();
+        
+        // Create route in EcWidget
+        EcWidget::Route route;
+        route.routeId = ecWidget->getNextAvailableRouteId();
+        route.name = routeObject["name"].toString();
+        route.description = routeObject["description"].toString();
+        route.totalDistance = routeObject["totalDistance"].toDouble();
+        route.estimatedTime = routeObject["estimatedTime"].toDouble();
+        
+        // Import waypoints
+        QJsonArray waypointsArray = routeObject["waypoints"].toArray();
+        for (const QJsonValue& waypointValue : waypointsArray) {
+            QJsonObject waypointObject = waypointValue.toObject();
+            
+            double lat = waypointObject["lat"].toDouble();
+            double lon = waypointObject["lon"].toDouble();
+            QString label = waypointObject["label"].toString();
+            QString remark = waypointObject["remark"].toString();
+            double turningRadius = waypointObject["turningRadius"].toDouble(0.5);
+            bool active = waypointObject["active"].toBool(true);
+            
+            // Create waypoint using EcWidget method
+            ecWidget->createWaypointFromForm(lat, lon, label, remark, route.routeId, turningRadius, active);
+        }
+        
+        importedCount++;
+    }
+    
+    // Refresh the route list
+    refreshRouteList();
+    
+    QMessageBox::information(this, "Import Complete", 
+        QString("Successfully imported %1 routes from:\n%2").arg(importedCount).arg(fileName));
+    
+    emit statusMessage(QString("Imported %1 routes successfully").arg(importedCount));
+}
+
+void RoutePanel::onExportRoutesClicked()
+{
+    if (!ecWidget) {
+        QMessageBox::warning(this, "Export Error", "No chart widget available.");
+        return;
+    }
+    
+    // Check if there are routes to export
+    QList<EcWidget::Route> routeList = ecWidget->getRoutes();
+    if (routeList.isEmpty()) {
+        QMessageBox::information(this, "Export Warning", "No routes available to export.");
+        return;
+    }
+    
+    QString fileName = QFileDialog::getSaveFileName(
+        this,
+        "Export Routes to JSON",
+        QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + "/exported_routes.json",
+        "JSON Files (*.json);;All Files (*)"
+    );
+    
+    if (fileName.isEmpty()) return;
+    
+    // Use EcWidget's existing JSON export functionality
+    // First, save current routes to ensure data is up-to-date
+    ecWidget->saveRoutes();
+    
+    // Read the saved routes file and copy it to export location
+    QString routeFilePath = ecWidget->getRouteFilePath();
+    
+    if (!QFile::exists(routeFilePath)) {
+        QMessageBox::warning(this, "Export Error", "Routes file not found. Please ensure routes are saved.");
+        return;
+    }
+    
+    if (!QFile::copy(routeFilePath, fileName)) {
+        // If copy fails, try manual export
+        QFile sourceFile(routeFilePath);
+        if (!sourceFile.open(QIODevice::ReadOnly)) {
+            QMessageBox::warning(this, "Export Error", "Could not read routes file.");
+            return;
+        }
+        
+        QFile destFile(fileName);
+        if (!destFile.open(QIODevice::WriteOnly)) {
+            QMessageBox::warning(this, "Export Error", "Could not create export file.");
+            return;
+        }
+        
+        destFile.write(sourceFile.readAll());
+        sourceFile.close();
+        destFile.close();
+    }
+    
+    QMessageBox::information(this, "Export Complete", 
+        QString("Routes exported successfully to:\n%1").arg(fileName));
+    
+    emit statusMessage(QString("Exported %1 routes successfully").arg(routeList.size()));
+}
+
+// ====== Waypoint Management Slot Implementations ======
+
+void RoutePanel::onAddWaypointClicked()
+{
+    if (selectedRouteId <= 0) {
+        QMessageBox::information(this, "No Route Selected", "Please select a route first to add waypoints.");
+        return;
+    }
+    
+    showWaypointEditDialog(selectedRouteId);
+}
+
+void RoutePanel::onEditWaypointClicked()
+{
+    WaypointTreeItem* waypointItem = dynamic_cast<WaypointTreeItem*>(getSelectedWaypointItem());
+    if (!waypointItem) {
+        QMessageBox::information(this, "No Waypoint Selected", "Please select a waypoint to edit.");
+        return;
+    }
+    
+    int routeId = waypointItem->getWaypoint().routeId;
+    int waypointIndex = getWaypointIndex(waypointItem);
+    showWaypointEditDialog(routeId, waypointIndex);
+}
+
+void RoutePanel::onDeleteWaypointClicked()
+{
+    WaypointTreeItem* waypointItem = dynamic_cast<WaypointTreeItem*>(getSelectedWaypointItem());
+    if (!waypointItem) {
+        QMessageBox::information(this, "No Waypoint Selected", "Please select a waypoint to delete.");
+        return;
+    }
+    
+    const EcWidget::Waypoint& waypoint = waypointItem->getWaypoint();
+    
+    int ret = QMessageBox::question(this, "Delete Waypoint", 
+        QString("Are you sure you want to delete waypoint '%1'?")
+        .arg(waypoint.label.isEmpty() ? QString("WP-%1").arg(getWaypointIndex(waypointItem) + 1) : waypoint.label),
+        QMessageBox::Yes | QMessageBox::No);
+        
+    if (ret == QMessageBox::Yes) {
+        if (ecWidget) {
+            // Get all waypoints for this route
+            QList<EcWidget::Waypoint> allWaypoints = ecWidget->getWaypoints();
+            QList<EcWidget::Waypoint> routeWaypoints;
+            
+            for (const auto& wp : allWaypoints) {
+                if (wp.routeId == waypoint.routeId) {
+                    routeWaypoints.append(wp);
+                }
+            }
+            
+            // Find and remove the waypoint
+            for (int i = 0; i < routeWaypoints.size(); ++i) {
+                if (qAbs(routeWaypoints[i].lat - waypoint.lat) < 0.000001 && 
+                    qAbs(routeWaypoints[i].lon - waypoint.lon) < 0.000001) {
+                    routeWaypoints.removeAt(i);
+                    break;
+                }
+            }
+            
+            // Replace waypoints for route
+            ecWidget->replaceWaypointsForRoute(waypoint.routeId, routeWaypoints);
+            refreshRouteList();
+            emit statusMessage(QString("Waypoint '%1' deleted successfully")
+                .arg(waypoint.label.isEmpty() ? "WP" : waypoint.label));
+        }
+    }
+}
+
+void RoutePanel::onMoveWaypointUp()
+{
+    WaypointTreeItem* waypointItem = dynamic_cast<WaypointTreeItem*>(getSelectedWaypointItem());
+    if (!waypointItem) return;
+    
+    int routeId = waypointItem->getWaypoint().routeId;
+    int fromIndex = getWaypointIndex(waypointItem);
+    int toIndex = fromIndex - 1;
+    
+    if (toIndex >= 0) {
+        reorderWaypoint(routeId, fromIndex, toIndex);
+    }
+}
+
+void RoutePanel::onMoveWaypointDown()
+{
+    WaypointTreeItem* waypointItem = dynamic_cast<WaypointTreeItem*>(getSelectedWaypointItem());
+    if (!waypointItem) return;
+    
+    int routeId = waypointItem->getWaypoint().routeId;
+    int fromIndex = getWaypointIndex(waypointItem);
+    int toIndex = fromIndex + 1;
+    
+    QTreeWidgetItem* parent = waypointItem->parent();
+    if (parent && toIndex < parent->childCount()) {
+        reorderWaypoint(routeId, fromIndex, toIndex);
+    }
+}
+
+void RoutePanel::onDuplicateWaypointClicked()
+{
+    WaypointTreeItem* waypointItem = dynamic_cast<WaypointTreeItem*>(getSelectedWaypointItem());
+    if (!waypointItem) {
+        QMessageBox::information(this, "No Waypoint Selected", "Please select a waypoint to duplicate.");
+        return;
+    }
+    
+    int routeId = waypointItem->getWaypoint().routeId;
+    int waypointIndex = getWaypointIndex(waypointItem);
+    duplicateWaypoint(routeId, waypointIndex);
+}
+
+void RoutePanel::onToggleWaypointActive()
+{
+    WaypointTreeItem* waypointItem = dynamic_cast<WaypointTreeItem*>(getSelectedWaypointItem());
+    if (!waypointItem) {
+        QMessageBox::information(this, "No Waypoint Selected", "Please select a waypoint to toggle active status.");
+        return;
+    }
+    
+    int routeId = waypointItem->getWaypoint().routeId;
+    int waypointIndex = getWaypointIndex(waypointItem);
+    toggleWaypointActiveStatus(routeId, waypointIndex);
+}
+
+// ====== Context Menu Slot Implementations ======
+
+void RoutePanel::onEditWaypointFromContext()
+{
+    onEditWaypointClicked(); // Reuse button functionality
+}
+
+void RoutePanel::onDuplicateWaypointFromContext()
+{
+    onDuplicateWaypointClicked(); // Reuse button functionality
+}
+
+void RoutePanel::onDeleteWaypointFromContext()
+{
+    onDeleteWaypointClicked(); // Reuse button functionality
+}
+
+void RoutePanel::onInsertWaypointBefore()
+{
+    WaypointTreeItem* waypointItem = dynamic_cast<WaypointTreeItem*>(getSelectedWaypointItem());
+    if (!waypointItem) return;
+    
+    int routeId = waypointItem->getWaypoint().routeId;
+    int insertIndex = getWaypointIndex(waypointItem);
+    
+    // TODO: Implement insert waypoint at specific position
+    emit statusMessage("Insert waypoint before functionality not yet implemented");
+}
+
+void RoutePanel::onInsertWaypointAfter()
+{
+    WaypointTreeItem* waypointItem = dynamic_cast<WaypointTreeItem*>(getSelectedWaypointItem());
+    if (!waypointItem) return;
+    
+    int routeId = waypointItem->getWaypoint().routeId;
+    int insertIndex = getWaypointIndex(waypointItem) + 1;
+    
+    // TODO: Implement insert waypoint at specific position
+    emit statusMessage("Insert waypoint after functionality not yet implemented");
+}
+
+void RoutePanel::onMoveWaypointUpFromContext()
+{
+    onMoveWaypointUp(); // Reuse button functionality
+}
+
+void RoutePanel::onMoveWaypointDownFromContext()
+{
+    onMoveWaypointDown(); // Reuse button functionality
 }

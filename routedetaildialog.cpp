@@ -10,6 +10,11 @@
 #include <QRegExp>
 #include <QCheckBox>
 #include <QHBoxLayout>
+#include <QDropEvent>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
+#include <QMimeData>
+#include <algorithm>
 
 RouteDetailDialog::RouteDetailDialog(EcWidget* ecWidget, QWidget *parent)
     : QDialog(parent)
@@ -24,6 +29,7 @@ RouteDetailDialog::RouteDetailDialog(EcWidget* ecWidget, QWidget *parent)
     , routeTree(nullptr)
     , buttonLayout(nullptr)
     , exportAllButton(nullptr)
+    , duplicateWaypointButton(nullptr)
     , closeButton(nullptr)
     , selectedRouteId(-1)
 {
@@ -76,11 +82,11 @@ void RouteDetailDialog::setupUI()
     QVBoxLayout* routesLayout = new QVBoxLayout(routesGroup);
     
     // Add instruction label
-    QLabel* instructionLabel = new QLabel("Click ▶ to expand routes and view waypoints. Check/uncheck Active column to toggle waypoint status.");
+    QLabel* instructionLabel = new QLabel("Click ▶ to expand routes and view waypoints. Check/uncheck Active column to toggle waypoint status. Drag & drop waypoints to reorder them within a route.");
     instructionLabel->setStyleSheet("QLabel { font-style: italic; color: #6c757d; margin: 5px 0px; }");
     routesLayout->addWidget(instructionLabel);
     
-    routeTree = new QTreeWidget();
+    routeTree = new RouteDetailTreeWidget(this);
     routeTree->setColumnCount(6);
     QStringList treeHeaders;
     treeHeaders << "Routes & Waypoints" << "Coordinates" << "Distance" << "Status" << "Active" << "Description";
@@ -96,6 +102,13 @@ void RouteDetailDialog::setupUI()
     routeTree->setMinimumHeight(350);
     routeTree->setExpandsOnDoubleClick(true);
     routeTree->setUniformRowHeights(false); // Allow varying row heights for better presentation
+    
+    // Enable drag & drop for waypoint reordering
+    routeTree->setDragDropMode(QAbstractItemView::InternalMove);
+    routeTree->setDefaultDropAction(Qt::MoveAction);
+    routeTree->setDragEnabled(true);
+    routeTree->setAcceptDrops(true);
+    routeTree->setDropIndicatorShown(true);
     
     // Default styling consistent with RouteFormDialog
     routeTree->setStyleSheet(
@@ -129,8 +142,8 @@ void RouteDetailDialog::setupUI()
     );
     
     // Resize columns for optimal display
-    routeTree->header()->resizeSection(0, 220); // Routes & Waypoints 
-    routeTree->header()->resizeSection(1, 200); // Coordinates - wider for lat,lon display
+    routeTree->header()->resizeSection(0, 280); // Routes & Waypoints - wider for route names
+    routeTree->header()->resizeSection(1, 250); // Coordinates - wider for lat,lon display
     routeTree->header()->resizeSection(2, 100); // Distance - for distance values
     routeTree->header()->resizeSection(3, 80);  // Status
     routeTree->header()->resizeSection(4, 60);  // Active - sized for checkbox
@@ -143,9 +156,15 @@ void RouteDetailDialog::setupUI()
     buttonLayout = new QHBoxLayout();
     
     exportAllButton = new QPushButton("Export All Routes");
+    duplicateWaypointButton = new QPushButton("Duplicate Waypoint");
     closeButton = new QPushButton("Close");
     
+    // Set enabled state for duplicate button (initially disabled until selection)
+    duplicateWaypointButton->setEnabled(false);
+    duplicateWaypointButton->setToolTip("Select a waypoint to duplicate it at the end of the route");
+    
     buttonLayout->addWidget(exportAllButton);
+    buttonLayout->addWidget(duplicateWaypointButton);
     buttonLayout->addStretch();
     buttonLayout->addWidget(closeButton);
     
@@ -162,8 +181,12 @@ void RouteDetailDialog::connectSignals()
     // Tree click signals for toggling active status
     connect(routeTree, &QTreeWidget::itemClicked, this, &RouteDetailDialog::onTreeItemClicked);
     
+    // Waypoint reordering signal
+    connect(routeTree, &RouteDetailTreeWidget::waypointReordered, this, &RouteDetailDialog::onWaypointReordered);
+    
     // Button signals
     connect(exportAllButton, &QPushButton::clicked, this, &RouteDetailDialog::onExportAllClicked);
+    connect(duplicateWaypointButton, &QPushButton::clicked, this, &RouteDetailDialog::onDuplicateWaypoint);
     connect(closeButton, &QPushButton::clicked, this, &RouteDetailDialog::onCloseClicked);
 }
 
@@ -435,8 +458,10 @@ void RouteDetailDialog::updateWaypointRowStyling(QTreeWidgetItem* waypointItem, 
 // Slot implementations
 void RouteDetailDialog::onRouteTreeSelectionChanged()
 {
-    // Optional: Add tree selection handling if needed
-    // Currently the tree is mainly for display, no additional action needed on selection
+    // Enable/disable duplicate button based on selection
+    QTreeWidgetItem* selectedItem = routeTree->currentItem();
+    bool isWaypointSelected = selectedItem && selectedItem->parent(); // Waypoint items have parents
+    duplicateWaypointButton->setEnabled(isWaypointSelected);
 }
 
 void RouteDetailDialog::onTreeItemClicked(QTreeWidgetItem* item, int column)
@@ -495,7 +520,285 @@ void RouteDetailDialog::onExportAllClicked()
                            QString("All routes exported successfully to:\n%1").arg(fileName));
 }
 
+void RouteDetailDialog::onDuplicateWaypoint()
+{
+    QTreeWidgetItem* selectedItem = routeTree->currentItem();
+    if (!selectedItem || !selectedItem->parent()) {
+        QMessageBox::information(this, "No Selection", "Please select a waypoint to duplicate.");
+        return;
+    }
+    
+    // Get route and waypoint information
+    QTreeWidgetItem* routeItem = selectedItem->parent();
+    QString routeText = routeItem->text(0);
+    QRegExp rx("ID: (\\d+)");
+    if (rx.indexIn(routeText) == -1) {
+        return;
+    }
+    
+    int routeId = rx.cap(1).toInt();
+    int waypointIndex = routeItem->indexOfChild(selectedItem);
+    
+    // Find the route data and duplicate the waypoint
+    for (auto& routeData : allRoutesData) {
+        if (routeData.routeId == routeId) {
+            if (waypointIndex >= 0 && waypointIndex < routeData.waypoints.size()) {
+                // Create duplicate waypoint
+                RouteDetailWaypoint originalWaypoint = routeData.waypoints[waypointIndex];
+                RouteDetailWaypoint duplicateWaypoint = originalWaypoint;
+                
+                // Modify label to indicate it's a duplicate
+                QString originalLabel = duplicateWaypoint.label;
+                if (originalLabel.isEmpty()) {
+                    originalLabel = QString("WP-%1").arg(waypointIndex + 1);
+                }
+                duplicateWaypoint.label = QString("%1-Copy").arg(originalLabel);
+                
+                // Add duplicate to the end of the route
+                routeData.waypoints.append(duplicateWaypoint);
+                
+                qDebug() << "[DUPLICATE] Waypoint" << originalLabel << "duplicated in route" << routeId;
+                
+                // Update EcWidget with the new waypoint order
+                if (ecWidget) {
+                    updateEcWidgetWaypointOrder(routeId, routeData.waypoints);
+                }
+                
+                // Refresh the tree display
+                updateRouteTree();
+                
+                // Expand the route to show the new waypoint
+                for (int i = 0; i < routeTree->topLevelItemCount(); ++i) {
+                    QTreeWidgetItem* routeItem = routeTree->topLevelItem(i);
+                    QString routeText = routeItem->text(0);
+                    QRegExp rx("ID: (\\d+)");
+                    if (rx.indexIn(routeText) != -1 && rx.cap(1).toInt() == routeId) {
+                        routeItem->setExpanded(true);
+                        // Select the new duplicate waypoint (last child)
+                        if (routeItem->childCount() > 0) {
+                            QTreeWidgetItem* newWaypoint = routeItem->child(routeItem->childCount() - 1);
+                            routeTree->setCurrentItem(newWaypoint);
+                        }
+                        break;
+                    }
+                }
+                
+                QMessageBox::information(this, "Waypoint Duplicated", 
+                    QString("Waypoint '%1' has been duplicated as '%2' at the end of the route.")
+                    .arg(originalLabel).arg(duplicateWaypoint.label));
+                
+                break;
+            }
+        }
+    }
+}
+
 void RouteDetailDialog::onCloseClicked()
 {
     accept();
+}
+
+void RouteDetailDialog::onWaypointReordered(int routeId, int fromIndex, int toIndex)
+{
+    qDebug() << "[WAYPOINT-REORDER] Route" << routeId << "waypoint moved from" << fromIndex << "to" << toIndex;
+    
+    // Find the route in allRoutesData and reorder waypoints
+    for (auto& routeData : allRoutesData) {
+        if (routeData.routeId == routeId) {
+            if (fromIndex >= 0 && fromIndex < routeData.waypoints.size() &&
+                toIndex >= 0 && toIndex <= routeData.waypoints.size()) {
+                
+                // Manual reordering like RouteFormDialog - remove then insert
+                RouteDetailWaypoint waypoint = routeData.waypoints.takeAt(fromIndex);
+                
+                // Adjust target index if needed (when moving down, index shifts)
+                int adjustedToIndex = toIndex;
+                if (fromIndex < toIndex) {
+                    adjustedToIndex--; // Account for the removed item
+                }
+                
+                routeData.waypoints.insert(adjustedToIndex, waypoint);
+                
+                qDebug() << "[WAYPOINT-REORDER] Moved waypoint" << waypoint.label << "from index" << fromIndex << "to" << adjustedToIndex;
+                
+                // Update EcWidget with new order
+                if (ecWidget) {
+                    updateEcWidgetWaypointOrder(routeId, routeData.waypoints);
+                }
+                
+                // Refresh the tree display to show new order
+                updateRouteTree();
+                
+                // Remember expanded state and restore it
+                for (int i = 0; i < routeTree->topLevelItemCount(); ++i) {
+                    QTreeWidgetItem* routeItem = routeTree->topLevelItem(i);
+                    QString routeText = routeItem->text(0);
+                    QRegExp rx("ID: (\\d+)");
+                    if (rx.indexIn(routeText) != -1 && rx.cap(1).toInt() == routeId) {
+                        routeItem->setExpanded(true); // Keep route expanded after reorder
+                        break;
+                    }
+                }
+                
+                break;
+            }
+        }
+    }
+}
+
+void RouteDetailDialog::updateEcWidgetWaypointOrder(int routeId, const QList<RouteDetailWaypoint>& newOrder)
+{
+    // Get current waypoints from EcWidget
+    QList<EcWidget::Waypoint> allWaypoints = ecWidget->getWaypoints();
+    
+    // Remove old waypoints for this route
+    allWaypoints.erase(
+        std::remove_if(allWaypoints.begin(), allWaypoints.end(),
+            [routeId](const EcWidget::Waypoint& wp) {
+                return wp.routeId == routeId;
+            }),
+        allWaypoints.end());
+    
+    // Add waypoints in new order
+    for (const auto& detailWp : newOrder) {
+        EcWidget::Waypoint ecWp;
+        ecWp.lat = detailWp.lat;
+        ecWp.lon = detailWp.lon;
+        ecWp.label = detailWp.label;
+        ecWp.remark = detailWp.remark;
+        ecWp.turningRadius = detailWp.turningRadius;
+        ecWp.routeId = detailWp.routeId;
+        ecWp.active = detailWp.active;
+        allWaypoints.append(ecWp);
+    }
+    
+    // Update EcWidget with new waypoint order
+    // We need to add a method to EcWidget to update waypoints
+    ecWidget->replaceWaypointsForRoute(routeId, allWaypoints);
+}
+
+// RouteDetailTreeWidget implementation
+RouteDetailTreeWidget::RouteDetailTreeWidget(RouteDetailDialog* parent)
+    : QTreeWidget(parent), parentDialog(parent)
+{
+}
+
+void RouteDetailTreeWidget::dropEvent(QDropEvent* event)
+{
+    QTreeWidgetItem* draggedItem = currentItem();
+    if (!draggedItem || !draggedItem->parent()) {
+        // Only allow waypoint items (which have parents) to be dragged
+        event->ignore();
+        return;
+    }
+    
+    // Store original position before drop
+    QTreeWidgetItem* originalParent = draggedItem->parent();
+    int originalIndex = originalParent->indexOfChild(draggedItem);
+    
+    // Get drop target item
+    QTreeWidgetItem* dropTarget = itemAt(event->pos());
+    if (!dropTarget) {
+        event->ignore();
+        return;
+    }
+    
+    // Determine target position
+    QTreeWidgetItem* targetParent = nullptr;
+    int targetIndex = -1;
+    
+    if (dropTarget->parent()) {
+        // Dropping on a waypoint - insert at its position
+        targetParent = dropTarget->parent();
+        targetIndex = targetParent->indexOfChild(dropTarget);
+    } else {
+        // Dropping on route item - append to end
+        targetParent = dropTarget;
+        targetIndex = targetParent->childCount();
+    }
+    
+    // Only allow drops within the same route
+    if (targetParent != originalParent) {
+        event->ignore();
+        return;
+    }
+    
+    // Don't process drop if same position
+    if (originalIndex == targetIndex) {
+        event->ignore();
+        return;
+    }
+    
+    // Prevent default QTreeWidget behavior and handle manually
+    event->accept();
+    
+    // Extract route ID from parent item text
+    QString routeText = originalParent->text(0);
+    QRegExp rx("ID: (\\d+)");
+    if (rx.indexIn(routeText) != -1) {
+        int routeId = rx.cap(1).toInt();
+        
+        qDebug() << "[DRAG-DROP] Manual reorder in route" << routeId << "from" << originalIndex << "to" << targetIndex;
+        emit waypointReordered(routeId, originalIndex, targetIndex);
+    }
+}
+
+void RouteDetailTreeWidget::dragEnterEvent(QDragEnterEvent* event)
+{
+    QTreeWidgetItem* draggedItem = currentItem();
+    if (draggedItem && draggedItem->parent()) {
+        // Only allow waypoint items (which have parents) to be dragged
+        event->acceptProposedAction();
+    } else {
+        event->ignore();
+    }
+}
+
+void RouteDetailTreeWidget::dragMoveEvent(QDragMoveEvent* event)
+{
+    QTreeWidgetItem* draggedItem = currentItem();
+    if (!draggedItem || !draggedItem->parent()) {
+        event->ignore();
+        return;
+    }
+    
+    QTreeWidgetItem* dropTarget = itemAt(event->pos());
+    if (!dropTarget) {
+        event->ignore();
+        return;
+    }
+    
+    QTreeWidgetItem* originalParent = draggedItem->parent();
+    QTreeWidgetItem* targetParent = nullptr;
+    
+    if (dropTarget->parent()) {
+        // Dropping on a waypoint
+        targetParent = dropTarget->parent();
+    } else {
+        // Dropping on route item
+        targetParent = dropTarget;
+    }
+    
+    // Only allow drops within the same route
+    if (targetParent == originalParent) {
+        event->acceptProposedAction();
+    } else {
+        event->ignore();
+    }
+}
+
+bool RouteDetailTreeWidget::dropMimeData(QTreeWidgetItem* parent, int index, const QMimeData* data, Qt::DropAction action)
+{
+    // Only allow drops within the same route (parent)
+    QTreeWidgetItem* draggedItem = currentItem();
+    if (!draggedItem || !parent || draggedItem->parent() != parent) {
+        return false;
+    }
+    
+    return QTreeWidget::dropMimeData(parent, index, data, action);
+}
+
+Qt::DropActions RouteDetailTreeWidget::supportedDropActions() const
+{
+    return Qt::MoveAction;
 }

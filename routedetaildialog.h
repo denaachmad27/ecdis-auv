@@ -20,6 +20,28 @@
 
 // Forward declaration
 class EcWidget;
+class RouteDetailDialog;
+
+// Custom tree widget for drag & drop waypoint reordering
+class RouteDetailTreeWidget : public QTreeWidget
+{
+    Q_OBJECT
+public:
+    explicit RouteDetailTreeWidget(RouteDetailDialog* parent = nullptr);
+    
+protected:
+    void dropEvent(QDropEvent* event) override;
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dragMoveEvent(QDragMoveEvent* event) override;
+    bool dropMimeData(QTreeWidgetItem* parent, int index, const QMimeData* data, Qt::DropAction action) override;
+    Qt::DropActions supportedDropActions() const override;
+    
+private:
+    RouteDetailDialog* parentDialog;
+    
+signals:
+    void waypointReordered(int routeId, int fromIndex, int toIndex);
+};
 
 // Waypoint data structure (copied from EcWidget to avoid dependency)
 struct RouteDetailWaypoint {
@@ -58,6 +80,8 @@ private slots:
     void onExportAllClicked();
     void onCloseClicked();
     void onTreeItemClicked(QTreeWidgetItem* item, int column);
+    void onWaypointReordered(int routeId, int fromIndex, int toIndex);
+    void onDuplicateWaypoint();
 
 private:
     void setupUI();
@@ -68,6 +92,7 @@ private:
     QString formatDistance(double distanceNM);
     QString formatTime(double hours);
     void updateWaypointRowStyling(QTreeWidgetItem* waypointItem, const RouteDetailWaypoint& waypoint);
+    void updateEcWidgetWaypointOrder(int routeId, const QList<RouteDetailWaypoint>& newOrder);
     
     // UI Components
     EcWidget* ecWidget;
@@ -84,11 +109,12 @@ private:
     
     // Routes and Waypoints tree
     QGroupBox* routesGroup;
-    QTreeWidget* routeTree;
+    RouteDetailTreeWidget* routeTree;
     
     // Buttons
     QHBoxLayout* buttonLayout;
     QPushButton* exportAllButton;
+    QPushButton* duplicateWaypointButton;
     QPushButton* closeButton;
     
     // Data
