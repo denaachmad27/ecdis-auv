@@ -23,5 +23,7 @@
         <file>images/setting-white.png</file>
         <file>images/zoom-in-white.png</file>
         <file>images/zoom-out-white.png</file>
+        <file>images/route.png</file>
+        <file>images/route-white.png</file>
     </qresource>
 </RCC>

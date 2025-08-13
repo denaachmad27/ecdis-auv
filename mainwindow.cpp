@@ -122,6 +122,14 @@ void MainWindow::createActions()
     fileToolBar->addAction(rotateRightAct);
     rotateRightAct->setToolTip(tr("Rotate right"));
 
+    const QIcon routeIcon = QIcon::fromTheme("import-route", QIcon(":/images/route.png"));
+    routeAct = new QAction(routeIcon, tr("&route"), this);
+    routeAct->setShortcuts(QKeySequence::New);
+    //routeAct->setStatusTip(tr("route MOOSDB"));
+    connect(routeAct, SIGNAL(triggered()), this, SLOT(openRouteManager()));
+    fileToolBar->addAction(routeAct);
+    routeAct->setToolTip(tr("Routes Manager"));
+
     const QIcon connectIcon = QIcon::fromTheme("import-connect", QIcon(":/images/connect.png"));
     connectAct = new QAction(connectIcon, tr("&Connect"), this);
     connectAct->setShortcuts(QKeySequence::New);
@@ -1903,6 +1911,13 @@ void MainWindow::onEditRoute()
     }
 
     // Show route panel for additional editing options
+    if (routeDock) {
+        routeDock->setVisible(true);
+    }
+}
+
+void MainWindow::openRouteManager()
+{
     if (routeDock) {
         routeDock->setVisible(true);
     }
@@ -4403,6 +4418,7 @@ void MainWindow::updateIcon(bool dark){
         rotateRightAct->setIcon(QIcon(":/images/rotate-right-white.png"));
         rotateLeftAct->setIcon(QIcon(":/images/rotate-left-white.png"));
         settingAct->setIcon(QIcon(":/images/setting-white.png"));
+        routeAct->setIcon(QIcon(":/images/route-white.png"));
     }
     else {
         connectAct->setIcon(QIcon(":/images/connect.png"));
@@ -4412,5 +4428,6 @@ void MainWindow::updateIcon(bool dark){
         rotateRightAct->setIcon(QIcon(":/images/rotate-right.png"));
         rotateLeftAct->setIcon(QIcon(":/images/rotate-left.png"));
         settingAct->setIcon(QIcon(":/images/setting.png"));
+        routeAct->setIcon(QIcon(":/images/route.png"));
     }
 }

@@ -1482,23 +1482,8 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
     // ========== END GUARDZONE CREATION MODE ==========
 
     // ========== EXISTING WAYPOINT AND OTHER LOGIC (unchanged) ==========
-    // waypointLeftClick(e);
-    // waypointRightClick(e);
-
-    // =================== IMPORTANT!! DONT CHANGE IT! ===================
-    if (e->button() == Qt::LeftButton){
-        EcCoordinate lat, lon;
-        if (XyToLatLon(e->x(), e->y(), lat, lon)){
-            SetCenter(lat, lon);
-            Draw();
-        }
-    }
-    else {
-        pickX = e->x();
-        pickY = e->y();
-        emit mouseRightClick(e->pos());
-    }
-    // ===================================================================
+    waypointLeftClick(e);
+    waypointRightClick(e);
 }
 
 
@@ -1531,6 +1516,7 @@ void EcWidget::waypointRightClick(QMouseEvent *e){
         // Check if right-clicked on a legline
         int leglineRouteId, leglineSegmentIndex;
         int leglineDistance = findLeglineAt(e->x(), e->y(), leglineRouteId, leglineSegmentIndex);
+
         if (leglineDistance != -1) {
             showLeglineContextMenu(e->pos(), leglineRouteId, leglineSegmentIndex);
             return; // Return early - jangan lanjut ke normal right click
@@ -1547,7 +1533,7 @@ void EcWidget::waypointRightClick(QMouseEvent *e){
         }
 
         // Show map context menu (Create Route)
-        showMapContextMenu(e->pos());
+        // showMapContextMenu(e->pos());
 
         // =================== IMPORTANT!! DONT CHANGE IT! ===================
         pickX = e->x();

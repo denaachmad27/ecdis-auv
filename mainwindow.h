@@ -174,6 +174,8 @@ protected slots:
     void openReleaseNotesDialog();
     void setDisplay();
 
+    void openRouteManager();
+
     // Guardzone
     void onEnableGuardZone(bool enabled);
     void onCreateCircularGuardZone();
@@ -330,6 +332,7 @@ private:
     QAction *rotateRightAct;
     QAction *rotateLeftAct;
     QAction *settingAct;
+    QAction *routeAct;
 
     // BAR BAR
     void createStatusBar();

@@ -1434,7 +1434,7 @@ void RoutePanel::reorderWaypoint(int routeId, int fromIndex, int toIndex)
         }
     }
     
-    if (fromIndex < 0 || fromIndex >= routeWaypoints.size() || 
+    if (fromIndex < 0 || fromIndex >= routeWaypoints.size() ||
         toIndex < 0 || toIndex >= routeWaypoints.size()) {
         return;
     }
