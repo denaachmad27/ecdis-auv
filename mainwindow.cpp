@@ -580,6 +580,13 @@ void MainWindow::createMenuBar(){
     if (m_cpatcpaPanel) {
         ecchart->setCPAPanelToAIS(m_cpatcpaPanel);
     }
+    
+    // Setup GuardZone and AIS Target panels for tabify integration
+    setupGuardZonePanel();
+    setupAISTargetPanel();
+    setupObstacleDetectionPanel(); // Also setup obstacle detection for additional tabify
+    
+    qDebug() << "[TABIFY] Setup panels for tab integration - GuardZone, AIS Target, Route, Obstacle Detection";
 
     viewMenu->addSeparator();
 
@@ -2792,23 +2799,30 @@ void MainWindow::setupAISTargetPanel()
 
         // ========== TABIFY WITH GUARDZONE AND CPA/TCPA PANELS ==========
         if (guardZoneDock && aisTargetDock) {
+            qDebug() << "[TABIFY] Creating tabbed interface with GuardZone as base";
             // Create tabbed interface - GuardZone Manager as base, AIS Target Manager as tab
             tabifyDockWidget(guardZoneDock, aisTargetDock);
+            qDebug() << "[TABIFY] ✅ Added AIS Target Manager to tabbed interface";
             
             // Add CPA/TCPA panel to the tabbed interface if available
             if (m_cpatcpaDock) {
                 tabifyDockWidget(guardZoneDock, m_cpatcpaDock);
-                qDebug() << "Added CPA/TCPA Manager to tabbed interface";
+                qDebug() << "[TABIFY] ✅ Added CPA/TCPA Manager to tabbed interface";
+            } else {
+                qDebug() << "[TABIFY] ❌ CPA/TCPA dock not available for tabify";
             }
             
             // Add Route Panel to the tabbed interface if available
             if (routeDock) {
                 tabifyDockWidget(guardZoneDock, routeDock);
-                qDebug() << "Added Route Panel to tabbed interface";
+                qDebug() << "[TABIFY] ✅ Added Route Panel to tabbed interface";
+            } else {
+                qDebug() << "[TABIFY] ❌ Route dock not available for tabify";
             }
             
             // Set GuardZone Manager as the default active tab
             guardZoneDock->raise();
+            qDebug() << "[TABIFY] Set GuardZone as active tab";
 
             guardZonePanel->hide();
             guardZoneDock->hide();
