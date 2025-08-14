@@ -59,6 +59,8 @@ public:
     WaypointTreeItem(const EcWidget::Waypoint& waypoint, RouteTreeItem* parent = nullptr);
     const EcWidget::Waypoint& getWaypoint() const { return waypointData; }
     void updateWaypoint(const EcWidget::Waypoint& waypoint);
+    void setActiveStatus(bool active);
+    void refreshDisplay();
     
 private:
     EcWidget::Waypoint waypointData;
@@ -93,6 +95,7 @@ private slots:
     void onRouteItemSelectionChanged();
     void onRouteItemDoubleClicked(QTreeWidgetItem* item, int column);
     void onShowContextMenu(const QPoint& pos);
+    void onTreeItemChanged(QTreeWidgetItem* item, int column);
     
     // Route Management
     void onAddRouteClicked();
@@ -174,6 +177,9 @@ private:
     void setupUI();
     void setupConnections();
     RouteInfo calculateRouteInfo(int routeId);
+    
+protected:
+    void mousePressEvent(QMouseEvent* event) override;
     QString formatDistance(double distanceNM);
     QString formatTime(double hours);
     void updateRouteInfoDisplay(const RouteInfo& info);
@@ -213,6 +219,7 @@ private:
     QAction* moveDownAction;
     
     int selectedRouteId;
+    bool isReorderingWaypoints = false; // Flag to prevent refresh during waypoint reorder
     QList<EcWidget::Waypoint> getWaypointById(int routeId);
     void publishToMOOSDB();
     RouteTreeItem* findRouteItem(int routeId);

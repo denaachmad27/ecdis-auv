@@ -227,6 +227,15 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
       update(); // Trigger repaint
   });
 
+  // Initialize waypoint animation timer for consistent highlighting
+  waypointAnimationTimer = new QTimer(this);
+  waypointAnimationTimer->setInterval(50); // 20 FPS for smooth animation
+  connect(waypointAnimationTimer, &QTimer::timeout, [this]() {
+      if (highlightedWaypoint.visible) {
+          update(); // Trigger repaint for animation
+      }
+  });
+
   // Initialize alert system (delayed to ensure EcWidget is fully constructed)
   QTimer::singleShot(100, this, &EcWidget::initializeAlertSystem);
 
@@ -429,6 +438,12 @@ EcWidget::~EcWidget ()
         alertCheckTimer->stop();
         delete alertCheckTimer;
         alertCheckTimer = nullptr;
+    }
+
+    if (waypointAnimationTimer) {
+        waypointAnimationTimer->stop();
+        delete waypointAnimationTimer;
+        waypointAnimationTimer = nullptr;
     }
 
   // Release AIS object.
@@ -1405,6 +1420,10 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
 {
     hideWaypointToolbox();
     setFocus();
+    
+    // Clear waypoint highlight when clicking anywhere on the map
+    // This provides better UX by removing distracting highlights
+    clearWaypointHighlight();
 
     // ========== HANDLING EDIT GUARDZONE MODE VIA MANAGER ==========
     if (guardZoneManager && guardZoneManager->isEditingGuardZone()) {
@@ -3894,12 +3913,20 @@ void EcWidget::drawHighlightedWaypoint(QPainter& painter, double lat, double lon
     painter.setRenderHint(QPainter::Antialiasing, true);
 
     // Style highlighted waypoint: bright yellow/gold with pulsing effect
-    static int frame = 0;
-    frame++;
+    // Use time-based animation instead of frame counter for consistent speed
+    static QElapsedTimer animationTimer;
+    if (!animationTimer.isValid()) {
+        animationTimer.start();
+    }
     
-    // Create pulsing effect
-    int pulseRadius = 12 + (int)(4 * sin(frame * 0.2));
-    int opacity = 150 + (int)(50 * sin(frame * 0.3));
+    // Get consistent time-based animation values
+    qint64 elapsed = animationTimer.elapsed();
+    double timeSeconds = elapsed / 1000.0;
+    
+    // Create smooth pulsing effect with consistent timing
+    // Pulse period: 1.5 seconds for radius, 2 seconds for opacity (faster)
+    int pulseRadius = 12 + (int)(4 * sin(timeSeconds * 2.0 * M_PI / 1.5));
+    int opacity = 150 + (int)(50 * sin(timeSeconds * 2.0 * M_PI / 2.0));
     
     // Outer glow ring
     QPen glowPen(QColor(255, 215, 0, opacity / 3)); // Gold glow
@@ -3925,9 +3952,6 @@ void EcWidget::drawHighlightedWaypoint(QPainter& painter, double lat, double lon
     painter.drawEllipse(QPoint(x, y), 6, 6);
 
     // No additional label - let the original waypoint label remain unchanged
-    
-    // Schedule next frame for animation
-    QTimer::singleShot(50, this, [this]() { update(); });
 }
 
 void EcWidget::drawGhostRouteLines(QPainter& painter, double ghostLat, double ghostLon, int routeId, int waypointIndex)
@@ -13033,6 +13057,11 @@ void EcWidget::highlightWaypoint(int routeId, int waypointIndex)
                 qDebug() << "[HIGHLIGHT] Highlighting waypoint" << wp.label 
                          << "at" << wp.lat << "," << wp.lon << "route" << routeId << "index" << waypointIndex;
                 
+                // Start animation timer for consistent pulsing
+                if (!waypointAnimationTimer->isActive()) {
+                    waypointAnimationTimer->start();
+                }
+                
                 // Trigger map update
                 update();
                 return;
@@ -13048,6 +13077,12 @@ void EcWidget::clearWaypointHighlight()
 {
     if (highlightedWaypoint.visible) {
         highlightedWaypoint.visible = false;
+        
+        // Stop animation timer to save resources
+        if (waypointAnimationTimer->isActive()) {
+            waypointAnimationTimer->stop();
+        }
+        
         qDebug() << "[HIGHLIGHT] Cleared waypoint highlight";
         update();
     }

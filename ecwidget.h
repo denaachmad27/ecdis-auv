@@ -649,6 +649,9 @@ public:
   void startChartFlashing();
   void stopChartFlashing();
 
+  // Animation timer for waypoint highlighting
+  QTimer* waypointAnimationTimer;
+
   // Helper functions (private)
   bool checkAISTargetsInShipGuardian(QList<DetectedObstacle>& obstacles);
   bool checkStaticObstaclesInShipGuardian(QList<DetectedObstacle>& obstacles);

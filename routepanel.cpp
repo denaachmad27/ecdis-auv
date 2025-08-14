@@ -95,20 +95,32 @@ void WaypointTreeItem::updateWaypoint(const EcWidget::Waypoint& waypoint)
     updateDisplayText();
 }
 
+void WaypointTreeItem::setActiveStatus(bool active)
+{
+    waypointData.active = active;
+    updateDisplayText();
+}
+
+void WaypointTreeItem::refreshDisplay()
+{
+    updateDisplayText();
+}
+
 void WaypointTreeItem::updateDisplayText()
 {
-    // Clean, professional waypoint display without excessive icons
-    QString statusText = waypointData.active ? "" : " [Inactive]";
+    // Clean, professional waypoint display without status text (checkbox handles it)
     QString waypointName = waypointData.label.isEmpty() ? QString("WP-%1").arg(waypointData.routeId) : waypointData.label;
     
     // Compact coordinate formatting - 4 decimal places for readability
-    QString waypointText = QString("  %1 (%2°, %3°)%4")
+    QString waypointText = QString("  %1 (%2°, %3°)")
                           .arg(waypointName)
                           .arg(waypointData.lat, 0, 'f', 4)
-                          .arg(waypointData.lon, 0, 'f', 4)
-                          .arg(statusText);
+                          .arg(waypointData.lon, 0, 'f', 4);
     
     setText(0, waypointText);
+    
+    // Set checkbox for active/inactive status in column 1
+    setCheckState(1, waypointData.active ? Qt::Checked : Qt::Unchecked);
     
     // Theme-aware colors
     bool isDark = AppConfig::isDark();
@@ -187,6 +199,28 @@ QString RoutePanel::getThemeAwareStyleSheet()
         alternateRowColor  = "#243447";  // untuk baris selang-seling
     }
     
+    // Define checkbox border color based on theme
+    QString checkboxBorderColor;
+    if (AppConfig::isDark()) {
+        checkboxBorderColor = "#ffffff"; // White border for dark mode
+    }
+    else if (AppConfig::isLight()) {
+        checkboxBorderColor = "#000000"; // Black border for light mode
+    }
+    else if (AppConfig::isDim()) {
+        checkboxBorderColor = "#ffffff"; // White border for dim mode
+    }
+    else {
+        checkboxBorderColor = "#000000"; // Default to black
+    }
+    
+    qDebug() << "[CHECKBOX-THEME] Selected checkbox border color:" << checkboxBorderColor
+             << "(Dark:" << AppConfig::isDark() << "Light:" << AppConfig::isLight() << "Dim:" << AppConfig::isDim() << ")";
+    qDebug() << "[CHECKBOX-THEME] Applied hover fixes:";
+    qDebug() << "  - Checkbox checked:hover = #66BB6A (stays green)";
+    qDebug() << "  - Checkbox unchecked:hover = rgba(76,175,80,0.3) (preview)";
+    qDebug() << "  - Item selected:hover = " << selectedBgColor << " (stays blue highlight)";
+    
     return QString(
         "QTreeWidget {"
         "    background-color: %1;"
@@ -213,14 +247,51 @@ QString RoutePanel::getThemeAwareStyleSheet()
         "    color: %7;"
         "    border-radius: 3px;"
         "}"
+        "QTreeWidget::item:selected:hover {"
+        "    background-color: %4;"
+        "    color: %5;"
+        "    border-radius: 3px;"
+        "}"
+        "QTreeWidget::indicator {"
+        "    width: 16px;"
+        "    height: 16px;"
+        "    border: 2px solid %9;"
+        "    border-radius: 3px;"
+        "    background-color: transparent;"
+        "}"
+        "QTreeWidget::indicator:unchecked {"
+        "    border: 2px solid %9;"
+        "    background-color: transparent;"
+        "}"
+        "QTreeWidget::indicator:checked {"
+        "    border: 2px solid %9;"
+        "    background-color: #4CAF50;"
+        "}"
+        "QTreeWidget::indicator:unchecked:hover {"
+        "    border: 2px solid %9;"
+        "    background-color: rgba(76, 175, 80, 0.3);"
+        "}"
+        "QTreeWidget::indicator:checked:hover {"
+        "    border: 2px solid %9;"
+        "    background-color: #66BB6A;"
+        "}"
+        "QTreeWidget::indicator:disabled {"
+        "    border: 2px solid #888888;"
+        "    background-color: #cccccc;"
+        "}"
     ).arg(bgColor).arg(borderColor).arg(textColor).arg(selectedBgColor)
-     .arg(selectedTextColor).arg(hoverBgColor).arg(hoverTextColor).arg(alternateRowColor);
+     .arg(selectedTextColor).arg(hoverBgColor).arg(hoverTextColor).arg(alternateRowColor)
+     .arg(checkboxBorderColor);
 }
 
 void RoutePanel::updateThemeAwareStyles()
 {
     // Update tree widget styling when theme changes
-    routeTreeWidget->setStyleSheet(getThemeAwareStyleSheet());
+    QString newStyleSheet = getThemeAwareStyleSheet();
+    routeTreeWidget->setStyleSheet(newStyleSheet);
+    
+    qDebug() << "[THEME] RoutePanel updated theme-aware styles";
+    qDebug() << "[THEME] Current theme - Dark:" << AppConfig::isDark() << "Light:" << AppConfig::isLight() << "Dim:" << AppConfig::isDim();
     
     // Force refresh of all items to update their colors
     refreshRouteList();
@@ -308,7 +379,21 @@ void RoutePanel::setupUI()
     routeTreeWidget->setSelectionMode(QAbstractItemView::SingleSelection);
     routeTreeWidget->setSelectionBehavior(QAbstractItemView::SelectRows); // Select entire rows
     routeTreeWidget->setContextMenuPolicy(Qt::CustomContextMenu);
-    routeTreeWidget->setHeaderHidden(true); // Hide column headers
+    
+    // Setup columns: [Route/Waypoint Name] [Active Checkbox]
+    routeTreeWidget->setColumnCount(2);
+    QStringList headers;
+    headers << "Route / Waypoint" << "Active";
+    routeTreeWidget->setHeaderLabels(headers);
+    routeTreeWidget->setHeaderHidden(false); // Show headers for clarity
+    
+    // Set column widths
+    routeTreeWidget->setColumnWidth(0, 300); // Main content column
+    routeTreeWidget->setColumnWidth(1, 60);  // Checkbox column
+    routeTreeWidget->header()->setStretchLastSection(false);
+    routeTreeWidget->header()->setSectionResizeMode(0, QHeaderView::Stretch);
+    routeTreeWidget->header()->setSectionResizeMode(1, QHeaderView::Fixed);
+    
     routeTreeWidget->setRootIsDecorated(true); // Show expand/collapse indicators
     routeTreeWidget->setIndentation(20); // Reduced indentation for more compact layout
     routeTreeWidget->setUniformRowHeights(false); // Allow different row heights
@@ -458,6 +543,8 @@ void RoutePanel::setupConnections()
             this, &RoutePanel::onRouteItemDoubleClicked);
     connect(routeTreeWidget, &QTreeWidget::customContextMenuRequested, 
             this, &RoutePanel::onShowContextMenu);
+    connect(routeTreeWidget, &QTreeWidget::itemChanged,
+            this, &RoutePanel::onTreeItemChanged);
     
     // Route Management Button connections
     connect(addRouteButton, &QPushButton::clicked, this, &RoutePanel::onAddRouteClicked);
@@ -927,6 +1014,12 @@ void RoutePanel::onWaypointAdded()
 {
     qDebug() << "[ROUTE-PANEL] onWaypointAdded() called";
     
+    // CRITICAL FIX: Skip refresh during waypoint reordering to prevent selection issues
+    if (isReorderingWaypoints) {
+        qDebug() << "[ROUTE-PANEL] *** SKIPPING REFRESH - isReorderingWaypoints = true ***";
+        return;
+    }
+    
     // Only refresh if there are actual routes (avoid refresh during route creation)
     if (!ecWidget) return;
     
@@ -973,6 +1066,16 @@ void RoutePanel::onRouteItemSelectionChanged()
 {
     QTreeWidgetItem* currentItem = routeTreeWidget->currentItem();
     
+    qDebug() << "[SELECTION-CHANGED] onRouteItemSelectionChanged called - currentItem:" 
+             << (currentItem ? "EXISTS" : "NULL");
+    
+    if (currentItem) {
+        WaypointTreeItem* waypointItem = dynamic_cast<WaypointTreeItem*>(currentItem);
+        RouteTreeItem* routeItem = dynamic_cast<RouteTreeItem*>(currentItem);
+        qDebug() << "[SELECTION-CHANGED] Item type - waypoint:" << (waypointItem ? "YES" : "NO")
+                 << "route:" << (routeItem ? "YES" : "NO");
+    }
+    
     if (!currentItem) {
         clearRouteInfoDisplay();
         selectedRouteId = -1;
@@ -989,7 +1092,11 @@ void RoutePanel::onRouteItemSelectionChanged()
     if (waypointItem) {
         // When waypoint is selected, select its parent route
         int waypointRouteId = waypointItem->getWaypoint().routeId;
+        qDebug() << "[WAYPOINT-SELECTION] Waypoint selected:" << waypointItem->getWaypoint().label
+                 << "routeId:" << waypointRouteId << "current selectedRouteId:" << selectedRouteId;
+        
         if (waypointRouteId != selectedRouteId) {
+            qDebug() << "[WAYPOINT-SELECTION] Route change detected, updating selectedRouteId";
             selectedRouteId = waypointRouteId;
             RouteInfo info = calculateRouteInfo(selectedRouteId);
             updateRouteInfoDisplay(info);
@@ -1008,9 +1115,10 @@ void RoutePanel::onRouteItemSelectionChanged()
             QTreeWidgetItem* parent = waypointItem->parent();
             if (parent) {
                 int waypointIndex = parent->indexOfChild(waypointItem);
-                ecWidget->highlightWaypoint(waypointRouteId, waypointIndex);
-                qDebug() << "[WAYPOINT-HIGHLIGHT] Highlighting waypoint" << waypointItem->getWaypoint().label 
+                qDebug() << "[WAYPOINT-HIGHLIGHT] About to highlight waypoint" << waypointItem->getWaypoint().label 
                          << "route:" << waypointRouteId << "index:" << waypointIndex;
+                ecWidget->highlightWaypoint(waypointRouteId, waypointIndex);
+                qDebug() << "[WAYPOINT-HIGHLIGHT] ✅ Successfully highlighted waypoint" << waypointItem->getWaypoint().label;
             }
         }
         
@@ -1023,16 +1131,19 @@ void RoutePanel::onRouteItemSelectionChanged()
     RouteTreeItem* routeItem = dynamic_cast<RouteTreeItem*>(currentItem);
     if (routeItem) {
         int newSelectedRouteId = routeItem->getRouteId();
-        qDebug() << "[SELECTED-ROUTE] RoutePanel changing selectedRouteId from" << selectedRouteId << "to" << newSelectedRouteId;
+        qDebug() << "[ROUTE-SELECTION] Route item selected, changing selectedRouteId from" << selectedRouteId << "to" << newSelectedRouteId;
+        qDebug() << "[ROUTE-SELECTION] *** THIS WILL CLEAR WAYPOINT HIGHLIGHT ***";
         selectedRouteId = newSelectedRouteId;
         RouteInfo info = calculateRouteInfo(selectedRouteId);
         updateRouteInfoDisplay(info);
         
         // Set visual feedback in chart - SYNC with EcWidget's selectedRouteId
         if (ecWidget) {
+            qDebug() << "[ROUTE-SELECTION] ⚠️ ROUTE SELECTED - This will CLEAR waypoint highlight!";
             qDebug() << "[SELECTED-ROUTE] Syncing EcWidget selectedRouteId to" << selectedRouteId;
             ecWidget->setSelectedRoute(selectedRouteId);
             // Clear waypoint highlight when route is selected (not waypoint)
+            qDebug() << "[ROUTE-SELECTION] ❌ CLEARING WAYPOINT HIGHLIGHT due to route selection";
             ecWidget->clearWaypointHighlight();
             // Note: setSelectedRoute already calls forceRedraw() internally, no need for additional redraw
         }
@@ -1057,6 +1168,52 @@ void RoutePanel::onRouteItemDoubleClicked(QTreeWidgetItem* item, int column)
         emit requestEditRoute(routeId);
         emit statusMessage(QString("Opening route editor for Route ID: %1").arg(routeId));
     }
+}
+
+void RoutePanel::onTreeItemChanged(QTreeWidgetItem* item, int column)
+{
+    // Only handle checkbox changes in column 1 (Active column)
+    if (column != 1) return;
+    
+    // Only handle waypoint items (routes don't have checkboxes)
+    WaypointTreeItem* waypointItem = dynamic_cast<WaypointTreeItem*>(item);
+    if (!waypointItem) return;
+    
+    // Get checkbox state
+    bool isChecked = (item->checkState(1) == Qt::Checked);
+    
+    // Get waypoint data
+    EcWidget::Waypoint waypoint = waypointItem->getWaypoint();
+    
+    // Skip if state hasn't actually changed
+    if (waypoint.active == isChecked) return;
+    
+    qDebug() << "[CHECKBOX] Waypoint" << waypoint.label << "active state changed from" 
+             << waypoint.active << "to" << isChecked;
+    
+    // CRITICAL FIX: Prevent refresh during direct checkbox toggle to avoid collapse
+    isReorderingWaypoints = true;
+    qDebug() << "[CHECKBOX-FLAG] Set isReorderingWaypoints = true to prevent refresh during checkbox toggle";
+    
+    // Update waypoint in EcWidget
+    if (ecWidget) {
+        ecWidget->updateWaypointActiveStatus(waypoint.routeId, waypoint.lat, waypoint.lon, isChecked);
+        
+        // Update local waypoint data using public method
+        waypointItem->setActiveStatus(isChecked);
+        
+        // Update route info if needed (distance might change based on active waypoints)
+        if (selectedRouteId == waypoint.routeId) {
+            RouteInfo info = calculateRouteInfo(selectedRouteId);
+            updateRouteInfoDisplay(info);
+        }
+        
+        emit statusMessage(QString("Waypoint '%1' %2").arg(waypoint.label).arg(isChecked ? "activated" : "deactivated"));
+    }
+    
+    // CRITICAL FIX: Reset flag after operations
+    isReorderingWaypoints = false;
+    qDebug() << "[CHECKBOX-FLAG] Set isReorderingWaypoints = false after checkbox toggle";
 }
 
 void RoutePanel::onShowContextMenu(const QPoint& pos)
@@ -1424,6 +1581,18 @@ void RoutePanel::reorderWaypoint(int routeId, int fromIndex, int toIndex)
 {
     if (!ecWidget) return;
     
+    // CRITICAL FIX: Prevent onWaypointAdded from triggering refreshRouteList during reorder
+    isReorderingWaypoints = true;
+    qDebug() << "[REORDER-FLAG] Set isReorderingWaypoints = true";
+    
+    // ANTI-FLICKER: Preserve current highlight information to maintain it during rebuild
+    bool hadHighlight = false;
+    if (ecWidget) {
+        // Check if we currently have a highlighted waypoint - we'll restore it manually
+        hadHighlight = true; // Assume we have highlight since we're in reorder operation
+        qDebug() << "[ANTI-FLICKER] Preserving highlight state during reorder operation";
+    }
+    
     QList<EcWidget::Waypoint> waypoints = ecWidget->getWaypoints();
     QList<EcWidget::Waypoint> routeWaypoints;
     
@@ -1436,6 +1605,8 @@ void RoutePanel::reorderWaypoint(int routeId, int fromIndex, int toIndex)
     
     if (fromIndex < 0 || fromIndex >= routeWaypoints.size() ||
         toIndex < 0 || toIndex >= routeWaypoints.size()) {
+        // CRITICAL FIX: Reset flag on early return
+        isReorderingWaypoints = false;
         return;
     }
     
@@ -1445,18 +1616,60 @@ void RoutePanel::reorderWaypoint(int routeId, int fromIndex, int toIndex)
     
     // Update EcWidget with new order
     ecWidget->replaceWaypointsForRoute(routeId, routeWaypoints);
-    refreshRouteList();
     
-    // Restore selection to the moved waypoint
+    // CRITICAL FIX: Update tree manually without full refresh to preserve waypoint selection
     RouteTreeItem* routeItem = findRouteItem(routeId);
-    if (routeItem && routeItem->childCount() > toIndex) {
-        QTreeWidgetItem* movedWaypoint = routeItem->child(toIndex);
-        routeTreeWidget->setCurrentItem(movedWaypoint);
+    if (routeItem) {
+        // MAINTAIN HIGHLIGHT during rebuild by keeping EcWidget highlight active
+        if (ecWidget) {
+            // Keep the highlight on the map during tree rebuild to prevent flicker
+            qDebug() << "[ANTI-FLICKER] Maintaining EcWidget highlight during tree rebuild";
+        }
+        
+        // BLOCK SIGNALS during tree update to prevent interference
+        routeTreeWidget->blockSignals(true);
+        
+        // Clear and rebuild waypoint children for this route
+        qDeleteAll(routeItem->takeChildren());
+        
+        // Add waypoint children in new order
+        for (const auto& waypoint : routeWaypoints) {
+            WaypointTreeItem* waypointItem = new WaypointTreeItem(waypoint, routeItem);
+        }
+        
         routeItem->setExpanded(true);
+        
+        // Select the moved waypoint IMMEDIATELY before unblocking signals
+        if (routeItem->childCount() > toIndex) {
+            QTreeWidgetItem* movedWaypoint = routeItem->child(toIndex);
+            routeTreeWidget->setCurrentItem(movedWaypoint);
+            qDebug() << "[ANTI-FLICKER] Set selection immediately before unblocking signals";
+        }
+        
+        // UNBLOCK SIGNALS after setting selection - this should trigger onRouteItemSelectionChanged
+        routeTreeWidget->blockSignals(false);
+        
+        // IMMEDIATE highlight restoration to prevent flicker
+        if (routeItem->childCount() > toIndex && hadHighlight && ecWidget) {
+            // Directly set the highlight on EcWidget to prevent any gap
+            ecWidget->highlightWaypoint(routeId, toIndex);
+            qDebug() << "[ANTI-FLICKER] Immediately restored EcWidget highlight to prevent flicker";
+            
+            // Also trigger the selection event for UI consistency
+            onRouteItemSelectionChanged();
+            qDebug() << "[ANTI-FLICKER] Called onRouteItemSelectionChanged for UI consistency";
+        }
+    } else {
+        // Fallback: If route item not found, do full refresh
+        refreshRouteList();
     }
     
     emit statusMessage(QString("Waypoint moved from position %1 to %2")
         .arg(fromIndex + 1).arg(toIndex + 1));
+    
+    // CRITICAL FIX: Reset reordering flag
+    isReorderingWaypoints = false;
+    qDebug() << "[REORDER-FLAG] Set isReorderingWaypoints = false";
 }
 
 void RoutePanel::duplicateWaypoint(int routeId, int waypointIndex)
@@ -1493,14 +1706,36 @@ void RoutePanel::duplicateWaypoint(int routeId, int waypointIndex)
     
     // Update EcWidget with new waypoints
     ecWidget->replaceWaypointsForRoute(routeId, routeWaypoints);
-    refreshRouteList();
     
-    // Select the new duplicate waypoint
+    // CRITICAL FIX: Update tree manually without full refresh to preserve waypoint selection
     RouteTreeItem* routeItem = findRouteItem(routeId);
-    if (routeItem && routeItem->childCount() > 0) {
-        QTreeWidgetItem* newWaypoint = routeItem->child(routeItem->childCount() - 1);
-        routeTreeWidget->setCurrentItem(newWaypoint);
-        routeItem->setExpanded(true);
+    if (routeItem) {
+        // Clear and rebuild waypoint children for this route
+        qDeleteAll(routeItem->takeChildren());
+        
+        // Add waypoint children in new order
+        for (const auto& waypoint : routeWaypoints) {
+            WaypointTreeItem* waypointItem = new WaypointTreeItem(waypoint, routeItem);
+        }
+        
+        // Select the new duplicate waypoint (should be the last one)
+        int newWaypointIndex = routeItem->childCount() - 1;
+        if (newWaypointIndex >= 0) {
+            routeItem->setExpanded(true);
+            
+            // CRITICAL FIX: Use QTimer to delay selection to avoid race conditions
+            QTimer::singleShot(0, this, [this, routeItem, newWaypointIndex, routeId]() {
+                int finalIndex = routeItem->childCount() - 1;
+                if (finalIndex >= 0) {
+                    QTreeWidgetItem* newWaypoint = routeItem->child(finalIndex);
+                    routeTreeWidget->setCurrentItem(newWaypoint);
+                    qDebug() << "[DUPLICATE-WAYPOINT] Delayed selection set to duplicated waypoint - route:" << routeId << "index:" << finalIndex;
+                }
+            });
+        }
+    } else {
+        // Fallback: If route item not found, do full refresh
+        refreshRouteList();
     }
     
     emit statusMessage(QString("Waypoint '%1' duplicated as '%2'")
@@ -1510,6 +1745,10 @@ void RoutePanel::duplicateWaypoint(int routeId, int waypointIndex)
 void RoutePanel::toggleWaypointActiveStatus(int routeId, int waypointIndex)
 {
     if (!ecWidget) return;
+    
+    // CRITICAL FIX: Prevent onWaypointAdded from triggering refreshRouteList during toggle
+    isReorderingWaypoints = true;
+    qDebug() << "[TOGGLE-FLAG] Set isReorderingWaypoints = true to prevent refresh interference";
     
     QList<EcWidget::Waypoint> waypoints = ecWidget->getWaypoints();
     QList<EcWidget::Waypoint> routeWaypoints;
@@ -1522,6 +1761,8 @@ void RoutePanel::toggleWaypointActiveStatus(int routeId, int waypointIndex)
     }
     
     if (waypointIndex < 0 || waypointIndex >= routeWaypoints.size()) {
+        // CRITICAL FIX: Reset flag on early return
+        isReorderingWaypoints = false;
         return;
     }
     
@@ -1531,20 +1772,71 @@ void RoutePanel::toggleWaypointActiveStatus(int routeId, int waypointIndex)
     
     // Update EcWidget
     ecWidget->updateWaypointActiveStatus(routeId, waypoint.lat, waypoint.lon, waypoint.active);
-    refreshRouteList();
     
-    // Restore selection
+    // CRITICAL FIX: Update tree manually without full refresh to preserve waypoint selection
     RouteTreeItem* routeItem = findRouteItem(routeId);
-    if (routeItem && routeItem->childCount() > waypointIndex) {
-        QTreeWidgetItem* waypointItem = routeItem->child(waypointIndex);
-        routeTreeWidget->setCurrentItem(waypointItem);
+    if (routeItem) {
+        // Get updated waypoints after active status change
+        QList<EcWidget::Waypoint> updatedWaypoints = ecWidget->getWaypoints();
+        QList<EcWidget::Waypoint> updatedRouteWaypoints;
+        
+        for (const auto& wp : updatedWaypoints) {
+            if (wp.routeId == routeId) {
+                updatedRouteWaypoints.append(wp);
+            }
+        }
+        
+        // ANTI-FLICKER: Maintain highlight during rebuild
+        bool hadHighlight = true; // Assume we have highlight since we're toggling
+        if (ecWidget) {
+            qDebug() << "[ANTI-FLICKER] Maintaining EcWidget highlight during toggle tree rebuild";
+        }
+        
+        // BLOCK SIGNALS during tree update
+        routeTreeWidget->blockSignals(true);
+        
+        // Clear and rebuild waypoint children for this route
+        qDeleteAll(routeItem->takeChildren());
+        
+        // Add waypoint children with updated active status
+        for (const auto& waypoint : updatedRouteWaypoints) {
+            WaypointTreeItem* waypointItem = new WaypointTreeItem(waypoint, routeItem);
+        }
+        
         routeItem->setExpanded(true);
+        
+        // Set selection IMMEDIATELY before unblocking signals
+        if (routeItem->childCount() > waypointIndex) {
+            QTreeWidgetItem* waypointItem = routeItem->child(waypointIndex);
+            routeTreeWidget->setCurrentItem(waypointItem);
+            qDebug() << "[ANTI-FLICKER] Set selection immediately before unblocking signals - toggle";
+        }
+        
+        // UNBLOCK SIGNALS
+        routeTreeWidget->blockSignals(false);
+        
+        // IMMEDIATE highlight restoration
+        if (routeItem->childCount() > waypointIndex && hadHighlight && ecWidget) {
+            ecWidget->highlightWaypoint(routeId, waypointIndex);
+            qDebug() << "[ANTI-FLICKER] Immediately restored EcWidget highlight after toggle";
+            
+            // Also trigger selection event for UI consistency
+            onRouteItemSelectionChanged();
+            qDebug() << "[ANTI-FLICKER] Called onRouteItemSelectionChanged for consistency";
+        }
+    } else {
+        // Fallback: If route item not found, do full refresh
+        refreshRouteList();
     }
     
     QString statusText = waypoint.active ? "activated" : "deactivated";
     emit statusMessage(QString("Waypoint '%1' %2")
         .arg(waypoint.label.isEmpty() ? QString("WP-%1").arg(waypointIndex + 1) : waypoint.label)
         .arg(statusText));
+    
+    // CRITICAL FIX: Reset flag
+    isReorderingWaypoints = false;
+    qDebug() << "[TOGGLE-FLAG] Set isReorderingWaypoints = false";
 }
 
 // ====== Route Management Slot Implementations ======
@@ -1749,6 +2041,13 @@ void RoutePanel::onDeleteWaypointClicked()
             
             // Replace waypoints for route
             ecWidget->replaceWaypointsForRoute(waypoint.routeId, routeWaypoints);
+            
+            // CRITICAL FIX: Clear highlight when waypoint is deleted
+            if (ecWidget) {
+                ecWidget->clearWaypointHighlight();
+                qDebug() << "[DELETE-WAYPOINT] Cleared highlight after waypoint deletion";
+            }
+            
             refreshRouteList();
             emit statusMessage(QString("Waypoint '%1' deleted successfully")
                 .arg(waypoint.label.isEmpty() ? "WP" : waypoint.label));
@@ -1860,4 +2159,27 @@ void RoutePanel::onMoveWaypointUpFromContext()
 void RoutePanel::onMoveWaypointDownFromContext()
 {
     onMoveWaypointDown(); // Reuse button functionality
+}
+
+void RoutePanel::mousePressEvent(QMouseEvent* event)
+{
+    // Check if click is on empty area (not on tree widget items)
+    QPoint clickPos = event->pos();
+    QPoint treeClickPos = routeTreeWidget->mapFromParent(clickPos);
+    
+    // If click is within tree widget bounds but not on any item
+    if (routeTreeWidget->geometry().contains(clickPos)) {
+        QTreeWidgetItem* clickedItem = routeTreeWidget->itemAt(treeClickPos);
+        if (!clickedItem) {
+            // Clear selection when clicking on empty tree area
+            routeTreeWidget->clearSelection();
+            // This will trigger onRouteItemSelectionChanged() which clears highlight
+        }
+    } else {
+        // Click is outside tree widget - clear selection
+        routeTreeWidget->clearSelection();
+    }
+    
+    // Call parent implementation
+    QWidget::mousePressEvent(event);
 }
