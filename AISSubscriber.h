@@ -61,6 +61,7 @@ private slots:
     void onReadyRead();
     void onSocketError(QAbstractSocket::SocketError socketError);
     void onDisconnected();
+    void onConnected();
     void tryReconnect();
 
 public slots:

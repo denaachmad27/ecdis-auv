@@ -45,7 +45,7 @@ void AISSubscriber::connectToHost(const QString &host, quint16 port) {
 
     connect(socket, &QTcpSocket::readyRead, this, &AISSubscriber::onReadyRead);
     connect(socket, &QTcpSocket::disconnected, this, &AISSubscriber::onDisconnected);
-    // connect(socket, &QTcpSocket::connected, this, &AISSubscriber::onConnected);
+    connect(socket, &QTcpSocket::connected, this, &AISSubscriber::onConnected);
 
     connect(socket, QOverload<QAbstractSocket::SocketError>::of(&QTcpSocket::errorOccurred),
             this, &AISSubscriber::onSocketError);
@@ -56,6 +56,21 @@ void AISSubscriber::connectToHost(const QString &host, quint16 port) {
     }
 
     socket->connectToHost(host, port);
+}
+
+void AISSubscriber::onConnected() {
+    QString connection = "Connecting to MOOSDB...";
+    mainWindow->setReconnectStatusText(connection);
+
+    // Timeout kalau 10 detik gak ada data
+    QTimer::singleShot(11000, this, [this]() {
+        if (!hasReceivedData && socket && socket->state() == QAbstractSocket::ConnectedState) {
+            QString qconnection = "MOOSDB not connected, reconnecting...";
+            mainWindow->setReconnectStatusText(qconnection);
+            socket->disconnectFromHost();
+            tryReconnect();
+        }
+    });
 }
 
 void AISSubscriber::disconnectFromHost() {
@@ -210,6 +225,10 @@ void AISSubscriber::onReadyRead() {
 
 void AISSubscriber::onSocketError(QAbstractSocket::SocketError) {
     emit errorOccurred(socket->errorString());
+    QString connection = "TCP not connected, reconnecting...";
+    mainWindow->setReconnectStatusText(connection);
+
+    tryReconnect();
 }
 
 void AISSubscriber::onDisconnected() {

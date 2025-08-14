@@ -1752,6 +1752,7 @@ void MainWindow::closeEvent(QCloseEvent *e)
 {
   if (ecchart)
   {
+    ecchart->stopAISConnection();
     ecchart->stopAllThread();
 
     delete ecchart;
