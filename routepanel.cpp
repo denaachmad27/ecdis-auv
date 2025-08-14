@@ -220,6 +220,11 @@ QString RoutePanel::getThemeAwareStyleSheet()
     qDebug() << "  - Checkbox checked:hover = #66BB6A (stays green)";
     qDebug() << "  - Checkbox unchecked:hover = rgba(76,175,80,0.3) (preview)";
     qDebug() << "  - Item selected:hover = " << selectedBgColor << " (stays blue highlight)";
+    qDebug() << "[SPACING] Applied compact layout:";
+    qDebug() << "  - Row padding: 3px↕ 8px↔ (was 6px↕ 8px↔)";
+    qDebug() << "  - Row min-height: 22px (was 28px)"; 
+    qDebug() << "  - Tree indentation: 16px (was 20px)";
+    qDebug() << "  - Checkbox size: 14x14px (was 16x16px)";
     
     return QString(
         "QTreeWidget {"
@@ -231,9 +236,9 @@ QString RoutePanel::getThemeAwareStyleSheet()
         "    alternate-background-color: %8;"
         "}"
         "QTreeWidget::item {"
-        "    padding: 6px 8px;"
+        "    padding: 3px 8px;"
         "    border: none;"
-        "    min-height: 28px;"
+        "    min-height: 22px;"
         "    border-radius: 3px;"
         "    color: %3;"
         "}"
@@ -253,10 +258,10 @@ QString RoutePanel::getThemeAwareStyleSheet()
         "    border-radius: 3px;"
         "}"
         "QTreeWidget::indicator {"
-        "    width: 16px;"
-        "    height: 16px;"
+        "    width: 14px;"
+        "    height: 14px;"
         "    border: 2px solid %9;"
-        "    border-radius: 3px;"
+        "    border-radius: 2px;"
         "    background-color: transparent;"
         "}"
         "QTreeWidget::indicator:unchecked {"
@@ -395,7 +400,7 @@ void RoutePanel::setupUI()
     routeTreeWidget->header()->setSectionResizeMode(1, QHeaderView::Fixed);
     
     routeTreeWidget->setRootIsDecorated(true); // Show expand/collapse indicators
-    routeTreeWidget->setIndentation(20); // Reduced indentation for more compact layout
+    routeTreeWidget->setIndentation(16); // Further reduced indentation for more compact layout
     routeTreeWidget->setUniformRowHeights(false); // Allow different row heights
     routeTreeWidget->setAlternatingRowColors(true); // Enable alternating row colors
     routeTreeWidget->setAllColumnsShowFocus(true); // Ensure full row selection highlighting
