@@ -2799,42 +2799,25 @@ void MainWindow::setupAISTargetPanel()
             }
         });
 
-        // ========== TABIFY WITH GUARDZONE AND CPA/TCPA PANELS ==========
+        // ========== TABIFY FOR GUARDZONE AND AIS TARGET ==========
         if (guardZoneDock && aisTargetDock) {
-            qDebug() << "[TABIFY] Creating tabbed interface with GuardZone as base";
-            // Create tabbed interface - GuardZone Manager as base, AIS Target Manager as tab
+            qDebug() << "[TABIFY] Creating tabbed interface for GuardZone and AIS Target";
             tabifyDockWidget(guardZoneDock, aisTargetDock);
-            qDebug() << "[TABIFY] ✅ Added AIS Target Manager to tabbed interface";
+            qDebug() << "[TABIFY] ✅ Tabified GuardZone with AIS Target Panel";
             
-            // Add CPA/TCPA panel to the tabbed interface if available
-            if (m_cpatcpaDock) {
-                tabifyDockWidget(guardZoneDock, m_cpatcpaDock);
-                qDebug() << "[TABIFY] ✅ Added CPA/TCPA Manager to tabbed interface";
-            } else {
-                qDebug() << "[TABIFY] ❌ CPA/TCPA dock not available for tabify";
-            }
-            
-            // Add Route Panel to the tabbed interface if available
-            if (routeDock) {
-                tabifyDockWidget(guardZoneDock, routeDock);
-                qDebug() << "[TABIFY] ✅ Added Route Panel to tabbed interface";
-            } else {
-                qDebug() << "[TABIFY] ❌ Route dock not available for tabify";
-            }
-            
-            // Set GuardZone Manager as the default active tab
+            // Set GuardZone as active tab for this group
             guardZoneDock->raise();
             qDebug() << "[TABIFY] Set GuardZone as active tab";
-
-            guardZonePanel->hide();
-            guardZoneDock->hide();
             
-            qDebug() << "Created tabbed dock interface: GuardZone Manager + AIS Target Manager + CPA/TCPA Manager + Route Panel";
+            qDebug() << "Created tabbed dock interface: GuardZone + AIS Target";
         }
+        
+        // Note: Route Panel + CPA/TCPA tabification is handled in setupCPATCPAPanel()
         // =================================================
 
-        aisTargetDock->hide();
-        aisTargetPanel->hide();
+        // Don't hide the tabified panels - they should be accessible via tabs
+        // aisTargetDock->hide();
+        // aisTargetPanel->hide();
 
         qDebug() << "AIS Target panel setup completed successfully";
 
@@ -4081,6 +4064,16 @@ void MainWindow::setupCPATCPAPanel()
 
     // Set initial visibility
     m_cpatcpaDock->setVisible(false);
+    
+    // Force tabify with Route Panel if it exists
+    if (routeDock) {
+        qDebug() << "[SETUP-CPA] Attempting to tabify CPA/TCPA with Route Panel";
+        tabifyDockWidget(routeDock, m_cpatcpaDock);
+        m_cpatcpaDock->raise(); // Make CPA/TCPA the active tab
+        qDebug() << "[SETUP-CPA] ✅ CPA/TCPA tabified with Route Panel";
+    } else {
+        qDebug() << "[SETUP-CPA] ❌ Route Panel not available for tabify";
+    }
 }
 
 void MainWindow::setupRoutePanel()
@@ -4135,11 +4128,12 @@ void MainWindow::setupRoutePanel()
                 routePanel, &RoutePanel::onWaypointAdded);
     }
     
-    // Set initial visibility (default disabled)
+    // Set initial visibility (default disabled, will be controlled via tabify)
     routeDock->setVisible(false);
     
     qDebug() << "Route Panel setup completed";
 }
+
 
 void MainWindow::onRouteSelected(int routeId)
 {
