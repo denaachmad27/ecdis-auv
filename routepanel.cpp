@@ -360,6 +360,12 @@ void RoutePanel::setupUI()
     routeManagementLayout->addWidget(exportRoutesButton, 0, 2);
     routeManagementLayout->addWidget(refreshButton, 1, 0);
     routeManagementLayout->addWidget(clearAllButton, 1, 1);
+
+    // HIDE FOR PRODUCTION PURPOSE
+    if (AppConfig::isProduction()){
+        //importRoutesButton->setVisible(false);
+        exportRoutesButton->setVisible(false);
+    }
     
     mainLayout->addWidget(routeManagementGroup);
     
@@ -657,7 +663,7 @@ void RoutePanel::setupConnections()
             
             // Detach this route from ship (this will make all routes blue again)
             ecWidget->attachRouteToShip(-1); // Detach all routes
-            ecWidget->publishToMOOSDB("WAYPT_NAV", "");
+            ecWidget->publishToMOOS("WAYPT_NAV", "");
             ecWidget->setOwnShipTrail(false);
             
             // Ensure visibility is maintained
@@ -890,7 +896,7 @@ void RoutePanel::publishToMOOSDB(){
     }
 
     QString result = "pts={" + coordPairs.join(": ") + "}";
-    ecWidget->publishToMOOSDB("WAYPT_NAV", result);
+    ecWidget->publishToMOOS("WAYPT_NAV", result);
 }
 
 QString RoutePanel::formatDistance(double distanceNM)
@@ -2233,4 +2239,9 @@ void RoutePanel::mousePressEvent(QMouseEvent* event)
     
     // Call parent implementation
     QWidget::mousePressEvent(event);
+}
+
+void RoutePanel::setAttachDetachButton(bool connection){
+    addToShipButton->setVisible(connection);
+    detachFromShipButton->setVisible(connection);
 }

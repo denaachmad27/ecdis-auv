@@ -690,6 +690,7 @@ public:
   void processMapInfoReq(QString);
   void processAis(QString);
   void publishToMOOSDB(QString, QString);
+  void publishToMOOS(QString, QString);
 
   QString convertJsonData(const QString &jsonString);
   void publishRoutesToMOOSDB(const QString data);

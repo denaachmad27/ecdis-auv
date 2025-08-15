@@ -285,3 +285,7 @@ QString AISSubscriber::formatCountdownTime(int totalSeconds) {
 void AISSubscriber::setMainWindow(MainWindow* mw){
     mainWindow = mw;
 }
+
+bool AISSubscriber::hasData(){
+    return dataFlag;
+}

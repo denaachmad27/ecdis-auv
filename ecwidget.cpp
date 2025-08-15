@@ -2394,6 +2394,8 @@ void EcWidget::startAISConnection()
     connect(subscriber, &AISSubscriber::rteTtgReceived, this, [=](const QString &v) { activeRoute.rteTtg = v;});
     connect(subscriber, &AISSubscriber::rteEtaReceived, this, [=](const QString &v) { activeRoute.rteEta = v;});
 
+    connect(subscriber, &AISSubscriber::publishToMOOSDB, this, &EcWidget::publishToMOOSDB);
+
     connect(subscriber, &AISSubscriber::errorOccurred, this, [](const QString &msg) { qWarning() << "Error:" << msg; });
     connect(subscriber, &AISSubscriber::disconnected, this, []() { qDebug() << "Disconnected from AIS source.";});
 
@@ -2634,6 +2636,7 @@ void EcWidget::processAISJson(const QByteArray& rawData){
     qDebug() << data;
 }
 
+// REAL FUNCTION
 void EcWidget::publishToMOOSDB(QString varName, QString data){
     qDebug() << data;
 
@@ -2657,6 +2660,13 @@ void EcWidget::publishToMOOSDB(QString varName, QString data){
     sendSocket->deleteLater();
 
     qDebug() << sendData;
+}
+
+// FOR EMIT PUPROSE
+void EcWidget::publishToMOOS(QString varName, QString data){
+    if (subscriber && subscriber->hasData()){
+        emit subscriber->publishToMOOSDB(varName, data);
+    }
 }
 
 QString EcWidget::convertJsonData(const QString &jsonString){
@@ -2686,7 +2696,7 @@ QString EcWidget::convertJsonData(const QString &jsonString){
 void EcWidget::publishRoutesToMOOSDB(const QString data){
     QString publishData = convertJsonData(data);
 
-    publishToMOOSDB("WAYPT_NAV", publishData);
+    publishToMOOS("WAYPT_NAV", publishData);
 }
 
 AISSubscriber* EcWidget::getAisSub() const{
@@ -4401,7 +4411,9 @@ void EcWidget::showWaypointContextMenu(const QPoint& pos, int waypointIndex)
                             .arg(lat, 0, 'f', 6) // 6 angka di belakang koma
                             .arg(lon, 0, 'f', 6);
 
-        publishToMOOSDB("WAYPT_NEXT", result);
+        if (subscriber){
+            publishToMOOS("WAYPT_NEXT", result);
+        }
     }
 }
 

@@ -77,6 +77,7 @@ public:
 
     void refreshRouteList();
     void updateRouteInfo(int routeId);
+    void setAttachDetachButton(bool connection);
 
 public slots:
     void onRouteCreated();

@@ -216,6 +216,8 @@ void MainWindow::onMoosConnectionStatusChanged(bool connected)
 
     restartAction->setEnabled(!connected);
     stopAction->setEnabled(connected);
+
+    routePanel->setAttachDetachButton(connected);
 }
 
 void MainWindow::createStatusBar(){
@@ -519,19 +521,27 @@ void MainWindow::createMenuBar(){
     // Route - Comprehensive navigation planning
     QMenu *routeMenu = menuBar()->addMenu("&Route");
 
-    routeMenu->addAction("Create New Route", this, SLOT(onCreateRoute()));
-    routeMenu->addAction("Create Route by Form...", this, SLOT(onCreateRouteByForm()));
-    routeMenu->addSeparator();
-    routeMenu->addAction("Edit Route Points", this, SLOT(onEditRoute()));
-    routeMenu->addAction("Insert Waypoint", this, SLOT(onInsertWaypoint()));
-    routeMenu->addAction("Move Waypoint", this, SLOT(onMoveWaypoint()));
-    routeMenu->addAction("Delete Waypoint", this, SLOT(onDeleteWaypoint()));
-    routeMenu->addAction("Delete Route", this, SLOT(onDeleteRoute()));
-    routeMenu->addSeparator();
-    routeMenu->addAction("Import Route...", this, SLOT(onImportRoute()));
-    routeMenu->addAction("Export Route...", this, SLOT(onExportRoute()));
-    routeMenu->addAction("Export All Routes...", this, SLOT(onExportAllRoutes()));
-    routeMenu->addAction("Clear All Routes", this, SLOT(onClearRoutes()));
+    if (AppConfig::isDevelopment()){
+        routeMenu->addAction("Create New Route", this, SLOT(onCreateRoute()));
+        routeMenu->addAction("Create Route by Form...", this, SLOT(onCreateRouteByForm()));
+        routeMenu->addSeparator();
+        routeMenu->addAction("Edit Route Points", this, SLOT(onEditRoute()));
+        routeMenu->addAction("Insert Waypoint", this, SLOT(onInsertWaypoint()));
+        routeMenu->addAction("Move Waypoint", this, SLOT(onMoveWaypoint()));
+        routeMenu->addAction("Delete Waypoint", this, SLOT(onDeleteWaypoint()));
+        routeMenu->addAction("Delete Route", this, SLOT(onDeleteRoute()));
+        routeMenu->addSeparator();
+        routeMenu->addAction("Import Route...", this, SLOT(onImportRoute()));
+        routeMenu->addAction("Export Route...", this, SLOT(onExportRoute()));
+        routeMenu->addAction("Export All Routes...", this, SLOT(onExportAllRoutes()));
+        routeMenu->addAction("Clear All Routes", this, SLOT(onClearRoutes()));
+    }
+    else {
+        routeMenu->addAction("Create New Route", this, SLOT(onCreateRoute()));
+        routeMenu->addAction("Clear All Routes", this, SLOT(onClearRoutes()));
+        routeMenu->addSeparator();
+        routeMenu->addAction("Route Management", this, SLOT(openRouteManager()));
+    }
 
     // ================================== MOOSDB MENU
     QMenu *moosMenu = menuBar()->addMenu("&Connection");
@@ -956,7 +966,7 @@ void MainWindow::openSettingsDialog() {
 
 void MainWindow::openReleaseNotesDialog() {
     QDialog dialog(this);
-    dialog.setWindowTitle("Release Notes - ECDIS v1.1");
+    dialog.setWindowTitle("Release Notes - "+ QString(APP_TITLE));
     dialog.resize(500, 450);
 
     QVBoxLayout *layout = new QVBoxLayout(&dialog);
@@ -964,8 +974,20 @@ void MainWindow::openReleaseNotesDialog() {
     QTextEdit *textEdit = new QTextEdit(&dialog);
     textEdit->setReadOnly(true);
     textEdit->setHtml(R"(
-        <h3><b>ECDIS v1.1 Release Notes</b></h3>
+        <h3><b>ECDIS v1.2 Changelog</b></h3>
+
+        <h3>New Features</h3>
+        <div style="font-size: 14px; margin-left: 0;">• Route Management</div>
+
+        <h3>Enhancements</h3>
+        <div style="font-size: 14px; margin-left: 0;">• Bug Fixing</div>
+        <div style="font-size: 14px; margin-left: 0;">• UI Refinements</div>
+        <div style="font-size: 14px; margin-left: 0;">• MOOSDB Autoconnect</div>
+        <div style="font-size: 14px; margin-left: 0;">• TCP Subscribe and Publish</div>
+        <div style="font-size: 14px; margin-left: 0;">• Logging Management</div>
+
         <hr>
+        <h3><b>ECDIS v1.1</b></h3>
 
         <h3>New Features</h3>
         <div style="font-size: 14px; margin-left: 0;">• Vertical Action Bar</div>
@@ -4119,7 +4141,8 @@ void MainWindow::setupRoutePanel()
             this, &MainWindow::onEditRouteByForm);
     connect(routePanel, &RoutePanel::statusMessage, 
             this, [this](const QString& message) {
-                statusBar()->showMessage(message, 3000);
+                routesStatusText->setText(message);
+                // statusBar()->showMessage(message, 3000);
             });
     
     // Connect EcWidget signals to RoutePanel
@@ -4140,7 +4163,8 @@ void MainWindow::onRouteSelected(int routeId)
     if (!ecchart) return;
     
     qDebug() << "Route selected:" << routeId;
-    statusBar()->showMessage(tr("Route %1 selected").arg(routeId), 2000);
+    //statusBar()->showMessage(tr("Route %1 selected").arg(routeId), 2000);
+    routesStatusText->setText(tr("Route %1 selected").arg(routeId));
 }
 
 void MainWindow::onRouteVisibilityChanged(int routeId, bool visible)

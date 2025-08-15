@@ -16,6 +16,7 @@ public:
     //void disconnectFromHost();
     void setMainWindow(MainWindow*);
     bool dataFlag = false;
+    bool hasData();
 
 signals:
     // OWNSHIP
@@ -47,6 +48,8 @@ signals:
     void rteDtgMReceived(const QString &value);
     void rteTtgReceived(const QString &value);
     void rteEtaReceived(const QString &value);
+
+    void publishToMOOSDB(const QString &key, const QString &value);
 
     void errorOccurred(const QString &message);
     void disconnected();
