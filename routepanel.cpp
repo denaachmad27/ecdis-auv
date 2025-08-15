@@ -308,6 +308,9 @@ RoutePanel::~RoutePanel()
 
 void RoutePanel::setupUI()
 {
+    // Set minimum width to accommodate lat/lon coordinates properly
+    setMinimumWidth(320);
+    
     // Consistent with CPA/TCPA Panel layout and styling
     mainLayout = new QVBoxLayout();
     this->setLayout(mainLayout);
@@ -336,7 +339,7 @@ void RoutePanel::setupUI()
         "    padding: 0 5px 0 5px;"
         "}"
     );
-    QHBoxLayout* routeManagementLayout = new QHBoxLayout();
+    QGridLayout* routeManagementLayout = new QGridLayout();
     routeManagementGroup->setLayout(routeManagementLayout);
     
     addRouteButton = new QPushButton("Add Route");
@@ -351,12 +354,12 @@ void RoutePanel::setupUI()
     refreshButton->setToolTip("Refresh route list");
     clearAllButton->setToolTip("Clear all routes");
     
-    routeManagementLayout->addWidget(addRouteButton);
-    routeManagementLayout->addWidget(importRoutesButton);
-    routeManagementLayout->addWidget(exportRoutesButton);
-    routeManagementLayout->addStretch();
-    routeManagementLayout->addWidget(refreshButton);
-    routeManagementLayout->addWidget(clearAllButton);
+    // Layout buttons in 3 columns, 2 rows
+    routeManagementLayout->addWidget(addRouteButton, 0, 0);
+    routeManagementLayout->addWidget(importRoutesButton, 0, 1);
+    routeManagementLayout->addWidget(exportRoutesButton, 0, 2);
+    routeManagementLayout->addWidget(refreshButton, 1, 0);
+    routeManagementLayout->addWidget(clearAllButton, 1, 1);
     
     mainLayout->addWidget(routeManagementGroup);
     
@@ -453,29 +456,47 @@ void RoutePanel::setupUI()
     duplicateWaypointButton->setEnabled(false);
     toggleActiveButton->setEnabled(false);
     
-    // Layout buttons in 2 rows
+    // Hide toggle button since it's replaced by checkbox in Available routes
+    toggleActiveButton->setVisible(false);
+    
+    // Layout buttons in 3 columns, 2 rows
     waypointManagementLayout->addWidget(addWaypointButton, 0, 0);
     waypointManagementLayout->addWidget(editWaypointButton, 0, 1);
     waypointManagementLayout->addWidget(deleteWaypointButton, 0, 2);
-    waypointManagementLayout->addWidget(duplicateWaypointButton, 0, 3);
     waypointManagementLayout->addWidget(moveUpButton, 1, 0);
     waypointManagementLayout->addWidget(moveDownButton, 1, 1);
-    waypointManagementLayout->addWidget(toggleActiveButton, 1, 2);
-    waypointManagementLayout->setColumnStretch(3, 1); // Stretch last column
+    waypointManagementLayout->addWidget(duplicateWaypointButton, 1, 2);
     
     listGroupLayout->addWidget(waypointManagementGroup);
     mainLayout->addWidget(routeListGroup);
     
-    // Route Details Group (similar to Own Ship group in CPA/TCPA)
+    // Route Details Group (consistent with other GroupBox styles)
     routeInfoGroup = new QGroupBox("Route Details");
+    routeInfoGroup->setStyleSheet(
+        "QGroupBox {"
+        "    font-weight: bold;"
+        "    border: 2px solid #c0c0c0;"
+        "    border-radius: 5px;"
+        "    margin-top: 10px;"
+        "    padding-top: 10px;"
+        "}"
+        "QGroupBox::title {"
+        "    subcontrol-origin: margin;"
+        "    left: 10px;"
+        "    padding: 0 5px 0 5px;"
+        "}"
+    );
+    QVBoxLayout* infoGroupLayout = new QVBoxLayout();
+    routeInfoGroup->setLayout(infoGroupLayout);
+    
+    // Route Info Display Grid
     QGridLayout* infoLayout = new QGridLayout();
-    routeInfoGroup->setLayout(infoLayout);
     
     // Labels in grid layout like CPA/TCPA
-    routeNameLabel = new QLabel("Name: -");
-    waypointCountLabel = new QLabel("Waypoints: -");
-    totalDistanceLabel = new QLabel("Distance: -");
-    totalTimeLabel = new QLabel("ETA: -");
+    routeNameLabel = new QLabel("-");
+    waypointCountLabel = new QLabel("-");
+    totalDistanceLabel = new QLabel("-");
+    totalTimeLabel = new QLabel("-");
     
     infoLayout->addWidget(new QLabel("Route:"), 0, 0);
     infoLayout->addWidget(routeNameLabel, 0, 1);
@@ -483,13 +504,36 @@ void RoutePanel::setupUI()
     infoLayout->addWidget(waypointCountLabel, 1, 1);
     infoLayout->addWidget(new QLabel("Distance:"), 2, 0);
     infoLayout->addWidget(totalDistanceLabel, 2, 1);
-    infoLayout->addWidget(new QLabel("ETA:"), 3, 0);
-    infoLayout->addWidget(totalTimeLabel, 3, 1);
+    // ETA information hidden - not needed currently
+    // infoLayout->addWidget(new QLabel("ETA:"), 3, 0);
+    // infoLayout->addWidget(totalTimeLabel, 3, 1);
+    
+    // Add info layout to group
+    infoGroupLayout->addLayout(infoLayout);
+    
+    // Route Actions Group (nested within Route Details)
+    QGroupBox* actionsGroup = new QGroupBox("Route Actions");
+    actionsGroup->setStyleSheet(
+        "QGroupBox {"
+        "    font-weight: normal;"
+        "    border: 1px solid #a0a0a0;"
+        "    border-radius: 3px;"
+        "    margin-top: 5px;"
+        "    padding-top: 5px;"
+        "}"
+        "QGroupBox::title {"
+        "    subcontrol-origin: margin;"
+        "    left: 10px;"
+        "    padding: 0 3px 0 3px;"
+        "}"
+    );
+    QGridLayout* actionsLayout = new QGridLayout();
+    actionsGroup->setLayout(actionsLayout);
     
     // Visibility checkbox and ship attachment buttons
     visibilityCheckBox = new QCheckBox("Show on Chart");
-    addToShipButton = new QPushButton("Attach to Ship");
-    detachFromShipButton = new QPushButton("Detach from Ship");
+    addToShipButton = new QPushButton("Attach");
+    detachFromShipButton = new QPushButton("Detach");
 
     addToShipButton->setToolTip("Attach this route to ship navigation (only one route can be attached)");
     detachFromShipButton->setToolTip("Remove this route from ship navigation");
@@ -498,13 +542,14 @@ void RoutePanel::setupUI()
     addToShipButton->setEnabled(true);
     detachFromShipButton->setEnabled(false);
     
-    QHBoxLayout* actionLayout = new QHBoxLayout();
-    actionLayout->addWidget(visibilityCheckBox);
-    actionLayout->addWidget(addToShipButton);
-    actionLayout->addWidget(detachFromShipButton);
-    actionLayout->addStretch();
+    // Layout actions in 3 columns to match other sections
+    actionsLayout->addWidget(visibilityCheckBox, 0, 0);
+    actionsLayout->addWidget(addToShipButton, 0, 1);
+    actionsLayout->addWidget(detachFromShipButton, 0, 2);
     
-    infoLayout->addLayout(actionLayout, 4, 0, 1, 2);
+    // Add actions group to info group
+    infoGroupLayout->addWidget(actionsGroup);
+    
     mainLayout->addWidget(routeInfoGroup);
 
     // Button states are now managed by updateRouteInfoDisplay based on actual attachment status
@@ -544,8 +589,9 @@ void RoutePanel::setupConnections()
     // Tree widget connections
     connect(routeTreeWidget, &QTreeWidget::itemSelectionChanged, 
             this, &RoutePanel::onRouteItemSelectionChanged);
-    connect(routeTreeWidget, &QTreeWidget::itemDoubleClicked, 
-            this, &RoutePanel::onRouteItemDoubleClicked);
+    // Double-click disabled - not needed currently
+    // connect(routeTreeWidget, &QTreeWidget::itemDoubleClicked, 
+    //         this, &RoutePanel::onRouteItemDoubleClicked);
     connect(routeTreeWidget, &QTreeWidget::customContextMenuRequested, 
             this, &RoutePanel::onShowContextMenu);
     connect(routeTreeWidget, &QTreeWidget::itemChanged,
