@@ -582,9 +582,11 @@ void MainWindow::createMenuBar(){
     }
     
     // Setup GuardZone and AIS Target panels for tabify integration
-    setupGuardZonePanel();
-    setupAISTargetPanel();
-    setupObstacleDetectionPanel(); // Also setup obstacle detection for additional tabify
+    if (AppConfig::isDevelopment()){
+        setupGuardZonePanel();
+        setupAISTargetPanel();
+        setupObstacleDetectionPanel(); // Also setup obstacle detection for additional tabify
+    }
     
     qDebug() << "[TABIFY] Setup panels for tab integration - GuardZone, AIS Target, Route, Obstacle Detection";
 

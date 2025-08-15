@@ -37,7 +37,7 @@ void SettingsDialog::setupUI() {
     QWidget *moosTab = new QWidget;
     QFormLayout *moosLayout = new QFormLayout;
     moosIpLineEdit = new QLineEdit;
-    moosIpLineEdit->setDisabled(true);
+    moosIpLineEdit->setDisabled(false);
     moosPortLineEdit = new QLineEdit;
     moosLayout->addRow("MOOSDB IP:", moosIpLineEdit);
 
