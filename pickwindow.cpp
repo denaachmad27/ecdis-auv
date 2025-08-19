@@ -342,12 +342,14 @@ QString PickWindow::ownShipAutoFill()
     ownship.append("<table width='100%' cellspacing='0' cellpadding='2'>");
 
     if (navShip.lat != 0){
-        row = QString("<tr><td>LAT</td><td><b>%1 °</b></td></tr>").arg(navShip.lat);
+        row = QString("<tr><td>LAT</td><td><b>%1</b></td></tr>").arg(navShip.slat);
+        //row = QString("<tr><td>LAT</td><td><b>%1 °</b></td></tr>").arg(navShip.lat);
         text.append(row);
         ownship.append(row);
     }
     if (navShip.lon != 0){
-        row = QString("<tr><td>LONG</td><td><b>%1 °</b></td></tr>").arg(navShip.lon);
+        row = QString("<tr><td>LONG</td><td><b>%1</b></td></tr>").arg(navShip.slon);
+        //row = QString("<tr><td>LONG</td><td><b>%1 °</b></td></tr>").arg(navShip.slon);
         text.append(row);
         ownship.append(row);
     }

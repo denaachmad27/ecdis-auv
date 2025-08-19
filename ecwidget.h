@@ -76,7 +76,9 @@ struct ShipStruct {
     double drift_angle;  // Drift angle
     double set;     // current set
     double rot;     // Rate of Turn
-    double depth_below_keel; // distance from transducer to seabed
+    double depth_below_keel; // distance from transducer to seabed'
+    QString slat; // String Lat
+    QString slon; // String Lon
 };
 
 struct ActiveRouteStruct {
@@ -692,6 +694,8 @@ public:
   void processAis(QString);
   void publishToMOOSDB(QString, QString);
   void publishToMOOS(QString, QString);
+
+  QString latLonToDegMin(double value, bool isLatitude);
 
   QString convertJsonData(const QString &jsonString);
   void publishRoutesToMOOSDB(const QString data);

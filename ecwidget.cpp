@@ -2365,8 +2365,20 @@ void EcWidget::startAISConnection()
     });
 
     // OWNSHIP
-    connect(subscriber, &AISSubscriber::navLatReceived, this, [=](double lat) { navShip.lat = lat;});
-    connect(subscriber, &AISSubscriber::navLongReceived, this, [=](double lon) { navShip.lon = lon;});
+    connect(subscriber, &AISSubscriber::navLatReceived, this, [=](double lat) {
+        navShip.lat = lat;
+
+        QString slat = latLonToDegMin(lat, true);
+        navShip.slat = slat;
+    });
+    connect(subscriber, &AISSubscriber::navLongReceived, this, [=](double lon) {
+        navShip.lon = lon;
+
+        QString slon = latLonToDegMin(lon, false);
+        navShip.slon = slon;
+    });
+
+
     connect(subscriber, &AISSubscriber::navDepthReceived, this, [=](double depth) { navShip.depth = depth;});
     connect(subscriber, &AISSubscriber::navHeadingReceived, this, [=](double hdg) { navShip.heading = hdg;});
     connect(subscriber, &AISSubscriber::navHeadingOGReceived, this, [=](double cog) { navShip.heading_og = cog;});
@@ -2634,6 +2646,28 @@ void EcWidget::processAISJson(const QByteArray& rawData){
     }
 
     qDebug() << data;
+}
+
+QString EcWidget::latLonToDegMin(double value, bool isLatitude){
+    // Tentukan arah (N/S atau E/W)
+    char hemi;
+    if (isLatitude) {
+        hemi = (value >= 0) ? 'N' : 'S';
+    } else {
+        hemi = (value >= 0) ? 'E' : 'W';
+    }
+
+    value = std::fabs(value);
+
+    // Pecah jadi derajat dan menit
+    int deg = (int)value;
+    double minutes = (value - deg) * 60.0;
+
+    // Format: 07° 11.71' S
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), "%02d° %05.2f' %c", deg, minutes, hemi);
+
+    return QString(buf);
 }
 
 // REAL FUNCTION
