@@ -294,6 +294,7 @@ public:
   bool exportWaypointsToFile(const QString &filename);
   bool importWaypointsFromFile(const QString &filename);
   bool initializeWaypointSystem();
+  bool renameRoute(int routeId, const QString& newName);
   
   // Route mode methods
   void startRouteMode();

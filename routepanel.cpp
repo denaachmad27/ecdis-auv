@@ -17,6 +17,21 @@
 
 // ====== RouteTreeItem Implementation ======
 
+// Helper: format decimal degrees to Deg-Min representation with hemisphere
+static QString formatDegMin(double value, bool isLat)
+{
+    double absVal = qAbs(value);
+    int deg = static_cast<int>(absVal);
+    double minutes = (absVal - deg) * 60.0;
+    QChar hemi;
+    if (isLat) hemi = (value >= 0.0) ? 'N' : 'S';
+    else hemi = (value >= 0.0) ? 'E' : 'W';
+    return QString("%1° %2' %3")
+        .arg(deg, 2, 10, QChar('0'))
+        .arg(minutes, 0, 'f', 3)
+        .arg(hemi);
+}
+
 RouteTreeItem::RouteTreeItem(const RouteInfo& routeInfo, QTreeWidget* parent, EcWidget* ecWidget)
     : QTreeWidgetItem(parent), routeId(routeInfo.routeId), ecWidget(ecWidget)
 {
@@ -56,6 +71,8 @@ void RouteTreeItem::updateDisplayText(const RouteInfo& routeInfo)
     font.setFamily("Segoe UI");
     font.setPixelSize(13); // Slightly smaller for better hierarchy
     font.setWeight(QFont::Medium);
+    // Ensure base (visible) state is not italic
+    font.setItalic(false);
     
     // Apply styling based on route state
     if (!routeInfo.visible) {
@@ -69,6 +86,7 @@ void RouteTreeItem::updateDisplayText(const RouteInfo& routeInfo)
         // Active route - prominent but not overwhelming
         setData(0, Qt::ForegroundRole, QBrush(activeColor));
         QFont activeFont = font;
+        activeFont.setItalic(false); // Explicitly clear italic for visible active state
         activeFont.setWeight(QFont::DemiBold);
         setFont(0, activeFont);
     } else {
@@ -110,12 +128,14 @@ void WaypointTreeItem::updateDisplayText()
 {
     // Clean, professional waypoint display without status text (checkbox handles it)
     QString waypointName = waypointData.label.isEmpty() ? QString("WP-%1").arg(waypointData.routeId) : waypointData.label;
-    
-    // Compact coordinate formatting - 4 decimal places for readability
-    QString waypointText = QString("  %1 (%2°, %3°)")
+
+    // Coordinates formatted in deg-minute with hemisphere
+    QString latDM = formatDegMin(waypointData.lat, true);
+    QString lonDM = formatDegMin(waypointData.lon, false);
+    QString waypointText = QString("  %1 (%2, %3)")
                           .arg(waypointName)
-                          .arg(waypointData.lat, 0, 'f', 4)
-                          .arg(waypointData.lon, 0, 'f', 4);
+                          .arg(latDM)
+                          .arg(lonDM);
     
     setText(0, waypointText);
     
@@ -627,6 +647,10 @@ void RoutePanel::setupConnections()
             ecWidget->Draw(); // Use Draw() like route selection fix
             emit routeVisibilityChanged(selectedRouteId, checked);
             emit statusMessage(QString("Route %1 %2").arg(selectedRouteId).arg(checked ? "shown" : "hidden"));
+            // Update only this route item's title/styling to reflect [Hidden]/italic
+            refreshRouteItem(selectedRouteId);
+            // Also keep the info panel in sync
+            updateRouteInfo(selectedRouteId);
         }
     });
     
@@ -1330,49 +1354,20 @@ void RoutePanel::onRenameRoute()
     dialog.setTextValue(info.name);
     dialog.setInputMode(QInputDialog::TextInput);
     
-    // Modern styling
-    dialog.setStyleSheet(
-        "QInputDialog {"
-        "    background-color: white;"
-        "    font-family: 'Segoe UI';"
-        "}"
-        "QLabel {"
-        "    color: #495057;"
-        "    font-size: 13px;"
-        "    font-weight: 500;"
-        "}"
-        "QLineEdit {"
-        "    border: 2px solid #e9ecef;"
-        "    border-radius: 4px;"
-        "    padding: 8px 12px;"
-        "    font-size: 13px;"
-        "    background-color: white;"
-        "}"
-        "QLineEdit:focus {"
-        "    border-color: #007bff;"
-        "    outline: none;"
-        "}"
-        "QPushButton {"
-        "    background-color: #007bff;"
-        "    color: white;"
-        "    border: none;"
-        "    border-radius: 4px;"
-        "    padding: 8px 16px;"
-        "    font-weight: 500;"
-        "    min-width: 80px;"
-        "}"
-        "QPushButton:hover {"
-        "    background-color: #0056b3;"
-        "}"
-    );
+    // Theme-aware styling
+    dialog.setStyleSheet(getDialogStyleSheet());
     
     if (dialog.exec() == QDialog::Accepted) {
         QString newName = dialog.textValue().trimmed();
         if (!newName.isEmpty() && newName != info.name) {
-            // TODO: Implement actual rename functionality in EcWidget
-            // For now, just refresh and show message
-            refreshRouteList();
-            emit statusMessage(QString("✅ Route renamed to '%1'").arg(newName));
+            if (ecWidget && ecWidget->renameRoute(selectedRouteId, newName)) {
+                // Update tree item and info panel without full rebuild
+                refreshRouteItem(selectedRouteId);
+                updateRouteInfo(selectedRouteId);
+                emit statusMessage(QString("✅ Route renamed to '%1'").arg(newName));
+            } else {
+                QMessageBox::warning(this, "Rename Failed", "Could not rename the route.");
+            }
         }
     }
 }
@@ -1385,6 +1380,9 @@ void RoutePanel::onToggleRouteVisibility()
         visibilityCheckBox->setChecked(!currentVisibility);
         ecWidget->update(); // Use lighter update instead of forceRedraw
         emit routeVisibilityChanged(selectedRouteId, !currentVisibility);
+        // Reflect title/state changes immediately in the tree
+        refreshRouteItem(selectedRouteId);
+        updateRouteInfo(selectedRouteId);
     }
 }
 
@@ -1517,6 +1515,47 @@ RouteTreeItem* RoutePanel::findRouteItem(int routeId)
 bool RoutePanel::isWaypointItem(QTreeWidgetItem* item) const
 {
     return dynamic_cast<WaypointTreeItem*>(item) != nullptr;
+}
+
+void RoutePanel::refreshRouteItem(int routeId)
+{
+    // Update a single route item's display (text, color, italic) without full list rebuild
+    RouteTreeItem* routeItem = findRouteItem(routeId);
+    if (routeItem) {
+        RouteInfo info = calculateRouteInfo(routeId);
+        routeItem->updateFromRouteInfo(info);
+    } else {
+        // Fallback: if not found, rebuild list
+        refreshRouteList();
+    }
+}
+
+QString RoutePanel::getDialogStyleSheet() const
+{
+    QString bg, text, label, inputBg, inputText, border, primary, primaryHover;
+
+    if (AppConfig::isDark()) {
+        bg = "#2b2b2b"; text = "#ffffff"; label = "#e0e0e0";
+        inputBg = "#3a3a3a"; inputText = "#ffffff"; border = "#5a5a5a";
+        primary = "#0078d4"; primaryHover = "#1a86db";
+    } else if (AppConfig::isDim()) {
+        bg = "#1e2a38"; text = "#ffffff"; label = "#e8eef5";
+        inputBg = "#243447"; inputText = "#ffffff"; border = "#3a4a5a";
+        primary = "#355273"; primaryHover = "#3f5f85";
+    } else { // Light
+        bg = "#ffffff"; text = "#000000"; label = "#495057";
+        inputBg = "#ffffff"; inputText = "#000000"; border = "#e9ecef";
+        primary = "#007bff"; primaryHover = "#0056b3";
+    }
+
+    return QString(
+        "QInputDialog { background-color: %1; font-family: 'Segoe UI'; color: %2; }"
+        "QLabel { color: %3; font-size: 13px; font-weight: 500; }"
+        "QLineEdit { border: 2px solid %6; border-radius: 4px; padding: 8px 12px; font-size: 13px; background-color: %4; color: %5; }"
+        "QLineEdit:focus { border-color: %7; outline: none; }"
+        "QPushButton { background-color: %7; color: #ffffff; border: none; border-radius: 4px; padding: 8px 16px; font-weight: 500; min-width: 80px; }"
+        "QPushButton:hover { background-color: %8; }"
+    ).arg(bg).arg(text).arg(label).arg(inputBg).arg(inputText).arg(border).arg(primary).arg(primaryHover);
 }
 
 // ====== Waypoint Operation Functions ======

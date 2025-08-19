@@ -3895,7 +3895,7 @@ void EcWidget::drawGhostWaypoint(QPainter& painter, double lat, double lon, cons
         
         // Hitung jarak dan bearing jika ada waypoint referensi
         if (refWaypoint) {
-            double distance = haversine(refWaypoint->lat, refWaypoint->lon, lat, lon);
+            double distance = haversine(refWaypoint->lat, refWaypoint->lon, lat, lon); // meters
             double bearing = atan2(sin((lon - refWaypoint->lon) * M_PI / 180.0) * cos(lat * M_PI / 180.0),
                                  cos(refWaypoint->lat * M_PI / 180.0) * sin(lat * M_PI / 180.0) - 
                                  sin(refWaypoint->lat * M_PI / 180.0) * cos(lat * M_PI / 180.0) * 
@@ -3904,8 +3904,8 @@ void EcWidget::drawGhostWaypoint(QPainter& painter, double lat, double lon, cons
             // Konversi bearing ke 0-360 derajat
             if (bearing < 0) bearing += 360;
             
-            displayText += QString("\nDist: %1 NM\nBrg: %2°")
-                          .arg(distance, 0, 'f', 2)
+            displayText += QString("\nDist: %1 m\nBrg: %2°")
+                          .arg(distance, 0, 'f', 0)
                           .arg(bearing, 0, 'f', 1);
         }
     }
@@ -4033,9 +4033,9 @@ void EcWidget::drawGhostRouteLines(QPainter& painter, double ghostLat, double gh
             painter.drawLine(midX, midY, arrowX1, arrowY1);
             painter.drawLine(midX, midY, arrowX2, arrowY2);
             
-            // Draw distance and bearing label on leg line
-            QString legInfo = QString("%1 NM / %2°")
-                             .arg(distance, 0, 'f', 2)
+            // Draw distance and bearing label on leg line (incoming)
+            QString legInfo = QString("%1 m / %2°")
+                             .arg(distance, 0, 'f', 0)
                              .arg(bearing, 0, 'f', 1);
             
             painter.setFont(QFont("Arial", 8, QFont::Bold));
@@ -4210,8 +4210,8 @@ void EcWidget::drawGhostRouteLines(QPainter& painter, double ghostLat, double gh
             painter.drawLine(midX, midY, arrowX2, arrowY2);
             
             // Draw distance and bearing label on leg line (outgoing)
-            QString legInfo = QString("%1 NM / %2°")
-                             .arg(distance, 0, 'f', 2)
+            QString legInfo = QString("%1 m / %2°")
+                             .arg(distance, 0, 'f', 0)
                              .arg(bearing, 0, 'f', 1);
             
             painter.setFont(QFont("Arial", 7, QFont::Bold));
@@ -12344,6 +12344,29 @@ void EcWidget::loadRoutes()
     {
         qDebug() << "[ERROR] Failed to open routes file:" << filePath;
     }
+}
+
+bool EcWidget::renameRoute(int routeId, const QString& newName)
+{
+    if (routeId <= 0 || newName.trimmed().isEmpty()) return false;
+
+    bool found = false;
+    for (auto &route : routeList) {
+        if (route.routeId == routeId) {
+            route.name = newName.trimmed();
+            route.modifiedDate = QDateTime::currentDateTime();
+            found = true;
+            break;
+        }
+    }
+
+    if (!found) return false;
+
+    // Persist and refresh any labels/overlays using the route name
+    saveRoutes();
+    updateRouteLabels(routeId);
+    Draw();
+    return true;
 }
 
 void EcWidget::convertRoutesToWaypoints()
