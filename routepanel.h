@@ -225,6 +225,7 @@ protected:
     void publishToMOOSDB();
     RouteTreeItem* findRouteItem(int routeId);
     bool isWaypointItem(QTreeWidgetItem* item) const;
+    void refreshRouteItem(int routeId);
 };
 
 #endif // ROUTEPANEL_H

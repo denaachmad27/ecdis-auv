@@ -56,6 +56,8 @@ void RouteTreeItem::updateDisplayText(const RouteInfo& routeInfo)
     font.setFamily("Segoe UI");
     font.setPixelSize(13); // Slightly smaller for better hierarchy
     font.setWeight(QFont::Medium);
+    // Ensure base (visible) state is not italic
+    font.setItalic(false);
     
     // Apply styling based on route state
     if (!routeInfo.visible) {
@@ -69,6 +71,7 @@ void RouteTreeItem::updateDisplayText(const RouteInfo& routeInfo)
         // Active route - prominent but not overwhelming
         setData(0, Qt::ForegroundRole, QBrush(activeColor));
         QFont activeFont = font;
+        activeFont.setItalic(false); // Explicitly clear italic for visible active state
         activeFont.setWeight(QFont::DemiBold);
         setFont(0, activeFont);
     } else {
@@ -627,6 +630,10 @@ void RoutePanel::setupConnections()
             ecWidget->Draw(); // Use Draw() like route selection fix
             emit routeVisibilityChanged(selectedRouteId, checked);
             emit statusMessage(QString("Route %1 %2").arg(selectedRouteId).arg(checked ? "shown" : "hidden"));
+            // Update only this route item's title/styling to reflect [Hidden]/italic
+            refreshRouteItem(selectedRouteId);
+            // Also keep the info panel in sync
+            updateRouteInfo(selectedRouteId);
         }
     });
     
@@ -1385,6 +1392,9 @@ void RoutePanel::onToggleRouteVisibility()
         visibilityCheckBox->setChecked(!currentVisibility);
         ecWidget->update(); // Use lighter update instead of forceRedraw
         emit routeVisibilityChanged(selectedRouteId, !currentVisibility);
+        // Reflect title/state changes immediately in the tree
+        refreshRouteItem(selectedRouteId);
+        updateRouteInfo(selectedRouteId);
     }
 }
 
@@ -1517,6 +1527,19 @@ RouteTreeItem* RoutePanel::findRouteItem(int routeId)
 bool RoutePanel::isWaypointItem(QTreeWidgetItem* item) const
 {
     return dynamic_cast<WaypointTreeItem*>(item) != nullptr;
+}
+
+void RoutePanel::refreshRouteItem(int routeId)
+{
+    // Update a single route item's display (text, color, italic) without full list rebuild
+    RouteTreeItem* routeItem = findRouteItem(routeId);
+    if (routeItem) {
+        RouteInfo info = calculateRouteInfo(routeId);
+        routeItem->updateFromRouteInfo(info);
+    } else {
+        // Fallback: if not found, rebuild list
+        refreshRouteList();
+    }
 }
 
 // ====== Waypoint Operation Functions ======
