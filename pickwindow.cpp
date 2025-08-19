@@ -335,8 +335,8 @@ QString PickWindow::ownShipAutoFill()
     QString          text = "";
     QString          ownship = "";
 
-    row = QString("<br><b>OWNSHIP</b><br>");
-    text.append(row);
+    // row = QString("<br><b>OWNSHIP</b><br>");
+    // text.append(row);
 
     ownship.append(row);
     ownship.append("<table width='100%' cellspacing='0' cellpadding='2'>");

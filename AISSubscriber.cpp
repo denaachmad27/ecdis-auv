@@ -5,6 +5,7 @@
 #include <QJsonParseError>
 #include <QDebug>
 #include "mainwindow.h"
+#include "SettingsManager.h"
 
 AISSubscriber::AISSubscriber(QObject* parent)
     : QObject(parent),
@@ -12,7 +13,8 @@ AISSubscriber::AISSubscriber(QObject* parent)
     countdownTimer(new QTimer(this)),
     reconnectAttempts(0),
     baseDelay(5000),         // 5 detik
-    maxDelay(3600000)        // 1 jam
+    maxDelay(3600000),        // 1 jam
+    dialogIsOpen(false)
 {
     countdownTimer->setInterval(1000); // 1 detik per hitungan mundur
     connect(countdownTimer, &QTimer::timeout, this, [this]() {
@@ -23,15 +25,31 @@ AISSubscriber::AISSubscriber(QObject* parent)
                 mainWindow->setReconnectStatusText(message);
             }
         } else {
-            countdownTimer->stop();
-            this->connectToHost(lastHost, lastPort); // coba konek ulang
+            if (dialogIsOpen){
+                // jangan reconnect, tunggu dialog ditutup
+                countdownSeconds = 1; // tahan di 1 detik
+                QString message = "Reconnect paused (settings dialog open)";
+                if (mainWindow) {
+                    mainWindow->setReconnectStatusText(message);
+                }
+            }
+            else {
+                countdownTimer->stop();
+                this->connectToHost(lastHost, lastPort);
+            }
         }
     });
 }
 
 void AISSubscriber::connectToHost(const QString &host, quint16 port) {
-    lastHost = host;
-    lastPort = port;
+    QString dHost = SettingsManager::instance().data().moosIp;
+    int dPort = 5000;
+
+    // lastHost = host;
+    // lastPort = port;
+
+    lastHost = dHost;
+    lastPort = dPort;
 
     if (socket) {
         socket->abort();  // pastikan socket bersih
@@ -288,4 +306,8 @@ void AISSubscriber::setMainWindow(MainWindow* mw){
 
 bool AISSubscriber::hasData(){
     return dataFlag;
+}
+
+void AISSubscriber::setDialogOpen(bool open) {
+    dialogIsOpen = open;
 }

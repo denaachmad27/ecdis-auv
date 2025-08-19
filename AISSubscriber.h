@@ -17,6 +17,7 @@ public:
     void setMainWindow(MainWindow*);
     bool dataFlag = false;
     bool hasData();
+    void setDialogOpen(bool open);
 
 signals:
     // OWNSHIP
@@ -87,6 +88,8 @@ private:
     int reconnectAttempts;
     const int baseDelay;   // e.g., 5000 ms
     const int maxDelay;    // e.g., 3600000 ms
+
+    bool dialogIsOpen;
 };
 
 #endif // AISSUBSCRIBER_H
