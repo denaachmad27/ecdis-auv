@@ -208,18 +208,21 @@ void MainWindow::createActions()
     // ==============================================
 }
 
-// STATUS BAR
+// ON CONNECTION CHANGE
 void MainWindow::onMoosConnectionStatusChanged(bool connected)
 {
+    // CONNECTION ICON
     connectAct->setVisible(!connected);       // Disable connect if already connected
     disconnectAct->setVisible(connected);     // Enable disconnect if connected
 
     restartAction->setEnabled(!connected);
     stopAction->setEnabled(connected);
 
+    // ROUTE PANEL
     routePanel->setAttachDetachButton(connected);
 }
 
+// STATUS BAR
 void MainWindow::createStatusBar(){
     // Status bar
     posEdit = new QLineEdit(statusBar());
@@ -951,7 +954,24 @@ void MainWindow::nmeaDecode(){
 
 void MainWindow::openSettingsDialog() {
     SettingsDialog dlg(this);
+
+    // Hubungkan signal AISSubscriber -> slot SettingsDialog
+    if (ecchart && ecchart->getAisSub()) {
+        // TAHAN KONEKSI KLO DIALOG KEBUKA
+        auto aisSub = ecchart->getAisSub();
+
+        connect(&dlg, &SettingsDialog::dialogOpened, [aisSub]() { aisSub->setDialogOpen(true); });
+        connect(&dlg, &SettingsDialog::dialogClosed, [aisSub]() { aisSub->setDialogOpen(false); });
+
+        // DISABLE EDITABLE MOOS IP
+        connect(ecchart->getAisSub(), &AISSubscriber::connectionStatusChanged, &dlg, &SettingsDialog::onConnectionStatusChanged);
+
+        if (aisSub){dlg.onConnectionStatusChanged(aisSub->hasData());}
+        else {dlg.onConnectionStatusChanged(false);}
+    }
+
     dlg.loadSettings();
+
     if (dlg.exec() == QDialog::Accepted) {
         dlg.saveSettings();
         setDisplay();

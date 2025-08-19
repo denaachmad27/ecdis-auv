@@ -25,12 +25,24 @@ public:
     EcWidget::DisplayOrientationMode orientation(const QString &str);
     EcWidget::OSCenteringMode centering(const QString &str);
 
+signals:
+    void dialogOpened();
+    void dialogClosed();
+
+protected:
+    void showEvent(QShowEvent *event) override;
+    void closeEvent(QCloseEvent *event) override;
+
+public slots:
+    void onConnectionStatusChanged(const bool &connection);
+
 private slots:
     void updateAisWidgetsVisibility(const QString &text);
 
 private:
     void setupUI();
     void accept() override;
+    void reject() override;
 
     // MOOSDB
     QLineEdit *moosIpLineEdit;

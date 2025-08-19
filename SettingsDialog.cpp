@@ -41,6 +41,8 @@ void SettingsDialog::setupUI() {
     moosPortLineEdit = new QLineEdit;
     moosLayout->addRow("MOOSDB IP:", moosIpLineEdit);
 
+
+
     //moosLayout->addRow("MOOSDB Port:", moosPortLineEdit);
 
     moosTab->setLayout(moosLayout);
@@ -551,6 +553,15 @@ void SettingsDialog::accept() {
     SettingsManager::instance().save(data);
 
     QDialog::accept();
+
+    // EMIT CLOSED
+    emit dialogClosed();
+}
+
+void SettingsDialog::reject() {
+    QDialog::reject();
+    emit dialogClosed();
+    qDebug() << "SettingsDialog rejected";
 }
 
 EcWidget::DisplayOrientationMode SettingsDialog::orientation(const QString &str) {
@@ -564,4 +575,22 @@ EcWidget::OSCenteringMode SettingsDialog::centering(const QString &str) {
     if (str == "LookAhead") return EcWidget::LookAhead;
     if (str == "AutoRecenter") return EcWidget::AutoRecenter;
     return EcWidget::Manual;
+}
+
+void SettingsDialog::onConnectionStatusChanged(const bool &connection){
+    if (moosIpLineEdit){
+        moosIpLineEdit->setDisabled(connection);
+    }
+}
+
+void SettingsDialog::showEvent(QShowEvent *event) {
+    QDialog::showEvent(event);
+    emit dialogOpened();
+    qDebug() << "SettingsDialog opened";
+}
+
+void SettingsDialog::closeEvent(QCloseEvent *event) {
+    QDialog::closeEvent(event);
+    emit dialogClosed();
+    qDebug() << "SettingsDialog closed";
 }
