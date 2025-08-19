@@ -567,7 +567,7 @@ void MainWindow::createMenuBar(){
 
     // ================================== SIDEBAR MENU
     viewMenu = menuBar()->addMenu(tr("&Sidebar"));
-    QDockWidget *dock = new QDockWidget(tr("Ownship Info Panel"), this);
+    QDockWidget *dock = new QDockWidget(tr("Ownship Navigation"), this);
 
     dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::TopDockWidgetArea | Qt::BottomDockWidgetArea);
     ownShipText = new QTextEdit(dock);
