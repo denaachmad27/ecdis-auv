@@ -14,6 +14,7 @@
 #include "obstacledetectionpanel.h"
 #include "routepanel.h"
 #include "SettingsData.h"
+#include "compasswidget.h"
 
 #include <QPluginLoader>
 
@@ -84,6 +85,10 @@ public:
     QLabel *reconnectStatusText;
     void setReconnectStatusText(const QString);
     SettingsData getSettingsForwarder();
+
+    // COMPASS
+    CompassWidget *compass = nullptr;
+    void setCompassHeading(const int &hdg);
 
 public slots:
     void onEnableRedDotTracker(bool enabled);

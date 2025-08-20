@@ -2,6 +2,7 @@
 #include "SettingsManager.h"
 #include "appconfig.h"
 #include <QSettings>
+#include <QCoreApplication>
 
 SettingsManager& SettingsManager::instance() {
     static SettingsManager instance;
@@ -9,7 +10,8 @@ SettingsManager& SettingsManager::instance() {
 }
 
 void SettingsManager::load() {
-    QSettings settings("config.ini", QSettings::IniFormat);
+    QString configPath = QCoreApplication::applicationDirPath() + "/config.ini";
+    QSettings settings(configPath, QSettings::IniFormat);
 
     // MOOSDB
     m_data.moosIp = settings.value("MOOSDB/ip", "127.0.0.1").toString();

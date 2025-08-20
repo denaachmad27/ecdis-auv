@@ -26,6 +26,7 @@
 #include "aisdecoder.h"
 #include "aivdoencoder.h"
 #include "appconfig.h"
+#include "compasswidget.h"
 
 #include <dwmapi.h>
 #pragma comment(lib, "Dwmapi.lib")
@@ -45,23 +46,22 @@ void MainWindow::setTitleBarDark(bool dark) {
 // DOCK WINDOW
 void MainWindow::createDockWindows()
 {
-    // Panel kanan sebagai dock widget
-    // dock = new QDockWidget("Informasi", this);
-    // QWidget *formWidget = new QWidget;
-    // QFormLayout *formLayout = new QFormLayout;
+    // Buat dock widget
+    QDockWidget *dock = new QDockWidget("Navigation", this);
+    dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 
-    // QLineEdit *nameEdit = new QLineEdit("Keterangan 1");
-    // nameEdit->setReadOnly(true);
+    // Buat kompas
+    compass = new CompassWidget;
+    dock->setWidget(compass);
 
-    // QLineEdit *ageEdit = new QLineEdit("Keterangan 2");
-    // ageEdit->setReadOnly(true);
+    // Tambahkan ke sidebar kiri
+    addDockWidget(Qt::LeftDockWidgetArea, dock);
+}
 
-    // formLayout->addRow("Titel 1", nameEdit);
-    // formLayout->addRow("Titel 2", ageEdit);
-
-    // formWidget->setLayout(formLayout);
-    // dock->setWidget(formWidget);
-    // addDockWidget(Qt::BottomDockWidgetArea, dock);
+void MainWindow::setCompassHeading(const int &hdg){
+    if (compass != nullptr){
+        compass->setHeading(hdg);
+    }
 }
 
 void MainWindow::addTextToBar(QString text){
@@ -1248,7 +1248,8 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL){
   // MENU BAR
   createMenuBar();
 
-
+  // DOCK
+  //createDockWindows();
 
   /*
   // DELETE LATER

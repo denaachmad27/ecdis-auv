@@ -2380,7 +2380,12 @@ void EcWidget::startAISConnection()
 
 
     connect(subscriber, &AISSubscriber::navDepthReceived, this, [=](double depth) { navShip.depth = depth;});
-    connect(subscriber, &AISSubscriber::navHeadingReceived, this, [=](double hdg) { navShip.heading = hdg;});
+    connect(subscriber, &AISSubscriber::navHeadingReceived, this, [=](double hdg) {
+        navShip.heading = hdg;
+        if (mainWindow){
+            mainWindow->setCompassHeading(hdg);
+        }
+    });
     connect(subscriber, &AISSubscriber::navHeadingOGReceived, this, [=](double cog) { navShip.heading_og = cog;});
     connect(subscriber, &AISSubscriber::navSpeedReceived, this, [=](double sog) { navShip.speed_og = sog;});
     connect(subscriber, &AISSubscriber::navYawReceived, this, [=](double yaw) { navShip.yaw = yaw;});

@@ -44,6 +44,7 @@ HEADERS += mainwindow.h ecwidget.h pickwindow.h ais.h \
     aivdoencoder.h \
     alertmanager.h \
     appconfig.h \
+    compasswidget.h \
     cpatcpacalculator.h \
     cpatcpapanel.h \
     cpatcpasettings.h \
@@ -76,6 +77,7 @@ SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     aistooltip.cpp \
     aivdoencoder.cpp \
     appconfig.cpp \
+    compasswidget.cpp \
     cpatcpacalculator.cpp \
     cpatcpapanel.cpp \
     cpatcpasettings.cpp \
