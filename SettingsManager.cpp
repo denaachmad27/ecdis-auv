@@ -46,7 +46,8 @@ void SettingsManager::load() {
 void SettingsManager::save(const SettingsData& data) {
     m_data = data;
 
-    QSettings settings("config.ini", QSettings::IniFormat);
+    QString configPath = QCoreApplication::applicationDirPath() + "/config.ini";
+    QSettings settings(configPath, QSettings::IniFormat);
 
     // MOOSDB
     settings.setValue("MOOSDB/ip", data.moosIp);
