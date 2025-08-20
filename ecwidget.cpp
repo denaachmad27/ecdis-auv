@@ -12539,7 +12539,10 @@ void EcWidget::saveCurrentRoute()
         if (routeList[i].routeId == currentRouteId) {
             // Update existing route
             routeList[i].modifiedDate = QDateTime::currentDateTime();
-            routeList[i].name = QString("Route %1").arg(currentRouteId);
+            // Preserve existing custom name; only set a default if empty
+            if (routeList[i].name.trimmed().isEmpty()) {
+                routeList[i].name = QString("Route %1").arg(currentRouteId);
+            }
             
             // Recalculate route data
             calculateRouteData(routeList[i]);
@@ -13112,6 +13115,8 @@ void EcWidget::createWaypointFromForm(double lat, double lon, const QString& lab
     
     // Update current route if needed
     if (routeId > 0) {
+        // Ensure saveCurrentRoute targets the correct route ID
+        currentRouteId = routeId;
         saveCurrentRoute();
     }
     

@@ -2002,6 +2002,13 @@ void RoutePanel::onImportRoutesClicked()
             // Create waypoint using EcWidget method
             ecWidget->createWaypointFromForm(lat, lon, label, remark, route.routeId, turningRadius, active);
         }
+
+        // Apply imported route name after waypoints created to override default
+        if (!route.name.trimmed().isEmpty()) {
+            ecWidget->renameRoute(route.routeId, route.name.trimmed());
+        }
+        // Persist now that name is applied
+        ecWidget->saveRoutes();
         
         importedCount++;
     }
