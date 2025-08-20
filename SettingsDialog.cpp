@@ -20,6 +20,7 @@
 #include <QCheckBox>
 #include <QSlider>
 #include <QDir>
+#include <QCoreApplication>
 
 SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
     setupUI();
@@ -318,7 +319,8 @@ void SettingsDialog::setupUI() {
 }
 
 void SettingsDialog::loadSettings() {
-    QSettings settings("config.ini", QSettings::IniFormat);
+    QString configPath = QCoreApplication::applicationDirPath() + "/config.ini";
+    QSettings settings(configPath, QSettings::IniFormat);
 
     // MOOSDB
     moosIpLineEdit->setText(settings.value("MOOSDB/ip", "127.0.0.1").toString());
@@ -424,7 +426,8 @@ void SettingsDialog::loadSettings() {
 }
 
 void SettingsDialog::saveSettings() {
-    QSettings settings("config.ini", QSettings::IniFormat);
+    QString configPath = QCoreApplication::applicationDirPath() + "/config.ini";
+    QSettings settings(configPath, QSettings::IniFormat);
 
     // MOOSDB
     settings.setValue("MOOSDB/ip", moosIpLineEdit->text());
@@ -480,7 +483,9 @@ void SettingsDialog::updateAisWidgetsVisibility(const QString &text) {
 SettingsData SettingsDialog::loadSettingsFromFile(const QString &filePath) {
     SettingsData data;
 
-    QSettings settings(filePath, QSettings::IniFormat);
+    QString configPath = QCoreApplication::applicationDirPath() + filePath;
+    QSettings settings(configPath, QSettings::IniFormat);
+
 
     // MOOSDB
     data.moosIp = settings.value("MOOSDB/ip", "127.0.0.1").toString();
