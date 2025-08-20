@@ -402,8 +402,9 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   currentRouteId = 1;
   activeFunction = PAN;
   
-  // Load existing waypoints from JSON file
-  loadWaypoints();
+  // NOTE: Do not call loadWaypoints() again here; routes have already
+  // been converted to waypoints above. Calling it again would clear
+  // waypointList and drop route waypoints on startup.
   
   qDebug() << "[ECWIDGET] Route/Waypoint system initialized";
 
@@ -5219,9 +5220,18 @@ void EcWidget::loadWaypoints()
     {
         QByteArray fileData = file.readAll();
         QJsonDocument doc = QJsonDocument::fromJson(fileData);
-        QJsonArray waypointsArray = doc.array();
+        QJsonArray waypointsArray;
+        if (doc.isObject()) {
+            // Newer format: object with "waypoints" array
+            QJsonObject root = doc.object();
+            waypointsArray = root.value("waypoints").toArray();
+        } else if (doc.isArray()) {
+            // Legacy format: top-level array
+            waypointsArray = doc.array();
+        }
 
-        waypointList.clear();
+        // Do NOT clear existing waypointList; routes from routes.json are already present.
+        // Only append single waypoints (routeId == 0) from file to preserve routes.
         int validWaypoints = 0;
         int maxRouteId = 0;
 
@@ -5244,8 +5254,11 @@ void EcWidget::loadWaypoints()
             wp.featureHandle.id = EC_NOCELLID;
             wp.featureHandle.offset = 0;
 
-            waypointList.append(wp);
-            validWaypoints++;
+            // Only append single waypoints here (routeId == 0). Route waypoints are managed via routes.json
+            if (wp.routeId == 0) {
+                waypointList.append(wp);
+                validWaypoints++;
+            }
             
             // Track maximum route ID
             if (wp.routeId > maxRouteId) {
@@ -12573,6 +12586,9 @@ EcWidget::Route EcWidget::getRouteById(int routeId) const
                     routeCopy.waypoints.append(routeWp);
                 }
             }
+            // Recalculate aggregate data so export reflects the current map
+            // This uses the latest coordinates from waypointList
+            const_cast<EcWidget*>(this)->calculateRouteData(routeCopy);
             qDebug() << "[GET-ROUTE] Created route copy for" << routeId << "with" << routeCopy.waypoints.size() << "waypoints - ORIGINAL ROUTE UNCHANGED";
             return routeCopy;
         }

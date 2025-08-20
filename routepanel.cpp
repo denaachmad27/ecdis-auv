@@ -370,7 +370,7 @@ void RoutePanel::setupUI()
     
     addRouteButton->setToolTip("Create new route");
     importRoutesButton->setToolTip("Import routes from CSV file");
-    exportRoutesButton->setToolTip("Export all routes to CSV file");
+    exportRoutesButton->setToolTip("Export all routes to JSON file");
     refreshButton->setToolTip("Refresh route list");
     clearAllButton->setToolTip("Clear all routes");
     
@@ -381,10 +381,11 @@ void RoutePanel::setupUI()
     routeManagementLayout->addWidget(refreshButton, 1, 0);
     routeManagementLayout->addWidget(clearAllButton, 1, 1);
 
-    // HIDE FOR PRODUCTION PURPOSE
+    // Ensure export is available in all modes
     if (AppConfig::isProduction()){
-        //importRoutesButton->setVisible(false);
-        exportRoutesButton->setVisible(false);
+        // Keep import visibility policy if needed, but do not hide export
+        // importRoutesButton->setVisible(false);
+        exportRoutesButton->setVisible(true);
     }
     
     mainLayout->addWidget(routeManagementGroup);
