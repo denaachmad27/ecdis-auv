@@ -300,6 +300,7 @@ public:
   
   // Route mode methods
   void startRouteMode();
+  void startAppendWaypointMode(int routeId);
   void endRouteMode();
   void finalizeCurrentRoute();
   void resetRouteConnections();
