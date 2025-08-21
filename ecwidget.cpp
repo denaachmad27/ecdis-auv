@@ -12046,6 +12046,38 @@ void EcWidget::startRouteMode()
     qDebug() << "[ROUTE] Route mode started. Current route ID:" << currentRouteId;
 }
 
+void EcWidget::startAppendWaypointMode(int routeId)
+{
+    if (routeId <= 0) return;
+
+    // Switch to route creation mode but target an existing route
+    isRouteMode = true;
+    activeFunction = CREATE_ROUTE;
+    currentRouteId = routeId;
+
+    // Set next waypoint counter to append to the end of the route
+    int count = 0;
+    for (const auto& wp : waypointList) {
+        if (wp.routeId == routeId) count++;
+    }
+    routeWaypointCounter = count + 1;
+
+    // Prepare ghost waypoint context
+    ghostWaypoint.visible = false; // will become visible on mouse move
+    ghostWaypoint.routeId = routeId;
+    ghostWaypoint.waypointIndex = -1;
+
+    if (mainWindow) {
+        mainWindow->setWindowTitle(QString(APP_TITLE) + " - Add Waypoint by Mouse");
+        mainWindow->routesStatusText->setText(
+            tr("Route Mode: Click to add waypoint. Press ESC or right-click to finish")
+        );
+    }
+
+    qDebug() << "[ROUTE] Append waypoint mode started for route" << routeId
+             << "next index:" << routeWaypointCounter;
+}
+
 void EcWidget::resetRouteConnections()
 {
     // This function ensures that previous routes are properly terminated

@@ -14,6 +14,9 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QFile>
+#include <QRadioButton>
+#include <QComboBox>
+#include <QIntValidator>
 
 // ====== RouteTreeItem Implementation ======
 
@@ -476,6 +479,7 @@ void RoutePanel::setupUI()
     toggleActiveButton->setToolTip("Toggle waypoint active/inactive status");
     
     // Initially disable all waypoint buttons until selection
+    addWaypointButton->setEnabled(false); // Enable only when a route is selected
     editWaypointButton->setEnabled(false);
     deleteWaypointButton->setEnabled(false);
     moveUpButton->setEnabled(false);
@@ -818,6 +822,9 @@ void RoutePanel::refreshRouteList()
         }
         
         qDebug() << "[ROUTE-PANEL] Restored selection for route" << selectedRouteId << "name:" << info.name << "visibility:" << info.visible << "waypoints:" << info.waypointCount;
+    } else {
+        // No valid item to restore; clear selection state so buttons reflect no selection
+        selectedRouteId = -1;
     }
     
     // Update title with count
@@ -826,6 +833,12 @@ void RoutePanel::refreshRouteList()
     
     // Note: Routes are now collapsed by default to show expand/collapse indicators
     // Only selected route will be expanded automatically
+    
+    // Ensure button states reflect current selection/availability
+    if (selectedRouteId <= 0) {
+        clearRouteInfoDisplay();
+    }
+    updateButtonStates();
 }
 
 RouteInfo RoutePanel::calculateRouteInfo(int routeId)
@@ -1566,19 +1579,46 @@ void RoutePanel::showWaypointEditDialog(int routeId, int waypointIndex)
     QDialog dialog(this);
     dialog.setWindowTitle(waypointIndex >= 0 ? "Edit Waypoint" : "Add Waypoint");
     dialog.setModal(true);
-    dialog.resize(400, 300);
     
     QFormLayout* layout = new QFormLayout(&dialog);
+    layout->setContentsMargins(8, 8, 8, 8);
+    layout->setSpacing(6);
+    layout->setSizeConstraint(QLayout::SetFixedSize); // Make dialog auto-fit content
     
     QLineEdit* labelEdit = new QLineEdit();
     QLineEdit* latEdit = new QLineEdit();
     QLineEdit* lonEdit = new QLineEdit();
     QLineEdit* remarkEdit = new QLineEdit();
     QCheckBox* activeCheck = new QCheckBox();
+
+    // Unit selection for coordinate input
+    QGroupBox* unitGroup = new QGroupBox("Coordinate Units");
+    QHBoxLayout* unitLayout = new QHBoxLayout(unitGroup);
+    unitLayout->setContentsMargins(0, 0, 0, 0);
+    unitLayout->setSpacing(6);
+    QRadioButton* decDegBtn = new QRadioButton("Decimal Degrees");
+    QRadioButton* degMinBtn = new QRadioButton("Deg-Min");
+    QRadioButton* metersBtn = new QRadioButton("Meters (N/E)");
+    decDegBtn->setChecked(true);
+    unitLayout->addWidget(decDegBtn);
+    unitLayout->addWidget(degMinBtn);
+    unitLayout->addWidget(metersBtn);
     
-    // Set validators
-    latEdit->setValidator(new QDoubleValidator(-90.0, 90.0, 6, &dialog));
-    lonEdit->setValidator(new QDoubleValidator(-180.0, 180.0, 6, &dialog));
+    // Validators will be set based on unit selection
+    auto setValidatorsForUnit = [&]() {
+        if (decDegBtn->isChecked()) {
+            latEdit->setValidator(new QDoubleValidator(-90.0, 90.0, 6, &dialog));
+            lonEdit->setValidator(new QDoubleValidator(-180.0, 180.0, 6, &dialog));
+        } else if (metersBtn->isChecked()) {
+            latEdit->setValidator(new QDoubleValidator(-10000000.0, 10000000.0, 3, &dialog));
+            lonEdit->setValidator(new QDoubleValidator(-10000000.0, 10000000.0, 3, &dialog));
+        } else {
+            // Deg-Min: allow free text (we parse manually)
+            latEdit->setValidator(nullptr);
+            lonEdit->setValidator(nullptr);
+        }
+    };
+    setValidatorsForUnit();
     
     activeCheck->setChecked(true);
     
@@ -1606,13 +1646,106 @@ void RoutePanel::showWaypointEditDialog(int routeId, int waypointIndex)
         labelEdit->setText(QString("WP-%1").arg(QTime::currentTime().toString("hhmmss")));
     }
     
+    // Dynamic relabeling for meters/dec mode
+    QLabel* latLabel = new QLabel("Latitude:");
+    QLabel* lonLabel = new QLabel("Longitude:");
+    // Removed examples helper for Deg-Min per user request
+    
+    // Build groups for different unit modes
+    QGroupBox* decMetersGroup = new QGroupBox("Coordinates");
+    QFormLayout* decMetersLayout = new QFormLayout(decMetersGroup);
+    decMetersLayout->setContentsMargins(0, 0, 0, 0);
+    decMetersLayout->setSpacing(4);
+    decMetersGroup->setFlat(true);
+    decMetersLayout->addRow(latLabel, latEdit);
+    decMetersLayout->addRow(lonLabel, lonEdit);
+
+    QGroupBox* degMinGroup = new QGroupBox("Deg-Min Coordinates");
+    QGridLayout* degMinLayout = new QGridLayout(degMinGroup);
+    degMinLayout->setContentsMargins(0, 0, 0, 0);
+    degMinLayout->setHorizontalSpacing(6);
+    degMinLayout->setVerticalSpacing(4);
+    degMinGroup->setFlat(true);
+    QLineEdit* latDegEdit = new QLineEdit(); latDegEdit->setValidator(new QIntValidator(0, 90, &dialog)); latDegEdit->setMaximumWidth(70);
+    QLineEdit* latMinEdit = new QLineEdit(); latMinEdit->setValidator(new QDoubleValidator(0.0, 60.0, 3, &dialog)); latMinEdit->setMaximumWidth(100);
+    QComboBox* latHem = new QComboBox(); latHem->addItems({"N", "S"}); latHem->setMaximumWidth(60);
+    QLineEdit* lonDegEdit = new QLineEdit(); lonDegEdit->setValidator(new QIntValidator(0, 180, &dialog)); lonDegEdit->setMaximumWidth(70);
+    QLineEdit* lonMinEdit = new QLineEdit(); lonMinEdit->setValidator(new QDoubleValidator(0.0, 60.0, 3, &dialog)); lonMinEdit->setMaximumWidth(100);
+    QComboBox* lonHem = new QComboBox(); lonHem->addItems({"E", "W"}); lonHem->setMaximumWidth(60);
+    degMinLayout->addWidget(new QLabel("Lat Deg"), 0, 0);
+    degMinLayout->addWidget(latDegEdit, 0, 1);
+    degMinLayout->addWidget(new QLabel("Lat Min"), 0, 2);
+    degMinLayout->addWidget(latMinEdit, 0, 3);
+    degMinLayout->addWidget(new QLabel("N/S"), 0, 4);
+    degMinLayout->addWidget(latHem, 0, 5);
+    degMinLayout->addWidget(new QLabel("Lon Deg"), 1, 0);
+    degMinLayout->addWidget(lonDegEdit, 1, 1);
+    degMinLayout->addWidget(new QLabel("Lon Min"), 1, 2);
+    degMinLayout->addWidget(lonMinEdit, 1, 3);
+    degMinLayout->addWidget(new QLabel("E/W"), 1, 4);
+    degMinLayout->addWidget(lonHem, 1, 5);
+
+    // Pre-fill deg-min widgets from decimal degree fields (if available)
+    {
+        bool ok1=false, ok2=false;
+        double alat = latEdit->text().toDouble(&ok1);
+        double alon = lonEdit->text().toDouble(&ok2);
+        if (!ok1) alat = 0.0;
+        if (!ok2) alon = 0.0;
+        int dlat = static_cast<int>(qFloor(qAbs(alat)));
+        double mlat = (qAbs(alat) - dlat) * 60.0;
+        latDegEdit->setText(QString::number(dlat));
+        latMinEdit->setText(QString::number(mlat, 'f', 3));
+        latHem->setCurrentText(alat >= 0 ? "N" : "S");
+        int dlon = static_cast<int>(qFloor(qAbs(alon)));
+        double mlon = (qAbs(alon) - dlon) * 60.0;
+        lonDegEdit->setText(QString::number(dlon));
+        lonMinEdit->setText(QString::number(mlon, 'f', 3));
+        lonHem->setCurrentText(alon >= 0 ? "E" : "W");
+    }
+
+    // Toggle visibility when switching units
+    auto updateCoordinateLabels = [&]() {
+        if (metersBtn->isChecked()) {
+            latLabel->setText("North (m):");
+            lonLabel->setText("East (m):");
+            latEdit->setPlaceholderText("e.g., 25.0");
+            lonEdit->setPlaceholderText("e.g., 50.0");
+            
+            decMetersGroup->setVisible(true);
+            degMinGroup->setVisible(false);
+        } else if (degMinBtn->isChecked()) {
+            
+            decMetersGroup->setVisible(false);
+            degMinGroup->setVisible(true);
+        } else {
+            latLabel->setText("Latitude:");
+            lonLabel->setText("Longitude:");
+            latEdit->setPlaceholderText("e.g., -7.508333");
+            lonEdit->setPlaceholderText("e.g., 112.754167");
+            
+            decMetersGroup->setVisible(true);
+            degMinGroup->setVisible(false);
+        }
+        setValidatorsForUnit();
+        dialog.adjustSize();
+    };
+    QObject::connect(decDegBtn, &QRadioButton::toggled, &dialog, updateCoordinateLabels);
+    QObject::connect(degMinBtn, &QRadioButton::toggled, &dialog, updateCoordinateLabels);
+    QObject::connect(metersBtn, &QRadioButton::toggled, &dialog, updateCoordinateLabels);
+    updateCoordinateLabels();
+
     layout->addRow("Label:", labelEdit);
-    layout->addRow("Latitude:", latEdit);
-    layout->addRow("Longitude:", lonEdit);
+    layout->addRow(unitGroup);
+    layout->addRow(decMetersGroup);
+    layout->addRow(degMinGroup);
+    // No examples row for Deg-Min per request
     layout->addRow("Remark:", remarkEdit);
     layout->addRow("Active:", activeCheck);
     
     QHBoxLayout* buttonLayout = new QHBoxLayout();
+    buttonLayout->setContentsMargins(0, 0, 0, 0);
+    buttonLayout->setSpacing(6);
     QPushButton* okBtn = new QPushButton("OK");
     QPushButton* cancelBtn = new QPushButton("Cancel");
     
@@ -1625,17 +1758,65 @@ void RoutePanel::showWaypointEditDialog(int routeId, int waypointIndex)
     connect(okBtn, &QPushButton::clicked, &dialog, &QDialog::accept);
     connect(cancelBtn, &QPushButton::clicked, &dialog, &QDialog::reject);
     
+    // Helper for deg-min to decimal
+    auto toDecimalFromDegMin = [&](QLineEdit* degEdit, QLineEdit* minEdit, QComboBox* hem, bool isLat, bool& ok) -> double {
+        ok = false;
+        bool okd=false, okm=false;
+        int deg = degEdit->text().toInt(&okd);
+        double minu = minEdit->text().toDouble(&okm);
+        if (!okd || !okm) return 0.0;
+        if (isLat && (deg < 0 || deg > 90)) return 0.0;
+        if (!isLat && (deg < 0 || deg > 180)) return 0.0;
+        if (minu < 0.0 || minu >= 60.0) return 0.0;
+        double val = deg + (minu / 60.0);
+        QString h = hem->currentText().toUpper();
+        if ((isLat && h == "S") || (!isLat && h == "W")) val = -val;
+        ok = true;
+        return val;
+    };
+
+    dialog.adjustSize();
     if (dialog.exec() == QDialog::Accepted) {
-        double lat = latEdit->text().toDouble();
-        double lon = lonEdit->text().toDouble();
+        bool okLat = true, okLon = true;
+        double lat = 0.0, lon = 0.0;
+        if (decDegBtn->isChecked()) {
+            lat = latEdit->text().toDouble(&okLat);
+            lon = lonEdit->text().toDouble(&okLon);
+        } else if (degMinBtn->isChecked()) {
+            lat = toDecimalFromDegMin(latDegEdit, latMinEdit, latHem, true, okLat);
+            lon = toDecimalFromDegMin(lonDegEdit, lonMinEdit, lonHem, false, okLon);
+        } else if (metersBtn->isChecked()) {
+            double north = latEdit->text().toDouble(&okLat);
+            double east = lonEdit->text().toDouble(&okLon);
+            // Convert meters offset from last waypoint in this route
+            if (okLat && okLon && ecWidget) {
+                QList<EcWidget::Waypoint> wps = ecWidget->getWaypoints();
+                EcWidget::Waypoint lastWp; bool found=false;
+                for (int i = wps.size()-1; i >= 0; --i) {
+                    if (wps[i].routeId == routeId) { lastWp = wps[i]; found=true; break; }
+                }
+                if (found) {
+                    double lat0 = qDegreesToRadians(lastWp.lat);
+                    double nm_per_meter = 1.0 / 1852.0;
+                    double dlat_deg = (north * nm_per_meter) / 60.0;
+                    double dlon_deg = (east * nm_per_meter) / (60.0 * qCos(lat0));
+                    lat = lastWp.lat + dlat_deg;
+                    lon = lastWp.lon + dlon_deg;
+                } else {
+                    okLat = okLon = false;
+                }
+            } else {
+                okLat = okLon = false;
+            }
+        }
         QString label = labelEdit->text().trimmed();
         QString remark = remarkEdit->text().trimmed();
         bool active = activeCheck->isChecked();
         
-        // Validate coordinates
-        if (lat < -90.0 || lat > 90.0 || lon < -180.0 || lon > 180.0) {
+        // Validate
+        if (!okLat || !okLon || lat < -90.0 || lat > 90.0 || lon < -180.0 || lon > 180.0) {
             QMessageBox::warning(this, "Invalid Coordinates", 
-                "Please enter valid coordinates:\nLatitude: -90.0 to 90.0\nLongitude: -180.0 to 180.0");
+                "Please enter valid coordinates or offsets.\nLatitude: -90.0 to 90.0\nLongitude: -180.0 to 180.0");
             return;
         }
         
@@ -2090,7 +2271,29 @@ void RoutePanel::onAddWaypointClicked()
         QMessageBox::information(this, "No Route Selected", "Please select a route first to add waypoints.");
         return;
     }
-    
+
+    // Ask user how to add the waypoint
+    QMessageBox modeBox(this);
+    modeBox.setWindowTitle("Add Waypoint");
+    modeBox.setText("How do you want to add the waypoint?");
+    QPushButton* mouseBtn = modeBox.addButton("By Mouse", QMessageBox::AcceptRole);
+    QPushButton* formBtn = modeBox.addButton("By Form", QMessageBox::ActionRole);
+    QPushButton* cancelBtn = modeBox.addButton(QMessageBox::Cancel);
+    modeBox.setDefaultButton(mouseBtn);
+    modeBox.exec();
+
+    if (modeBox.clickedButton() == cancelBtn) return;
+
+    if (modeBox.clickedButton() == mouseBtn) {
+        // Start append-by-mouse mode on the selected route
+        if (ecWidget) {
+            ecWidget->startAppendWaypointMode(selectedRouteId);
+            emit statusMessage(QString("Add waypoint by mouse on Route %1").arg(selectedRouteId));
+        }
+        return;
+    }
+
+    // Otherwise, open the form dialog
     showWaypointEditDialog(selectedRouteId);
 }
 
@@ -2133,13 +2336,21 @@ void RoutePanel::onDeleteWaypointClicked()
                     routeWaypoints.append(wp);
                 }
             }
-            
-            // Find and remove the waypoint
-            for (int i = 0; i < routeWaypoints.size(); ++i) {
-                if (qAbs(routeWaypoints[i].lat - waypoint.lat) < 0.000001 && 
-                    qAbs(routeWaypoints[i].lon - waypoint.lon) < 0.000001) {
-                    routeWaypoints.removeAt(i);
-                    break;
+            // Prefer removing by index within the selected route to handle duplicates
+            int indexInRoute = getWaypointIndex(waypointItem);
+            if (indexInRoute >= 0 && indexInRoute < routeWaypoints.size()) {
+                routeWaypoints.removeAt(indexInRoute);
+            } else {
+                // Fallback: match by full signature (routeId + label + coordinates)
+                for (int i = 0; i < routeWaypoints.size(); ++i) {
+                    const auto& cand = routeWaypoints[i];
+                    if (cand.routeId == waypoint.routeId &&
+                        cand.label == waypoint.label &&
+                        qAbs(cand.lat - waypoint.lat) < 0.000001 &&
+                        qAbs(cand.lon - waypoint.lon) < 0.000001) {
+                        routeWaypoints.removeAt(i);
+                        break;
+                    }
                 }
             }
             
