@@ -2,16 +2,38 @@
 #include "qpainterpath.h"
 #include <QtMath>
 #include <QPainter>
+#include <QSvgRenderer>
 
 inline double deg2rad(double deg) { return deg * M_PI / 180.0; }
 
 CompassWidget::CompassWidget(QWidget *parent)
-    : QWidget(parent), heading(0) {
-    setFixedSize(200, 200); // ukuran widget tetap
+    : QWidget(parent), heading(0)
+{
+    setFixedWidth(200);                               // width tetap 200
+    setMinimumHeight(200);                            // tinggi minimum (opsional)
+    setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding); // tinggi bisa melebar
+}
+
+QSize CompassWidget::sizeHint() const {
+    return QSize(200, 260); // default tinggi yang “diinginkan” (opsional)
+}
+
+QSize CompassWidget::minimumSizeHint() const {
+    return QSize(200, 200); // batas minimum (opsional)
 }
 
 void CompassWidget::setHeading(double h) {
     heading = fmod(h, 360.0); // biar 0–360
+    update(); // redraw
+}
+
+void CompassWidget::setHeadingRot(double r) {
+    heading = fmod(heading-r, 360.0); // biar 0–360
+    update(); // redraw
+}
+
+void CompassWidget::setRotation(double r) {
+    rotate = r;
     update(); // redraw
 }
 
@@ -21,73 +43,47 @@ void CompassWidget::paintEvent(QPaintEvent *) {
 
     int w = width();
     int h = height();
-    int margin = 40;                     // padding dari tepi panel
-    int r = (qMin(w, h) / 2) - margin;   // radius lingkaran
+    int margin = 40;
+    int r = (qMin(w, h) / 2) - margin;
     QPoint center(w / 2, h / 2);
 
-    // Helper: sudut kompas -> titik layar (0°=N, 90°=E, 180°=S, 270°=W)
     auto polar = [&](double compassDeg, double extraRadius) -> QPoint {
-        double a = deg2rad(compassDeg - 90.0); // shift supaya 0° di atas
+        double a = deg2rad(compassDeg - 90.0);
         double R = r + extraRadius;
         int x = int(std::lround(center.x() + R * std::cos(a)));
-        int y = int(std::lround(center.y() + R * std::sin(a))); // +sin karena Y ke bawah
+        int y = int(std::lround(center.y() + R * std::sin(a)));
         return QPoint(x, y);
     };
 
-    // Lingkaran kompas
-    p.setPen(QPen(Qt::white, 2));
+    // lingkaran kompas
+    p.setPen(QPen(Qt::white, 1));
     p.drawEllipse(center, r, r);
 
-    // Huruf arah (di luar lingkaran)
+    // huruf arah
     QFont letterFont = p.font();
-    letterFont.setBold(true);
     letterFont.setPointSize(11);
     p.setFont(letterFont);
-    const int offsetLabel = 12;   // jarak huruf dari lingkaran (ke luar)
+    const int offsetLabel = 12;
     auto drawLabel = [&](double deg, const QString& txt) {
         QPoint pt = polar(deg, offsetLabel);
         QRect rect(pt.x() - 15, pt.y() - 15, 30, 30);
         p.drawText(rect, Qt::AlignCenter, txt);
     };
-    drawLabel(0,   "N");
-    drawLabel(90,  "E");
-    drawLabel(180, "S");
-    drawLabel(270, "W");
+    drawLabel(0-rotate,   "N");
+    drawLabel(90-rotate,  "E");
+    drawLabel(180-rotate, "S");
+    drawLabel(270-rotate, "W");
 
-    // Angka derajat (lebih luar dari huruf)
-    // QFont degFont("Arial", 8);
-    // p.setFont(degFont);
-    // const int offsetDegree = 26;  // pastikan > offsetLabel agar di luar
-    // for (int deg : {0, 90, 180, 270}) {
-    //     QPoint pt = polar(deg, offsetDegree);
-    //     QRect rect(pt.x() - 12, pt.y() - 12, 24, 24);
-    //     p.drawText(rect, Qt::AlignCenter, QString::number(deg) + "°");
-    // }
+    // === Gambar kapal pakai SVG ===
+    static QSvgRenderer shipSvg(QString(":/icon/ship.svg"));
 
-    // Kapal (segitiga) mengikuti heading (0° menghadap ke atas)
-    // Gambar kapal (bentuk panah lurus seperti kompas)
+    QSize shipSize(r * 1.4, r * 1.4);  // ukuran relatif
+    QRect targetRect(-shipSize.width()/2, -shipSize.height()/2,
+                     shipSize.width(), shipSize.height());
+
     p.save();
     p.translate(center);
     p.rotate(heading);
-
-    QPolygon ship;
-
-    // Ujung depan lancip (lebih panjang ke depan)
-    ship << QPoint(0, -r * 0.7);
-
-    // Sisi kanan badan
-    ship << QPoint(r * 0.25, r * 0.2);
-
-    // Belakang rata agak panjang
-    ship << QPoint(r * 0.25, r * 0.6);
-    ship << QPoint(-r * 0.25, r * 0.6);
-
-    // Sisi kiri badan
-    ship << QPoint(-r * 0.25, r * 0.2);
-
-    p.setBrush(Qt::gray);
-    p.setPen(QPen(Qt::white, 1));
-    p.drawPolygon(ship);
-
+    shipSvg.render(&p, targetRect);
     p.restore();
 }

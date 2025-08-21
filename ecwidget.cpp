@@ -36,6 +36,7 @@
 #include <QFile>
 #include <QMenu>
 #include <QAction>
+#include <QSvgRenderer>
 
 // Guardzone
 #include "IAisDvrPlugin.h"
@@ -3075,14 +3076,30 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon, double head )
             if (orientation == HeadUp){
                 SetHeading(head);
                 mainWindow->oriEditSetText(head);
+
+                if (mainWindow){
+                    mainWindow->setCompassHeading(0);
+                    mainWindow->setCompassRotation(head);
+                }
             }
             else if (orientation  == CourseUp){
-                SetHeading(SettingsManager::instance().data().courseUpHeading);
-                mainWindow->oriEditSetText(SettingsManager::instance().data().courseUpHeading);
+                int course = SettingsManager::instance().data().courseUpHeading;
+
+                SetHeading(course);
+                mainWindow->oriEditSetText(course);
+
+                if (mainWindow){
+                    mainWindow->setCompassRotation(course);
+                    mainWindow->setCompassHeadRot(course);
+                }
             }
             else {
                 SetHeading(0);
                 mainWindow->oriEditSetText(0);
+
+                if (mainWindow){
+                    mainWindow->setCompassRotation(0);
+                }
             }
         }
 
@@ -4359,30 +4376,30 @@ void EcWidget::showWaypointContextMenu(const QPoint& pos, int waypointIndex)
     
     // Edit waypoint properties
     QAction* editAction = contextMenu.addAction(tr("Edit Route Point"));
-    editAction->setIcon(QIcon(":/icon/edit.png"));
+    editAction->setIcon(QIcon(":/icon/edit.svg"));
     
     // Move waypoint
     QAction* moveAction = contextMenu.addAction(tr("Move Waypoint"));
-    moveAction->setIcon(QIcon(":/icon/move.png"));
+    moveAction->setIcon(QIcon(":/icon/move.svg"));
     
     contextMenu.addSeparator();
     
     // Delete waypoint
     QAction* deleteWaypointAction = contextMenu.addAction(tr("Delete Waypoint"));
-    deleteWaypointAction->setIcon(QIcon(":/icon/delete_wp.png"));
+    deleteWaypointAction->setIcon(QIcon(":/icon/delete_wp.svg"));
     
     // Delete route (only if waypoint is part of a route)
     QAction* deleteRouteAction = nullptr;
     if (waypoint.routeId > 0) {
         deleteRouteAction = contextMenu.addAction(tr("Delete Route"));
-        deleteRouteAction->setIcon(QIcon(":/icon/delete_route.png"));
+        deleteRouteAction->setIcon(QIcon(":/icon/delete_route.svg"));
     }
 
     contextMenu.addSeparator();
 
     // Publish waypoint
     QAction* publishAction = contextMenu.addAction(tr("Publish Waypoint"));
-    publishAction->setIcon(QIcon(":/icon/publish.png"));
+    publishAction->setIcon(QIcon(":/icon/publish.svg"));
     
     // Execute menu
     QAction* selectedAction = contextMenu.exec(mapToGlobal(pos));

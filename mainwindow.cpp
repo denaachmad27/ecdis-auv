@@ -47,12 +47,20 @@ void MainWindow::setTitleBarDark(bool dark) {
 void MainWindow::createDockWindows()
 {
     // Buat dock widget
-    QDockWidget *dock = new QDockWidget("Navigation", this);
+    QDockWidget *dock = new QDockWidget("Compass", this);
     dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 
-    // Buat kompas
+    // Buat compass
     compass = new CompassWidget;
-    dock->setWidget(compass);
+
+    // Bungkus compass ke dalam container supaya bisa align top
+    QWidget *container = new QWidget;
+    QVBoxLayout *vbox = new QVBoxLayout(container);
+    vbox->setContentsMargins(0,0,0,0);               // hilangkan margin default
+    vbox->addWidget(compass, 0, Qt::AlignTop | Qt::AlignHCenter);
+    vbox->addStretch();                              // ruang kosong di bawah
+
+    dock->setWidget(container);
 
     // Tambahkan ke sidebar kiri
     addDockWidget(Qt::LeftDockWidgetArea, dock);
@@ -61,6 +69,18 @@ void MainWindow::createDockWindows()
 void MainWindow::setCompassHeading(const int &hdg){
     if (compass != nullptr){
         compass->setHeading(hdg);
+    }
+}
+
+void MainWindow::setCompassRotation(const int &rot){
+    if (compass != nullptr){
+        compass->setRotation(rot);
+    }
+}
+
+void MainWindow::setCompassHeadRot(const int &rot){
+    if (compass != nullptr){
+        compass->setHeadingRot(rot);
     }
 }
 
@@ -578,6 +598,23 @@ void MainWindow::createMenuBar(){
     viewMenu->addAction(dock->toggleViewAction());
     dock->hide();
 
+    // COMPASS
+    dock = new QDockWidget(tr("Compass"), this);
+    dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    compass = new CompassWidget;
+
+    QWidget *container = new QWidget;
+    QVBoxLayout *vbox = new QVBoxLayout(container);
+    vbox->setContentsMargins(0,0,0,0);               // hilangkan margin default
+    vbox->addWidget(compass, 0, Qt::AlignTop | Qt::AlignHCenter);
+    vbox->addStretch();                              // ruang kosong di bawah
+    dock->setWidget(container);
+
+    addDockWidget(Qt::LeftDockWidgetArea, dock);
+    viewMenu->addAction(dock->toggleViewAction());
+    dock->hide();
+
+    // AIS TARGET PANEL
     dock = new QDockWidget(tr("AIS Target Panel"), this);
     dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::TopDockWidgetArea | Qt::BottomDockWidgetArea);
     aisText = new QTextEdit(dock);
@@ -1511,6 +1548,12 @@ void MainWindow::onRotateCW()
   ecchart->SetHeading(hdg);
   oriEdit->setText(QString("%1°").arg(hdg));
 
+  // COMPASS
+  if (compass != nullptr){
+      compass->setRotation(hdg);
+      compass->setHeadingRot(10);
+  }
+
   DrawChart();
 }
 
@@ -1527,6 +1570,12 @@ void MainWindow::onRotateCCW()
   if (hdg < 0) hdg += 360.0;
   ecchart->SetHeading(hdg);
   oriEdit->setText(QString("%1°").arg(hdg));
+
+  // COMPASS
+  if (compass != nullptr){
+      compass->setRotation(hdg);
+      compass->setHeadingRot(-10);
+  }
 
   DrawChart();
 }

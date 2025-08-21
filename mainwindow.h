@@ -36,7 +36,7 @@ class AISSubscriber;
 #define M_KEY "10121"
 // data server id
 #define DSID "0"
-#define APP_TITLE "ECDIS AUV v1.2"
+#define APP_TITLE "ECDIS AUV v1.21"
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
@@ -89,6 +89,8 @@ public:
     // COMPASS
     CompassWidget *compass = nullptr;
     void setCompassHeading(const int &hdg);
+    void setCompassRotation(const int &rot);
+    void setCompassHeadRot(const int &rot);
 
 public slots:
     void onEnableRedDotTracker(bool enabled);

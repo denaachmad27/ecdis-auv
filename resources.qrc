@@ -25,5 +25,14 @@
         <file>images/zoom-out-white.png</file>
         <file>images/route.png</file>
         <file>images/route-white.png</file>
+        <file>icon/ship_white.png</file>
+        <file>icon/ship.svg</file>
+        <file>icon/create_route.svg</file>
+        <file>icon/create_wp.svg</file>
+        <file>icon/delete_route.svg</file>
+        <file>icon/delete_wp.svg</file>
+        <file>icon/edit.svg</file>
+        <file>icon/move.svg</file>
+        <file>icon/publish.svg</file>
     </qresource>
 </RCC>
