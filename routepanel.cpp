@@ -573,6 +573,9 @@ void RoutePanel::setupUI()
     // Awal: addToShip aktif, detachFromShip pasif
     addToShipButton->setEnabled(true);
     detachFromShipButton->setEnabled(false);
+
+    addToShipButton->setVisible(false);
+    detachFromShipButton->setVisible(false);
     
     // Layout actions in 3 columns to match other sections
     actionsLayout->addWidget(visibilityCheckBox, 0, 0);
