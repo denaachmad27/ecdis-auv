@@ -126,6 +126,7 @@ private slots:
     void onInsertWaypointAfter();
     void onMoveWaypointUpFromContext();
     void onMoveWaypointDownFromContext();
+    void onChangeRouteColor();
 
 signals:
     void routeSelectionChanged(int routeId);
@@ -208,6 +209,7 @@ protected:
     QAction* routePropertiesAction;
     QAction* duplicateRouteAction;
     QAction* exportRouteAction;
+    QAction* changeColorAction;
     
     // Waypoint context menu actions
     QAction* editWaypointAction;

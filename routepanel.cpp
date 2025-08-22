@@ -17,6 +17,7 @@
 #include <QRadioButton>
 #include <QComboBox>
 #include <QIntValidator>
+#include <QColorDialog>
 
 // ====== RouteTreeItem Implementation ======
 
@@ -591,6 +592,7 @@ void RoutePanel::setupUI()
     renameRouteAction = routeContextMenu->addAction("Rename Route");
     duplicateRouteAction = routeContextMenu->addAction("Duplicate Route");
     exportRouteAction = routeContextMenu->addAction("Export Route");
+    changeColorAction = routeContextMenu->addAction("Change Color...");
     routeContextMenu->addSeparator();
     toggleVisibilityAction = routeContextMenu->addAction("Toggle Visibility");
     routeContextMenu->addSeparator();
@@ -724,6 +726,7 @@ void RoutePanel::setupConnections()
     connect(toggleVisibilityAction, &QAction::triggered, this, &RoutePanel::onToggleRouteVisibility);
     connect(deleteRouteAction, &QAction::triggered, this, &RoutePanel::onDeleteRoute);
     connect(routePropertiesAction, &QAction::triggered, this, &RoutePanel::onRouteProperties);
+    connect(changeColorAction, &QAction::triggered, this, &RoutePanel::onChangeRouteColor);
     
     // Waypoint Context menu connections
     connect(editWaypointAction, &QAction::triggered, this, &RoutePanel::onEditWaypointFromContext);
@@ -1325,6 +1328,17 @@ void RoutePanel::onShowContextMenu(const QPoint& pos)
         routeTreeWidget->setCurrentItem(item); // Select the waypoint
         waypointContextMenu->exec(routeTreeWidget->mapToGlobal(pos));
     }
+}
+
+void RoutePanel::onChangeRouteColor()
+{
+    if (selectedRouteId <= 0 || !ecWidget) return;
+    QColor initial = ecWidget->getBaseRouteColor(selectedRouteId);
+    QColor chosen = QColorDialog::getColor(initial, this, "Select Route Color");
+    if (!chosen.isValid()) return;
+    ecWidget->setRouteCustomColor(selectedRouteId, chosen);
+    refreshRouteList();
+    emit statusMessage(QString("Route %1 color updated").arg(selectedRouteId));
 }
 
 void RoutePanel::onAddRouteClicked()
@@ -2272,29 +2286,121 @@ void RoutePanel::onAddWaypointClicked()
         return;
     }
 
-    // Ask user how to add the waypoint
-    QMessageBox modeBox(this);
-    modeBox.setWindowTitle("Add Waypoint");
-    modeBox.setText("How do you want to add the waypoint?");
-    QPushButton* mouseBtn = modeBox.addButton("By Mouse", QMessageBox::AcceptRole);
-    QPushButton* formBtn = modeBox.addButton("By Form", QMessageBox::ActionRole);
-    QPushButton* cancelBtn = modeBox.addButton(QMessageBox::Cancel);
-    modeBox.setDefaultButton(mouseBtn);
-    modeBox.exec();
+    // First choice: Create New or From Existing
+    QStringList addModes;
+    addModes << "Create New" << "From Existing";
+    bool ok = false;
+    QString selMode = QInputDialog::getItem(this, "Add Waypoint", "Select mode:", addModes, 0, false, &ok);
+    if (!ok || selMode.isEmpty()) return;
 
-    if (modeBox.clickedButton() == cancelBtn) return;
+    if (selMode == "Create New") {
+        // Ask user how to add the new waypoint (existing behavior)
+        QMessageBox modeBox(this);
+        modeBox.setWindowTitle("Add Waypoint");
+        modeBox.setText("How do you want to add the waypoint?");
+        QPushButton* mouseBtn = modeBox.addButton("By Mouse", QMessageBox::AcceptRole);
+        QPushButton* formBtn = modeBox.addButton("By Form", QMessageBox::ActionRole);
+        QPushButton* cancelBtn = modeBox.addButton(QMessageBox::Cancel);
+        modeBox.setDefaultButton(mouseBtn);
+        modeBox.exec();
 
-    if (modeBox.clickedButton() == mouseBtn) {
-        // Start append-by-mouse mode on the selected route
-        if (ecWidget) {
-            ecWidget->startAppendWaypointMode(selectedRouteId);
-            emit statusMessage(QString("Add waypoint by mouse on Route %1").arg(selectedRouteId));
+        if (modeBox.clickedButton() == cancelBtn) return;
+
+        if (modeBox.clickedButton() == mouseBtn) {
+            // Start append-by-mouse mode on the selected route
+            if (ecWidget) {
+                ecWidget->startAppendWaypointMode(selectedRouteId);
+                emit statusMessage(QString("Add waypoint by mouse on Route %1").arg(selectedRouteId));
+            }
+            return;
         }
+
+        // Otherwise, open the form dialog
+        showWaypointEditDialog(selectedRouteId);
         return;
     }
 
-    // Otherwise, open the form dialog
-    showWaypointEditDialog(selectedRouteId);
+    // From Existing: show a list of all existing waypoints from all routes
+    if (!ecWidget) return;
+
+    QList<EcWidget::Waypoint> allWps = ecWidget->getWaypoints();
+    QVector<EcWidget::Waypoint> routeWps;
+    routeWps.reserve(allWps.size());
+    for (const auto& wp : allWps) {
+        if (wp.routeId > 0) {
+            routeWps.append(wp);
+        }
+    }
+
+    if (routeWps.isEmpty()) {
+        QMessageBox::information(this, "No Waypoints", "No existing waypoints found across routes.");
+        return;
+    }
+
+    QDialog dlg(this);
+    dlg.setWindowTitle("Select Existing Waypoint");
+    QVBoxLayout* vlay = new QVBoxLayout(&dlg);
+    QLabel* info = new QLabel("Choose a waypoint from any route to add to the selected route.", &dlg);
+    info->setWordWrap(true);
+    vlay->addWidget(info);
+
+    QTreeWidget* list = new QTreeWidget(&dlg);
+    list->setColumnCount(4);
+    QStringList headers; headers << "Label" << "Route" << "Latitude" << "Longitude";
+    list->setHeaderLabels(headers);
+    list->setSelectionMode(QAbstractItemView::SingleSelection);
+    list->setUniformRowHeights(true);
+    list->setRootIsDecorated(false);
+    list->setAlternatingRowColors(true);
+
+    // Fill items
+    for (int i = 0; i < routeWps.size(); ++i) {
+        const auto& wp = routeWps[i];
+        auto* it = new QTreeWidgetItem(list);
+        it->setText(0, wp.label);
+        // Resolve route name
+        QString routeName = QString("Route %1").arg(wp.routeId);
+        EcWidget::Route r = ecWidget->getRouteById(wp.routeId);
+        if (!r.name.trimmed().isEmpty()) routeName = r.name;
+        it->setText(1, routeName);
+        // Show coordinates in Deg-Min format
+        it->setText(2, formatDegMin(wp.lat, true));
+        it->setText(3, formatDegMin(wp.lon, false));
+        it->setData(0, Qt::UserRole, i); // store index
+    }
+    list->resizeColumnToContents(0);
+    list->resizeColumnToContents(1);
+    vlay->addWidget(list);
+
+    QHBoxLayout* btns = new QHBoxLayout();
+    btns->addStretch();
+    QPushButton* okBtn = new QPushButton("Add to Route", &dlg);
+    QPushButton* cancelBtn = new QPushButton("Cancel", &dlg);
+    btns->addWidget(okBtn);
+    btns->addWidget(cancelBtn);
+    vlay->addLayout(btns);
+
+    QObject::connect(okBtn, &QPushButton::clicked, &dlg, &QDialog::accept);
+    QObject::connect(cancelBtn, &QPushButton::clicked, &dlg, &QDialog::reject);
+
+    if (dlg.exec() != QDialog::Accepted) return;
+
+    QTreeWidgetItem* sel = list->currentItem();
+    if (!sel) {
+        QMessageBox::information(this, "No Selection", "Please select a waypoint.");
+        return;
+    }
+    bool okIdx = false;
+    int idx = sel->data(0, Qt::UserRole).toInt(&okIdx);
+    if (!okIdx || idx < 0 || idx >= routeWps.size()) return;
+
+    const auto& src = routeWps[idx];
+    // Create a new waypoint in the selected route using the chosen waypoint's data
+    ecWidget->createWaypointFromForm(src.lat, src.lon, src.label, src.remark, selectedRouteId, src.turningRadius, src.active);
+
+    // Refresh and notify
+    refreshRouteList();
+    emit statusMessage(QString("Added existing waypoint '%1' to Route %2").arg(src.label).arg(selectedRouteId));
 }
 
 void RoutePanel::onEditWaypointClicked()

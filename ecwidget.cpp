@@ -3389,25 +3389,40 @@ bool EcWidget::createWaypointInRoute(int routeId, double lat, double lon, const 
     return true;
 }
 
+QColor EcWidget::getBaseRouteColor(int routeId) const
+{
+    if (routeId == 0) {
+        return QColor(255, 140, 0); // Single waypoint orange
+    }
+    if (routeCustomColors.contains(routeId)) {
+        return routeCustomColors.value(routeId);
+    }
+    // Default for new routes: blue
+    return QColor(0, 100, 255);
+}
+
 QColor EcWidget::getRouteColor(int routeId)
 {
-    // Single waypoints (routeId 0) get orange
-    if (routeId == 0) {
-        return QColor(255, 140, 0); // Orange for single waypoints
-    }
-    
-    // If no route is attached to ship, all routes are active (blue)
-    if (!hasAttachedRoute()) {
-        return QColor(0, 100, 255); // Blue for all routes when none attached
-    }
-    
-    // If there's an attached route, only the attached route is active (blue)
-    // Others are inactive (gray)
-    if (isRouteAttachedToShip(routeId)) {
-        return QColor(0, 100, 255); // Blue for attached route
-    } else {
-        return QColor(128, 128, 128); // Gray for non-attached routes
-    }
+    // Single waypoints keep base color
+    if (routeId == 0) return getBaseRouteColor(routeId);
+
+    QColor base = getBaseRouteColor(routeId);
+
+    // If no route attached, use base color
+    if (!hasAttachedRoute()) return base;
+
+    // If attached, show base; others dim to gray
+    if (isRouteAttachedToShip(routeId)) return base;
+    return QColor(128, 128, 128);
+}
+
+void EcWidget::setRouteCustomColor(int routeId, const QColor& color)
+{
+    if (routeId <= 0) return;
+    routeCustomColors[routeId] = color;
+    // Persist immediately so changes survive app restarts
+    saveRoutes();
+    Draw();
 }
 
 bool EcWidget::deleteRoute(int routeId)
@@ -3448,6 +3463,17 @@ bool EcWidget::deleteRoute(int routeId)
     }
     routeList = newRouteList;
     
+    // Cleanup ancillary state
+    routeVisibility.remove(routeId);
+    routeCustomColors.remove(routeId);
+    if (selectedRouteId == routeId) {
+        selectedRouteId = -1;
+        clearWaypointHighlight();
+    }
+    if (isRouteAttachedToShip(routeId)) {
+        setRouteAttachedToShip(routeId, false);
+    }
+    
     qDebug() << "[ROUTE] Deleted route" << routeId << "with" << deletedCount << "waypoints";
     
     // Save changes
@@ -3456,6 +3482,9 @@ bool EcWidget::deleteRoute(int routeId)
     
     // Force complete chart redraw - use Draw() to ensure AIS and waypoints are redrawn
     Draw();
+    
+    // Notify UI (RoutePanel refresh via MainWindow connection)
+    emit waypointCreated();
     
     return true;
 }
@@ -12041,9 +12070,11 @@ void EcWidget::startRouteMode()
 {
     qDebug() << "[ROUTE] Starting route mode";
     isRouteMode = true;
+    // Ensure we start a brand-new route ID and clean state
+    currentRouteId = getNextAvailableRouteId();
     routeWaypointCounter = 1;
-    // Don't increment currentRouteId here - let it be incremented when we actually create first waypoint
-    qDebug() << "[ROUTE] Route mode started. Current route ID:" << currentRouteId;
+    resetRouteConnections();
+    qDebug() << "[ROUTE] Route mode started. New route ID:" << currentRouteId;
 }
 
 void EcWidget::startAppendWaypointMode(int routeId)
@@ -12264,6 +12295,12 @@ void EcWidget::saveRoutes()
         routeObject["visible"] = isRouteVisible(route.routeId); // Save visibility state
         routeObject["attachedToShip"] = route.attachedToShip; // Save attached to ship state
         
+        // Persist custom color if any
+        if (routeCustomColors.contains(route.routeId)) {
+            QColor c = routeCustomColors.value(route.routeId);
+            routeObject["color"] = c.name(QColor::HexRgb); // e.g., #RRGGBB
+        }
+
         // Save waypoints with full coordinate data
         QJsonArray waypointsArray;
         for (const EcWidget::RouteWaypoint& wp : route.waypoints) {
@@ -12414,6 +12451,16 @@ void EcWidget::loadRoutes()
             
             setRouteVisibility(route.routeId, routeVisible);
             qDebug() << "[ROUTE-LOAD] Route" << route.routeId << "loaded with saved visibility:" << routeVisible << "attachedToShip:" << route.attachedToShip;
+
+            // Load custom color if present
+            QString colorStr = routeObject.value("color").toString("");
+            if (!colorStr.isEmpty()) {
+                QColor c(colorStr);
+                if (c.isValid()) {
+                    routeCustomColors[route.routeId] = c;
+                    qDebug() << "[ROUTE-LOAD] Route" << route.routeId << "loaded with custom color:" << c.name();
+                }
+            }
             
             // Load waypoints with coordinates
             QJsonArray waypointsArray = routeObject["waypoints"].toArray();
