@@ -34,5 +34,12 @@
         <file>icon/edit.svg</file>
         <file>icon/move.svg</file>
         <file>icon/publish.svg</file>
+        <file>icon/create_route_white.svg</file>
+        <file>icon/create_wp_white.svg</file>
+        <file>icon/delete_route_white.svg</file>
+        <file>icon/delete_wp_white.svg</file>
+        <file>icon/edit_white.svg</file>
+        <file>icon/move_white.svg</file>
+        <file>icon/publish_white.svg</file>
     </qresource>
 </RCC>

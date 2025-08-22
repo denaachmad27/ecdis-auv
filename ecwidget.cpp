@@ -4376,30 +4376,30 @@ void EcWidget::showWaypointContextMenu(const QPoint& pos, int waypointIndex)
     
     // Edit waypoint properties
     QAction* editAction = contextMenu.addAction(tr("Edit Route Point"));
-    editAction->setIcon(QIcon(":/icon/edit.svg"));
+    editAction->setIcon(QIcon(":/icon/edit_white.svg"));
     
     // Move waypoint
     QAction* moveAction = contextMenu.addAction(tr("Move Waypoint"));
-    moveAction->setIcon(QIcon(":/icon/move.svg"));
+    moveAction->setIcon(QIcon(":/icon/move_white.svg"));
     
     contextMenu.addSeparator();
     
     // Delete waypoint
     QAction* deleteWaypointAction = contextMenu.addAction(tr("Delete Waypoint"));
-    deleteWaypointAction->setIcon(QIcon(":/icon/delete_wp.svg"));
+    deleteWaypointAction->setIcon(QIcon(":/icon/delete_wp_white.svg"));
     
     // Delete route (only if waypoint is part of a route)
     QAction* deleteRouteAction = nullptr;
     if (waypoint.routeId > 0) {
         deleteRouteAction = contextMenu.addAction(tr("Delete Route"));
-        deleteRouteAction->setIcon(QIcon(":/icon/delete_route.svg"));
+        deleteRouteAction->setIcon(QIcon(":/icon/delete_route_white.svg"));
     }
 
     contextMenu.addSeparator();
 
     // Publish waypoint
     QAction* publishAction = contextMenu.addAction(tr("Publish Waypoint"));
-    publishAction->setIcon(QIcon(":/icon/publish.svg"));
+    publishAction->setIcon(QIcon(":/icon/publish_white.svg"));
     
     // Execute menu
     QAction* selectedAction = contextMenu.exec(mapToGlobal(pos));
@@ -4543,13 +4543,13 @@ void EcWidget::showLeglineContextMenu(const QPoint& pos, int routeId, int segmen
     
     // Insert waypoint at clicked position
     QAction* insertWaypointAction = contextMenu.addAction(tr("Insert Waypoint"));
-    insertWaypointAction->setIcon(QIcon(":/icon/create_wp.png"));
+    insertWaypointAction->setIcon(QIcon(":/icon/create_wp_white.svg"));
     
     contextMenu.addSeparator();
     
     // Delete route
     QAction* deleteRouteAction = contextMenu.addAction(tr("Delete Route"));
-    deleteRouteAction->setIcon(QIcon(":/icon/delete_route.png"));
+    deleteRouteAction->setIcon(QIcon(":/icon/delete_route_white.svg"));
     
     // Execute menu
     QAction* selectedAction = contextMenu.exec(mapToGlobal(pos));
@@ -4609,7 +4609,7 @@ void EcWidget::showMapContextMenu(const QPoint& pos)
     
     // Create Route option
     QAction* createRouteAction = contextMenu.addAction(tr("Create Route"));
-    createRouteAction->setIcon(QIcon(":/icon/create_route.png"));
+    createRouteAction->setIcon(QIcon(":/icon/create_route_white.svg"));
     
     // Execute menu
     QAction* selectedAction = contextMenu.exec(mapToGlobal(pos));
