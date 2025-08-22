@@ -12,6 +12,7 @@
 #include <QTextEdit>
 #include <QMenu>
 #include <QAction>
+#include <QMap>
 
 // SevenCs Kernel EC2007
 #ifdef _WIN32
@@ -297,6 +298,10 @@ public:
   bool importWaypointsFromFile(const QString &filename);
   bool initializeWaypointSystem();
   bool renameRoute(int routeId, const QString& newName);
+  
+  // Route color customization
+  void setRouteCustomColor(int routeId, const QColor& color);
+  QColor getBaseRouteColor(int routeId) const; // returns custom or default base color
   
   // Route mode methods
   void startRouteMode();
@@ -590,6 +595,8 @@ public:
   void ownShipDraw();
 
   // Waypoint
+  // Custom colors per routeId
+  QMap<int, QColor> routeCustomColors;
   void SetWaypointPos(EcCoordinate lat, EcCoordinate lon);
   bool drawUdo(void);
   ActiveFunction    activeFunction;
