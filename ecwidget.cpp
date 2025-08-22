@@ -100,7 +100,7 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   // PERBAIKAN: Set default position jika currentLat/Lon belum diset
   if (qIsNaN(currentLat) || qIsNaN(currentLon)) {
       // Default position (Jakarta, Indonesia - bisa disesuaikan)
-      ownShip.lat = -6.2088;  // Jakarta latitude  
+      ownShip.lat = -6.2088;  // Jakarta latitude
       ownShip.lon = 106.8456; // Jakarta longitude
       qDebug() << "[INIT] Using default ownship position: Jakarta" << ownShip.lat << "," << ownShip.lon;
   } else {
@@ -219,7 +219,7 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   alertCheckTimer = new QTimer(this);
   connect(alertCheckTimer, &QTimer::timeout, this, &EcWidget::performPeriodicAlertChecks);
   alertCheckTimer->start(10000); // Check every 10 seconds
-  
+
   // Initialize chart flashing for dangerous obstacles
   chartFlashTimer = new QTimer(this);
   chartFlashVisible = false;
@@ -361,16 +361,16 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
 
   // Routes (load first to populate waypointList from routes)
   loadRoutes(); // Muat route dari file JSON dan konversi ke waypoints
-  
+
   // Waypoint (load after routes for single waypoints)
   loadWaypoints(); // Muat single waypoint dari file JSON
-  
+
   // Convert legacy single waypoints to routes for compatibility
   convertSingleWaypointsToRoutes();
-  
+
   // DEBUGGING: Comment loadGuardZones() to test without auto-loading
   // loadGuardZones();
-  
+
   // EMERGENCY: Manually clear guardZones list to prevent loading existing attached guardzone
   guardZones.clear();
   attachedGuardZoneId = -1;
@@ -402,11 +402,11 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   routeWaypointCounter = 1;
   currentRouteId = 1;
   activeFunction = PAN;
-  
+
   // NOTE: Do not call loadWaypoints() again here; routes have already
   // been converted to waypoints above. Calling it again would clear
   // waypointList and drop route waypoints on startup.
-  
+
   qDebug() << "[ECWIDGET] Route/Waypoint system initialized";
 
 }
@@ -580,17 +580,17 @@ void EcWidget::SetHeading (double newHeading)
   // ROUTE FIX: Flush SevenCs cache when heading changes significantly to prevent stale route rendering
   static double lastHeading = -999.0;
   bool headingChanged = (qAbs(newHeading - lastHeading) > 0.1);
-  
+
   currentHeading = newHeading;
   if (currentScale > maxScale) currentScale = maxScale; // in case the world overview has been shown before
-  
+
   // Flush SevenCs drawing cache when heading changes to prevent double route display
   if (headingChanged && view && initialized) {
     qDebug() << "[ROUTE-FIX] Heading changed significantly, flushing SevenCs cache";
     EcDrawFlushCache(view);
     lastHeading = newHeading;
   }
-  
+
   // Check projection because it depends on viewport
   SetProjection(projectionMode);
 }
@@ -1008,7 +1008,7 @@ void EcWidget::draw(bool upd)
 void EcWidget::Draw()
 {
     draw(true);
-    
+
     // ROUTE FIX: Enhanced conditional drawAISCell() for route stability
     // Always call drawAISCell() if routes exist to ensure proper pixmap management
     bool hasRoutes = !waypointList.isEmpty();
@@ -1035,7 +1035,7 @@ void EcWidget::Draw()
 
 void EcWidget::waypointDraw(){
     qDebug() << "[WAYPOINT-DRAW] Drawing" << waypointList.size() << "waypoints";
-    
+
     // Gambar waypoint dengan warna konsisten
     for (const Waypoint &wp : waypointList)
     {
@@ -1068,7 +1068,7 @@ void EcWidget::paintEvent (QPaintEvent *e)
 
   QPainter painter(this);
   painter.drawPixmap(e->rect(), drawPixmap, e->rect());
-  
+
   // FORCE CLEANUP: Run cleanup from paint event as fallback
   static int paintCleanupCounter = 0;
   if (++paintCleanupCounter % 100 == 0) { // Every ~100 paint events (less frequent)
@@ -1082,7 +1082,7 @@ void EcWidget::paintEvent (QPaintEvent *e)
   if (ghostWaypoint.visible) {
       drawGhostWaypoint(painter, ghostWaypoint.lat, ghostWaypoint.lon, ghostWaypoint.label);
   }
-  
+
   // Draw highlighted waypoint for route panel selection
   if (highlightedWaypoint.visible) {
       drawHighlightedWaypoint(painter, highlightedWaypoint.lat, highlightedWaypoint.lon, highlightedWaypoint.label);
@@ -1097,7 +1097,7 @@ void EcWidget::paintEvent (QPaintEvent *e)
 
       // Re-enabled with enhanced safety protections
       drawObstacleMarkers(painter); // Draw obstacle markers with color-coded dots
-      
+
       // TEMPORARY DISABLE: Route lines drawing to prevent crash during presentation
       // drawRouteLinesOverlay(painter);
 
@@ -1422,7 +1422,7 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
 {
     hideWaypointToolbox();
     setFocus();
-    
+
     // Clear waypoint highlight when clicking anywhere on the map
     // This provides better UX by removing distracting highlights
     clearWaypointHighlight();
@@ -1712,11 +1712,11 @@ void EcWidget::mouseMoveEvent(QMouseEvent *e)
             // Update ghost waypoint position
             ghostWaypoint.lat = lat;
             ghostWaypoint.lon = lon;
-            
+
             // Throttle update untuk performance
             static QTime lastGhostUpdate;
             QTime currentTime = QTime::currentTime();
-            
+
             if (!lastGhostUpdate.isValid() || lastGhostUpdate.msecsTo(currentTime) >= 16) {
                 update(); // Trigger repaint untuk ghost waypoint
                 lastGhostUpdate = currentTime;
@@ -1735,11 +1735,11 @@ void EcWidget::mouseMoveEvent(QMouseEvent *e)
             ghostWaypoint.label = QString("WP%1").arg(routeWaypointCounter);
             ghostWaypoint.routeId = currentRouteId;
             ghostWaypoint.waypointIndex = routeWaypointCounter - 1; // Index untuk next waypoint
-            
+
             // Throttle update untuk performance
             static QTime lastCreateGhostUpdate;
             QTime currentTime = QTime::currentTime();
-            
+
             if (!lastCreateGhostUpdate.isValid() || lastCreateGhostUpdate.msecsTo(currentTime) >= 16) {
                 update(); // Trigger repaint untuk ghost waypoint dan leglines
                 lastCreateGhostUpdate = currentTime;
@@ -3113,39 +3113,39 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon, double head )
       // PERBAIKAN: Update heading ownship dari data real-time
       double oldHeading = ownShip.heading;
       ownShip.heading = head;
-      
+
       qDebug() << "Updating red dot position to:" << lat << "," << lon << "heading:" << head;
       updateRedDotPosition(lat, lon);
-      
+
       // Log jika heading berubah signifikan
       if (abs(head - oldHeading) > 1.0) {
           qDebug() << "[HEADING-CHANGE] Ship heading changed from" << oldHeading << "to" << head;
       }
-      
+
       update(); // Force widget repaint
   }
-  
+
   // PERBAIKAN: Hanya buat guardzone jika belum ada DAN user sudah aktifkan redDotAttachedToShip
   // DAN belum ada guardzone fisik yang ter-render
   if (attachedGuardZoneId == -1 && lat != 0 && lon != 0 && !qIsNaN(lat) && !qIsNaN(lon) && redDotAttachedToShip) {
       // Cek apakah ada guardzone yang attachedToShip dari file yang belum ter-render
       bool hasAttachedFromFile = false;
       int attachedGuardZoneCount = 0;
-      
+
       for (const GuardZone& gz : guardZones) {
-          if (gz.attachedToShip && 
-              !gz.name.contains("Ship Guardian Circle") && 
+          if (gz.attachedToShip &&
+              !gz.name.contains("Ship Guardian Circle") &&
               !gz.name.contains("Red Dot Guardian")) {
               hasAttachedFromFile = true;
               attachedGuardZoneCount++;
           }
       }
-      
+
       // PERBAIKAN: Hanya buat jika tidak ada guardzone attached yang sudah ada
       if (!hasAttachedFromFile && attachedGuardZoneCount == 0) {
           qDebug() << "[POSITION-UPDATE] Valid ownship position received, creating delayed attached guardzone";
           createAttachedGuardZone();
-          
+
           // PERBAIKAN: Emit signal untuk sync UI setelah guardzone dibuat
           emit attachToShipStateChanged(true);
       } else {
@@ -3330,20 +3330,20 @@ void EcWidget::createWaypointAt(EcCoordinate lat, EcCoordinate lon)
     Waypoint newWaypoint;
     newWaypoint.lat = lat;
     newWaypoint.lon = lon;
-    
+
     // Generate label based on mode
     if (isRouteMode) {
         newWaypoint.label = QString("R%1-WP%2").arg(currentRouteId).arg(routeWaypointCounter, 3, 10, QChar('0'));
         newWaypoint.remark = QString("Route %1 waypoint %2").arg(currentRouteId).arg(routeWaypointCounter);
         newWaypoint.routeId = currentRouteId;
-        
+
         // IMPORTANT: Create separate waypoint for each route to prevent connection
         createSeparateRouteWaypoint(newWaypoint);
     } else {
         newWaypoint.label = QString("WP%1").arg(waypointList.size() + 1, 3, 10, QChar('0'));
         newWaypoint.remark = "Single waypoint";
         newWaypoint.routeId = 0; // Single waypoint tidak punya route ID
-        
+
         // Create single waypoint normally
         createSingleWaypoint(newWaypoint);
     }
@@ -3354,13 +3354,13 @@ void EcWidget::createWaypointAt(EcCoordinate lat, EcCoordinate lon)
 bool EcWidget::createWaypointInRoute(int routeId, double lat, double lon, const QString& label)
 {
     qDebug() << "[DEBUG] Creating waypoint in route" << routeId << "at" << lat << lon;
-    
+
     // Create new waypoint struct
     Waypoint newWaypoint;
     newWaypoint.lat = lat;
     newWaypoint.lon = lon;
     newWaypoint.routeId = routeId;
-    
+
     // Set label - use provided label or generate one
     if (label.isEmpty()) {
         // Count existing waypoints in this route to generate label
@@ -3374,18 +3374,18 @@ bool EcWidget::createWaypointInRoute(int routeId, double lat, double lon, const 
     } else {
         newWaypoint.label = label;
     }
-    
+
     newWaypoint.remark = QString("Route %1 waypoint").arg(routeId);
     newWaypoint.featureHandle.id = EC_NOCELLID;
     newWaypoint.featureHandle.offset = 0;
-    
+
     // Add to waypoint list
     waypointList.append(newWaypoint);
-    
+
     qDebug() << "[CREATE-WAYPOINT] Added waypoint" << newWaypoint.label << "to route" << routeId << ". Total waypoints:" << waypointList.size();
-    
+
     // Note: Don't save or redraw here - will be done in batch after all waypoints are created
-    
+
     return true;
 }
 
@@ -3428,16 +3428,16 @@ void EcWidget::setRouteCustomColor(int routeId, const QColor& color)
 bool EcWidget::deleteRoute(int routeId)
 {
     qDebug() << "[DEBUG] Deleting route" << routeId;
-    
+
     if (routeId <= 0) {
         qDebug() << "[ERROR] Invalid routeId:" << routeId;
         return false;
     }
-    
+
     // Remove all waypoints with this routeId
     QList<Waypoint> newWaypointList;
     int deletedCount = 0;
-    
+
     for (const auto& wp : waypointList) {
         if (wp.routeId != routeId) {
             newWaypointList.append(wp);
@@ -3445,15 +3445,15 @@ bool EcWidget::deleteRoute(int routeId)
             deletedCount++;
         }
     }
-    
+
     if (deletedCount == 0) {
         qDebug() << "[WARNING] No waypoints found for route" << routeId;
         return false;
     }
-    
+
     // Update waypoint list
     waypointList = newWaypointList;
-    
+
     // Remove route from routeList
     QList<Route> newRouteList;
     for (const auto& route : routeList) {
@@ -3462,7 +3462,7 @@ bool EcWidget::deleteRoute(int routeId)
         }
     }
     routeList = newRouteList;
-    
+
     // Cleanup ancillary state
     routeVisibility.remove(routeId);
     routeCustomColors.remove(routeId);
@@ -3473,19 +3473,19 @@ bool EcWidget::deleteRoute(int routeId)
     if (isRouteAttachedToShip(routeId)) {
         setRouteAttachedToShip(routeId, false);
     }
-    
+
     qDebug() << "[ROUTE] Deleted route" << routeId << "with" << deletedCount << "waypoints";
-    
+
     // Save changes
     saveWaypoints();
     saveRoutes();
-    
+
     // Force complete chart redraw - use Draw() to ensure AIS and waypoints are redrawn
     Draw();
-    
+
     // Notify UI (RoutePanel refresh via MainWindow connection)
     emit waypointCreated();
-    
+
     return true;
 }
 
@@ -3494,7 +3494,7 @@ void EcWidget::setRouteVisibility(int routeId, bool visible)
     qDebug() << "[ROUTE] *** setRouteVisibility called for route" << routeId << "to" << visible;
     qDebug() << "[ROUTE] *** selectedRouteId:" << selectedRouteId;
     qDebug() << "[ROUTE] *** Previous visibility for route" << routeId << "was:" << routeVisibility.value(routeId, true);
-    
+
     routeVisibility[routeId] = visible;
     qDebug() << "[ROUTE] *** Set route" << routeId << "visibility to" << visible;
     Draw(); // Use Draw() instead of forceRedraw() to ensure AIS and waypoints are redrawn
@@ -3505,7 +3505,7 @@ bool EcWidget::isRouteVisible(int routeId) const
     qDebug() << "[ROUTE] *** isRouteVisible called for route" << routeId;
     qDebug() << "[ROUTE] *** routeVisibility map contains" << routeVisibility.size() << "entries";
     qDebug() << "[ROUTE] *** selectedRouteId:" << selectedRouteId;
-    
+
     // Check if routeId exists in the map first
     if (!routeVisibility.contains(routeId)) {
         qDebug() << "[ROUTE] *** Route" << routeId << "NOT FOUND in routeVisibility map";
@@ -3517,7 +3517,7 @@ bool EcWidget::isRouteVisible(int routeId) const
                 break;
             }
         }
-        
+
         if (routeExists) {
             // Route exists but not in visibility map - initialize to visible
             const_cast<QMap<int, bool>&>(routeVisibility)[routeId] = true;
@@ -3529,17 +3529,17 @@ bool EcWidget::isRouteVisible(int routeId) const
             return false;
         }
     }
-    
+
     // Route exists in visibility map - return saved state
     bool visible = routeVisibility[routeId];
     qDebug() << "[ROUTE] *** Route" << routeId << "FOUND in routeVisibility map, returns:" << visible;
-    
+
     // Print entire routeVisibility map for debugging
     qDebug() << "[ROUTE] *** Current routeVisibility map contents:";
     for (auto it = routeVisibility.begin(); it != routeVisibility.end(); ++it) {
         qDebug() << "[ROUTE] ***   Route" << it.key() << "=" << it.value();
     }
-    
+
     return visible;
 }
 
@@ -3550,7 +3550,7 @@ void EcWidget::setRouteAttachedToShip(int routeId, bool attached)
         if (route.routeId == routeId) {
             route.attachedToShip = attached;
             qDebug() << "[ROUTE] Set route" << routeId << "attached to ship:" << attached;
-            
+
             // Don't call saveRoutes or forceRedraw here to avoid recursive calls
             // These will be handled by the calling function
             return;
@@ -3572,23 +3572,23 @@ bool EcWidget::isRouteAttachedToShip(int routeId) const
 void EcWidget::attachRouteToShip(int routeId)
 {
     qDebug() << "[ROUTE] attachRouteToShip called for route" << routeId;
-    
+
     // Preserve current visibility of the route being attached
     bool wasVisible = true;
     if (routeId > 0) {
         wasVisible = isRouteVisible(routeId);
         qDebug() << "[ROUTE] Current visibility of route" << routeId << ":" << wasVisible;
-        
+
         // FORCE SET visibility to preserve it BEFORE save
         routeVisibility[routeId] = wasVisible;
         qDebug() << "[ROUTE] PRESERVED visibility in routeVisibility before attachment";
     }
-    
+
     // Detach all routes first
     for (auto& route : routeList) {
         route.attachedToShip = false;
     }
-    
+
     // Attach the selected route
     if (routeId > 0) {
         // Set attachment status directly without calling setRouteAttachedToShip
@@ -3598,16 +3598,16 @@ void EcWidget::attachRouteToShip(int routeId)
                 break;
             }
         }
-        
+
         qDebug() << "[ROUTE] Attached route" << routeId << "to ship";
     } else {
         qDebug() << "[ROUTE] Detached all routes from ship";
     }
-    
+
     // Save the attachment state - visibility should be preserved now
     saveRoutes();
     qDebug() << "[ROUTE] Saved routes with preserved visibility";
-    
+
     // Refresh chart to update colors - use Draw() to ensure AIS and waypoints are redrawn
     Draw(); // Changed from forceRedraw() to Draw() to include drawAISCell() and waypointDraw()
 }
@@ -3630,15 +3630,15 @@ bool EcWidget::hasAttachedRoute() const
 void EcWidget::setSelectedRoute(int routeId)
 {
     qDebug() << "[SELECTED-ROUTE] Setting selectedRouteId from" << selectedRouteId << "to" << routeId;
-    
+
     // If same route, no need to redraw
     if (selectedRouteId == routeId) {
         qDebug() << "[SELECTED-ROUTE] Same route selected, skipping redraw";
         return;
     }
-    
+
     selectedRouteId = routeId;
-    
+
     // Single optimized draw - no need for multiple draws
     Draw();
 }
@@ -3647,21 +3647,21 @@ int EcWidget::getNextAvailableRouteId() const
 {
     // Find lowest available route ID starting from 1
     QSet<int> usedRouteIds;
-    
+
     // Collect all route IDs currently in use
     for (const auto& wp : waypointList) {
         if (wp.routeId > 0) {
             usedRouteIds.insert(wp.routeId);
         }
     }
-    
+
     // Find the first available ID starting from 1
     for (int id = 1; id <= 1000; ++id) { // Reasonable upper limit
         if (!usedRouteIds.contains(id)) {
             return id;
         }
     }
-    
+
     // Fallback if somehow we have 1000 routes
     return usedRouteIds.size() + 1;
 }
@@ -3692,18 +3692,18 @@ void EcWidget::createSeparateRouteWaypoint(const Waypoint &waypoint)
     Waypoint wp = waypoint;
     wp.featureHandle.id = EC_NOCELLID;
     wp.featureHandle.offset = 0;
-    
+
     // Add to our list
     waypointList.append(wp);
-    
+
     qDebug() << "[ROUTE] Added waypoint" << wp.label << "to route" << wp.routeId;
-    
+
     // Save to JSON file (like GuardZone does)
     saveWaypoints();
-    
+
     // Save route information
     saveCurrentRoute();
-    
+
     // Redraw everything to show new waypoint and route lines
     Draw();
     update();
@@ -3718,14 +3718,14 @@ void EcWidget::createSingleWaypoint(const Waypoint &waypoint)
             return;
         }
     }
-    
+
     // Create waypoint in default cell
     Waypoint wp = waypoint;
     double range = GetRange(currentScale);
     double pickRadius = 0.03 * range;
-    
+
     EcFeature wpFeature = EcRouteAddWaypoint(udoCid, dictInfo, wp.lat, wp.lon, pickRadius, wp.turningRadius);
-    
+
     if (ECOK(wpFeature)) {
         wp.featureHandle = wpFeature;
         qDebug() << "[SINGLE] Created single waypoint" << wp.label;
@@ -3793,10 +3793,10 @@ void EcWidget::drawWaypointWithLabel(double lat, double lon, const QString& labe
     painter.setFont(font);
     QFontMetrics fm(font);
     QRect textRect = fm.boundingRect(label);
-    
+
     // Use fixed label position instead of findOptimalLabelPosition
     QPoint labelPos(x + 10, y - 10); // Fixed offset: 10px right and 10px up from waypoint
-    
+
     // Gambar teks label tanpa background
     painter.setBrush(Qt::NoBrush);
     painter.setPen(QPen(color, 1));
@@ -3810,50 +3810,50 @@ QPoint EcWidget::findOptimalLabelPosition(int waypointX, int waypointY, const QS
     // Static list untuk menyimpan posisi label yang sudah digunakan dalam satu frame draw
     static QList<QRect> usedLabelRects;
     static int lastDrawTime = 0;
-    
+
     // Reset list setiap kali draw baru dimulai
     int currentTime = QTime::currentTime().msecsSinceStartOfDay();
     if (currentTime - lastDrawTime > 100) {
         usedLabelRects.clear();
         lastDrawTime = currentTime;
     }
-    
+
     // Dapatkan bounds widget untuk memastikan label tidak keluar
     QRect widgetBounds = rect();
     int margin = 10; // Margin dari tepi widget
-    
+
     // Daftar posisi kandidat dengan prioritas UI/UX yang baik
     QList<QPoint> candidatePositions;
-    
+
     // Prioritas 1: Posisi terpusat dan mudah dibaca (jarak optimal)
     int distance = minDistance;
-    
+
     // Urutan prioritas berdasarkan prinsip UI/UX:
     // 1. Kanan atas (paling umum dan mudah dibaca)
     // 2. Kiri atas (alternatif terbaik)
-    // 3. Kanan bawah 
+    // 3. Kanan bawah
     // 4. Kiri bawah
     // 5. Posisi tengah (jika ruang cukup)
-    candidatePositions << QPoint(waypointX + distance, waypointY - distance);     
-    candidatePositions << QPoint(waypointX - distance, waypointY - distance);     
-    candidatePositions << QPoint(waypointX + distance, waypointY + distance);     
-    candidatePositions << QPoint(waypointX - distance, waypointY + distance);     
-    candidatePositions << QPoint(waypointX, waypointY - distance - 8);           
-    candidatePositions << QPoint(waypointX, waypointY + distance + 8);           
-    
+    candidatePositions << QPoint(waypointX + distance, waypointY - distance);
+    candidatePositions << QPoint(waypointX - distance, waypointY - distance);
+    candidatePositions << QPoint(waypointX + distance, waypointY + distance);
+    candidatePositions << QPoint(waypointX - distance, waypointY + distance);
+    candidatePositions << QPoint(waypointX, waypointY - distance - 8);
+    candidatePositions << QPoint(waypointX, waypointY + distance + 8);
+
     // Prioritas 2: Jarak sedang jika posisi dekat masih bertabrakan
     distance = minDistance + 8;
     candidatePositions << QPoint(waypointX + distance, waypointY - distance);
     candidatePositions << QPoint(waypointX - distance, waypointY - distance);
     candidatePositions << QPoint(waypointX + distance, waypointY + distance);
     candidatePositions << QPoint(waypointX - distance, waypointY + distance);
-    
+
     // Cari posisi optimal yang memenuhi kriteria UI/UX
     for (const QPoint& candidate : candidatePositions) {
         // Hitung rectangle label dengan padding
-        QRect labelRect(candidate.x() - 3, candidate.y() - textSize.height() - 3, 
+        QRect labelRect(candidate.x() - 3, candidate.y() - textSize.height() - 3,
                        textSize.width() + 6, textSize.height() + 4);
-        
+
         // KRITERIA 1: Pastikan label tidak keluar dari bounds widget
         if (labelRect.left() < widgetBounds.left() + margin ||
             labelRect.right() > widgetBounds.right() - margin ||
@@ -3861,7 +3861,7 @@ QPoint EcWidget::findOptimalLabelPosition(int waypointX, int waypointY, const QS
             labelRect.bottom() > widgetBounds.bottom() - margin) {
             continue; // Skip posisi yang keluar bounds
         }
-        
+
         // KRITERIA 2: Check collision dengan label lain
         bool hasCollision = false;
         for (const QRect& usedRect : usedLabelRects) {
@@ -3870,21 +3870,21 @@ QPoint EcWidget::findOptimalLabelPosition(int waypointX, int waypointY, const QS
                 break;
             }
         }
-        
+
         // Jika posisi memenuhi semua kriteria, gunakan posisi ini
         if (!hasCollision) {
             usedLabelRects.append(labelRect);
             return candidate;
         }
     }
-    
+
     // Fallback dengan constraining ke dalam bounds
     QPoint fallbackPos(waypointX + minDistance, waypointY - minDistance);
-    
+
     // Constraint ke dalam widget bounds
     QRect fallbackRect(fallbackPos.x() - 3, fallbackPos.y() - textSize.height() - 3,
                        textSize.width() + 6, textSize.height() + 4);
-    
+
     // Adjust jika keluar bounds
     if (fallbackRect.right() > widgetBounds.right() - margin) {
         fallbackPos.setX(widgetBounds.right() - margin - textSize.width() - 6);
@@ -3898,12 +3898,12 @@ QPoint EcWidget::findOptimalLabelPosition(int waypointX, int waypointY, const QS
     if (fallbackRect.bottom() > widgetBounds.bottom() - margin) {
         fallbackPos.setY(widgetBounds.bottom() - margin - 3);
     }
-    
+
     // Update rectangle dengan posisi yang sudah di-adjust
     fallbackRect = QRect(fallbackPos.x() - 3, fallbackPos.y() - textSize.height() - 3,
                         textSize.width() + 6, textSize.height() + 4);
     usedLabelRects.append(fallbackRect);
-    
+
     return fallbackPos;
 }
 
@@ -3926,7 +3926,7 @@ void EcWidget::drawGhostWaypoint(QPainter& painter, double lat, double lon, cons
     pen.setWidth(2);
     pen.setStyle(Qt::DashLine);
     painter.setPen(pen);
-    
+
     QBrush brush(QColor(255, 140, 0, 60)); // Fill semi-transparent
     painter.setBrush(brush);
 
@@ -3936,14 +3936,14 @@ void EcWidget::drawGhostWaypoint(QPainter& painter, double lat, double lon, cons
     // Gambar ghost label dengan info tambahan
     painter.setPen(QColor(0, 0, 0, 150)); // Black semi-transparent
     painter.setFont(QFont("Arial", 8, QFont::Bold));
-    
+
     QString displayText = label;
-    
+
     // Tambahkan informasi jarak dan bearing jika ada waypoint referensi
     if (ghostWaypoint.routeId > 0) {
         // Cari waypoint referensi untuk perhitungan jarak dan bearing
         const Waypoint* refWaypoint = nullptr;
-        
+
         if (activeFunction == CREATE_ROUTE) {
             // Untuk CREATE_ROUTE, gunakan waypoint terakhir dalam route
             QList<int> routeIndices;
@@ -3965,7 +3965,7 @@ void EcWidget::drawGhostWaypoint(QPainter& painter, double lat, double lon, cons
                 }
             }
             std::sort(routeIndices.begin(), routeIndices.end());
-            
+
             int movingPos = -1;
             for (int i = 0; i < routeIndices.size(); ++i) {
                 if (routeIndices[i] == moveSelectedIndex) {
@@ -3973,30 +3973,30 @@ void EcWidget::drawGhostWaypoint(QPainter& painter, double lat, double lon, cons
                     break;
                 }
             }
-            
+
             if (movingPos > 0) {
                 refWaypoint = &waypointList[routeIndices[movingPos - 1]];
             }
         }
-        
+
         // Hitung jarak dan bearing jika ada waypoint referensi
         if (refWaypoint) {
             double distance_m = haversine(refWaypoint->lat, refWaypoint->lon, lat, lon); // meters
             double distance_nm = distance_m / 1852.0; // convert to nautical miles
             double bearing = atan2(sin((lon - refWaypoint->lon) * M_PI / 180.0) * cos(lat * M_PI / 180.0),
-                                 cos(refWaypoint->lat * M_PI / 180.0) * sin(lat * M_PI / 180.0) - 
-                                 sin(refWaypoint->lat * M_PI / 180.0) * cos(lat * M_PI / 180.0) * 
+                                 cos(refWaypoint->lat * M_PI / 180.0) * sin(lat * M_PI / 180.0) -
+                                 sin(refWaypoint->lat * M_PI / 180.0) * cos(lat * M_PI / 180.0) *
                                  cos((lon - refWaypoint->lon) * M_PI / 180.0)) * 180.0 / M_PI;
-            
+
             // Konversi bearing ke 0-360 derajat
             if (bearing < 0) bearing += 360;
-            
+
             displayText += QString("\nDist: %1 NM\nBrg: %2°")
                           .arg(distance_nm, 0, 'f', 2)
                           .arg(bearing, 0, 'f', 1);
         }
     }
-    
+
     painter.drawText(x + 12, y - 15, displayText);
 }
 
@@ -4015,23 +4015,23 @@ void EcWidget::drawHighlightedWaypoint(QPainter& painter, double lat, double lon
     if (!animationTimer.isValid()) {
         animationTimer.start();
     }
-    
+
     // Get consistent time-based animation values
     qint64 elapsed = animationTimer.elapsed();
     double timeSeconds = elapsed / 1000.0;
-    
+
     // Create smooth pulsing effect with consistent timing
     // Pulse period: 1.5 seconds for radius, 2 seconds for opacity (faster)
     int pulseRadius = 12 + (int)(4 * sin(timeSeconds * 2.0 * M_PI / 1.5));
     int opacity = 150 + (int)(50 * sin(timeSeconds * 2.0 * M_PI / 2.0));
-    
+
     // Outer glow ring
     QPen glowPen(QColor(255, 215, 0, opacity / 3)); // Gold glow
     glowPen.setWidth(3);
     painter.setPen(glowPen);
     painter.setBrush(Qt::NoBrush);
     painter.drawEllipse(QPoint(x, y), pulseRadius + 5, pulseRadius + 5);
-    
+
     // Main highlight ring
     QPen highlightPen(QColor(255, 215, 0, opacity)); // Bright gold
     highlightPen.setWidth(4);
@@ -4039,7 +4039,7 @@ void EcWidget::drawHighlightedWaypoint(QPainter& painter, double lat, double lon
     QBrush highlightBrush(QColor(255, 255, 0, opacity / 4)); // Yellow fill
     painter.setBrush(highlightBrush);
     painter.drawEllipse(QPoint(x, y), pulseRadius, pulseRadius);
-    
+
     // Inner core
     QPen corePen(QColor(255, 140, 0, 255)); // Solid orange core
     corePen.setWidth(2);
@@ -4054,9 +4054,9 @@ void EcWidget::drawHighlightedWaypoint(QPainter& painter, double lat, double lon
 void EcWidget::drawGhostRouteLines(QPainter& painter, double ghostLat, double ghostLon, int routeId, int waypointIndex)
 {
     if (routeId <= 0) return;
-    
+
     painter.setRenderHint(QPainter::Antialiasing, true);
-    
+
     // Find all waypoints in the same route
     QList<int> routeWaypointIndices;
     for (int i = 0; i < waypointList.size(); ++i) {
@@ -4064,82 +4064,82 @@ void EcWidget::drawGhostRouteLines(QPainter& painter, double ghostLat, double gh
             routeWaypointIndices.append(i);
         }
     }
-    
+
     // Handle CREATE_ROUTE mode: draw line from last waypoint to ghost position
     if (activeFunction == CREATE_ROUTE && routeWaypointIndices.size() >= 1) {
         // Sort waypoints by their order in the route (by original index)
         std::sort(routeWaypointIndices.begin(), routeWaypointIndices.end());
-        
+
         // Get last waypoint in current route
         int lastWaypointIndex = routeWaypointIndices.last();
         const Waypoint& lastWaypoint = waypointList[lastWaypointIndex];
-        
+
         // Setup ghost line style
         QPen ghostPen(QColor(255, 140, 0, 120)); // Orange semi-transparent
         ghostPen.setWidth(3);
         ghostPen.setStyle(Qt::DashLine);
         painter.setPen(ghostPen);
-        
+
         int ghostX, ghostY;
         int lastX, lastY;
-        if (LatLonToXy(ghostLat, ghostLon, ghostX, ghostY) && 
+        if (LatLonToXy(ghostLat, ghostLon, ghostX, ghostY) &&
             LatLonToXy(lastWaypoint.lat, lastWaypoint.lon, lastX, lastY)) {
-            
+
             // Draw line from last waypoint to ghost position
             painter.drawLine(lastX, lastY, ghostX, ghostY);
-            
+
             // Calculate distance and bearing
             double distance = haversine(lastWaypoint.lat, lastWaypoint.lon, ghostLat, ghostLon);
             double bearing = atan2(sin((ghostLon - lastWaypoint.lon) * M_PI / 180.0) * cos(ghostLat * M_PI / 180.0),
-                                 cos(lastWaypoint.lat * M_PI / 180.0) * sin(ghostLat * M_PI / 180.0) - 
-                                 sin(lastWaypoint.lat * M_PI / 180.0) * cos(ghostLat * M_PI / 180.0) * 
+                                 cos(lastWaypoint.lat * M_PI / 180.0) * sin(ghostLat * M_PI / 180.0) -
+                                 sin(lastWaypoint.lat * M_PI / 180.0) * cos(ghostLat * M_PI / 180.0) *
                                  cos((ghostLon - lastWaypoint.lon) * M_PI / 180.0)) * 180.0 / M_PI;
-            
+
             // Konversi bearing ke 0-360 derajat
             if (bearing < 0) bearing += 360;
-            
+
             // Draw arrow direction indicator
             double angle = atan2(ghostY - lastY, ghostX - lastX);
             double arrowLength = 15;
             double arrowAngle = M_PI / 6; // 30 degrees
-            
+
             // Calculate arrow head position (middle of leg line)
             double midX = lastX + 0.5 * (ghostX - lastX);
             double midY = lastY + 0.5 * (ghostY - lastY);
-            
+
             int arrowX1 = midX - arrowLength * cos(angle - arrowAngle);
             int arrowY1 = midY - arrowLength * sin(angle - arrowAngle);
             int arrowX2 = midX - arrowLength * cos(angle + arrowAngle);
             int arrowY2 = midY - arrowLength * sin(angle + arrowAngle);
-            
+
             QPen arrowPen(QColor(255, 140, 0, 150));
             arrowPen.setWidth(2);
             arrowPen.setStyle(Qt::SolidLine);
             painter.setPen(arrowPen);
-            
+
             painter.drawLine(midX, midY, arrowX1, arrowY1);
             painter.drawLine(midX, midY, arrowX2, arrowY2);
-            
+
             // Draw distance and bearing label on leg line (incoming)
             double distance_nm_in = distance / 1852.0;
             QString legInfo = QString("%1 NM / %2°")
                              .arg(distance_nm_in, 0, 'f', 2)
                              .arg(bearing, 0, 'f', 1);
-            
+
             painter.setFont(QFont("Arial", 8, QFont::Bold));
             QPen textPen(QColor(255, 140, 0, 200));
             painter.setPen(textPen);
-            
+
             // Position label slightly offset from middle of line
             QFontMetrics fm(painter.font());
             int textWidth = fm.horizontalAdvance(legInfo);
             int textHeight = fm.height();
-            
+
             // Calculate perpendicular offset for text positioning
             double perpAngle = angle + M_PI / 2;
             int textX = midX - textWidth/2 + 10 * cos(perpAngle);
             int textY = midY + textHeight/4 + 10 * sin(perpAngle);
-            
+
             // Draw background rectangle for better readability
             QRect textRect(textX - 2, textY - textHeight + 2, textWidth + 4, textHeight);
             QPen bgPen(QColor(255, 255, 255, 180));
@@ -4147,7 +4147,7 @@ void EcWidget::drawGhostRouteLines(QPainter& painter, double ghostLat, double gh
             painter.setPen(bgPen);
             painter.setBrush(bgBrush);
             painter.drawRect(textRect);
-            
+
             // Draw text
             painter.setPen(textPen);
             painter.setBrush(Qt::NoBrush);
@@ -4155,13 +4155,13 @@ void EcWidget::drawGhostRouteLines(QPainter& painter, double ghostLat, double gh
         }
         return;
     }
-    
+
     // Handle MOVE_WAYP mode: existing logic
     if (waypointIndex < 0 || routeWaypointIndices.size() < 2) return;
-    
+
     // Sort waypoints by their order in the route (by original index)
     std::sort(routeWaypointIndices.begin(), routeWaypointIndices.end());
-    
+
     // Find position of moving waypoint in the route
     int movingWaypointPosition = -1;
     for (int i = 0; i < routeWaypointIndices.size(); ++i) {
@@ -4170,18 +4170,18 @@ void EcWidget::drawGhostRouteLines(QPainter& painter, double ghostLat, double gh
             break;
         }
     }
-    
+
     if (movingWaypointPosition < 0) return;
-    
+
     // Setup ghost line style
     QPen ghostPen(QColor(255, 140, 0, 100)); // Orange semi-transparent
     ghostPen.setWidth(3);
     ghostPen.setStyle(Qt::DashLine);
     painter.setPen(ghostPen);
-    
+
     int ghostX, ghostY;
     if (!LatLonToXy(ghostLat, ghostLon, ghostX, ghostY)) return;
-    
+
     // Draw line to previous waypoint (if exists)
     if (movingWaypointPosition > 0) {
         int prevIndex = routeWaypointIndices[movingWaypointPosition - 1];
@@ -4189,57 +4189,57 @@ void EcWidget::drawGhostRouteLines(QPainter& painter, double ghostLat, double gh
         int prevX, prevY;
         if (LatLonToXy(prevWaypoint.lat, prevWaypoint.lon, prevX, prevY)) {
             painter.drawLine(prevX, prevY, ghostX, ghostY);
-            
+
             // Calculate distance and bearing
             double distance = haversine(prevWaypoint.lat, prevWaypoint.lon, ghostLat, ghostLon);
             double bearing = atan2(sin((ghostLon - prevWaypoint.lon) * M_PI / 180.0) * cos(ghostLat * M_PI / 180.0),
-                                 cos(prevWaypoint.lat * M_PI / 180.0) * sin(ghostLat * M_PI / 180.0) - 
-                                 sin(prevWaypoint.lat * M_PI / 180.0) * cos(ghostLat * M_PI / 180.0) * 
+                                 cos(prevWaypoint.lat * M_PI / 180.0) * sin(ghostLat * M_PI / 180.0) -
+                                 sin(prevWaypoint.lat * M_PI / 180.0) * cos(ghostLat * M_PI / 180.0) *
                                  cos((ghostLon - prevWaypoint.lon) * M_PI / 180.0)) * 180.0 / M_PI;
-            
+
             // Konversi bearing ke 0-360 derajat
             if (bearing < 0) bearing += 360;
-            
+
             // Draw arrow direction indicator (from previous to ghost)
             double angle = atan2(ghostY - prevY, ghostX - prevX);
             double arrowLength = 12;
             double arrowAngle = M_PI / 6; // 30 degrees
-            
+
             int arrowX1 = ghostX - arrowLength * cos(angle - arrowAngle);
             int arrowY1 = ghostY - arrowLength * sin(angle - arrowAngle);
             int arrowX2 = ghostX - arrowLength * cos(angle + arrowAngle);
             int arrowY2 = ghostY - arrowLength * sin(angle + arrowAngle);
-            
+
             QPen arrowPen(QColor(255, 140, 0, 150));
             arrowPen.setWidth(2);
             arrowPen.setStyle(Qt::SolidLine);
             painter.setPen(arrowPen);
-            
+
             painter.drawLine(ghostX, ghostY, arrowX1, arrowY1);
             painter.drawLine(ghostX, ghostY, arrowX2, arrowY2);
-            
+
             // Draw distance and bearing label on leg line (incoming)
             QString legInfo = QString("%1 NM / %2°")
                              .arg(distance, 0, 'f', 2)
                              .arg(bearing, 0, 'f', 1);
-            
+
             painter.setFont(QFont("Arial", 7, QFont::Bold));
             QPen textPen(QColor(255, 140, 0, 200));
             painter.setPen(textPen);
-            
+
             // Position label at 1/3 of the line from previous waypoint
             double labelX = prevX + 0.33 * (ghostX - prevX);
             double labelY = prevY + 0.33 * (ghostY - prevY);
-            
+
             // Calculate perpendicular offset for text positioning
             double perpAngle = angle + M_PI / 2;
             QFontMetrics fm(painter.font());
             int textWidth = fm.horizontalAdvance(legInfo);
             int textHeight = fm.height();
-            
+
             int textX = labelX - textWidth/2 + 8 * cos(perpAngle);
             int textY = labelY + textHeight/4 + 8 * sin(perpAngle);
-            
+
             // Draw background rectangle for better readability
             QRect textRect(textX - 2, textY - textHeight + 2, textWidth + 4, textHeight);
             QPen bgPen(QColor(255, 255, 255, 160));
@@ -4247,14 +4247,14 @@ void EcWidget::drawGhostRouteLines(QPainter& painter, double ghostLat, double gh
             painter.setPen(bgPen);
             painter.setBrush(bgBrush);
             painter.drawRect(textRect);
-            
+
             // Draw text
             painter.setPen(textPen);
             painter.setBrush(Qt::NoBrush);
             painter.drawText(textX, textY, legInfo);
         }
     }
-    
+
     // Draw line to next waypoint (if exists)
     if (movingWaypointPosition < routeWaypointIndices.size() - 1) {
         int nextIndex = routeWaypointIndices[movingWaypointPosition + 1];
@@ -4264,62 +4264,62 @@ void EcWidget::drawGhostRouteLines(QPainter& painter, double ghostLat, double gh
             ghostPen.setStyle(Qt::DashLine);
             painter.setPen(ghostPen);
             painter.drawLine(ghostX, ghostY, nextX, nextY);
-            
+
             // Calculate distance and bearing
             double distance = haversine(ghostLat, ghostLon, nextWaypoint.lat, nextWaypoint.lon);
             double bearing = atan2(sin((nextWaypoint.lon - ghostLon) * M_PI / 180.0) * cos(nextWaypoint.lat * M_PI / 180.0),
-                                 cos(ghostLat * M_PI / 180.0) * sin(nextWaypoint.lat * M_PI / 180.0) - 
-                                 sin(ghostLat * M_PI / 180.0) * cos(nextWaypoint.lat * M_PI / 180.0) * 
+                                 cos(ghostLat * M_PI / 180.0) * sin(nextWaypoint.lat * M_PI / 180.0) -
+                                 sin(ghostLat * M_PI / 180.0) * cos(nextWaypoint.lat * M_PI / 180.0) *
                                  cos((nextWaypoint.lon - ghostLon) * M_PI / 180.0)) * 180.0 / M_PI;
-            
+
             // Konversi bearing ke 0-360 derajat
             if (bearing < 0) bearing += 360;
-            
+
             // Draw arrow direction indicator (from ghost to next)
             double angle = atan2(nextY - ghostY, nextX - ghostX);
             double arrowLength = 12;
             double arrowAngle = M_PI / 6; // 30 degrees
-            
+
             // Calculate arrow head position (middle of leg line)
             double midX = ghostX + 0.5 * (nextX - ghostX);
             double midY = ghostY + 0.5 * (nextY - ghostY);
-            
+
             int arrowX1 = midX - arrowLength * cos(angle - arrowAngle);
             int arrowY1 = midY - arrowLength * sin(angle - arrowAngle);
             int arrowX2 = midX - arrowLength * cos(angle + arrowAngle);
             int arrowY2 = midY - arrowLength * sin(angle + arrowAngle);
-            
+
             QPen arrowPen(QColor(255, 140, 0, 150));
             arrowPen.setWidth(2);
             arrowPen.setStyle(Qt::SolidLine);
             painter.setPen(arrowPen);
-            
+
             painter.drawLine(midX, midY, arrowX1, arrowY1);
             painter.drawLine(midX, midY, arrowX2, arrowY2);
-            
+
             // Draw distance and bearing label on leg line (outgoing)
             double distance_nm_out = distance / 1852.0;
             QString legInfo = QString("%1 NM / %2°")
                              .arg(distance_nm_out, 0, 'f', 2)
                              .arg(bearing, 0, 'f', 1);
-            
+
             painter.setFont(QFont("Arial", 7, QFont::Bold));
             QPen textPen(QColor(255, 140, 0, 200));
             painter.setPen(textPen);
-            
+
             // Position label at 2/3 of the line toward next waypoint
             double labelX = ghostX + 0.67 * (nextX - ghostX);
             double labelY = ghostY + 0.67 * (nextY - ghostY);
-            
+
             // Calculate perpendicular offset for text positioning
             double perpAngle = angle - M_PI / 2; // Opposite side from incoming line
             QFontMetrics fm(painter.font());
             int textWidth = fm.horizontalAdvance(legInfo);
             int textHeight = fm.height();
-            
+
             int textX = labelX - textWidth/2 + 8 * cos(perpAngle);
             int textY = labelY + textHeight/4 + 8 * sin(perpAngle);
-            
+
             // Draw background rectangle for better readability
             QRect textRect(textX - 2, textY - textHeight + 2, textWidth + 4, textHeight);
             QPen bgPen(QColor(255, 255, 255, 160));
@@ -4327,7 +4327,7 @@ void EcWidget::drawGhostRouteLines(QPainter& painter, double ghostLat, double gh
             painter.setPen(bgPen);
             painter.setBrush(bgBrush);
             painter.drawRect(textRect);
-            
+
             // Draw text
             painter.setPen(textPen);
             painter.setBrush(Qt::NoBrush);
@@ -4354,7 +4354,7 @@ int EcWidget::findWaypointAt(int x, int y)
 int EcWidget::findLeglineAt(int x, int y, int& routeId, int& segmentIndex)
 {
     const int tolerance = 8; // pixels
-    
+
     // Group waypoints by route
     QMap<int, QList<int>> routeWaypoints;
     for (int i = 0; i < waypointList.size(); ++i) {
@@ -4362,27 +4362,27 @@ int EcWidget::findLeglineAt(int x, int y, int& routeId, int& segmentIndex)
             routeWaypoints[waypointList[i].routeId].append(i);
         }
     }
-    
+
     // Check each route's leglines
     for (auto it = routeWaypoints.begin(); it != routeWaypoints.end(); ++it) {
         int currentRouteId = it.key();
         QList<int> indices = it.value();
-        
+
         if (indices.size() < 2) continue;
-        
+
         // Sort waypoints by their original index (creation order)
         std::sort(indices.begin(), indices.end());
-        
+
         // Check each leg segment in this route
         for (int i = 0; i < indices.size() - 1; ++i) {
             const Waypoint& wp1 = waypointList[indices[i]];
             const Waypoint& wp2 = waypointList[indices[i + 1]];
-            
+
             int x1, y1, x2, y2;
             if (LatLonToXy(wp1.lat, wp1.lon, x1, y1) && LatLonToXy(wp2.lat, wp2.lon, x2, y2)) {
                 // Calculate distance from point to line segment
                 double distance = distanceToLineSegment(x, y, x1, y1, x2, y2);
-                
+
                 if (distance <= tolerance) {
                     routeId = currentRouteId;
                     segmentIndex = i; // Index of the first waypoint in the segment
@@ -4391,32 +4391,32 @@ int EcWidget::findLeglineAt(int x, int y, int& routeId, int& segmentIndex)
             }
         }
     }
-    
+
     return -1; // No legline found
 }
 
 void EcWidget::showWaypointContextMenu(const QPoint& pos, int waypointIndex)
 {
     if (waypointIndex < 0 || waypointIndex >= waypointList.size()) return;
-    
+
     const Waypoint& waypoint = waypointList[waypointIndex];
-    
+
     QMenu contextMenu(this);
-    
+
     // Edit waypoint properties
     QAction* editAction = contextMenu.addAction(tr("Edit Route Point"));
     editAction->setIcon(QIcon(":/icon/edit_white.svg"));
-    
+
     // Move waypoint
     QAction* moveAction = contextMenu.addAction(tr("Move Waypoint"));
     moveAction->setIcon(QIcon(":/icon/move_white.svg"));
-    
+
     contextMenu.addSeparator();
-    
+
     // Delete waypoint
     QAction* deleteWaypointAction = contextMenu.addAction(tr("Delete Waypoint"));
     deleteWaypointAction->setIcon(QIcon(":/icon/delete_wp_white.svg"));
-    
+
     // Delete route (only if waypoint is part of a route)
     QAction* deleteRouteAction = nullptr;
     if (waypoint.routeId > 0) {
@@ -4429,12 +4429,12 @@ void EcWidget::showWaypointContextMenu(const QPoint& pos, int waypointIndex)
     // Publish waypoint
     QAction* publishAction = contextMenu.addAction(tr("Publish Waypoint"));
     publishAction->setIcon(QIcon(":/icon/publish_white.svg"));
-    
+
     // Execute menu
     QAction* selectedAction = contextMenu.exec(mapToGlobal(pos));
-    
+
     if (!selectedAction) return;
-    
+
     // Handle selected action
     if (selectedAction == editAction) {
         // Switch to edit waypoint mode and edit this waypoint
@@ -4444,7 +4444,7 @@ void EcWidget::showWaypointContextMenu(const QPoint& pos, int waypointIndex)
         // Switch to move waypoint mode
         setActiveFunction(MOVE_WAYP);
         moveSelectedIndex = waypointIndex;
-        
+
         // Setup ghost waypoint for immediate preview
         ghostWaypoint.visible = true;
         ghostWaypoint.lat = waypoint.lat;
@@ -4452,13 +4452,13 @@ void EcWidget::showWaypointContextMenu(const QPoint& pos, int waypointIndex)
         ghostWaypoint.label = waypoint.label;
         ghostWaypoint.routeId = waypoint.routeId;
         ghostWaypoint.waypointIndex = waypointIndex;
-        
+
         if (mainWindow) {
             mainWindow->setWindowTitle(QString(APP_TITLE) + " - Move Waypoint Mode");
             //mainWindow->statusBar()->showMessage("Move the waypoint to a new position and click to confirm");
             mainWindow->routesStatusText->setText(tr("Move the waypoint to a new position and click to confirm"));
         }
-        
+
         qDebug() << "[CONTEXT-MENU] Waypoint" << waypointIndex << "selected for moving";
     }
     else if (selectedAction == deleteWaypointAction) {
@@ -4468,7 +4468,7 @@ void EcWidget::showWaypointContextMenu(const QPoint& pos, int waypointIndex)
     else if (selectedAction == deleteRouteAction && waypoint.routeId > 0) {
         // Delete entire route
         QString routeName = QString("Route %1").arg(waypoint.routeId);
-        
+
         // Count waypoints in route
         int waypointCount = 0;
         for (const Waypoint& wp : waypointList) {
@@ -4476,17 +4476,17 @@ void EcWidget::showWaypointContextMenu(const QPoint& pos, int waypointIndex)
                 waypointCount++;
             }
         }
-        
+
         // Confirm deletion
         QMessageBox::StandardButton reply = QMessageBox::question(this,
             tr("Confirm Delete Route"),
             tr("Are you sure you want to delete %1?\n\nThis will remove all %2 waypoints in this route.\nThis action cannot be undone.")
                 .arg(routeName).arg(waypointCount),
             QMessageBox::Yes | QMessageBox::No);
-        
+
         if (reply == QMessageBox::Yes) {
             if (deleteRoute(waypoint.routeId)) {
-                QMessageBox::information(this, tr("Route Deleted"), 
+                QMessageBox::information(this, tr("Route Deleted"),
                     tr("%1 has been deleted with %2 waypoints.").arg(routeName).arg(waypointCount));
             }
         }
@@ -4567,24 +4567,24 @@ void EcWidget::hideWaypointToolbox()
 void EcWidget::showLeglineContextMenu(const QPoint& pos, int routeId, int segmentIndex)
 {
     if (routeId <= 0) return;
-    
+
     QMenu contextMenu(this);
-    
+
     // Insert waypoint at clicked position
     QAction* insertWaypointAction = contextMenu.addAction(tr("Insert Waypoint"));
     insertWaypointAction->setIcon(QIcon(":/icon/create_wp_white.svg"));
-    
+
     contextMenu.addSeparator();
-    
+
     // Delete route
     QAction* deleteRouteAction = contextMenu.addAction(tr("Delete Route"));
     deleteRouteAction->setIcon(QIcon(":/icon/delete_route_white.svg"));
-    
+
     // Execute menu
     QAction* selectedAction = contextMenu.exec(mapToGlobal(pos));
-    
+
     if (!selectedAction) return;
-    
+
     // Handle selected action
     if (selectedAction == insertWaypointAction) {
         // Convert click position to lat/lon
@@ -4592,22 +4592,22 @@ void EcWidget::showLeglineContextMenu(const QPoint& pos, int routeId, int segmen
         if (XyToLatLon(pos.x(), pos.y(), lat, lon)) {
             // Switch to insert waypoint mode
             setActiveFunction(INSERT_WAYP);
-            
+
             // Store the insertion point for insertWaypointAt function
             insertWaypointAt(lat, lon);
-            
+
             if (mainWindow) {
                 mainWindow->setWindowTitle(QString(APP_TITLE) + " - Waypoint Inserted");
                 mainWindow->statusBar()->showMessage(tr("Waypoint inserted into route"), 3000);
             }
-            
+
             qDebug() << "[CONTEXT-MENU] Insert waypoint at" << lat << lon << "in route" << routeId;
         }
     }
     else if (selectedAction == deleteRouteAction) {
         // Delete entire route
         QString routeName = QString("Route %1").arg(routeId);
-        
+
         // Count waypoints in route
         int waypointCount = 0;
         for (const Waypoint& wp : waypointList) {
@@ -4615,17 +4615,17 @@ void EcWidget::showLeglineContextMenu(const QPoint& pos, int routeId, int segmen
                 waypointCount++;
             }
         }
-        
+
         // Confirm deletion
         QMessageBox::StandardButton reply = QMessageBox::question(this,
             tr("Confirm Delete Route"),
             tr("Are you sure you want to delete %1?\n\nThis will remove all %2 waypoints in this route.\nThis action cannot be undone.")
                 .arg(routeName).arg(waypointCount),
             QMessageBox::Yes | QMessageBox::No);
-        
+
         if (reply == QMessageBox::Yes) {
             if (deleteRoute(routeId)) {
-                QMessageBox::information(this, tr("Route Deleted"), 
+                QMessageBox::information(this, tr("Route Deleted"),
                     tr("%1 has been deleted with %2 waypoints.").arg(routeName).arg(waypointCount));
             }
         }
@@ -4635,24 +4635,24 @@ void EcWidget::showLeglineContextMenu(const QPoint& pos, int routeId, int segmen
 void EcWidget::showMapContextMenu(const QPoint& pos)
 {
     QMenu contextMenu(this);
-    
+
     // Create Route option
     QAction* createRouteAction = contextMenu.addAction(tr("Create Route"));
     createRouteAction->setIcon(QIcon(":/icon/create_route_white.svg"));
-    
+
     // Execute menu
     QAction* selectedAction = contextMenu.exec(mapToGlobal(pos));
-    
+
     if (selectedAction == createRouteAction) {
         // Start route creation mode
         startRouteMode();
         setActiveFunction(CREATE_ROUTE);
-        
+
         if (mainWindow) {
             mainWindow->setWindowTitle(QString(APP_TITLE) + " - Create Route");
             mainWindow->routesStatusText->setText(tr("Route Mode: Click to add waypoints. Press ESC or right-click to end route creation"));
         }
-        
+
         qDebug() << "[CONTEXT-MENU] Create Route mode started";
     }
 }
@@ -4667,7 +4667,7 @@ void EcWidget::saveWaypoints()
         if (wp.routeId > 0) {
             continue;
         }
-        
+
         QJsonObject wpObject;
         wpObject["label"] = wp.label;
         wpObject["lat"] = wp.lat;
@@ -4777,7 +4777,7 @@ void EcWidget::moveWaypointAt(int x, int y)
                 if (qAbs(x - wx) <= 10 && qAbs(y - wy) <= 10)
                 {
                     moveSelectedIndex = i;
-                    
+
                     // Setup ghost waypoint
                     ghostWaypoint.visible = true;
                     ghostWaypoint.lat = waypointList[i].lat;
@@ -4785,7 +4785,7 @@ void EcWidget::moveWaypointAt(int x, int y)
                     ghostWaypoint.label = waypointList[i].label;
                     ghostWaypoint.routeId = waypointList[i].routeId;
                     ghostWaypoint.waypointIndex = i;
-                    
+
                     qDebug() << "[DEBUG] Waypoint selected for moving:" << i << "route:" << waypointList[i].routeId;
                     return;
                 }
@@ -4824,32 +4824,32 @@ void EcWidget::moveWaypointAt(int x, int y)
             // Update koordinat di struct waypoint (untuk kedua kasus)
             wp.lat = newLat;
             wp.lon = newLon;
-            
+
             // Preserve route visibility during move
             int routeId = wp.routeId;
             bool wasRouteVisible = (routeId > 0) ? isRouteVisible(routeId) : true;
-            
+
             qDebug() << "[WAYPOINT-MOVE] Route" << routeId << "visibility before move operations:" << wasRouteVisible;
-            
+
             // Save waypoints or routes depending on type
             if (routeId > 0) {
                 // Route waypoint - update route data and save routes
                 updateRouteFromWaypoint(routeId);
-                
+
                 // PRESERVE EXISTING VISIBILITY - DO NOT FORCE CHANGE
                 qDebug() << "[WAYPOINT-MOVE] Route" << routeId << "preserving existing visibility:" << wasRouteVisible;
-                
+
                 saveRoutes();
-                
+
                 qDebug() << "[WAYPOINT-MOVE] Route" << routeId << "saved without changing visibility";
-                
+
                 qDebug() << "[WAYPOINT-MOVE] Route waypoint moved, route" << routeId << "final visibility:" << isRouteVisible(routeId);
             } else {
                 // Single waypoint - save to waypoints.json
                 saveWaypoints();
                 qDebug() << "[WAYPOINT-MOVE] Single waypoint moved";
             }
-            
+
             Draw();
 
             // NO DELAYED VISIBILITY CHANGES - Let user control via checkbox only
@@ -4858,7 +4858,7 @@ void EcWidget::moveWaypointAt(int x, int y)
 
             // Reset ghost waypoint
             ghostWaypoint.visible = false;
-            
+
             moveSelectedIndex = -1; // Reset
             activeFunction = PAN; // Kembali ke mode normal
             emit waypointCreated();
@@ -4928,28 +4928,28 @@ void EcWidget::drawLeglineLabels()
 
     // Group waypoints by route ID first - same logic as drawRouteLines
     QMap<int, QList<int>> routeWaypoints; // routeId -> list of waypoint indices
-    
+
     for (int i = 0; i < waypointList.size(); ++i) {
         int routeId = waypointList[i].routeId;
         if (routeId > 0) { // Only route waypoints, skip single waypoints
             routeWaypoints[routeId].append(i);
         }
     }
-    
+
     // Draw labels within each route separately
     for (auto it = routeWaypoints.begin(); it != routeWaypoints.end(); ++it) {
         int routeId = it.key();
         QList<int> indices = it.value();
-        
+
         // Check visibility - skip labels for hidden routes
         if (!isRouteVisible(routeId)) {
             continue;
         }
-        
+
         if (indices.size() < 2) {
             continue;
         }
-        
+
         // Filter only active waypoints for this route
         QList<int> activeIndices;
         for (int idx : indices) {
@@ -4957,15 +4957,15 @@ void EcWidget::drawLeglineLabels()
                 activeIndices.append(idx);
             }
         }
-        
+
         // Draw labels between consecutive ACTIVE waypoints only
         for (int i = 0; i < activeIndices.size() - 1; ++i) {
             int idx1 = activeIndices[i];
             int idx2 = activeIndices[i + 1];
-            
+
             const Waypoint &wp1 = waypointList[idx1];
             const Waypoint &wp2 = waypointList[idx2];
-            
+
             EcCoordinate lat1 = wp1.lat;
             EcCoordinate lon1 = wp1.lon;
             EcCoordinate lat2 = wp2.lat;
@@ -4988,7 +4988,7 @@ void EcWidget::drawLeglineLabels()
                 // Set warna teks sesuai dengan routeId
                 QColor textColor = getRouteColor(routeId);
                 painter.setPen(textColor);
-                
+
                 int midX = (x1 + x2) / 2;
                 int midY = (y1 + y2) / 2;
 
@@ -5015,46 +5015,46 @@ void EcWidget::drawRouteLinesOverlay(QPainter& painter)
         qDebug() << "[ROUTE-OVERLAY-ERROR] QPainter is not active - aborting";
         return;
     }
-    
+
     try {
         painter.setRenderHint(QPainter::Antialiasing, true);
-    
+
     // Group waypoints by route ID first
     QMap<int, QList<int>> routeWaypoints; // routeId -> list of waypoint indices
-    
+
     for (int i = 0; i < waypointList.size(); ++i) {
         int routeId = waypointList[i].routeId;
         if (routeId > 0) { // Only route waypoints, skip single waypoints
             routeWaypoints[routeId].append(i);
         }
     }
-    
+
     qDebug() << "[ROUTE-OVERLAY] Drawing" << routeWaypoints.size() << "different routes";
-    
+
     // Draw lines within each route separately
     for (auto it = routeWaypoints.begin(); it != routeWaypoints.end(); ++it) {
         int routeId = it.key();
         QList<int> indices = it.value();
-        
+
         // Check visibility
         if (!isRouteVisible(routeId)) {
             qDebug() << "[ROUTE-OVERLAY] Route" << routeId << "is not visible, skipping line drawing";
             continue;
         }
-        
+
         qDebug() << "[ROUTE-OVERLAY] Drawing lines for route" << routeId << "with" << indices.size() << "waypoints";
-        
+
         if (indices.size() < 2) {
             continue;
         }
-        
+
         // Choose color based on routeId
         QColor routeColor = getRouteColor(routeId);
-        
+
         QPen pen(routeColor);
         pen.setStyle(Qt::DashLine);
         pen.setWidth(2); // Default width
-        
+
         // Make selected route thicker and more visible - ALWAYS solid when selected
         if (routeId == selectedRouteId) {
             pen.setWidth(4); // Thicker line for selected route
@@ -5062,9 +5062,9 @@ void EcWidget::drawRouteLinesOverlay(QPainter& painter)
             // Keep original color for selected route, don't make it lighter
             pen.setColor(routeColor);
         }
-        
+
         painter.setPen(pen);
-        
+
         // Filter only active waypoints for this route
         QList<int> activeIndices;
         for (int idx : indices) {
@@ -5072,34 +5072,34 @@ void EcWidget::drawRouteLinesOverlay(QPainter& painter)
                 activeIndices.append(idx);
             }
         }
-        
+
         // Draw lines between consecutive ACTIVE waypoints only
         for (int i = 0; i < activeIndices.size() - 1; ++i) {
             int idx1 = activeIndices[i];
             int idx2 = activeIndices[i + 1];
-            
+
             const Waypoint &wp1 = waypointList[idx1];
             const Waypoint &wp2 = waypointList[idx2];
-            
+
             int x1, y1, x2, y2;
             if (LatLonToXy(wp1.lat, wp1.lon, x1, y1) && LatLonToXy(wp2.lat, wp2.lon, x2, y2)) {
                 painter.drawLine(x1, y1, x2, y2);
-                
+
                 // Draw arrow to show direction
                 double angle = atan2(y2 - y1, x2 - x1);
                 double arrowLength = 15;
                 double arrowAngle = M_PI / 6; // 30 degrees
-                
+
                 // Calculate arrow head position (middle of leg line)
                 double midX = x1 + 0.5 * (x2 - x1);
                 double midY = y1 + 0.5 * (y2 - y1);
-                
+
                 // Arrow head points
                 int arrowX1 = midX - arrowLength * cos(angle - arrowAngle);
                 int arrowY1 = midY - arrowLength * sin(angle - arrowAngle);
                 int arrowX2 = midX - arrowLength * cos(angle + arrowAngle);
                 int arrowY2 = midY - arrowLength * sin(angle + arrowAngle);
-                
+
                 // Draw arrow head with solid pen
                 QPen arrowPen = painter.pen();
                 Qt::PenStyle originalStyle = arrowPen.style();
@@ -5107,14 +5107,14 @@ void EcWidget::drawRouteLinesOverlay(QPainter& painter)
                 painter.setPen(arrowPen);
                 painter.drawLine(midX, midY, arrowX1, arrowY1);
                 painter.drawLine(midX, midY, arrowX2, arrowY2);
-                
+
                 // Restore original pen style for route lines
                 arrowPen.setStyle(originalStyle);
                 painter.setPen(arrowPen);
             }
         }
     }
-    
+
     } catch (const std::exception& e) {
         qDebug() << "[ROUTE-OVERLAY-ERROR] Exception in drawRouteLinesOverlay:" << e.what();
     } catch (...) {
@@ -5126,7 +5126,7 @@ void EcWidget::drawRouteLinesOverlay(QPainter& painter)
 void EcWidget::drawRouteLines()
 {
     if (waypointList.size() < 2) return;
-    
+
     // ROUTE FIX: Enhanced safety checks for coordinate transformation
     try {
         QPainter painter(&drawPixmap);
@@ -5135,17 +5135,17 @@ void EcWidget::drawRouteLines()
             return;
         }
         painter.setRenderHint(QPainter::Antialiasing, true);
-        
+
         // ROUTE FIX: Validate coordinate transformation is ready
         if (!view || !initialized) {
             qDebug() << "[ROUTE-LINES-ERROR] View not initialized properly - aborting";
             return;
         }
-    
+
     // Warna untuk route yang berbeda (harus sama dengan warna waypoint)
     // APPROACH BARU: Group waypoints by route ID first, then draw lines within each route
     QMap<int, QList<int>> routeWaypoints; // routeId -> list of waypoint indices
-    
+
     // Group waypoints by routeId first
     for (int i = 0; i < waypointList.size(); ++i) {
         int routeId = waypointList[i].routeId;
@@ -5153,32 +5153,32 @@ void EcWidget::drawRouteLines()
             routeWaypoints[routeId].append(i);
         }
     }
-    
+
     // Draw routes with visibility check
-    
+
     // Draw lines within each route separately
     for (auto it = routeWaypoints.begin(); it != routeWaypoints.end(); ++it) {
         int routeId = it.key();
         QList<int> indices = it.value();
-        
+
         // Check visibility
         if (!isRouteVisible(routeId)) {
             qDebug() << "[ROUTE-DRAW] Route" << routeId << "is hidden, skipping";
             continue;
         }
-        
+
         if (indices.size() < 2) {
             qDebug() << "[ROUTE-DRAW] Route" << routeId << "has only" << indices.size() << "waypoints, skipping lines";
             continue;
         }
-        
+
         // Pilih warna berdasarkan routeId
         QColor routeColor = getRouteColor(routeId);
-        
+
         QPen pen(routeColor);
         pen.setStyle(Qt::DashLine);
         pen.setWidth(2); // Default width
-        
+
         // Visual feedback for selected route - ALWAYS solid when selected
         if (routeId == selectedRouteId) {
             qDebug() << "[ROUTE-DRAW] Drawing SELECTED route" << routeId << "as SOLID line";
@@ -5188,11 +5188,11 @@ void EcWidget::drawRouteLines()
             pen.setColor(routeColor);
         }
         // Reduced debug output to improve performance during drawing
-        
+
         painter.setPen(pen);
-        
+
         // Draw lines for this route
-        
+
         // Filter only active waypoints for this route
         QList<int> activeIndices;
         for (int idx : indices) {
@@ -5200,34 +5200,34 @@ void EcWidget::drawRouteLines()
                 activeIndices.append(idx);
             }
         }
-        
+
         // Draw lines between consecutive ACTIVE waypoints only
         for (int i = 0; i < activeIndices.size() - 1; ++i) {
             int idx1 = activeIndices[i];
             int idx2 = activeIndices[i + 1];
-            
+
             const Waypoint &wp1 = waypointList[idx1];
             const Waypoint &wp2 = waypointList[idx2];
-            
+
             int x1, y1, x2, y2;
             if (LatLonToXy(wp1.lat, wp1.lon, x1, y1) && LatLonToXy(wp2.lat, wp2.lon, x2, y2)) {
                 painter.drawLine(x1, y1, x2, y2);
-                
+
                 // Draw arrow to show direction
                 double angle = atan2(y2 - y1, x2 - x1);
                 double arrowLength = 15;
                 double arrowAngle = M_PI / 6; // 30 degrees
-                
+
                 // Calculate arrow head position (middle of leg line)
                 double midX = x1 + 0.5 * (x2 - x1);
                 double midY = y1 + 0.5 * (y2 - y1);
-                
+
                 // Arrow head points
                 int arrowX1 = midX - arrowLength * cos(angle - arrowAngle);
                 int arrowY1 = midY - arrowLength * sin(angle - arrowAngle);
                 int arrowX2 = midX - arrowLength * cos(angle + arrowAngle);
                 int arrowY2 = midY - arrowLength * sin(angle + arrowAngle);
-                
+
                 // Draw arrow head with solid pen
                 QPen arrowPen = painter.pen();
                 Qt::PenStyle originalStyle = arrowPen.style();
@@ -5235,20 +5235,20 @@ void EcWidget::drawRouteLines()
                 painter.setPen(arrowPen);
                 painter.drawLine(midX, midY, arrowX1, arrowY1);
                 painter.drawLine(midX, midY, arrowX2, arrowY2);
-                
+
                 // Restore original pen style for route lines
                 arrowPen.setStyle(originalStyle);
                 painter.setPen(arrowPen);
-                
-                qDebug() << "[ROUTE-DRAW] Drew line with arrow between" << wp1.label << "and" << wp2.label 
+
+                qDebug() << "[ROUTE-DRAW] Drew line with arrow between" << wp1.label << "and" << wp2.label
                          << "in route" << routeId << "style:" << (originalStyle == Qt::SolidLine ? "solid" : "dash");
             }
         }
     }
-    
+
     painter.end();
     qDebug() << "[ROUTE-DRAW] Finished controlled route line drawing";
-    
+
     } catch (const std::exception& e) {
         qDebug() << "[ROUTE-LINES-ERROR] Exception in drawRouteLines:" << e.what();
     } catch (...) {
@@ -5310,13 +5310,13 @@ void EcWidget::loadWaypoints()
                 waypointList.append(wp);
                 validWaypoints++;
             }
-            
+
             // Track maximum route ID
             if (wp.routeId > maxRouteId) {
                 maxRouteId = wp.routeId;
             }
         }
-        
+
         // Set currentRouteId to the next available route ID (not just maxRouteId + 1)
         currentRouteId = getNextAvailableRouteId();
 
@@ -5420,31 +5420,31 @@ void EcWidget::clearWaypoints()
         return;
 
     qDebug() << "[INFO] Clearing all waypoints - no confirmation needed (already confirmed by caller)";
-    
+
     // Skip individual SevenCs deletion to prevent hang - just clear everything
     int waypointCount = waypointList.size();
-    
+
     // Clear data structures
     waypointList.clear();
     routeList.clear();
     routeVisibility.clear();
-    
+
     // Reset route variables
     currentRouteId = 1;
     routeWaypointCounter = 1;
     qDebug() << "[SELECTED-ROUTE] CLEARING selectedRouteId (was" << selectedRouteId << ") due to clearWaypoints";
     selectedRouteId = -1;
-    
+
     // Save empty state
     saveWaypoints();
     saveRoutes();
-    
+
     // Redraw
     Draw();
-    
+
     // Emit signal to refresh route panel
     emit waypointCreated();
-    
+
     qDebug() << "[INFO] Cleared" << waypointCount << "waypoints and all routes";
 }
 
@@ -5455,27 +5455,27 @@ void EcWidget::updateWaypointActiveStatus(int routeId, double lat, double lon, b
         if (waypoint.routeId == routeId &&
             qAbs(waypoint.lat - lat) < 0.000001 &&
             qAbs(waypoint.lon - lon) < 0.000001) {
-            
+
             // Update the active status
             bool oldStatus = waypoint.active;
             waypoint.active = active;
-            
+
             qDebug() << "[WAYPOINT-ACTIVE] Updated waypoint at" << lat << "," << lon
                      << "in route" << routeId << "from" << oldStatus << "to" << active;
-            
+
             // Save the updated waypoints
             saveWaypoints();
-            
+
             // Redraw to reflect changes
             Draw();
-            
+
             // Emit signal to refresh UI
             emit waypointCreated();
-            
+
             return;
         }
     }
-    
+
     qDebug() << "[WAYPOINT-ACTIVE] Warning: Waypoint not found at" << lat << "," << lon
              << "in route" << routeId;
 }
@@ -5483,7 +5483,7 @@ void EcWidget::updateWaypointActiveStatus(int routeId, double lat, double lon, b
 void EcWidget::replaceWaypointsForRoute(int routeId, const QList<Waypoint>& newWaypoints)
 {
     qDebug() << "[WAYPOINT-REORDER] Replacing waypoints for route" << routeId << "with" << newWaypoints.size() << "waypoints";
-    
+
     // Remove all existing waypoints for this route
     waypointList.erase(
         std::remove_if(waypointList.begin(), waypointList.end(),
@@ -5491,25 +5491,25 @@ void EcWidget::replaceWaypointsForRoute(int routeId, const QList<Waypoint>& newW
                 return wp.routeId == routeId;
             }),
         waypointList.end());
-    
+
     // Add new waypoints in the specified order
     for (const auto& wp : newWaypoints) {
         if (wp.routeId == routeId) { // Only add waypoints for this route
             waypointList.append(wp);
         }
     }
-    
+
     qDebug() << "[WAYPOINT-REORDER] Total waypoints after reorder:" << waypointList.size();
-    
+
     // Save updated waypoints
     saveWaypoints();
-    
+
     // Update routes to reflect new waypoint order
     updateRouteFromWaypoint(routeId);
-    
+
     // Redraw to show new order
     Draw();
-    
+
     // Emit signal to refresh UI components
     emit waypointCreated();
 }
@@ -5949,7 +5949,7 @@ void EcWidget::checkGuardZone()
 void EcWidget::drawGuardZone()
 {
     qDebug() << "[DRAW-GUARDZONE-DEBUG] ========== STARTING DRAW GUARDZONE ==========";
-    
+
     // TAMBAHAN: Performance timer
     QElapsedTimer timer;
     timer.start();
@@ -5961,7 +5961,7 @@ void EcWidget::drawGuardZone()
         return;
     }
     qDebug() << "[DRAW-GUARDZONE-DEBUG] QPainter created successfully";
-    
+
     painter.setRenderHint(QPainter::Antialiasing, true);
     qDebug() << "[DRAW-GUARDZONE-DEBUG] Antialiasing set";
 
@@ -5982,13 +5982,13 @@ void EcWidget::drawGuardZone()
     int drawnCount = 0;
     int skippedCount = 0;
 
-    // TAMBAHAN: Viewport culling untuk performance  
+    // TAMBAHAN: Viewport culling untuk performance
     qDebug() << "[DRAW-GUARDZONE-DEBUG] Getting viewport rect...";
     QRect viewport = rect();
     qDebug() << "[DRAW-GUARDZONE-DEBUG] Viewport rect:" << viewport;
 
     qDebug() << "[DRAW-GUARDZONE-DEBUG] === STARTING GUARDZONE ITERATION ===";
-    
+
     for (const GuardZone &gz : guardZones) {
         qDebug() << "[DRAW-GUARDZONE-DEBUG] ===== PROCESSING GUARDZONE" << gz.id << "=====";
         qDebug() << "[DRAW-GUARDZONE-DEBUG] - Name:" << gz.name;
@@ -6000,7 +6000,7 @@ void EcWidget::drawGuardZone()
             qDebug() << "[DRAW-GUARDZONE-DEBUG] - Circle center:" << gz.centerLat << "," << gz.centerLon;
             qDebug() << "[DRAW-GUARDZONE-DEBUG] - Circle radius:" << gz.radius;
         }
-        
+
         if (!gz.active && !creatingGuardZone) {
             qDebug() << "[DRAW-DEBUG] Skipping inactive guardzone" << gz.id;
             skippedCount++;
@@ -6013,7 +6013,7 @@ void EcWidget::drawGuardZone()
             skippedCount++;
             continue;
         }
-        
+
         qDebug() << "[DRAW-DEBUG] Drawing guardzone" << gz.id;
 
         bool isBeingEdited = (guardZoneManager && guardZoneManager->isEditingGuardZone() &&
@@ -6048,16 +6048,16 @@ void EcWidget::drawGuardZone()
                     lon = ownShip.lon;
                     qDebug() << "[DRAW-GUARDZONE] Using ownShip position for attached guardzone";
                 }
-                
+
                 // PERBAIKAN: Pastikan posisi valid untuk attached guardzone
                 if (qIsNaN(lat) || qIsNaN(lon) || (lat == 0.0 && lon == 0.0)) {
                     lat = gz.centerLat;  // Fallback ke stored position
                     lon = gz.centerLon;
                     qDebug() << "[DRAW-GUARDZONE] Using stored position instead of invalid position";
                 }
-                
-                qDebug() << "[DRAW-GUARDZONE] Drawing attached guardzone" << gz.id 
-                         << "at position:" << lat << "," << lon 
+
+                qDebug() << "[DRAW-GUARDZONE] Drawing attached guardzone" << gz.id
+                         << "at position:" << lat << "," << lon
                          << "radius:" << gz.radius << "NM";
             }
 
@@ -6070,12 +6070,12 @@ void EcWidget::drawGuardZone()
                 qDebug() << "[DRAW-GUARDZONE-DEBUG] Screen coordinates: centerX=" << centerX << "centerY=" << centerY;
                 // CRITICAL: Validate converted coordinates untuk fullscreen safety
                 if (abs(centerX) > 20000 || abs(centerY) > 20000) {
-                    qDebug() << "[DRAW-GUARDZONE-ERROR] Invalid screen coordinates for guardzone" << gz.id 
+                    qDebug() << "[DRAW-GUARDZONE-ERROR] Invalid screen coordinates for guardzone" << gz.id
                              << ":" << centerX << "," << centerY << "- skipping";
                     skippedCount++;
                     continue;
                 }
-                
+
                 qDebug() << "[DRAW-GUARDZONE-DEBUG] Calculating radius in pixels...";
                 // PERBAIKAN: Untuk CIRCLE gunakan gz.radius, bukan outerRadius
                 double circleRadiusNM = (gz.shape == GUARD_ZONE_CIRCLE) ? gz.radius : gz.outerRadius;
@@ -6084,7 +6084,7 @@ void EcWidget::drawGuardZone()
                 double outerRadiusInPixels = calculatePixelsFromNauticalMiles(circleRadiusNM);
                 double innerRadiusInPixels = calculatePixelsFromNauticalMiles(innerRadiusNM);
                 qDebug() << "[DRAW-GUARDZONE-DEBUG] outerRadius pixels:" << outerRadiusInPixels << "innerRadius pixels:" << innerRadiusInPixels;
-                
+
                 // PERBAIKAN CRITICAL: Validate radius calculations
                 if (qIsNaN(outerRadiusInPixels) || qIsInf(outerRadiusInPixels) ||
                     qIsNaN(innerRadiusInPixels) || qIsInf(innerRadiusInPixels)) {
@@ -6100,64 +6100,64 @@ void EcWidget::drawGuardZone()
 
                 // Check if this is a semicircle shield (has angles)
                 // PERBAIKAN: AttachedToShip tetap semicircle, create circular guardzone jadi full circle
-                bool isSemicircleShield = (gz.attachedToShip) || 
-                                         (gz.shape != GUARD_ZONE_CIRCLE && 
-                                          gz.startAngle != gz.endAngle && 
+                bool isSemicircleShield = (gz.attachedToShip) ||
+                                         (gz.shape != GUARD_ZONE_CIRCLE &&
+                                          gz.startAngle != gz.endAngle &&
                                           gz.startAngle >= 0 && gz.endAngle >= 0);
 
                 qDebug() << "[DRAW-GUARDZONE-DEBUG] Starting QPainter operations for guardzone" << gz.id;
                 qDebug() << "[DRAW-GUARDZONE-DEBUG] isSemicircleShield:" << isSemicircleShield;
-                
+
                 // PERBAIKAN CRITICAL: Wrap all QPainter operations in try-catch
                 try {
                     if (isSemicircleShield) {
                         qDebug() << "[DRAW-GUARDZONE-DEBUG] Drawing semicircle shield...";
                         // Create semicircle shield using sector rendering
                         QPainterPath semicirclePath;
-                        
+
                         // Convert angles from navigation (0=North, clockwise) to Qt (0=East, counterclockwise)
                         double qtStartAngle = (90 - gz.startAngle + 360) * 16;    // Qt uses 16th of degree
                         double qtEndAngle = (90 - gz.endAngle + 360) * 16;
                         double qtSpanAngle = (qtEndAngle - qtStartAngle);
-                        
+
                         // Normalize angles
                         qtStartAngle = fmod(qtStartAngle, 360 * 16);
                         if (qtSpanAngle < 0) qtSpanAngle += 360 * 16;
                         if (qtSpanAngle > 360 * 16) qtSpanAngle -= 360 * 16;
-                        
+
                         double startAngleQt = qtStartAngle / 16.0;
                         double spanAngleQt = qtSpanAngle / 16.0;
-                        
+
                         // CRITICAL: Validate rectangle coordinates
                         double rectX = centerX - outerRadiusInPixels;
                         double rectY = centerY - outerRadiusInPixels;
                         double rectSize = 2 * outerRadiusInPixels;
-                        
+
                         if (qIsNaN(rectX) || qIsInf(rectX) || qIsNaN(rectY) || qIsInf(rectY) ||
                             qIsNaN(rectSize) || qIsInf(rectSize) || rectSize <= 0) {
                             qDebug() << "[DRAW-GUARDZONE-ERROR] Invalid rectangle values - skipping semicircle";
                             continue;
                         }
-                        
+
                         QRectF outerRect(rectX, rectY, rectSize, rectSize);
-                        
+
                         // Start from center
                         semicirclePath.moveTo(centerX, centerY);
-                        
+
                         // Draw arc
                         semicirclePath.arcTo(outerRect, startAngleQt, spanAngleQt);
-                        
+
                         // Close back to center
                         semicirclePath.closeSubpath();
-                        
+
                         painter.drawPath(semicirclePath);
-                        
+
                         qDebug() << "[DRAW-SUCCESS] Successfully drew semicircle shield guardzone" << gz.id;
                     } else {
                         qDebug() << "[DRAW-GUARDZONE-DEBUG] Drawing circle/donut shape...";
                         // Create full circle or donut shape using QPainterPath
                         QPainterPath circlePath;
-                        
+
                         // CRITICAL: Validate ellipse parameters
                         QPointF centerPoint(centerX, centerY);
                         if (qIsNaN(centerPoint.x()) || qIsInf(centerPoint.x()) ||
@@ -6165,11 +6165,11 @@ void EcWidget::drawGuardZone()
                             qDebug() << "[DRAW-GUARDZONE-ERROR] Invalid center point - skipping circle";
                             continue;
                         }
-                        
+
                         qDebug() << "[DRAW-GUARDZONE-DEBUG] Adding outer ellipse - center:" << centerPoint << "radius:" << outerRadiusInPixels;
                         circlePath.addEllipse(centerPoint, outerRadiusInPixels, outerRadiusInPixels);
                         qDebug() << "[DRAW-GUARDZONE-DEBUG] Outer ellipse added successfully";
-                        
+
                         if (innerRadiusInPixels > 0) {
                             qDebug() << "[DRAW-GUARDZONE-DEBUG] Adding inner ellipse - radius:" << innerRadiusInPixels;
                             circlePath.addEllipse(centerPoint, innerRadiusInPixels, innerRadiusInPixels);
@@ -6179,16 +6179,16 @@ void EcWidget::drawGuardZone()
                         qDebug() << "[DRAW-GUARDZONE-DEBUG] Drawing path...";
                         painter.drawPath(circlePath);
                         qDebug() << "[DRAW-GUARDZONE-DEBUG] Path drawn successfully";
-                        
+
                         qDebug() << "[DRAW-SUCCESS] Successfully drew" << (innerRadiusInPixels > 0 ? "donut" : "circle") << "guardzone" << gz.id;
                     }
 
                     labelX = centerX;
                     labelY = centerY - static_cast<int>(outerRadiusInPixels) - 15;
                     drawnCount++;
-                    
-                    qDebug() << "[DRAW-SUCCESS] Successfully drew donut guardzone" << gz.id 
-                             << "at screen coords:" << centerX << "," << centerY 
+
+                    qDebug() << "[DRAW-SUCCESS] Successfully drew donut guardzone" << gz.id
+                             << "at screen coords:" << centerX << "," << centerY
                              << "outer radius:" << outerRadiusInPixels << "inner radius:" << innerRadiusInPixels << "pixels";
                 } catch (const std::exception& e) {
                     qDebug() << "[DRAW-GUARDZONE-ERROR] Exception drawing circle guardzone" << gz.id << ":" << e.what();
@@ -6255,7 +6255,7 @@ void EcWidget::drawGuardZone()
         } else {
             qDebug() << "[DRAW-GUARDZONE-DEBUG] No valid label position for guardzone" << gz.id;
         }
-        
+
         qDebug() << "[DRAW-GUARDZONE-DEBUG] ===== FINISHED PROCESSING GUARDZONE" << gz.id << "=====";
     }
 
@@ -6296,7 +6296,7 @@ void EcWidget::drawGuardZone()
         qDebug() << "[PERF] drawGuardZone took" << elapsed << "ms"
                  << "- Drawn:" << drawnCount << "Skipped:" << skippedCount;
     }
-    
+
     qDebug() << "[DRAW-GUARDZONE-DEBUG] ========== DRAW GUARDZONE COMPLETE ==========";
 }
 
@@ -6905,22 +6905,22 @@ bool EcWidget::checkTargetsInGuardZone()
                 // If has inner radius, check donut range
                 withinRadiusRange = (distance <= activeGuardZone->outerRadius && distance >= activeGuardZone->innerRadius);
             }
-            
+
             // Check if this is a semicircle shield (has angle restrictions)
-            bool isSemicircleShield = (activeGuardZone->startAngle != activeGuardZone->endAngle && 
+            bool isSemicircleShield = (activeGuardZone->startAngle != activeGuardZone->endAngle &&
                                        activeGuardZone->startAngle >= 0 && activeGuardZone->endAngle >= 0);
-            
+
             if (isSemicircleShield && withinRadiusRange) {
                 // Use geometric method like polygon detection for accuracy
                 inGuardZone = isPointInSemicircle(aisTarget.lat, aisTarget.lon, activeGuardZone);
-                
+
                 qDebug() << "[REAL-AIS-CHECK] Semicircle shield - Using geometric detection";
             } else {
                 inGuardZone = withinRadiusRange;
             }
 
             qDebug() << "[REAL-AIS-CHECK] Target" << aisTarget.mmsi
-                     << "distance:" << distance << "vs inner:" << activeGuardZone->innerRadius 
+                     << "distance:" << distance << "vs inner:" << activeGuardZone->innerRadius
                      << "outer:" << activeGuardZone->outerRadius << "inZone:" << inGuardZone;
         }
         else if (activeGuardZone->shape == GUARD_ZONE_POLYGON && activeGuardZone->latLons.size() >= 6) {
@@ -7150,7 +7150,7 @@ void EcWidget::updateOwnShipPosition()
         guardZoneCenterLat = newLat;
         guardZoneCenterLon = newLon;
     }
-    
+
     // PERBAIKAN: Update guardzone angle ketika heading berubah
     if (redDotAttachedToShip || hasAttachedGuardZone()) {
         updateRedDotPosition(newLat, newLon);
@@ -7391,13 +7391,13 @@ void EcWidget::createCircularGuardZoneNew(double centerLat, double centerLon, do
     newGuardZone.centerLat = centerLat;
     newGuardZone.centerLon = centerLon;
     newGuardZone.radius = radiusNM;
-    
+
     // PERBAIKAN: Set untuk lingkaran penuh (tidak ada angle untuk create circular)
-    newGuardZone.innerRadius = 0.0;      // Inner radius 0 untuk solid circle  
+    newGuardZone.innerRadius = 0.0;      // Inner radius 0 untuk solid circle
     newGuardZone.outerRadius = radiusNM; // Outer radius sama dengan radius
     newGuardZone.startAngle = 0.0;       // Start dari 0°
     newGuardZone.endAngle = 0.0;         // End sama dengan start = full circle
-    
+
     // Apply default filter settings from SettingsManager
     const SettingsData& settings = SettingsManager::instance().data();
     newGuardZone.shipTypeFilter = static_cast<ShipTypeFilter>(settings.defaultShipTypeFilter);
@@ -7494,7 +7494,7 @@ void EcWidget::createPolygonGuardZoneNew()
     newGuardZone.attachedToShip = false;
     newGuardZone.color = Qt::red;
     newGuardZone.latLons = latLons;
-    
+
     // Apply default filter settings from SettingsManager
     const SettingsData& settings = SettingsManager::instance().data();
     newGuardZone.shipTypeFilter = static_cast<ShipTypeFilter>(settings.defaultShipTypeFilter);
@@ -7755,7 +7755,7 @@ void EcWidget::loadGuardZones()
 
         QJsonParseError parseError;
         QJsonDocument jsonDoc;
-        
+
         // PERBAIKAN CRITICAL: Wrap JSON parsing in try-catch
         try {
             jsonDoc = QJsonDocument::fromJson(jsonData, &parseError);
@@ -7845,9 +7845,9 @@ void EcWidget::loadGuardZones()
 
                     // PERBAIKAN CRITICAL: Safe coordinate parsing with NaN check
                     gz.centerLat = gzObject["centerLat"].toDouble();
-                    gz.centerLon = gzObject["centerLon"].toDouble(); 
+                    gz.centerLon = gzObject["centerLon"].toDouble();
                     gz.radius = gzObject["radius"].toDouble();
-                    
+
                     // Check for NaN or infinity values
                     if (qIsNaN(gz.centerLat) || qIsInf(gz.centerLat) ||
                         qIsNaN(gz.centerLon) || qIsInf(gz.centerLon) ||
@@ -7855,12 +7855,12 @@ void EcWidget::loadGuardZones()
                         qDebug() << "[ERROR] NaN/Infinity values detected in circle guardzone:" << gz.name;
                         continue;  // Skip this guardzone entirely
                     }
-                    
+
                     // Load donut properties (with backward compatibility)
                     if (gzObject.contains("innerRadius") && gzObject.contains("outerRadius")) {
                         gz.innerRadius = gzObject["innerRadius"].toDouble();
                         gz.outerRadius = gzObject["outerRadius"].toDouble();
-                        
+
                         // PERBAIKAN CRITICAL: Validate innerRadius/outerRadius for NaN
                         if (qIsNaN(gz.innerRadius) || qIsInf(gz.innerRadius) ||
                             qIsNaN(gz.outerRadius) || qIsInf(gz.outerRadius)) {
@@ -7907,17 +7907,17 @@ void EcWidget::loadGuardZones()
                 if (gzObject.contains("centerLat") && gzObject.contains("centerLon") &&
                     gzObject.contains("innerRadius") && gzObject.contains("outerRadius") &&
                     gzObject.contains("startAngle") && gzObject.contains("endAngle")) {
-                    
+
                     gz.centerLat = gzObject["centerLat"].toDouble();
                     gz.centerLon = gzObject["centerLon"].toDouble();
                     gz.innerRadius = gzObject["innerRadius"].toDouble();
                     gz.outerRadius = gzObject["outerRadius"].toDouble();
                     gz.startAngle = gzObject["startAngle"].toDouble();
                     gz.endAngle = gzObject["endAngle"].toDouble();
-                    
+
                     // Legacy radius untuk backward compatibility
                     gz.radius = gz.outerRadius;
-                    
+
                     // Validate sector data
                     if (gz.centerLat >= -90 && gz.centerLat <= 90 &&
                         gz.centerLon >= -180 && gz.centerLon <= 180 &&
@@ -7971,11 +7971,11 @@ void EcWidget::loadGuardZones()
                     break;
                 }
             }
-            
+
             // PERBAIKAN: Set attachedGuardZoneId jika ada guardzone dengan attachedToShip
             for (const GuardZone& gz : guardZones) {
-                if (gz.attachedToShip && 
-                    !gz.name.contains("Ship Guardian Circle") && 
+                if (gz.attachedToShip &&
+                    !gz.name.contains("Ship Guardian Circle") &&
                     !gz.name.contains("Red Dot Guardian")) {
                     attachedGuardZoneId = gz.id;
                     attachedGuardZoneName = gz.name;
@@ -8000,19 +8000,19 @@ void EcWidget::loadGuardZones()
                     attachedGuardZoneId = gz.id;
                     attachedGuardZoneName = gz.name;
                     qDebug() << "[RESTORE] Restored attached guardzone ID:" << attachedGuardZoneId << "Name:" << attachedGuardZoneName;
-                    
+
                     // Set red dot attached state untuk consistency
                     redDotAttachedToShip = true;
                     redDotTrackerEnabled = false;  // PERBAIKAN: Disable untuk mencegah double rendering
-                    
-                    // PERBAIKAN CRITICAL: Matikan shipGuardianEnabled 
+
+                    // PERBAIKAN CRITICAL: Matikan shipGuardianEnabled
                     // untuk mencegah konflik rendering dengan attached guardzone
                     shipGuardianEnabled = false;
                     qDebug() << "[RESTORE] Disabled shipGuardian to prevent rendering conflict with attached guardzone";
-                    
+
                     // Emit signal untuk update UI
                     emit attachToShipStateChanged(true);
-                    
+
                     // PERBAIKAN: Auto-enable guardzone auto-check for attached guardzone after restart
                     if (!guardZoneAutoCheckEnabled) {
                         guardZoneAutoCheckEnabled = true;
@@ -8028,16 +8028,16 @@ void EcWidget::loadGuardZones()
                 }
             }
         }
-        
+
         // PERBAIKAN: Jika ada duplikasi, save untuk membersihkan file
         if (attachedCount > 1) {
             qDebug() << "[CLEANUP] Found" << attachedCount << "attached guardzones, cleaned up to 1. Saving file...";
             saveGuardZones();
         }
-        
+
         // PERBAIKAN: Debug final state
-        qDebug() << "[LOAD-FINAL] attachedGuardZoneId:" << attachedGuardZoneId 
-                 << "attachedCount:" << attachedCount 
+        qDebug() << "[LOAD-FINAL] attachedGuardZoneId:" << attachedGuardZoneId
+                 << "attachedCount:" << attachedCount
                  << "totalGuardZones:" << guardZones.size();
 
         // PERBAIKAN: Auto-enable auto-check if there are any active guardzones
@@ -8050,7 +8050,7 @@ void EcWidget::loadGuardZones()
         // PERBAIKAN: Trigger update hanya jika ada data
         if (!guardZones.isEmpty()) {
             update();
-            
+
             // Apply default filters to loaded guardzones if they have default values
             if (guardZoneManager) {
                 guardZoneManager->applyDefaultFiltersToExistingGuardZones();
@@ -8137,7 +8137,7 @@ bool EcWidget::isGuardZoneInViewport(const GuardZone& gz, const QRect& viewport)
     if (gz.shape == GUARD_ZONE_CIRCLE) {
         int centerX, centerY;
         double lat, lon;
-        
+
         if (gz.attachedToShip) {
             // Konsisten dengan logic drawing - gunakan redDot position jika available
             if (redDotTrackerEnabled && redDotLat != 0.0 && redDotLon != 0.0) {
@@ -8147,7 +8147,7 @@ bool EcWidget::isGuardZoneInViewport(const GuardZone& gz, const QRect& viewport)
                 lat = ownShip.lat;
                 lon = ownShip.lon;
             }
-            qDebug() << "[VIEWPORT-DEBUG] Checking attached guardzone" << gz.id 
+            qDebug() << "[VIEWPORT-DEBUG] Checking attached guardzone" << gz.id
                      << "at position:" << lat << "," << lon;
         } else {
             lat = gz.centerLat;
@@ -8361,10 +8361,10 @@ void EcWidget::drawSectorGuardZone(QPainter& painter, const GuardZone& gz, int& 
 {
     // ========== SECTOR GUARDZONE RENDERING ==========
     // Implementasi sector guardzone (setengah lingkaran)
-    
+
     qDebug() << "[DRAW-SECTOR] Drawing" << (gz.innerRadius <= 0.0 ? "semicircle" : "sector") << "guardzone" << gz.id << "at" << gz.centerLat << "," << gz.centerLon
              << "angles:" << gz.startAngle << "to" << gz.endAngle;
-    
+
     // Convert center position to screen coordinates
     int centerX, centerY;
     if (!LatLonToXy(gz.centerLat, gz.centerLon, centerX, centerY)) {
@@ -8372,14 +8372,14 @@ void EcWidget::drawSectorGuardZone(QPainter& painter, const GuardZone& gz, int& 
         labelX = labelY = 0;
         return;
     }
-    
+
     // Calculate radii in pixels
     double innerRadiusPixels = calculatePixelsFromNauticalMiles(gz.innerRadius);
     double outerRadiusPixels = calculatePixelsFromNauticalMiles(gz.outerRadius);
-    
+
     // Ensure minimum visible size
     if (outerRadiusPixels < 5) outerRadiusPixels = 5;
-    
+
     // Handle semicircle case (inner radius = 0)
     if (gz.innerRadius <= 0.0) {
         innerRadiusPixels = 0;
@@ -8387,7 +8387,7 @@ void EcWidget::drawSectorGuardZone(QPainter& painter, const GuardZone& gz, int& 
         if (innerRadiusPixels < 1) innerRadiusPixels = 1;
         if (outerRadiusPixels <= innerRadiusPixels) innerRadiusPixels = outerRadiusPixels - 4;
     }
-    
+
     // Convert angles from navigation (0=North, clockwise) to Qt (0=East, counterclockwise)
     // Navigation: 0° = North, clockwise
     // Qt: 0° = East, counterclockwise
@@ -8395,36 +8395,36 @@ void EcWidget::drawSectorGuardZone(QPainter& painter, const GuardZone& gz, int& 
     double qtStartAngle = (90 - gz.startAngle + 360) * 16;    // Qt uses 16th of degree
     double qtEndAngle = (90 - gz.endAngle + 360) * 16;
     double qtSpanAngle = (qtEndAngle - qtStartAngle);
-    
+
     // Normalize angles
     qtStartAngle = fmod(qtStartAngle, 360 * 16);
     if (qtSpanAngle < 0) qtSpanAngle += 360 * 16;
     if (qtSpanAngle > 360 * 16) qtSpanAngle -= 360 * 16;
-    
+
     // Set up painter for sector drawing - consistent with circle/polygon
     QPen pen(gz.color);
     pen.setWidth(2);
     painter.setPen(pen);
-    
+
     QColor fillColor = gz.color;
     fillColor.setAlpha(50);  // Same transparency as circle/polygon
     painter.setBrush(QBrush(fillColor));
-    
+
     // Create the sector path using QPainterPath for precise control
     QPainterPath sectorPath;
-    
+
     // Calculate start and end points for outer arc
     double startAngleQt = qtStartAngle / 16.0;
     double spanAngleQt = qtSpanAngle / 16.0;
-    
+
     // Move to start point of outer arc
-    QRectF outerRect(centerX - outerRadiusPixels, centerY - outerRadiusPixels, 
+    QRectF outerRect(centerX - outerRadiusPixels, centerY - outerRadiusPixels,
                      2 * outerRadiusPixels, 2 * outerRadiusPixels);
     sectorPath.arcMoveTo(outerRect, startAngleQt);
-    
+
     // Draw outer arc
     sectorPath.arcTo(outerRect, startAngleQt, spanAngleQt);
-    
+
     if (gz.innerRadius <= 0.0) {
         // For semicircle (inner radius = 0), connect back to center
         sectorPath.lineTo(centerX, centerY);
@@ -8432,38 +8432,38 @@ void EcWidget::drawSectorGuardZone(QPainter& painter, const GuardZone& gz, int& 
     } else {
         // For ring sector, draw inner arc
         double endAngleQt = startAngleQt + spanAngleQt;
-        QRectF innerRect(centerX - innerRadiusPixels, centerY - innerRadiusPixels, 
+        QRectF innerRect(centerX - innerRadiusPixels, centerY - innerRadiusPixels,
                          2 * innerRadiusPixels, 2 * innerRadiusPixels);
-        
+
         // Connect to inner arc end point
         QPointF innerEndPoint = QPointF(
             centerX + innerRadiusPixels * cos(endAngleQt * M_PI / 180.0),
             centerY + innerRadiusPixels * sin(endAngleQt * M_PI / 180.0)
         );
         sectorPath.lineTo(innerEndPoint);
-        
+
         // Draw inner arc in reverse direction
         sectorPath.arcTo(innerRect, endAngleQt, -spanAngleQt);
-        
+
         // Close the path back to start
         sectorPath.closeSubpath();
     }
-    
+
     // Draw the sector
     painter.drawPath(sectorPath);
-    
+
     // Draw border lines for better visibility - consistent with main border
     painter.setPen(pen);
     // Convert navigation angles to Qt coordinate system for radial lines
     double startAngleRad = (90 - gz.startAngle) * M_PI / 180.0;  // Convert to radians
     double endAngleRad = (90 - gz.endAngle) * M_PI / 180.0;
-    
+
     if (gz.innerRadius <= 0.0) {
         // For semicircle, draw radial lines from center to outer arc
         painter.drawLine(centerX, centerY,
                          centerX + cos(startAngleRad) * outerRadiusPixels,
                          centerY + sin(startAngleRad) * outerRadiusPixels);
-        
+
         painter.drawLine(centerX, centerY,
                          centerX + cos(endAngleRad) * outerRadiusPixels,
                          centerY + sin(endAngleRad) * outerRadiusPixels);
@@ -8473,19 +8473,19 @@ void EcWidget::drawSectorGuardZone(QPainter& painter, const GuardZone& gz, int& 
                          centerY + sin(startAngleRad) * innerRadiusPixels,
                          centerX + cos(startAngleRad) * outerRadiusPixels,
                          centerY + sin(startAngleRad) * outerRadiusPixels);
-        
+
         painter.drawLine(centerX + cos(endAngleRad) * innerRadiusPixels,
                          centerY + sin(endAngleRad) * innerRadiusPixels,
                          centerX + cos(endAngleRad) * outerRadiusPixels,
                          centerY + sin(endAngleRad) * outerRadiusPixels);
     }
-    
+
     // Set label position at the center of the sector
     labelX = centerX;
     labelY = centerY - static_cast<int>(outerRadiusPixels) - 15;
-    
-    qDebug() << "[DRAW-SECTOR] Successfully drew" << (gz.innerRadius <= 0.0 ? "semicircle" : "sector") << "guardzone" << gz.id 
-             << "center:" << centerX << "," << centerY 
+
+    qDebug() << "[DRAW-SECTOR] Successfully drew" << (gz.innerRadius <= 0.0 ? "semicircle" : "sector") << "guardzone" << gz.id
+             << "center:" << centerX << "," << centerY
              << "inner:" << innerRadiusPixels << "outer:" << outerRadiusPixels << "pixels"
              << "nav angles:" << gz.startAngle << "to" << gz.endAngle
              << "qt start:" << (qtStartAngle/16) << "span:" << (qtSpanAngle/16);
@@ -8898,7 +8898,7 @@ void EcWidget::setRedDotAttachedToShip(bool attached)
             redDotTrackerEnabled = false;
             qDebug() << "[ATTACH] Disabled redDotTracker (attached guardzone exists)";
         }
-        
+
         // PERBAIKAN CRITICAL: Matikan shipGuardianEnabled untuk mencegah konflik rendering
         shipGuardianEnabled = false;
         qDebug() << "[ATTACH] Disabled shipGuardian to prevent rendering conflict";
@@ -8906,7 +8906,7 @@ void EcWidget::setRedDotAttachedToShip(bool attached)
         // Buat guardzone di manager hanya jika belum ada
         if (attachedGuardZoneId == -1) {
             qDebug() << "[EMERGENCY-DEBUG] No attached guardzone found, creating new one";
-            
+
             // CRITICAL: Extra protection for createAttachedGuardZone
             try {
                 qDebug() << "[EMERGENCY-DEBUG] About to call createAttachedGuardZone...";
@@ -8921,7 +8921,7 @@ void EcWidget::setRedDotAttachedToShip(bool attached)
                 // Don't continue if creation failed
                 return;
             }
-            
+
             // PERBAIKAN: Setelah guardzone dibuat, disable redDotTrackerEnabled
             redDotTrackerEnabled = false;
             qDebug() << "[ATTACH] Disabled redDotTracker after creating attached guardzone";
@@ -8930,7 +8930,7 @@ void EcWidget::setRedDotAttachedToShip(bool attached)
             // PERBAIKAN: Pastikan redDotTrackerEnabled disabled
             redDotTrackerEnabled = false;
             qDebug() << "[ATTACH] Disabled redDotTracker for existing attached guardzone";
-            
+
             // Emit signal untuk update UI saja
             emit attachToShipStateChanged(true);
         }
@@ -8951,7 +8951,7 @@ void EcWidget::setRedDotAttachedToShip(bool attached)
 
     } else {
         qDebug() << "[DETACH] Removing attached guardzone and cleaning up...";
-        
+
         // Hapus guardzone dari manager
         removeAttachedGuardZone();
 
@@ -8963,7 +8963,7 @@ void EcWidget::setRedDotAttachedToShip(bool attached)
                 break;
             }
         }
-        
+
         // Stop auto-check hanya jika tidak ada guardzone aktif lain
         if (!hasOtherActiveGuardZones) {
             guardZoneAutoCheckEnabled = false;
@@ -8975,13 +8975,13 @@ void EcWidget::setRedDotAttachedToShip(bool attached)
         redDotTrackerEnabled = false;
         redDotLat = 0.0;
         redDotLon = 0.0;
-        
+
         // Clear ship guardian specific data
         shipGuardianCheckTimer->stop();
         lastDetectedObstacles.clear();
 
         qDebug() << "Ship Guardian deactivated and red dot tracker cleared";
-        
+
         // Emit signal untuk update UI - detach
         qDebug() << "[EMERGENCY-DEBUG] Emitting attachToShipStateChanged(false)...";
         emit attachToShipStateChanged(false);
@@ -8999,7 +8999,7 @@ void EcWidget::setRedDotAttachedToShip(bool attached)
         qDebug() << "[ATTACH-ERROR] Unknown exception during update()";
     }
     qDebug() << "[EMERGENCY-DEBUG] ========== setRedDotAttachedToShip COMPLETED ==========";
-    
+
     } catch (const std::exception& e) {
         qDebug() << "[EMERGENCY-ERROR] Exception in setRedDotAttachedToShip:" << e.what();
         // Try to clean up safely
@@ -9030,17 +9030,17 @@ bool EcWidget::hasAttachedGuardZone() const
         qDebug() << "[DEBUG] hasAttachedGuardZone() - found by ID:" << attachedGuardZoneId;
         return true;
     }
-    
+
     // Cek juga dari guardzone list
     for (const GuardZone& gz : guardZones) {
-        if (gz.attachedToShip && 
-            !gz.name.contains("Ship Guardian Circle") && 
+        if (gz.attachedToShip &&
+            !gz.name.contains("Ship Guardian Circle") &&
             !gz.name.contains("Red Dot Guardian")) {
             qDebug() << "[DEBUG] hasAttachedGuardZone() - found in list:" << gz.name << "ID:" << gz.id;
             return true;
         }
     }
-    
+
     qDebug() << "[DEBUG] hasAttachedGuardZone() - not found";
     return false;
 }
@@ -9049,7 +9049,7 @@ void EcWidget::updateRedDotPosition(double lat, double lon)
 {
     // qDebug() << "[UPDATE-RED-DOT] Called with lat:" << lat << "lon:" << lon
     //         << "enabled:" << redDotTrackerEnabled << "attached:" << redDotAttachedToShip;
-             
+
     if (!redDotAttachedToShip) {
         qDebug() << "[UPDATE-RED-DOT] Early return - not attached to ship";
         return;
@@ -9057,7 +9057,7 @@ void EcWidget::updateRedDotPosition(double lat, double lon)
 
     redDotLat = lat;
     redDotLon = lon;
-    
+
     // PERBAIKAN: Update ownShip position untuk consistency
     if (redDotAttachedToShip) {
         ownShip.lat = lat;
@@ -9071,22 +9071,22 @@ void EcWidget::updateRedDotPosition(double lat, double lon)
             if (gz.id == attachedGuardZoneId) {
                 gz.centerLat = lat;
                 gz.centerLon = lon;
-                
+
                 // PERBAIKAN: Update angle untuk semicircle shield berdasarkan heading
                 if (gz.shape == GUARD_ZONE_CIRCLE && gz.startAngle != gz.endAngle) {
                     double currentHeading = ownShip.heading;
                     if (qIsNaN(currentHeading) || currentHeading < 0) {
                         currentHeading = 0.0;  // Default to North if no heading
                     }
-                    
+
                     // Update semicircle shield angles berdasarkan heading (+90° shift lagi untuk depan)
                     gz.startAngle = fmod(currentHeading + 90.0, 360.0);           // Port-forward (90° + heading)
                     gz.endAngle = fmod(currentHeading + 270.0, 360.0);            // Starboard-forward (270° + heading)
-                    
-                    qDebug() << "[UPDATE-GUARDZONE] Updated semicircle shield angles - Start:" << gz.startAngle 
+
+                    qDebug() << "[UPDATE-GUARDZONE] Updated semicircle shield angles - Start:" << gz.startAngle
                              << "End:" << gz.endAngle << "Based on heading:" << currentHeading;
                 }
-                
+
                 qDebug() << "[UPDATE-GUARDZONE] Updated attached guardzone position to:" << lat << "," << lon;
                 break;
             }
@@ -9096,27 +9096,27 @@ void EcWidget::updateRedDotPosition(double lat, double lon)
     } else {
         // PERBAIKAN: Jika attachedGuardZoneId == -1 tapi ada guardzone attachedToShip, update juga
         for (GuardZone& gz : guardZones) {
-            if (gz.attachedToShip && 
-                !gz.name.contains("Ship Guardian Circle") && 
+            if (gz.attachedToShip &&
+                !gz.name.contains("Ship Guardian Circle") &&
                 !gz.name.contains("Red Dot Guardian")) {
                 gz.centerLat = lat;
                 gz.centerLon = lon;
-                
+
                 // PERBAIKAN: Update angle untuk semicircle shield berdasarkan heading
                 if (gz.shape == GUARD_ZONE_CIRCLE && gz.startAngle != gz.endAngle) {
                     double currentHeading = ownShip.heading;
                     if (qIsNaN(currentHeading) || currentHeading < 0) {
                         currentHeading = 0.0;  // Default to North if no heading
                     }
-                    
+
                     // Update semicircle shield angles berdasarkan heading (+90° shift lagi untuk depan)
                     gz.startAngle = fmod(currentHeading + 90.0, 360.0);           // Port-forward (90° + heading)
                     gz.endAngle = fmod(currentHeading + 270.0, 360.0);            // Starboard-forward (270° + heading)
-                    
-                    qDebug() << "[UPDATE-GUARDZONE] Updated semicircle shield angles - Start:" << gz.startAngle 
+
+                    qDebug() << "[UPDATE-GUARDZONE] Updated semicircle shield angles - Start:" << gz.startAngle
                              << "End:" << gz.endAngle << "Based on heading:" << currentHeading;
                 }
-                
+
                 qDebug() << "[UPDATE-GUARDZONE] Updated attached guardzone (no ID) position to:" << lat << "," << lon;
                 // Emit signal untuk update panel
                 emit guardZoneModified();
@@ -9130,23 +9130,23 @@ void EcWidget::updateRedDotPosition(double lat, double lon)
 
 void EcWidget::drawRedDotTracker()
 {
-    qDebug() << "[RED-DOT-DEBUG] drawRedDotTracker called - enabled:" << redDotTrackerEnabled 
+    qDebug() << "[RED-DOT-DEBUG] drawRedDotTracker called - enabled:" << redDotTrackerEnabled
              << "attachedGuardZoneId:" << attachedGuardZoneId << "redDotLat:" << redDotLat
              << "redDotAttachedToShip:" << redDotAttachedToShip;
-             
+
     // Check if tracker is enabled and position is valid
     if (!redDotTrackerEnabled || redDotLat == 0.0 || redDotLon == 0.0) {
         // qDebug() << "[RED-DOT-DEBUG] Early return - tracker disabled or invalid position";
         return;
     }
-    
+
     // PERBAIKAN CRITICAL: Jangan gambar red dot area jika redDotAttachedToShip = true
     // Karena ini berarti ada sistem attach to ship yang aktif
     if (redDotAttachedToShip) {
         qDebug() << "[RED-DOT-DEBUG] Early return - redDotAttachedToShip is true, skip rendering";
         return;
     }
-    
+
     // PERBAIKAN: Jika ada attached guardzone, jangan gambar red dot area
     // Biarkan drawGuardZone() yang menggambar area guardzone
     if (attachedGuardZoneId != -1) {
@@ -9155,23 +9155,23 @@ void EcWidget::drawRedDotTracker()
         // qDebug() << "[RED-DOT-DEBUG] Early return - attached guardzone exists, let drawGuardZone handle it";
         return;
     }
-    
+
     // PERBAIKAN CRITICAL: Cek apakah ada guardzone dengan attachedToShip = true
     bool hasAttachedGuardZone = false;
     for (const GuardZone& gz : guardZones) {
-        if (gz.attachedToShip && 
+        if (gz.attachedToShip &&
             !gz.name.contains("Ship Guardian Circle") && !gz.name.contains("Red Dot Guardian")) {
             hasAttachedGuardZone = true;
             qDebug() << "[RED-DOT-DEBUG] Found attached guardzone in list:" << gz.name;
             break;
         }
     }
-    
+
     if (hasAttachedGuardZone) {
         qDebug() << "[RED-DOT-DEBUG] Early return - found attached guardzone in list, skip rendering";
         return;
     }
-    
+
     qDebug() << "[RED-DOT-DEBUG] Drawing red dot tracker and ship guardian circle...";
 
     // Convert geographic coordinates to screen coordinates
@@ -9207,13 +9207,13 @@ void EcWidget::drawRedDotTracker()
         qDebug() << "[RED-DOT-DEBUG] Skipping main circle draw - attached guardzone exists";
         return;
     }
-    
+
     // PERBAIKAN CRITICAL: Jangan gambar circle jika redDotAttachedToShip = true
     if (redDotAttachedToShip) {
         qDebug() << "[RED-DOT-DEBUG] Skipping main circle draw - redDotAttachedToShip is true";
         return;
     }
-    
+
     // MODIFIKASI UTAMA: Draw filled circle area (seperti guardzone)
     qDebug() << "[RED-DOT-DEBUG] Drawing main red dot circle at:" << screenX << "," << screenY << "radius:" << pixelRadius;
     painter.setBrush(QBrush(fillColor));
@@ -9224,7 +9224,7 @@ void EcWidget::drawRedDotTracker()
 
     // Draw border circle (seperti guardzone border) - TIDAK PERLU LAGI
     // Karena circle sudah handle di drawGuardZone() untuk attached guardzone
-    
+
     // Draw center dot untuk menandai posisi ship yang tepat - MINIMAL SAJA
     painter.setBrush(QBrush(centerColor));
     painter.setPen(QPen(centerColor, 1));
@@ -9310,7 +9310,7 @@ void EcWidget::drawShipGuardianCircle()
     if (!shipGuardianEnabled || redDotLat == 0.0 || redDotLon == 0.0) {
         return;
     }
-    
+
     // PERBAIKAN: Jangan gambar ship guardian circle jika ada attached guardzone
     if (attachedGuardZoneId != -1) {
         qDebug() << "[SHIP-GUARDIAN] Skipping draw - attached guardzone exists:" << attachedGuardZoneId;
@@ -10018,7 +10018,7 @@ void EcWidget::createRedDotGuardian()
         qDebug() << "Red Dot Guardian already exists";
         return;
     }
-    
+
     // PERBAIKAN: Jangan buat red dot guardian jika sudah ada attached guardzone
     if (attachedGuardZoneId != -1) {
         qDebug() << "Attached guardzone already exists, not creating Red Dot Guardian";
@@ -10117,7 +10117,7 @@ void EcWidget::updateRedDotGuardianInManager()
 void EcWidget::createAttachedGuardZone()
 {
     qDebug() << "[CREATE-ATTACHED-DEBUG] ========== STARTING CREATE ATTACHED GUARDZONE ==========";
-    
+
     // CRITICAL: Wrap entire function in try-catch to prevent crashes
     try {
         // Cek apakah sudah ada
@@ -10125,7 +10125,7 @@ void EcWidget::createAttachedGuardZone()
             qDebug() << "[CREATE-ATTACHED-DEBUG] Attached GuardZone already exists with ID:" << attachedGuardZoneId;
             return;
         }
-    
+
     // PERBAIKAN: Pastikan tidak ada guardzone lain yang attachedToShip = true
     for (GuardZone& gz : guardZones) {
         if (gz.attachedToShip) {
@@ -10152,34 +10152,34 @@ void EcWidget::createAttachedGuardZone()
     // PERBAIKAN: Use robust coordinate fallback system
     double useLat = ownShip.lat;
     double useLon = ownShip.lon;
-    
+
     qDebug() << "[CREATE-ATTACHED-DEBUG] === CREATING ATTACHED GUARDZONE ===";
     qDebug() << "[CREATE-ATTACHED-DEBUG] OwnShip position:" << useLat << "," << useLon;
     qDebug() << "[CREATE-ATTACHED-DEBUG] OwnShip heading:" << ownShip.heading;
     qDebug() << "[CREATE-ATTACHED-DEBUG] Guardian radius:" << guardianRadius;
-    
+
     // CRITICAL: Enhanced validation with safe fallback to Jakarta position
-    if (qIsNaN(useLat) || qIsInf(useLat) || qIsNaN(useLon) || qIsInf(useLon) || 
+    if (qIsNaN(useLat) || qIsInf(useLat) || qIsNaN(useLon) || qIsInf(useLon) ||
         (useLat == 0.0 && useLon == 0.0) ||
         useLat < -90.0 || useLat > 90.0 ||
         useLon < -180.0 || useLon > 180.0) {
-        
+
         qDebug() << "[CREATE-ATTACHED-WARNING] Invalid OwnShip position, using default Jakarta position";
         useLat = -6.2088;   // Jakarta default latitude
         useLon = 106.8456;  // Jakarta default longitude
         qDebug() << "[CREATE-ATTACHED-DEBUG] Using fallback position:" << useLat << "," << useLon;
     }
-    
+
     qDebug() << "[CREATE-ATTACHED-DEBUG] Final coordinates validation passed";
-    
+
     attachedGZ.centerLat = useLat;
     attachedGZ.centerLon = useLon;
-    
+
     qDebug() << "[CREATE-ATTACHED] Using position:" << useLat << "," << useLon;
-    
+
     // PERBAIKAN: Set properties untuk setengah lingkaran perisai
     qDebug() << "[CREATE-ATTACHED-DEBUG] Setting radius properties...";
-    
+
     // CRITICAL: Validate and fix guardian radius
     if (qIsNaN(guardianRadius) || qIsInf(guardianRadius) || guardianRadius <= 0.0 || guardianRadius > 100.0) {
         qDebug() << "[CREATE-ATTACHED-WARNING] Invalid guardianRadius:" << guardianRadius;
@@ -10188,33 +10188,33 @@ void EcWidget::createAttachedGuardZone()
     } else {
         qDebug() << "[CREATE-ATTACHED-DEBUG] Guardian radius validated:" << guardianRadius << "NM";
     }
-    
+
     attachedGZ.innerRadius = 0.0;              // No inner radius - full semicircle shield
     attachedGZ.outerRadius = guardianRadius;   // Outer radius
     qDebug() << "[CREATE-ATTACHED-DEBUG] Radius properties set - inner:" << attachedGZ.innerRadius << "outer:" << attachedGZ.outerRadius;
-    
+
     // RESTORED: Kembali ke setengah lingkaran yang mengikuti heading untuk presentasi
     qDebug() << "[CREATE-ATTACHED-DEBUG] Using semicircle shield following heading";
-    
+
     // Set angles untuk setengah lingkaran mengikuti heading
     double currentHeading = ownShip.heading;
     if (qIsNaN(currentHeading) || qIsInf(currentHeading)) {
         currentHeading = 0.0; // Default heading North jika invalid
     }
-    
+
     // Setengah lingkaran di depan kapal (front semicircle shield)
     attachedGZ.startAngle = fmod(currentHeading + 90.0, 360.0);   // Port-forward (90° + heading)
     attachedGZ.endAngle = fmod(currentHeading + 270.0, 360.0);    // Starboard-forward (270° + heading)
-    
-    qDebug() << "[CREATE-ATTACHED-DEBUG] Semicircle shield properties - Radius:" << attachedGZ.outerRadius 
+
+    qDebug() << "[CREATE-ATTACHED-DEBUG] Semicircle shield properties - Radius:" << attachedGZ.outerRadius
              << "Heading:" << currentHeading << "Angles: start=" << attachedGZ.startAngle << "end=" << attachedGZ.endAngle;
-    
+
     // Legacy radius untuk backward compatibility
     attachedGZ.radius = guardianRadius;
-    
+
     // PERBAIKAN: Update red dot position untuk sinkronisasi
     updateRedDotPosition(useLat, useLon);
-    
+
     qDebug() << "[CREATE-ATTACHED] Creating attached guardzone at position:" << useLat << "," << useLon
              << "with radius:" << attachedGZ.radius << "NM"
              << "active:" << attachedGZ.active << "attachedToShip:" << attachedGZ.attachedToShip;
@@ -10229,7 +10229,7 @@ void EcWidget::createAttachedGuardZone()
     qDebug() << "[CREATE-ATTACHED-DEBUG] - radius:" << attachedGZ.radius;
     qDebug() << "[CREATE-ATTACHED-DEBUG] - startAngle:" << attachedGZ.startAngle << "endAngle:" << attachedGZ.endAngle;
     qDebug() << "[CREATE-ATTACHED-DEBUG] - attachedToShip:" << attachedGZ.attachedToShip << "active:" << attachedGZ.active;
-    
+
     // Tambahkan ke list
     guardZones.append(attachedGZ);
     qDebug() << "[CREATE-ATTACHED-DEBUG] Added to guardZones list. Total guardZones now:" << guardZones.size();
@@ -10251,18 +10251,18 @@ void EcWidget::createAttachedGuardZone()
     } catch (...) {
         qDebug() << "[CREATE-ATTACHED-ERROR] Unknown exception during save";
     }
-    
+
     qDebug() << "[CREATE-ATTACHED-DEBUG] Emitting guardZoneCreated signal...";
     emit guardZoneCreated();
     qDebug() << "[CREATE-ATTACHED-DEBUG] Signal emitted";
 
     qDebug() << "[CREATE-ATTACHED-DEBUG] Attached GuardZone created with ID:" << attachedGuardZoneId;
-    
+
     // Emit signal untuk update UI
     qDebug() << "[CREATE-ATTACHED-DEBUG] Emitting attachToShipStateChanged signal...";
     emit attachToShipStateChanged(true);
     qDebug() << "[CREATE-ATTACHED-DEBUG] ========== CREATE ATTACHED GUARDZONE COMPLETE ==========";
-    
+
     } catch (const std::exception& e) {
         qDebug() << "[CREATE-ATTACHED-ERROR] Exception in createAttachedGuardZone():" << e.what();
         // Cleanup partial state
@@ -10319,7 +10319,7 @@ void EcWidget::removeAttachedGuardZone()
     emit guardZoneDeleted();
 
     qDebug() << "Attached GuardZone removed";
-    
+
     // Emit signal untuk update UI
     emit attachToShipStateChanged(false);
 }
@@ -10330,7 +10330,7 @@ void EcWidget::cleanupDuplicateAttachedGuardZones()
     int attachedCount = 0;
     QVector<int> duplicateIds;
     int firstAttachedId = -1;
-    
+
     // Hitung berapa banyak guardzone yang attachedToShip = true
     for (const GuardZone& gz : guardZones) {
         if (gz.attachedToShip) {
@@ -10342,11 +10342,11 @@ void EcWidget::cleanupDuplicateAttachedGuardZones()
             }
         }
     }
-    
+
     // Hapus yang duplikat
     if (attachedCount > 1) {
         qDebug() << "[CLEANUP] Found" << attachedCount << "attached guardzones, removing duplicates...";
-        
+
         for (int duplicateId : duplicateIds) {
             for (GuardZone& gz : guardZones) {
                 if (gz.id == duplicateId) {
@@ -10356,7 +10356,7 @@ void EcWidget::cleanupDuplicateAttachedGuardZones()
                 }
             }
         }
-        
+
         // PERBAIKAN: Update attachedGuardZoneId dengan yang pertama
         if (firstAttachedId != -1) {
             attachedGuardZoneId = firstAttachedId;
@@ -10368,7 +10368,7 @@ void EcWidget::cleanupDuplicateAttachedGuardZones()
             }
             qDebug() << "[CLEANUP] Updated attachedGuardZoneId to" << attachedGuardZoneId;
         }
-        
+
         // Save perubahan
         saveGuardZones();
         qDebug() << "[CLEANUP] Duplicate attached guardzones cleaned up and saved";
@@ -10386,7 +10386,7 @@ bool EcWidget::checkShipGuardianZone()
             break;
         }
     }
-    
+
     if (!hasAttachedGuardZone) {
         return false;
     }
@@ -10410,12 +10410,12 @@ bool EcWidget::checkShipGuardianZone()
 
     // Check pick report obstacles (chart features at ship position)
     checkPickReportObstaclesInShipGuardian();
-    
+
     // Clean up outdated obstacle markers
     qDebug() << "[CLEANUP-TIMER] Running obstacle cleanup, current markers:" << obstacleMarkers.size();
     removeOutdatedObstacleMarkers();
     qDebug() << "[CLEANUP-TIMER] After cleanup, remaining markers:" << obstacleMarkers.size();
-    
+
     // FORCE TEST: Also run cleanup from update paint event as fallback
     static int cleanupCounter = 0;
     if (++cleanupCounter % 50 == 0) { // Every ~50 paint events
@@ -10565,7 +10565,7 @@ void EcWidget::checkPickReportObstaclesInShipGuardian()
     int totalGuardZones = guardZones.size();
     int activeGuardZones = 0;
     int attachedGuardZones = 0;
-    
+
     for (const GuardZone& gz : guardZones) {
         if (gz.active) activeGuardZones++;
         if (gz.attachedToShip) {
@@ -10576,10 +10576,10 @@ void EcWidget::checkPickReportObstaclesInShipGuardian()
             }
         }
     }
-    
-    qDebug() << "[OBSTACLE-DEBUG] GuardZone status: total=" << totalGuardZones 
+
+    qDebug() << "[OBSTACLE-DEBUG] GuardZone status: total=" << totalGuardZones
              << "active=" << activeGuardZones << "attached=" << attachedGuardZones;
-    
+
     if (!hasAttachedGuardZone) {
         return; // Only check when guardzone is attached to ship
     }
@@ -10592,29 +10592,29 @@ void EcWidget::checkPickReportObstaclesInShipGuardian()
             break; // Use first attached guardzone
         }
     }
-    
+
     if (!attachedGuardZone) {
         return;
     }
 
     // Check multiple points within guardzone area USING SAME LOGIC as guardzone
     QList<QPair<EcFeature, QPair<double, double>>> allPickedFeaturesWithCoords;
-    
-    qDebug() << "[OBSTACLE-DEBUG] Guardzone shape:" << attachedGuardZone->shape 
-             << "radius inner:" << attachedGuardZone->innerRadius 
+
+    qDebug() << "[OBSTACLE-DEBUG] Guardzone shape:" << attachedGuardZone->shape
+             << "radius inner:" << attachedGuardZone->innerRadius
              << "outer:" << attachedGuardZone->outerRadius << "NM"
              << "angles:" << attachedGuardZone->startAngle << "to" << attachedGuardZone->endAngle;
-    
+
     // Use guardzone center position (should be ship position for attached guardzone)
     double centerLat = attachedGuardZone->centerLat;
     double centerLon = attachedGuardZone->centerLon;
-    
+
     // For attach to ship, center should follow ship position
     if (attachedGuardZone->attachedToShip) {
         centerLat = ownShip.lat;
         centerLon = ownShip.lon;
     }
-    
+
     // Check center (guardzone center)
     QList<EcFeature> centerFeatures;
     GetPickedFeaturesSubs(centerFeatures, centerLat, centerLon);
@@ -10622,17 +10622,17 @@ void EcWidget::checkPickReportObstaclesInShipGuardian()
         allPickedFeaturesWithCoords.append(qMakePair(feature, qMakePair(centerLat, centerLon)));
     }
     qDebug() << "[OBSTACLE-DEBUG] Center features found:" << centerFeatures.size();
-    
+
     // For circular guardzone, check additional points using SEMICIRCLE logic
     if (attachedGuardZone->shape == GUARD_ZONE_CIRCLE) {
         double outerRadius = attachedGuardZone->outerRadius;
         double innerRadius = attachedGuardZone->innerRadius;
-        
+
         // OPTIMIZED: Use strategic scanning pattern to reduce duplicates
         // Focus on key angles and fewer radius checks
         for (int angle = 0; angle < 360; angle += 45) { // Wider angle intervals (45°)
             double checkLat, checkLon;
-            
+
             // OPTIMIZED: Reduce radius checks to prevent over-scanning
             QList<double> checkRadii;
             if (innerRadius > 0 && outerRadius > innerRadius + 0.1) {
@@ -10644,84 +10644,84 @@ void EcWidget::checkPickReportObstaclesInShipGuardian()
                     checkRadii << outerRadius * 0.7; // 70% radius for good coverage
                 }
             }
-            
+
             for (double checkRadius : checkRadii) {
                 EcCalculateRhumblinePosition(EC_GEO_DATUM_WGS84,
                                             centerLat, centerLon,
                                             checkRadius, angle,
                                             &checkLat, &checkLon);
-                
+
                 // CRITICAL: Only check points that would be in the guardzone using same logic
                 if (isPointInSemicircle(checkLat, checkLon, attachedGuardZone)) {
                     QList<EcFeature> pointFeatures;
                     GetPickedFeaturesSubs(pointFeatures, checkLat, checkLon);
-                    
+
                     for (const EcFeature& feature : pointFeatures) {
                         allPickedFeaturesWithCoords.append(qMakePair(feature, qMakePair(checkLat, checkLon)));
                     }
-                    
+
                     if (pointFeatures.size() > 0) {
-                        qDebug() << "[OBSTACLE-DEBUG] Found" << pointFeatures.size() << "features at angle" << angle 
+                        qDebug() << "[OBSTACLE-DEBUG] Found" << pointFeatures.size() << "features at angle" << angle
                                  << "radius" << checkRadius << "position" << checkLat << checkLon;
                     }
                 }
             }
         }
     }
-    
+
     qDebug() << "[OBSTACLE-DEBUG] Total features with coordinates collected:" << allPickedFeaturesWithCoords.size();
-    
+
     // Track current obstacles with counters for optimization monitoring
     QSet<QString> currentDetectedObstacles;
     int totalScanned = 0;
     int duplicatesSkipped = 0;
     int irrelevantSkipped = 0;
     int outsideGuardzone = 0;
-    
+
     // Process each feature individually like in PickWindow
     for (const auto& featureWithCoords : allPickedFeaturesWithCoords) {
         totalScanned++;
-        
+
         const EcFeature& feature = featureWithCoords.first;
         double obstacleLat = featureWithCoords.second.first;
         double obstacleLon = featureWithCoords.second.second;
         char featToken[EC_LENATRCODE + 1];
         char featName[256];
-        
+
         // Get feature class using SevenCs API (same as PickWindow)
         EcFeatureGetClass(feature, dictInfo, featToken, sizeof(featToken));
-        
+
         // Skip AIS targets and own ship (like in PickWindow)
         QString featureClass = QString::fromLatin1(featToken);
-        
+
         if (featureClass == "aistar" || featureClass == "ownshp") {
             continue;
         }
-        
+
         // OPTIMIZATION: Filter out irrelevant feature types to reduce noise
         // Only process navigationally significant obstacles
         QStringList relevantFeatures = {
-            "WRECKS", "OBSTNS", "UWTROC", "BOYISD", "CTNARE", "TSSBND", 
+            "WRECKS", "OBSTNS", "UWTROC", "BOYISD", "CTNARE", "TSSBND",
             "DEPARE", "DRGARE", "PIPARE", "CBLARE", "NAVLNE", "DWRTPT", "DWRTCL"
         };
-        
+
         if (!relevantFeatures.contains(featureClass)) {
             // Skip non-navigational features to reduce clutter
             irrelevantSkipped++;
             continue;
         }
-        
+
         // Translate token to human readable name (fallback)
         if (EcDictionaryTranslateObjectToken(dictInfo, featToken, featName, sizeof(featName)) != EC_DICT_OK) {
             strcpy(featName, "Unknown Chart Feature");
         }
-        
+
         // Extract better object name from attributes (like "swept between 5m and 10m")
         QString betterObjectName = extractObjectNameFromFeature(feature);
         QString finalObjectName = betterObjectName.isEmpty() ? QString::fromLatin1(featName) : betterObjectName;
-        
+
         // Obstacle coordinates are already available from the loop
-        
+
         // Create more precise unique identifier to prevent duplicates
         // Use higher precision coordinates and include feature class
         QString obstacleId = QString("%1_%2_%3_%4")
@@ -10729,16 +10729,16 @@ void EcWidget::checkPickReportObstaclesInShipGuardian()
                             .arg(finalObjectName.left(20)) // Limit name length
                             .arg(obstacleLat, 0, 'f', 6)   // Higher precision lat
                             .arg(obstacleLon, 0, 'f', 6);  // Higher precision lon
-        
+
         // CRITICAL: Double-check that obstacle coordinates are actually within guardzone
         // This prevents false detections from chart features picked up during scanning
         bool obstacleInGuardZone = isPointInSemicircle(obstacleLat, obstacleLon, attachedGuardZone);
-        
+
         if (!obstacleInGuardZone) {
             outsideGuardzone++;
             continue;
         }
-        
+
         // OPTIMIZATION: Check for nearby duplicate obstacles (distance-based deduplication)
         bool isDuplicate = false;
         for (const QString& existingId : currentDetectedObstacles) {
@@ -10747,14 +10747,14 @@ void EcWidget::checkPickReportObstaclesInShipGuardian()
             if (parts.size() >= 4) {
                 double existingLat = parts[2].toDouble();
                 double existingLon = parts[3].toDouble();
-                
+
                 // Calculate distance between obstacles
                 double distance, bearing;
                 EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
                                                        obstacleLat, obstacleLon,
                                                        existingLat, existingLon,
                                                        &distance, &bearing);
-                
+
                 // If obstacles are very close (< 50 meters), consider as duplicate
                 if (distance < 0.027) { // 0.027 NM ≈ 50 meters
                     isDuplicate = true;
@@ -10764,14 +10764,14 @@ void EcWidget::checkPickReportObstaclesInShipGuardian()
                 }
             }
         }
-        
+
         if (isDuplicate) {
             duplicatesSkipped++;
             continue; // Skip this duplicate obstacle
         }
-        
+
         currentDetectedObstacles.insert(obstacleId);
-        
+
         // Only emit if this is a new obstacle AND it's actually in guardzone
         if (!previousDetectedObstacles.contains(obstacleId)) {
             // Determine danger level based on feature type
@@ -10781,15 +10781,15 @@ void EcWidget::checkPickReportObstaclesInShipGuardian()
             } else if (featureClass == "BOYISD" || featureClass == "CTNARE" || featureClass == "TSSBND") {
                 dangerLevel = "WARNING";
             }
-            
+
             // Extract Information field from attributes
             QString information = extractInformationFromFeature(feature);
             if (information.isEmpty()) {
                 information = "Chart feature detected";
             }
-            
+
             qDebug() << "[OBSTACLE-DEBUG] Feature position: " << obstacleLat << "," << obstacleLon;
-            
+
             // Create pick report obstacle data with actual obstacle coordinates
             QString details = QString("PICK_REPORT|%1|%2|%3|%4|%5|%6|%7")
                              .arg(featureClass)
@@ -10799,32 +10799,32 @@ void EcWidget::checkPickReportObstaclesInShipGuardian()
                              .arg(obstacleLon, 0, 'f', 6)
                              .arg(dangerLevel)
                              .arg(information);
-            
+
             // Emit signal to add to obstacle detection panel
             emit pickReportObstacleDetected(0, details); // 0 = ship guardian zone ID
-            
-            qDebug() << "✅ Pick Report NEW Obstacle Detected:" << finalObjectName 
+
+            qDebug() << "✅ Pick Report NEW Obstacle Detected:" << finalObjectName
                      << "(" << featureClass << ") Level:" << dangerLevel << "at" << obstacleLat << obstacleLon
                      << "- CONFIRMED in guardzone area";
         }
     }
-    
+
     // Update previous obstacles for next check
     previousDetectedObstacles = currentDetectedObstacles;
-    
+
     // OPTIMIZATION REPORT: Log performance metrics
     qDebug() << "[OBSTACLE-OPTIMIZATION] Scan completed:"
              << "Total scanned:" << totalScanned
              << "Valid obstacles:" << currentDetectedObstacles.size()
              << "Duplicates skipped:" << duplicatesSkipped
-             << "Irrelevant skipped:" << irrelevantSkipped  
+             << "Irrelevant skipped:" << irrelevantSkipped
              << "Outside guardzone:" << outsideGuardzone;
 }
 
 QString EcWidget::extractInformationFromFeature(const EcFeature& feature)
 {
     QStringList infoList;
-    
+
     // Extract attributes using SevenCs API like in PickWindow
     char attrStr[1024];
     char attrName[1024];
@@ -10833,30 +10833,30 @@ QString EcWidget::extractInformationFromFeature(const EcFeature& feature)
     Bool result;
     EcAttributeToken attrToken;
     EcAttributeType attrType;
-    
+
     // Get the first attribute string of the feature
     result = EcFeatureGetAttributes(feature, dictInfo, &fI, EC_FIRST, attrStr, sizeof(attrStr));
-    
+
     while (result) {
         // Extract the six character long attribute token
         strncpy(attrToken, attrStr, EC_LENATRCODE);
         attrToken[EC_LENATRCODE] = (char)0;
-        
+
         // Translate the token to a human readable name
         if (EcDictionaryTranslateAttributeToken(dictInfo, attrToken, attrName, sizeof(attrName))) {
             // Get the attribute type (List, enumeration, integer, float, string, text)
             if (EcDictionaryGetAttributeType(dictInfo, attrStr, &attrType) == EC_DICT_OK) {
                 QString attrTokenStr = QString(attrToken);
                 QString attrNameStr = QString(attrName);
-                
+
                 if (attrType == EC_ATTR_ENUM || attrType == EC_ATTR_LIST) {
                     // Translate the value to a human readable text
                     if (!EcDictionaryTranslateAttributeValue(dictInfo, attrStr, attrText, sizeof(attrText))) {
                         attrText[0] = (char)0;
                     }
-                    
+
                     QString attrTextStr = QString(attrText);
-                    
+
                     // Format specific enumerated attributes with enhanced display
                     if (attrTokenStr == "trksta") {
                         infoList << QString("Track Status: %1").arg(attrTextStr);
@@ -10885,7 +10885,7 @@ QString EcWidget::extractInformationFromFeature(const EcFeature& feature)
                     // For other types, use the raw value with enhanced formatting
                     strcpy(attrText, &attrStr[EC_LENATRCODE]);
                     QString attrTextStr = QString(attrText);
-                    
+
                     // Handle specific non-enum attributes with enhanced formatting
                     if (attrTokenStr == "cogcrs") {
                         infoList << QString("COG: %1°").arg(attrTextStr);
@@ -10922,49 +10922,49 @@ QString EcWidget::extractInformationFromFeature(const EcFeature& feature)
                 }
             }
         }
-        
+
         // Get next attribute
         result = EcFeatureGetAttributes(feature, dictInfo, &fI, EC_NEXT, attrStr, sizeof(attrStr));
     }
-    
+
     // Return comprehensive information or fallback message
     if (infoList.isEmpty()) {
         return "Navigational feature detected";
     }
-    
+
     return infoList.join("; ");
 }
 
 QString EcWidget::extractObjectNameFromFeature(const EcFeature& feature)
 {
     QString objectName;
-    
+
     // Extract attributes using SevenCs API like in PickWindow
     char attrStr[512];
     EcFindInfo fI;
     Bool result;
     EcAttributeToken attrToken;
     char attrName[256];
-    
+
     // Get the first attribute string of the feature
     result = EcFeatureGetAttributes(feature, dictInfo, &fI, EC_FIRST, attrStr, sizeof(attrStr));
-    
+
     while (result) {
         // Extract the six character long attribute token
         strncpy(attrToken, attrStr, EC_LENATRCODE);
         attrToken[EC_LENATRCODE] = (char)0;
-        
+
         // Translate the token to a human readable name
         if (EcDictionaryTranslateAttributeToken(dictInfo, attrToken, attrName, sizeof(attrName))) {
             QString tokenStr = QString::fromLatin1(attrToken);
             QString nameStr = QString::fromLatin1(attrName);
             QString attrString = QString::fromLatin1(attrStr);
-            
+
             // Look for OBJNAM, INFORM, or any descriptive attribute
-            if (tokenStr == "OBJNAM" || tokenStr == "INFORM" || 
+            if (tokenStr == "OBJNAM" || tokenStr == "INFORM" ||
                 nameStr.contains("Object name") || nameStr.contains("Information") ||
                 nameStr.contains("Description")) {
-                // Extract value after = sign  
+                // Extract value after = sign
                 int equalPos = attrString.indexOf('=');
                 if (equalPos > 0 && equalPos < attrString.length() - 1) {
                     QString value = attrString.mid(equalPos + 1).trimmed();
@@ -10975,18 +10975,18 @@ QString EcWidget::extractObjectNameFromFeature(const EcFeature& feature)
                 }
             }
         }
-        
+
         // Get next attribute
         result = EcFeatureGetAttributes(feature, dictInfo, &fI, EC_NEXT, attrStr, sizeof(attrStr));
     }
-    
+
     return objectName;
 }
 
 void EcWidget::drawObstacleDetectionArea(QPainter& painter)
 {
     qDebug() << "[OBSTACLE-AREA-DEBUG] ========== Drawing Obstacle Detection Area ==========";
-    
+
     // CRITICAL: Wrap entire function in try-catch
     try {
         // Only draw if there's an attached guardzone
@@ -10997,25 +10997,25 @@ void EcWidget::drawObstacleDetectionArea(QPainter& painter)
                 break;
             }
         }
-        
+
         if (!attachedGuardZone) {
             qDebug() << "[OBSTACLE-AREA-DEBUG] No attached guardzone found - skipping";
             return; // No attached guardzone to visualize
         }
-        
+
         qDebug() << "[OBSTACLE-AREA-DEBUG] Found attached guardzone:" << attachedGuardZone->id;
-        
+
         // Set yellow color with transparency for detection area
         QColor detectionColor(255, 255, 0, 80); // Yellow with 80/255 opacity
         QColor borderColor(255, 215, 0, 150);   // Gold border
-        
+
         painter.setPen(QPen(borderColor, 2, Qt::DashLine));
         painter.setBrush(QBrush(detectionColor));
-        
+
         // CRITICAL: Enhanced coordinate validation
         double useLat = ownShip.lat;
         double useLon = ownShip.lon;
-        
+
         // Use fallback position if ownShip is invalid
         if (qIsNaN(useLat) || qIsNaN(useLon) || (useLat == 0.0 && useLon == 0.0) ||
             useLat < -90.0 || useLat > 90.0 || useLon < -180.0 || useLon > 180.0) {
@@ -11023,7 +11023,7 @@ void EcWidget::drawObstacleDetectionArea(QPainter& painter)
             useLat = -6.2088;   // Jakarta
             useLon = 106.8456;  // Jakarta
         }
-        
+
         // Get ship position in screen coordinates
         int shipX, shipY;
         qDebug() << "[OBSTACLE-AREA-DEBUG] Converting coordinates:" << useLat << "," << useLon;
@@ -11031,51 +11031,51 @@ void EcWidget::drawObstacleDetectionArea(QPainter& painter)
             qDebug() << "[OBSTACLE-AREA-DEBUG] Failed to convert coordinates - skipping";
             return; // Can't convert coordinates
         }
-        
+
         // CRITICAL: Validate screen coordinates
         if (abs(shipX) > 20000 || abs(shipY) > 20000) {
             qDebug() << "[OBSTACLE-AREA-ERROR] Invalid screen coordinates:" << shipX << "," << shipY << "- skipping";
             return;
         }
-        
+
         qDebug() << "[OBSTACLE-AREA-DEBUG] Screen coordinates:" << shipX << "," << shipY;
-        
+
         if (attachedGuardZone->shape == GUARD_ZONE_CIRCLE) {
             // Draw circular detection area
             qDebug() << "[OBSTACLE-AREA-DEBUG] Calculating radius pixels for radius:" << attachedGuardZone->outerRadius;
             double radiusPixels = calculatePixelsFromNauticalMiles(attachedGuardZone->outerRadius);
             qDebug() << "[OBSTACLE-AREA-DEBUG] Radius in pixels:" << radiusPixels;
-            
+
             // CRITICAL: Validate radius
             if (qIsNaN(radiusPixels) || qIsInf(radiusPixels) || radiusPixels <= 0 || radiusPixels > 5000) {
                 qDebug() << "[OBSTACLE-AREA-ERROR] Invalid radius pixels:" << radiusPixels << "- skipping";
                 return;
             }
-            
+
             // CRITICAL: Protected drawing operations
             try {
                 qDebug() << "[OBSTACLE-AREA-DEBUG] Drawing ellipse at:" << shipX << "," << shipY << "radius:" << radiusPixels;
                 painter.drawEllipse(QPointF(shipX, shipY), radiusPixels, radiusPixels);
                 qDebug() << "[OBSTACLE-AREA-DEBUG] Ellipse drawn successfully";
-                
-                // Draw center point and radius indicator  
+
+                // Draw center point and radius indicator
                 painter.setPen(QPen(Qt::yellow, 3));
                 painter.drawPoint(shipX, shipY);
                 qDebug() << "[OBSTACLE-AREA-DEBUG] Center point drawn";
-                
+
                 // Draw simple label
                 painter.setPen(QPen(Qt::black, 1));
                 painter.setFont(QFont("Arial", 10, QFont::Bold));
                 QString label = QString("Detection Area: %1 NM").arg(attachedGuardZone->outerRadius, 0, 'f', 1);
                 painter.drawText(shipX + 10, shipY - 10, label);
                 qDebug() << "[OBSTACLE-AREA-DEBUG] Label drawn";
-                
+
             } catch (const std::exception& e) {
                 qDebug() << "[OBSTACLE-AREA-ERROR] Exception during drawing operations:" << e.what();
             } catch (...) {
                 qDebug() << "[OBSTACLE-AREA-ERROR] Unknown exception during drawing operations";
             }
-            
+
             // SKIP: Comment out dangerous detection points drawing
             /*
             // Draw additional detection points (8 points around circumference)
@@ -11086,7 +11086,7 @@ void EcWidget::drawObstacleDetectionArea(QPainter& painter)
                                            ownShip.lat, ownShip.lon,
                                            attachedGuardZone->outerRadius, angle,
                                            &checkLat, &checkLon);
-                
+
                 int checkX, checkY;
                 if (LatLonToXy(checkLat, checkLon, checkX, checkY)) {
                     painter.drawEllipse(QPointF(checkX, checkY), 3, 3);
@@ -11094,9 +11094,9 @@ void EcWidget::drawObstacleDetectionArea(QPainter& painter)
             }
             */
         }
-        
+
         qDebug() << "[OBSTACLE-AREA-DEBUG] Obstacle detection area drawing completed successfully";
-        
+
     } catch (const std::exception& e) {
         qDebug() << "[OBSTACLE-AREA-ERROR] Exception in drawObstacleDetectionArea:" << e.what();
     } catch (...) {
@@ -11275,7 +11275,7 @@ void EcWidget::performAutoGuardZoneCheck()
     if (!Ais::instance()) {
         return;
     }
-    
+
     // Cek apakah ada guardzone individual yang aktif
     bool hasAnyActiveGuardZone = false;
     for (const GuardZone& gz : guardZones) {
@@ -11284,7 +11284,7 @@ void EcWidget::performAutoGuardZoneCheck()
             break;
         }
     }
-    
+
     if (!hasAnyActiveGuardZone) {
         return;
     }
@@ -11296,8 +11296,8 @@ void EcWidget::performAutoGuardZoneCheck()
     }
     lastGuardZoneCheck = now;
 
-    qDebug() << "[AUTO-CHECK] === PERFORMING AUTOMATIC GUARDZONE CHECK ===" 
-             << "redDotTrackerEnabled:" << redDotTrackerEnabled 
+    qDebug() << "[AUTO-CHECK] === PERFORMING AUTOMATIC GUARDZONE CHECK ==="
+             << "redDotTrackerEnabled:" << redDotTrackerEnabled
              << "redDotAttachedToShip:" << redDotAttachedToShip
              << "redDotLat:" << redDotLat;
 
@@ -11323,7 +11323,7 @@ void EcWidget::performAutoGuardZoneCheck()
     if (activeGuardZones.isEmpty()) {
         return;
     }
-    
+
     qDebug() << "[AUTO-CHECK] Processing" << activeGuardZones.size() << "active guardzones," << attachedCount << "attached to ship";
     qDebug() << "[AUTO-CHECK] Auto-check enabled:" << guardZoneAutoCheckEnabled << "Timer running:" << guardZoneAutoCheckTimer->isActive();
 
@@ -11333,12 +11333,12 @@ void EcWidget::performAutoGuardZoneCheck()
 
     // ========== CHECK SEMUA AIS TARGETS DARI AIS CLASS ==========
     QMap<unsigned int, EcAISTargetInfo>& targetInfoMap = Ais::instance()->getTargetInfoMap();
-    
+
     // Check setiap AIS target terhadap setiap guardzone aktif
     for (auto it = aisTargetMap.begin(); it != aisTargetMap.end(); ++it) {
         unsigned int mmsi = it.key();
         const AISTargetData& aisTarget = it.value();
-        
+
         // Get corresponding EcAISTargetInfo for ship type filtering
         EcAISTargetInfo* targetInfo = nullptr;
         if (targetInfoMap.contains(mmsi)) {
@@ -11357,10 +11357,10 @@ void EcWidget::performAutoGuardZoneCheck()
             // Check guardzone berdasarkan shape
             if (activeGuardZone->shape == GUARD_ZONE_CIRCLE) {
                 double distance, bearing;
-                
+
                 // PERBAIKAN: Use current position for attached guardzone (consistent dengan drawing)
                 double centerLat, centerLon;
-                
+
                 if (activeGuardZone->attachedToShip) {
                     // Gunakan redDot position jika available (current), fallback ke ownShip
                     if (redDotTrackerEnabled && redDotLat != 0.0 && redDotLon != 0.0) {
@@ -11372,22 +11372,22 @@ void EcWidget::performAutoGuardZoneCheck()
                         centerLon = ownShip.lon;
                         qDebug() << "[AUTO-CHECK] Using ownShip position for attached guardzone" << activeGuardZone->id;
                     }
-                    
+
                     // Fallback ke stored position jika semua invalid
                     if (qIsNaN(centerLat) || qIsNaN(centerLon) || (centerLat == 0.0 && centerLon == 0.0)) {
                         centerLat = activeGuardZone->centerLat;
                         centerLon = activeGuardZone->centerLon;
                         qDebug() << "[AUTO-CHECK] Using stored position for attached guardzone" << activeGuardZone->id;
                     }
-                    
-                    qDebug() << "[AUTO-CHECK] Processing attached guardzone" << activeGuardZone->id 
+
+                    qDebug() << "[AUTO-CHECK] Processing attached guardzone" << activeGuardZone->id
                              << "at position:" << centerLat << "," << centerLon
                              << "inner:" << activeGuardZone->innerRadius << "outer:" << activeGuardZone->outerRadius << "NM";
                 } else {
                     centerLat = activeGuardZone->centerLat;
                     centerLon = activeGuardZone->centerLon;
                 }
-                
+
                 EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
                                                        centerLat,
                                                        centerLon,
@@ -11399,28 +11399,28 @@ void EcWidget::performAutoGuardZoneCheck()
                     // If has inner radius, check donut range
                     withinRadiusRange = (distance <= activeGuardZone->outerRadius && distance >= activeGuardZone->innerRadius);
                 }
-                
+
                 // Check if this is a semicircle shield (has angle restrictions)
-                bool isSemicircleShield = (activeGuardZone->startAngle != activeGuardZone->endAngle && 
+                bool isSemicircleShield = (activeGuardZone->startAngle != activeGuardZone->endAngle &&
                                            activeGuardZone->startAngle >= 0 && activeGuardZone->endAngle >= 0);
-                
+
                 if (isSemicircleShield && withinRadiusRange) {
                     // Use geometric method like polygon detection for accuracy
                     // Create temporary guardzone with current center position
                     GuardZone tempGZ = *activeGuardZone;
                     tempGZ.centerLat = centerLat;
                     tempGZ.centerLon = centerLon;
-                    
+
                     inGuardZone = isPointInSemicircle(aisTarget.lat, aisTarget.lon, &tempGZ);
-                    
+
                     qDebug() << "[AUTO-CHECK] Semicircle shield - Using geometric detection";
                 } else {
                     inGuardZone = withinRadiusRange;
                 }
-                
+
                 // DEBUG: Log untuk attached guardzone
                 if (activeGuardZone->attachedToShip) {
-                    qDebug() << "[AIS-DETECT] Target" << mmsi << "distance:" << distance << "NM from attached guardzone" 
+                    qDebug() << "[AIS-DETECT] Target" << mmsi << "distance:" << distance << "NM from attached guardzone"
                              << activeGuardZone->id << "(inner:" << activeGuardZone->innerRadius << "outer:" << activeGuardZone->outerRadius << "NM) - inZone:" << inGuardZone;
                 }
             }
@@ -11429,7 +11429,7 @@ void EcWidget::performAutoGuardZoneCheck()
                 // The polygon coordinates are stored as absolute positions, not relative to ship
                 // For now, we use the stored coordinates as-is for compatibility
                 // TODO: Implement polygon transformation for ship-attached guardzones
-                
+
                 int targetX, targetY;
                 if (LatLonToXy(aisTarget.lat, aisTarget.lon, targetX, targetY)) {
                     QPolygon poly;
@@ -11450,7 +11450,7 @@ void EcWidget::performAutoGuardZoneCheck()
                 QSet<unsigned int>& previousTargetsForThisZone = previousTargetsPerZone[activeGuardZone->id];
                 if (!previousTargetsForThisZone.contains(mmsi)) {
                     // DEBUG: Log AIS target entering
-                    qDebug() << "[AIS-ENTER] Target" << mmsi << "(" << aisTarget.mmsi << ") entering guardzone" 
+                    qDebug() << "[AIS-ENTER] Target" << mmsi << "(" << aisTarget.mmsi << ") entering guardzone"
                              << activeGuardZone->id << activeGuardZone->name;
                     // ========== APPLY SHIP TYPE FILTER ==========
                     if (activeGuardZone->shipTypeFilter != SHIP_TYPE_ALL && targetInfo) {
@@ -11460,7 +11460,7 @@ void EcWidget::performAutoGuardZoneCheck()
                         }
                     }
                     // ==========================================
-                    
+
                     // ========== APPLY ALERT DIRECTION FILTER ==========
                     // For ENTERING events
                     if (activeGuardZone->alertDirection == ALERT_OUT_ONLY) {
@@ -11468,7 +11468,7 @@ void EcWidget::performAutoGuardZoneCheck()
                         continue;  // Skip entering events if set to OUT_ONLY
                     }
                     // ================================================
-                    
+
                     allNewTargetAlerts.append(tr("NEW: AIS %1 entered GuardZone '%2' - SOG: %3kts, COG: %4°")
                                               .arg(aisTarget.mmsi)
                                               .arg(activeGuardZone->name)
@@ -11477,12 +11477,12 @@ void EcWidget::performAutoGuardZoneCheck()
 
                     QString attachmentInfo = activeGuardZone->attachedToShip ? " [ATTACHED TO SHIP]" : "";
                     qDebug() << "[AUTO-CHECK] 🚨 NEW TARGET ENTERED:" << aisTarget.mmsi << "in GuardZone" << activeGuardZone->id << "(" << activeGuardZone->name << ")" << attachmentInfo;
-                    
+
                     // Emit signal untuk AISTargetPanel dengan format yang sama seperti GuardZoneManager
                     QString alertMessage = QString("Ship %1 entered GuardZone '%2'")
                                          .arg(aisTarget.mmsi)
                                          .arg(activeGuardZone->name);
-                    
+
                     // Emit signal dari EcWidget untuk AISTargetPanel
                     emit aisTargetDetected(activeGuardZone->id, aisTarget.mmsi.toUInt(), alertMessage);
                 }
@@ -11495,11 +11495,11 @@ void EcWidget::performAutoGuardZoneCheck()
     for (GuardZone* activeGuardZone : activeGuardZones) {
         QSet<unsigned int>& previousTargetsForThisZone = previousTargetsPerZone[activeGuardZone->id];
         QSet<unsigned int>& currentTargetsForThisZone = currentTargetsPerZone[activeGuardZone->id];
-        
+
         for (unsigned int mmsi : previousTargetsForThisZone) {
             if (!currentTargetsForThisZone.contains(mmsi)) {
                 // DEBUG: Log AIS target exiting
-                qDebug() << "[AIS-EXIT] Target" << mmsi << "exiting guardzone" 
+                qDebug() << "[AIS-EXIT] Target" << mmsi << "exiting guardzone"
                          << activeGuardZone->id << activeGuardZone->name;
                 // ========== APPLY ALERT DIRECTION FILTER ==========
                 // For EXITING events
@@ -11508,17 +11508,17 @@ void EcWidget::performAutoGuardZoneCheck()
                     continue;  // Skip exiting events if set to IN_ONLY
                 }
                 // ================================================
-                
-                // Note: Ship type filter tidak diterapkan untuk exit events 
+
+                // Note: Ship type filter tidak diterapkan untuk exit events
                 // karena EcAISTargetInfo mungkin sudah tidak tersedia
                 QString attachmentInfo = activeGuardZone->attachedToShip ? " [ATTACHED TO SHIP]" : "";
                 qDebug() << "[AUTO-CHECK] ✅ TARGET EXITED:" << mmsi << "from GuardZone" << activeGuardZone->id << "(" << activeGuardZone->name << ")" << attachmentInfo;
-                
+
                 // Emit signal untuk AISTargetPanel dengan format yang sama seperti GuardZoneManager
                 QString alertMessage = QString("Ship %1 exited GuardZone '%2'")
                                      .arg(mmsi)
                                      .arg(activeGuardZone->name);
-                
+
                 // Emit signal dari EcWidget untuk AISTargetPanel
                 emit aisTargetDetected(activeGuardZone->id, mmsi, alertMessage);
             }
@@ -11546,7 +11546,7 @@ void EcWidget::performAutoGuardZoneCheck()
 
         qDebug() << "[AUTO-CHECK] Alert triggered for" << allNewTargetAlerts.size() << "new targets across" << activeGuardZones.size() << "guardzones";
     }
-    
+
     // Check pick report obstacles for ship guardian zones
     checkPickReportObstaclesInShipGuardian();
 }
@@ -11723,11 +11723,11 @@ bool EcWidget::isPointInSemicircle(double lat, double lon, const GuardZone* gz)
     }
 
     if (!withinRadius) {
-        qDebug() << "[SEMICIRCLE-CHECK] Point" << lat << "," << lon << "outside radius range - distance:" << distance 
+        qDebug() << "[SEMICIRCLE-CHECK] Point" << lat << "," << lon << "outside radius range - distance:" << distance
                  << "inner:" << gz->innerRadius << "outer:" << gz->outerRadius;
         return false;
     } else {
-        qDebug() << "[SEMICIRCLE-CHECK] Point" << lat << "," << lon << "within radius - distance:" << distance 
+        qDebug() << "[SEMICIRCLE-CHECK] Point" << lat << "," << lon << "within radius - distance:" << distance
                  << "inner:" << gz->innerRadius << "outer:" << gz->outerRadius;
     }
 
@@ -11735,15 +11735,15 @@ bool EcWidget::isPointInSemicircle(double lat, double lon, const GuardZone* gz)
     // Convert startAngle and endAngle from guardzone to determine the semicircle direction
     double startAngle = gz->startAngle;
     double endAngle = gz->endAngle;
-    
+
     // Normalize bearing to 0-360
     bearing = fmod(bearing + 360.0, 360.0);
-    
+
     // For semicircle: check if bearing is in the "front" semicircle
     // Current configuration: startAngle = heading+90°, endAngle = heading+270°
     // Visual guardzone: from starboard through BOW to port (FRONT semicircle)
     // Detection should EXCLUDE the range from startAngle to endAngle (which is the BACK semicircle)
-    
+
     bool withinAngle;
     if (startAngle < endAngle) {
         // Simple case: e.g., 90° to 270° - EXCLUDE this range (back semicircle)
@@ -11763,22 +11763,22 @@ bool EcWidget::isPointInSemicircle(double lat, double lon, const GuardZone* gz)
 }
 
 // Obstacle marker functions implementation
-void EcWidget::addObstacleMarker(double lat, double lon, const QString& dangerLevel, 
+void EcWidget::addObstacleMarker(double lat, double lon, const QString& dangerLevel,
                                 const QString& objectName, const QString& information)
 {
     // CRITICAL: Validate input parameters
-    if (qIsNaN(lat) || qIsNaN(lon) || 
-        lat < -90.0 || lat > 90.0 || 
+    if (qIsNaN(lat) || qIsNaN(lon) ||
+        lat < -90.0 || lat > 90.0 ||
         lon < -180.0 || lon > 180.0) {
         qDebug() << "[OBSTACLE-MARKER] Invalid coordinates - marker not added:" << lat << "," << lon;
         return;
     }
-    
+
     if (dangerLevel.isEmpty() || objectName.isEmpty()) {
         qDebug() << "[OBSTACLE-MARKER] Invalid marker data - marker not added";
         return;
     }
-    
+
     try {
         ObstacleMarker marker;
         marker.lat = lat;
@@ -11787,7 +11787,7 @@ void EcWidget::addObstacleMarker(double lat, double lon, const QString& dangerLe
         marker.objectName = objectName;
         marker.information = information;
         marker.timestamp = QDateTime::currentDateTime();
-        
+
         // Check for duplicates
         for (const ObstacleMarker& existing : obstacleMarkers) {
             if (qAbs(existing.lat - lat) < 0.0001 && qAbs(existing.lon - lon) < 0.0001 &&
@@ -11796,35 +11796,35 @@ void EcWidget::addObstacleMarker(double lat, double lon, const QString& dangerLe
                 return; // Skip duplicate
             }
         }
-        
+
         // Limit number of markers to prevent memory issues
         if (obstacleMarkers.size() >= 1000) {
             qDebug() << "[OBSTACLE-MARKER] Too many markers - removing oldest";
             obstacleMarkers.removeFirst();
         }
-        
+
         obstacleMarkers.append(marker);
         qDebug() << "[OBSTACLE-MARKER] Added marker:" << objectName << "at" << lat << "," << lon << "level:" << dangerLevel;
-        
+
         // Start chart flashing if this is a dangerous obstacle
         if (dangerLevel == "DANGEROUS") {
             startChartFlashing();
         }
-        
+
         // Check and update flashing status based on current obstacles
         QTimer::singleShot(100, this, [this]() {
             bool hasDangerous = hasDangerousObstacles();
-            qDebug() << "[FLASHING-DEBUG] After adding obstacle, has dangerous:" << hasDangerous 
+            qDebug() << "[FLASHING-DEBUG] After adding obstacle, has dangerous:" << hasDangerous
                      << "Total markers:" << obstacleMarkers.size() << "Flashing active:" << chartFlashTimer->isActive();
             if (!hasDangerous) {
                 qDebug() << "[FLASHING-DEBUG] Stopping flashing - no dangerous obstacles";
                 stopChartFlashing();
             }
         });
-        
+
         // Trigger repaint to show new marker (safe update)
         QTimer::singleShot(0, this, [this]() { update(); });
-        
+
     } catch (const std::exception& e) {
         qDebug() << "[OBSTACLE-MARKER] Exception in addObstacleMarker:" << e.what();
     } catch (...) {
@@ -11837,13 +11837,13 @@ void EcWidget::clearObstacleMarkers()
     try {
         obstacleMarkers.clear();
         qDebug() << "[OBSTACLE-MARKER] Cleared all obstacle markers";
-        
+
         // Stop chart flashing when all obstacles cleared
         stopChartFlashing();
-        
+
         // Safe update using timer
         QTimer::singleShot(0, this, [this]() { update(); });
-        
+
     } catch (const std::exception& e) {
         qDebug() << "[OBSTACLE-MARKER] Exception in clearObstacleMarkers:" << e.what();
     } catch (...) {
@@ -11858,39 +11858,39 @@ void EcWidget::drawObstacleMarkers(QPainter& painter)
         if (obstacleMarkers.isEmpty() || !initialized || !view) {
             return; // Early return if no markers or not initialized
         }
-        
+
         // Validate painter state
         if (!painter.device()) {
             qDebug() << "[OBSTACLE-MARKER] Invalid painter device - skipping";
             return;
         }
-        
+
         // Save painter state
         painter.save();
         painter.setRenderHint(QPainter::Antialiasing, true);
-        
+
         for (const ObstacleMarker& marker : obstacleMarkers) {
             // CRITICAL: Validate marker data
-            if (qIsNaN(marker.lat) || qIsNaN(marker.lon) || 
-                marker.lat < -90.0 || marker.lat > 90.0 || 
+            if (qIsNaN(marker.lat) || qIsNaN(marker.lon) ||
+                marker.lat < -90.0 || marker.lat > 90.0 ||
                 marker.lon < -180.0 || marker.lon > 180.0) {
                 qDebug() << "[OBSTACLE-MARKER] Invalid coordinates - skipping marker";
                 continue;
             }
-            
+
             // Convert lat/lon to screen coordinates with validation
             int x, y;
             if (!LatLonToXy(marker.lat, marker.lon, x, y)) {
                 continue; // Skip if coordinate conversion fails
             }
-            
+
             // CRITICAL: Validate screen coordinates
             QRect widgetRect = rect();
-            if (x < -100 || x > widgetRect.width() + 100 || 
+            if (x < -100 || x > widgetRect.width() + 100 ||
                 y < -100 || y > widgetRect.height() + 100) {
                 continue; // Skip markers too far outside widget bounds
             }
-            
+
             // Set color based on danger level with validation
             QColor markerColor(128, 128, 128, 200); // Default gray
             if (marker.dangerLevel == "DANGEROUS") {
@@ -11900,15 +11900,15 @@ void EcWidget::drawObstacleMarkers(QPainter& painter)
             } else if (marker.dangerLevel == "NOTE") {
                 markerColor = QColor(0, 100, 255, 200); // Blue
             }
-            
+
             // Draw filled circle with safety bounds
             painter.setBrush(QBrush(markerColor));
             painter.setPen(QPen(Qt::white, 2));
-            
+
             int markerSize = 8;
             QRect markerRect(x - markerSize/2, y - markerSize/2, markerSize, markerSize);
             painter.drawEllipse(markerRect);
-            
+
             // Draw pulsing effect for dangerous obstacles (simplified)
             if (marker.dangerLevel == "DANGEROUS") {
                 // Simplified pulsing without complex math
@@ -11919,14 +11919,14 @@ void EcWidget::drawObstacleMarkers(QPainter& painter)
                 QRect pulseRect(x - pulseSize/2, y - pulseSize/2, pulseSize, pulseSize);
                 painter.drawEllipse(pulseRect);
             }
-            
+
             // Skip text drawing to avoid font-related crashes
             // Text drawing disabled for stability
         }
-        
+
         // Restore painter state
         painter.restore();
-        
+
     } catch (const std::exception& e) {
         qDebug() << "[OBSTACLE-MARKER] Exception in drawObstacleMarkers:" << e.what();
     } catch (...) {
@@ -11941,8 +11941,8 @@ bool EcWidget::hasDangerousObstacles() const
     for (const ObstacleMarker& marker : obstacleMarkers) {
         if (marker.dangerLevel == "DANGEROUS") {
             dangerousCount++;
-            qDebug() << "[DANGEROUS-CHECK] Found dangerous obstacle:" << marker.objectName 
-                     << "at" << marker.lat << "," << marker.lon 
+            qDebug() << "[DANGEROUS-CHECK] Found dangerous obstacle:" << marker.objectName
+                     << "at" << marker.lat << "," << marker.lon
                      << "age:" << marker.timestamp.secsTo(QDateTime::currentDateTime()) << "seconds";
         }
     }
@@ -11956,15 +11956,15 @@ void EcWidget::drawChartFlashOverlay(QPainter& painter)
     if (!hasDangerousObstacles() || !chartFlashVisible) {
         return;
     }
-    
+
     // Draw red flashing overlay over entire chart
     painter.save();
     painter.setCompositionMode(QPainter::CompositionMode_SourceAtop);
-    
+
     // Create semi-transparent red overlay
     QColor flashColor(255, 0, 0, 60); // Red with transparency
     painter.fillRect(rect(), flashColor);
-    
+
     painter.restore();
 }
 
@@ -11973,7 +11973,7 @@ void EcWidget::startChartFlashing()
     if (!chartFlashTimer->isActive()) {
         chartFlashTimer->start(500); // Flash every 500ms
         qDebug() << "[CHART-FLASH] Started chart flashing for dangerous obstacles";
-        
+
         // Emit signal to start sound alarm
         emit dangerousObstacleDetected();
     }
@@ -11986,7 +11986,7 @@ void EcWidget::stopChartFlashing()
         chartFlashVisible = false;
         update(); // Clear any remaining flash
         qDebug() << "[CHART-FLASH] Stopped chart flashing";
-        
+
         // Emit signal to stop sound alarm
         emit dangerousObstacleCleared();
     }
@@ -11996,7 +11996,7 @@ void EcWidget::stopChartFlashing()
 void EcWidget::removeOutdatedObstacleMarkers()
 {
     if (obstacleMarkers.isEmpty()) return;
-    
+
     // Find active attached guardzone
     GuardZone* attachedGuardZone = nullptr;
     for (GuardZone& gz : guardZones) {
@@ -12005,22 +12005,22 @@ void EcWidget::removeOutdatedObstacleMarkers()
             break;
         }
     }
-    
+
     if (!attachedGuardZone) {
         // No attached guardzone - clear all markers
         clearObstacleMarkers();
         return;
     }
-    
+
     // Remove markers that are outside guardzone or too old (>10 seconds for faster cleanup)
     QDateTime cutoffTime = QDateTime::currentDateTime().addSecs(-10);
     auto it = obstacleMarkers.begin();
     bool removedAny = false;
     bool hadDangerousObstacles = hasDangerousObstacles();
-    
+
     while (it != obstacleMarkers.end()) {
         bool shouldRemove = false;
-        
+
         // Check if marker is too old (reduced to 10 seconds)
         if (it->timestamp < cutoffTime) {
             shouldRemove = true;
@@ -12031,14 +12031,14 @@ void EcWidget::removeOutdatedObstacleMarkers()
             bool inSemicircle = isPointInSemicircle(it->lat, it->lon, attachedGuardZone);
             if (!inSemicircle) {
                 shouldRemove = true;
-                qDebug() << "[OBSTACLE-CLEANUP] Removing marker outside guardzone:" << it->objectName 
+                qDebug() << "[OBSTACLE-CLEANUP] Removing marker outside guardzone:" << it->objectName
                          << "at" << it->lat << "," << it->lon;
             } else {
-                qDebug() << "[OBSTACLE-CLEANUP] Keeping marker inside guardzone:" << it->objectName 
+                qDebug() << "[OBSTACLE-CLEANUP] Keeping marker inside guardzone:" << it->objectName
                          << "at" << it->lat << "," << it->lon;
             }
         }
-        
+
         if (shouldRemove) {
             it = obstacleMarkers.erase(it);
             removedAny = true;
@@ -12046,20 +12046,20 @@ void EcWidget::removeOutdatedObstacleMarkers()
             ++it;
         }
     }
-    
+
     if (removedAny) {
         qDebug() << "[OBSTACLE-CLEANUP] Removed obstacles, remaining markers:" << obstacleMarkers.size();
-        
+
         // Check if we still have dangerous obstacles after cleanup
         bool stillHasDangerous = hasDangerousObstacles();
         qDebug() << "[OBSTACLE-CLEANUP] Had dangerous:" << hadDangerousObstacles << "Still has dangerous:" << stillHasDangerous;
-        
+
         // Stop flashing if no dangerous obstacles remain
         if (hadDangerousObstacles && !stillHasDangerous) {
             qDebug() << "[OBSTACLE-CLEANUP] No more dangerous obstacles, stopping flashing";
             stopChartFlashing();
         }
-        
+
         update(); // Trigger repaint
     }
 }
@@ -12113,14 +12113,14 @@ void EcWidget::resetRouteConnections()
 {
     // This function ensures that previous routes are properly terminated
     // and won't connect to the new route being created
-    
+
     qDebug() << "[ROUTE] Resetting route connections before starting new route" << (currentRouteId + 1);
-    
+
     // Force save current waypoints to ensure proper separation
     if (!waypointList.isEmpty()) {
         saveWaypoints();
     }
-    
+
     // Update display to ensure clean slate for new route
     update();
 }
@@ -12128,11 +12128,11 @@ void EcWidget::resetRouteConnections()
 void EcWidget::endRouteMode()
 {
     qDebug() << "[ROUTE] Ending route mode";
-    
+
     if (isRouteMode) {
         // Finalize current route
         finalizeCurrentRoute();
-        
+
         // Show confirmation message
         int waypointsInRoute = 0;
         for (const Waypoint &wp : waypointList) {
@@ -12140,23 +12140,23 @@ void EcWidget::endRouteMode()
                 waypointsInRoute++;
             }
         }
-        
+
         if (waypointsInRoute > 0) {
-            QMessageBox::information(this, tr("Route Created"), 
+            QMessageBox::information(this, tr("Route Created"),
                 tr("Route R%1 created with %2 waypoints").arg(currentRouteId).arg(waypointsInRoute));
         }
-        
+
         // Prepare for next route - find next available route ID
         currentRouteId = getNextAvailableRouteId();
         routeWaypointCounter = 1;
     }
-    
+
     isRouteMode = false;
     activeFunction = PAN;
-    
+
     // Clear ghost waypoint
     ghostWaypoint.visible = false;
-    
+
     // Update status
     if (mainWindow) {
         //mainWindow->statusBar()->showMessage(tr("Route creation ended"), 3000);
@@ -12164,7 +12164,7 @@ void EcWidget::endRouteMode()
 
         mainWindow->setWindowTitle(APP_TITLE);
     }
-    
+
     qDebug() << "[ROUTE] Route mode ended. Next route ID will be:" << currentRouteId;
 }
 
@@ -12172,26 +12172,26 @@ void EcWidget::drawRoutesSeparately()
 {
     // Draw routes with different colors/styles to separate them visually
     // This is a workaround for SevenCs cell limitation
-    
+
     if (waypointList.isEmpty()) return;
-    
+
     // Group waypoints by route
     QMap<int, QList<Waypoint*>> routeGroups;
     for (Waypoint &wp : waypointList) {
         routeGroups[wp.routeId].append(&wp);
     }
-    
+
     qDebug() << "[DRAW] Drawing" << routeGroups.size() << "routes separately";
-    
+
     // For each route, ensure waypoints are visible
     for (auto it = routeGroups.begin(); it != routeGroups.end(); ++it) {
         int routeId = it.key();
         QList<Waypoint*> &waypoints = it.value();
-        
+
         if (waypoints.isEmpty()) continue;
-        
+
         qDebug() << "[DRAW] Route" << routeId << "has" << waypoints.size() << "waypoints";
-        
+
         // DISABLED: Route waypoints tidak menggunakan SevenCs engine
         // Hanya visual drawing manual yang digunakan untuk route waypoints
         for (Waypoint* wp : waypoints) {
@@ -12212,10 +12212,10 @@ EcCellId EcWidget::getOrCreateRouteCellId(int routeId)
         qDebug() << "[ROUTE] Using existing cell for route" << routeId;
         return routeCells[routeId];
     }
-    
+
     // Create new cell for this route by creating a separate waypoint cell
     EcCellId newRouteCell = createNewRouteCellId();
-    
+
     if (newRouteCell != EC_NOCELLID) {
         routeCells[routeId] = newRouteCell;
         qDebug() << "[ROUTE] Created new cell for route" << routeId;
@@ -12230,13 +12230,13 @@ EcCellId EcWidget::createNewRouteCellId()
 {
     // Create a completely new cell for route waypoints
     // This ensures each route has its own independent cell
-    
+
     // Use SevenCs API to create a new cell
     EcCellId newCell = EC_NOCELLID;
-    
+
     // Try to create waypoint cell - but don't interfere with main udoCid
     EcCellId tempUdoCid = udoCid; // Save current udoCid
-    
+
     if (createWaypointCell()) {
         newCell = udoCid; // Get the newly created cell
         udoCid = tempUdoCid; // Restore original udoCid
@@ -12254,9 +12254,9 @@ void EcWidget::finalizeCurrentRoute()
 {
     // This function ensures that the current route is properly terminated
     // and won't be connected to the next route
-    
+
     if (waypointList.isEmpty()) return;
-    
+
     // Count waypoints in current route
     int waypointsInCurrentRoute = 0;
     for (const Waypoint &wp : waypointList) {
@@ -12264,15 +12264,15 @@ void EcWidget::finalizeCurrentRoute()
             waypointsInCurrentRoute++;
         }
     }
-    
+
     qDebug() << "[ROUTE] Finalized route" << currentRouteId << "with" << waypointsInCurrentRoute << "waypoints";
-    
+
     // Force redraw to ensure proper visualization
     saveWaypoints();
-    
+
     // Save current route to route list
     saveCurrentRoute();
-    
+
     update();
 }
 
@@ -12294,7 +12294,7 @@ void EcWidget::saveRoutes()
         routeObject["estimatedTime"] = route.estimatedTime;
         routeObject["visible"] = isRouteVisible(route.routeId); // Save visibility state
         routeObject["attachedToShip"] = route.attachedToShip; // Save attached to ship state
-        
+
         // Persist custom color if any
         if (routeCustomColors.contains(route.routeId)) {
             QColor c = routeCustomColors.value(route.routeId);
@@ -12346,7 +12346,7 @@ void EcWidget::saveRoutes()
     else
     {
         qDebug() << "[ERROR] Failed to save routes to" << filePath << ":" << file.errorString();
-        
+
         // Coba simpan di direktori saat ini sebagai cadangan
         QFile fallbackFile("routes.json");
         if (fallbackFile.open(QIODevice::WriteOnly | QIODevice::Text))
@@ -12365,19 +12365,19 @@ void EcWidget::saveRoutes()
 void EcWidget::updateRouteFromWaypoint(int routeId)
 {
     qDebug() << "[UPDATE-ROUTE] Updating route" << routeId << "from waypoint changes";
-    
+
     // Preserve visibility before route update
     bool wasVisible = isRouteVisible(routeId);
     qDebug() << "[UPDATE-ROUTE] Route" << routeId << "visibility before update:" << wasVisible;
-    
+
     // Find the route in routeList
     for (int i = 0; i < routeList.size(); ++i) {
         if (routeList[i].routeId == routeId) {
             Route& route = routeList[i];
-            
+
             // Clear existing waypoints in route
             route.waypoints.clear();
-            
+
             // Update waypoints from waypointList
             for (const Waypoint& wp : waypointList) {
                 if (wp.routeId == routeId) {
@@ -12391,18 +12391,18 @@ void EcWidget::updateRouteFromWaypoint(int routeId)
                     route.waypoints.append(routeWp);
                 }
             }
-            
+
             // Update route metadata
             route.modifiedDate = QDateTime::currentDateTime();
-            
+
             // Recalculate route distance and time
             calculateRouteData(route);
-            
+
             qDebug() << "[UPDATE-ROUTE] Updated route" << routeId << "with" << route.waypoints.size() << "waypoints";
-            
+
             // PRESERVE VISIBILITY - DO NOT MODIFY
             qDebug() << "[UPDATE-ROUTE] Route" << routeId << "visibility preserved (not modified):" << wasVisible;
-            
+
             break;
         }
     }
@@ -12440,15 +12440,15 @@ void EcWidget::loadRoutes()
             route.modifiedDate = QDateTime::fromString(routeObject["modifiedDate"].toString(), Qt::ISODate);
             route.totalDistance = routeObject["totalDistance"].toDouble();
             route.estimatedTime = routeObject["estimatedTime"].toDouble();
-            
+
             // Load visibility state from file (respecting user's saved preferences)
             bool routeVisible = routeObject["visible"].toBool(true); // Default to visible for new routes only
-            
+
             // Load attached to ship state from file (check both old and new key names for compatibility)
             route.attachedToShip = routeObject["attachedToShip"].toBool(
                 routeObject["active"].toBool(false) // Fallback to old "active" key for compatibility
             );
-            
+
             setRouteVisibility(route.routeId, routeVisible);
             qDebug() << "[ROUTE-LOAD] Route" << route.routeId << "loaded with saved visibility:" << routeVisible << "attachedToShip:" << route.attachedToShip;
 
@@ -12461,12 +12461,12 @@ void EcWidget::loadRoutes()
                     qDebug() << "[ROUTE-LOAD] Route" << route.routeId << "loaded with custom color:" << c.name();
                 }
             }
-            
+
             // Load waypoints with coordinates
             QJsonArray waypointsArray = routeObject["waypoints"].toArray();
             for (const QJsonValue& waypointValue : waypointsArray) {
                 QJsonObject waypointObject = waypointValue.toObject();
-                
+
                 EcWidget::RouteWaypoint routeWp;
                 routeWp.lat = waypointObject["lat"].toDouble();
                 routeWp.lon = waypointObject["lon"].toDouble();
@@ -12474,7 +12474,7 @@ void EcWidget::loadRoutes()
                 routeWp.remark = waypointObject["remark"].toString();
                 routeWp.turningRadius = waypointObject["turningRadius"].toDouble();
                 routeWp.active = waypointObject["active"].toBool();
-                
+
                 route.waypoints.append(routeWp);
             }
 
@@ -12483,12 +12483,12 @@ void EcWidget::loadRoutes()
 
         qDebug() << "[INFO] Loaded" << routeList.size() << "routes from" << filePath;
         qDebug() << "[INFO] waypointList size before conversion:" << waypointList.size();
-        
+
         // Convert loaded routes to waypoints for display
         convertRoutesToWaypoints();
-        
+
         qDebug() << "[INFO] waypointList size after conversion:" << waypointList.size();
-        
+
         file.close();
     }
     else
@@ -12523,15 +12523,15 @@ bool EcWidget::renameRoute(int routeId, const QString& newName)
 void EcWidget::convertRoutesToWaypoints()
 {
     qDebug() << "[INFO] Converting loaded routes to waypoints for display";
-    
+
     // Add waypoints from loaded routes to waypointList (only if not already present)
     for (const EcWidget::Route& route : routeList) {
         for (const EcWidget::RouteWaypoint& routeWp : route.waypoints) {
-            
+
             // Check if waypoint already exists in waypointList
             bool exists = false;
             for (const Waypoint& existingWp : waypointList) {
-                if (existingWp.routeId == route.routeId && 
+                if (existingWp.routeId == route.routeId &&
                     existingWp.label == routeWp.label &&
                     qAbs(existingWp.lat - routeWp.lat) < 0.00001 &&
                     qAbs(existingWp.lon - routeWp.lon) < 0.00001) {
@@ -12539,7 +12539,7 @@ void EcWidget::convertRoutesToWaypoints()
                     break;
                 }
             }
-            
+
             // Only add if doesn't exist
             if (!exists) {
                 Waypoint wp;
@@ -12552,13 +12552,13 @@ void EcWidget::convertRoutesToWaypoints()
                 wp.routeId = route.routeId;
                 wp.featureHandle.id = EC_NOCELLID;
                 wp.featureHandle.offset = 0;
-                
+
                 waypointList.append(wp);
                 qDebug() << "[CONVERT] Added waypoint" << wp.label << "from route" << route.routeId;
             }
         }
     }
-    
+
     qDebug() << "[INFO] Conversion complete. Total waypoints in list:" << waypointList.size();
 }
 
@@ -12566,14 +12566,14 @@ void EcWidget::updateRouteList(int routeId)
 {
     // Find or create route in routeList
     EcWidget::Route* targetRoute = nullptr;
-    
+
     for (auto& route : routeList) {
         if (route.routeId == routeId) {
             targetRoute = &route;
             break;
         }
     }
-    
+
     if (!targetRoute) {
         // Create new route
         EcWidget::Route newRoute;
@@ -12585,11 +12585,11 @@ void EcWidget::updateRouteList(int routeId)
         routeList.append(newRoute);
         targetRoute = &routeList.last();
     }
-    
+
     // Clear existing waypoints and rebuild from waypointList
     targetRoute->waypoints.clear();
     targetRoute->modifiedDate = QDateTime::currentDateTime();
-    
+
     for (const Waypoint& wp : waypointList) {
         if (wp.routeId == routeId) {
             EcWidget::RouteWaypoint routeWp;
@@ -12599,14 +12599,14 @@ void EcWidget::updateRouteList(int routeId)
             routeWp.remark = wp.remark;
             routeWp.turningRadius = wp.turningRadius;
             routeWp.active = wp.active;
-            
+
             targetRoute->waypoints.append(routeWp);
         }
     }
-    
+
     // Calculate route data
     calculateRouteData(*targetRoute);
-    
+
     qDebug() << "[INFO] Updated route" << routeId << "in routeList with" << targetRoute->waypoints.size() << "waypoints";
 }
 
@@ -12633,7 +12633,7 @@ QString EcWidget::getRouteFilePath() const
 void EcWidget::saveCurrentRoute()
 {
     if (currentRouteId <= 0) return;
-    
+
     // Check if route already exists in the list
     bool routeExists = false;
     for (int i = 0; i < routeList.size(); ++i) {
@@ -12644,28 +12644,28 @@ void EcWidget::saveCurrentRoute()
             if (routeList[i].name.trimmed().isEmpty()) {
                 routeList[i].name = QString("Route %1").arg(currentRouteId);
             }
-            
+
             // Recalculate route data
             calculateRouteData(routeList[i]);
             routeExists = true;
             break;
         }
     }
-    
+
     if (!routeExists) {
         // Create new route
         EcWidget::Route newRoute;
         newRoute.routeId = currentRouteId;
         newRoute.name = QString("Route %1").arg(currentRouteId);
         newRoute.description = QString("Route created on %1").arg(QDateTime::currentDateTime().toString());
-        
+
         // Calculate route data
         calculateRouteData(newRoute);
-        
+
         routeList.append(newRoute);
         qDebug() << "[ROUTE] Created new route" << currentRouteId << "with" << newRoute.waypoints.size() << "waypoints";
     }
-    
+
     // Save to file
     saveRoutes();
 }
@@ -12677,7 +12677,7 @@ EcWidget::Route EcWidget::getRouteById(int routeId) const
             // Return COPY of route with current waypoint data synced
             EcWidget::Route routeCopy = route;
             routeCopy.waypoints.clear();
-            
+
             for (const Waypoint& wp : waypointList) {
                 if (wp.routeId == routeId) {
                     EcWidget::RouteWaypoint routeWp;
@@ -12704,37 +12704,37 @@ void EcWidget::calculateRouteData(EcWidget::Route& route)
 {
     route.waypoints.clear();
     route.totalDistance = 0.0;
-    
+
     // Find all waypoints belonging to this route and copy their data
     for (const Waypoint& wp : waypointList) {
         if (wp.routeId == route.routeId) {
             route.waypoints.append(EcWidget::RouteWaypoint(wp));
         }
     }
-    
+
     // Calculate total distance using waypoint coordinates
     if (route.waypoints.size() >= 2) {
         for (int i = 0; i < route.waypoints.size() - 1; ++i) {
             const EcWidget::RouteWaypoint& wp1 = route.waypoints[i];
             const EcWidget::RouteWaypoint& wp2 = route.waypoints[i + 1];
-            
+
             // Calculate distance using Haversine formula
             double lat1 = qDegreesToRadians(wp1.lat);
             double lon1 = qDegreesToRadians(wp1.lon);
             double lat2 = qDegreesToRadians(wp2.lat);
             double lon2 = qDegreesToRadians(wp2.lon);
-            
+
             double dlat = lat2 - lat1;
             double dlon = lon2 - lon1;
-            
+
             double a = qSin(dlat/2) * qSin(dlat/2) + qCos(lat1) * qCos(lat2) * qSin(dlon/2) * qSin(dlon/2);
             double c = 2 * qAtan2(qSqrt(a), qSqrt(1-a));
             double distance = 6371.0 * c; // Earth radius in km
-            
+
             route.totalDistance += distance * 0.539957; // Convert km to nautical miles
         }
     }
-    
+
     // Calculate estimated time (assume 10 knots speed)
     route.estimatedTime = route.totalDistance / 10.0;
 }
@@ -12765,20 +12765,20 @@ void EcWidget::insertWaypointAt(EcCoordinate lat, EcCoordinate lon)
     for (auto it = routeWaypoints.begin(); it != routeWaypoints.end(); ++it) {
         int routeId = it.key();
         QList<int> indices = it.value();
-        
+
         if (indices.size() < 2) continue;
 
         // Check each segment in this route
         for (int i = 0; i < indices.size() - 1; ++i) {
             int idx1 = indices[i];
             int idx2 = indices[i + 1];
-            
+
             const Waypoint& wp1 = waypointList[idx1];
             const Waypoint& wp2 = waypointList[idx2];
-            
+
             // Calculate distance from point to line segment
             double distance = distanceToLineSegment(lat, lon, wp1.lat, wp1.lon, wp2.lat, wp2.lon);
-            
+
             if (distance < minDistance) {
                 minDistance = distance;
                 insertIndex = idx2; // Insert before idx2
@@ -12810,13 +12810,13 @@ void EcWidget::insertWaypointAt(EcCoordinate lat, EcCoordinate lon)
             routeIndices.append(i);
         }
     }
-    
+
     int waypointNumber = routeIndices.size() + 1;
     newWaypoint.label = QString("R%1-WP%2").arg(targetRouteId).arg(waypointNumber, 3, 10, QChar('0'));
 
     // Insert waypoint at the correct position
     waypointList.insert(insertIndex, newWaypoint);
-    
+
     // DON'T UPDATE LABELS - preserve custom waypoint names set by user
     qDebug() << "[INSERT] Skipping label update to preserve custom waypoint names";
 
@@ -12839,7 +12839,7 @@ double EcWidget::distanceToLineSegment(double px, double py, double x1, double y
 
     double dot = A * C + B * D;
     double len_sq = C * C + D * D;
-    
+
     double param = -1;
     if (len_sq != 0) {
         param = dot / len_sq;
@@ -12877,17 +12877,17 @@ void EcWidget::updateRouteLabels(int routeId)
         int index = routeIndices[i];
         waypointList[index].label = QString("R%1-WP%2").arg(routeId).arg(i + 1, 3, 10, QChar('0'));
     }
-    
+
     qDebug() << "[UPDATE-LABELS] Updated" << routeIndices.size() << "labels for route" << routeId;
 }
 
 void EcWidget::convertSingleWaypointsToRoutes()
 {
     qDebug() << "[ROUTE-CONVERSION] Starting conversion of single waypoints to routes";
-    
+
     int singleWaypointCount = 0;
     int maxRouteId = 0;
-    
+
     // Find maximum existing route ID and count single waypoints
     for (const Waypoint& wp : waypointList) {
         if (wp.routeId == 0) {
@@ -12896,15 +12896,15 @@ void EcWidget::convertSingleWaypointsToRoutes()
             maxRouteId = wp.routeId;
         }
     }
-    
+
     if (singleWaypointCount == 0) {
         qDebug() << "[ROUTE-CONVERSION] No single waypoints found to convert";
         return;
     }
-    
+
     // Create a special route for single waypoints
     int singleWaypointsRouteId = maxRouteId + 1;
-    
+
     // Convert single waypoints (routeId = 0) to a special route
     for (Waypoint& wp : waypointList) {
         if (wp.routeId == 0) {
@@ -12912,26 +12912,26 @@ void EcWidget::convertSingleWaypointsToRoutes()
             qDebug() << "[ROUTE-CONVERSION] Converted waypoint" << wp.label << "to route" << singleWaypointsRouteId;
         }
     }
-    
+
     // Create route entry for converted waypoints
     if (singleWaypointCount > 0) {
         EcWidget::Route convertedRoute;
         convertedRoute.routeId = singleWaypointsRouteId;
         convertedRoute.name = QString("Legacy Waypoints (Route %1)").arg(singleWaypointsRouteId);
         convertedRoute.description = QString("Converted from %1 single waypoints for compatibility").arg(singleWaypointCount);
-        
+
         // Calculate route data
         calculateRouteData(convertedRoute);
-        
+
         routeList.append(convertedRoute);
-        
-        qDebug() << "[ROUTE-CONVERSION] Created route" << singleWaypointsRouteId 
+
+        qDebug() << "[ROUTE-CONVERSION] Created route" << singleWaypointsRouteId
                  << "for" << singleWaypointCount << "legacy waypoints";
-        
+
         // Save both waypoints and routes
         saveWaypoints();
         saveRoutes();
-        
+
         qDebug() << "[ROUTE-CONVERSION] Conversion completed successfully";
     }
 }
@@ -12940,12 +12940,12 @@ void EcWidget::convertSingleWaypointsToRoutes()
 void EcWidget::showAddWaypointDialog()
 {
     WaypointDialog dialog(this);
-    
+
     // Set default route based on current route mode
     if (isRouteMode) {
         dialog.setRouteId(currentRouteId);
     }
-    
+
     if (dialog.exec() == QDialog::Accepted) {
         double lat = dialog.getLatitude();
         double lon = dialog.getLongitude();
@@ -12953,7 +12953,7 @@ void EcWidget::showAddWaypointDialog()
         QString remark = dialog.getRemark();
         int routeId = dialog.getRouteId();
         double turningRadius = dialog.getTurningRadius();
-        
+
         createWaypointFromForm(lat, lon, label, remark, routeId, turningRadius);
     }
 }
@@ -12961,19 +12961,19 @@ void EcWidget::showAddWaypointDialog()
 void EcWidget::showCreateRouteDialog()
 {
     RouteFormDialog dialog(this, this);
-    
+
     if (dialog.exec() == QDialog::Accepted) {
         QString routeName = dialog.getRouteName();
         QString routeDescription = dialog.getRouteDescription();
         int routeId = dialog.getRouteId();
         QList<RouteWaypointData> waypoints = dialog.getWaypoints();
-        
+
         // Create route with all waypoints
         if (!waypoints.isEmpty()) {
             // Set route mode and current route ID
             isRouteMode = true;
             currentRouteId = routeId;
-            
+
             // Create route object for route management
             Route newRoute;
             newRoute.routeId = routeId;
@@ -12981,7 +12981,7 @@ void EcWidget::showCreateRouteDialog()
             newRoute.description = routeDescription;
             newRoute.createdDate = QDateTime::currentDateTime();
             newRoute.modifiedDate = newRoute.createdDate;
-            
+
             // Convert waypoints to RouteWaypoint format
             for (const RouteWaypointData& wp : waypoints) {
                 RouteWaypoint routeWp;
@@ -12993,40 +12993,40 @@ void EcWidget::showCreateRouteDialog()
                 routeWp.active = wp.active;
                 newRoute.waypoints.append(routeWp);
             }
-            
+
             // Calculate route data (distance, time)
             calculateRouteData(newRoute);
-            
+
             // Add route to routeList
             routeList.append(newRoute);
-            
+
             qDebug() << "[ROUTE-CREATE] Creating" << waypoints.size() << "waypoints for route" << routeId;
-            
+
             // Create all waypoints for this route in the chart FIRST
             for (const RouteWaypointData& wp : waypoints) {
                 qDebug() << "[ROUTE-CREATE] Creating waypoint" << wp.label << "at" << wp.lat << "," << wp.lon << "active:" << wp.active;
                 createWaypointFromForm(wp.lat, wp.lon, wp.label, wp.remark, routeId, wp.turningRadius, wp.active);
             }
-            
+
             qDebug() << "[ROUTE-CREATE] After waypoint creation, waypointList size:" << waypointList.size();
-            
+
             // INITIAL VISIBILITY: Set new routes visible by default (one time only)
             qDebug() << "[ROUTE-CREATE] Setting initial visibility for new route" << routeId;
             setRouteVisibility(routeId, true); // Initial visibility only
             qDebug() << "[ROUTE-CREATE] New route" << routeId << "initial visibility set to visible";
-            
-            // Save routes to file  
+
+            // Save routes to file
             saveRoutes();
-            
+
             qDebug() << "[ROUTE-CREATE] Route" << routeId << "saved with initial visibility:" << isRouteVisible(routeId);
-            
+
             // Force chart redraw to show the new route immediately
             Draw();
             update();
-            
+
             // Emit signal to notify route panel about new route/waypoints
             emit waypointCreated();
-            
+
             // Log route creation
             if (mainWindow && mainWindow->logText) {
                 QString logMessage = QString("Route '%1' created with %2 waypoints (ID: %3) - Distance: %.2f NM")
@@ -13043,36 +13043,36 @@ void EcWidget::showCreateRouteDialog()
 void EcWidget::showEditRouteDialog(int routeId)
 {
     RouteFormDialog dialog(this, this);
-    
+
     // Load existing route data
     dialog.loadRouteData(routeId);
-    
+
     if (dialog.exec() == QDialog::Accepted) {
         QString routeName = dialog.getRouteName();
         QString routeDescription = dialog.getRouteDescription();
         QList<RouteWaypointData> waypoints = dialog.getWaypoints();
-        
+
         // Update route with modified waypoints
         if (!waypoints.isEmpty()) {
             qDebug() << "[ROUTE-EDIT] Starting route update for route" << routeId << "with" << waypoints.size() << "waypoints";
             qDebug() << "[ROUTE-EDIT] Current routeList size:" << routeList.size();
-            
-            // FIRST: Preserve route visibility IMMEDIATELY to prevent race conditions  
+
+            // FIRST: Preserve route visibility IMMEDIATELY to prevent race conditions
             bool wasVisible = isRouteVisible(routeId);
             qDebug() << "[ROUTE-EDIT] Route" << routeId << "was visible:" << wasVisible << "before edit - preserving immediately";
-            
+
             // Find existing route in routeList
             bool routeFound = false;
             for (int i = 0; i < routeList.size(); ++i) {
                 qDebug() << "[ROUTE-EDIT] Checking routeList[" << i << "] with routeId:" << routeList[i].routeId;
                 if (routeList[i].routeId == routeId) {
                     qDebug() << "[ROUTE-EDIT] Updating route in routeList, old name:" << routeList[i].name << "new name:" << routeName;
-                    
+
                     // Update route information
                     routeList[i].name = routeName;
                     routeList[i].description = routeDescription;
                     routeList[i].modifiedDate = QDateTime::currentDateTime();
-                    
+
                     // Clear existing waypoints and add new ones
                     qDebug() << "[ROUTE-EDIT] Clearing" << routeList[i].waypoints.size() << "existing waypoints, adding" << waypoints.size() << "new ones";
                     routeList[i].waypoints.clear();
@@ -13087,24 +13087,24 @@ void EcWidget::showEditRouteDialog(int routeId)
                         routeList[i].waypoints.append(routeWp);
                         qDebug() << "[ROUTE-EDIT] Added waypoint" << wp.label << "at" << wp.lat << "," << wp.lon;
                     }
-                    
+
                     // Recalculate route data
                     calculateRouteData(routeList[i]);
-                    
+
                     qDebug() << "[ROUTE-EDIT] Route" << routeId << "updated successfully in routeList, new name:" << routeList[i].name;
                     routeFound = true;
                     break;
                 }
             }
-            
+
             if (!routeFound) {
                 qDebug() << "[ROUTE-EDIT-ERROR] Route" << routeId << "NOT found in routeList! This should not happen.";
             }
-            
+
             // Remove existing waypoints for this route from chart
             int removedCount = 0;
             waypointList.erase(std::remove_if(waypointList.begin(), waypointList.end(),
-                [routeId, &removedCount](const Waypoint& wp) { 
+                [routeId, &removedCount](const Waypoint& wp) {
                     if (wp.routeId == routeId) {
                         removedCount++;
                         return true;
@@ -13113,27 +13113,27 @@ void EcWidget::showEditRouteDialog(int routeId)
                 }),
                 waypointList.end());
             qDebug() << "[ROUTE-EDIT] Removed" << removedCount << "waypoints for route" << routeId << "from waypointList";
-            
+
             // Create updated waypoints in the chart
             currentRouteId = routeId;
             for (const RouteWaypointData& wp : waypoints) {
                 createWaypointFromForm(wp.lat, wp.lon, wp.label, wp.remark, routeId, wp.turningRadius, wp.active);
             }
-            
+
             // PRESERVE EXISTING VISIBILITY - DO NOT MODIFY
             qDebug() << "[ROUTE-EDIT] Route" << routeId << "preserving existing visibility:" << wasVisible;
-            
+
             // Save routes to file BEFORE emitting signals
             saveRoutes();
-            
+
             // Emit signal to notify route panel about route update
             emit waypointCreated();
-            
+
             qDebug() << "[ROUTE-EDIT] Route" << routeId << "edited without changing visibility";
-            
+
             // Ensure chart is refreshed
             update();
-            
+
             // Log route update
             if (mainWindow && mainWindow->logText) {
                 QString logMessage = QString("Route '%1' updated with %2 waypoints (ID: %3)")
@@ -13142,7 +13142,7 @@ void EcWidget::showEditRouteDialog(int routeId)
                     .arg(routeId);
                 mainWindow->logText->append(logMessage);
             }
-            
+
             // Refresh display
             update();
         }
@@ -13152,17 +13152,17 @@ void EcWidget::showEditRouteDialog(int routeId)
 void EcWidget::createWaypointFromForm(double lat, double lon, const QString& label, const QString& remark, int routeId, double turningRadius, bool active)
 {
     qDebug() << "[CREATE-WAYPOINT] Creating waypoint" << label << "at" << lat << "," << lon << "for route" << routeId;
-    
+
     Waypoint newWaypoint;
-    
+
     // Set coordinates
     newWaypoint.lat = lat;
     newWaypoint.lon = lon;
-    
+
     // Set turning radius and active status
     newWaypoint.turningRadius = turningRadius;
     newWaypoint.active = active;
-    
+
     // Generate label if empty
     if (label.isEmpty()) {
         if (routeId > 0) {
@@ -13180,7 +13180,7 @@ void EcWidget::createWaypointFromForm(double lat, double lon, const QString& lab
     } else {
         newWaypoint.label = label;
     }
-    
+
     // Set remark
     if (remark.isEmpty()) {
         if (routeId > 0) {
@@ -13191,17 +13191,17 @@ void EcWidget::createWaypointFromForm(double lat, double lon, const QString& lab
     } else {
         newWaypoint.remark = remark;
     }
-    
+
     // Set route ID
     newWaypoint.routeId = routeId;
-    
+
     // Initialize feature handle
     newWaypoint.featureHandle.id = EC_NOCELLID;
     newWaypoint.featureHandle.offset = 0;
-    
+
     // Add to waypoint list
     waypointList.append(newWaypoint);
-    
+
     // Create waypoint cell if needed
     if (routeId == 0) {
         // Single waypoint - create cell
@@ -13210,22 +13210,22 @@ void EcWidget::createWaypointFromForm(double lat, double lon, const QString& lab
         // Route waypoint - no cell creation needed
         qDebug() << "[INFO] Route waypoint created:" << newWaypoint.label;
     }
-    
+
     // Save waypoints
     saveWaypoints();
-    
+
     // Update current route if needed
     if (routeId > 0) {
         // Ensure saveCurrentRoute targets the correct route ID
         currentRouteId = routeId;
         saveCurrentRoute();
     }
-    
+
     // Redraw
     Draw();
     update();
-    
-    qDebug() << "[INFO] Waypoint created from form - Label:" << newWaypoint.label 
+
+    qDebug() << "[INFO] Waypoint created from form - Label:" << newWaypoint.label
              << "Lat:" << lat << "Lon:" << lon << "Route:" << routeId;
 }
 
@@ -13234,7 +13234,7 @@ void EcWidget::highlightWaypoint(int routeId, int waypointIndex)
 {
     // Clear previous highlight
     clearWaypointHighlight();
-    
+
     // Find the waypoint to highlight
     int currentIndex = 0;
     for (const auto& wp : waypointList) {
@@ -13247,15 +13247,15 @@ void EcWidget::highlightWaypoint(int routeId, int waypointIndex)
                 highlightedWaypoint.label = wp.label;
                 highlightedWaypoint.routeId = routeId;
                 highlightedWaypoint.waypointIndex = waypointIndex;
-                
-                qDebug() << "[HIGHLIGHT] Highlighting waypoint" << wp.label 
+
+                qDebug() << "[HIGHLIGHT] Highlighting waypoint" << wp.label
                          << "at" << wp.lat << "," << wp.lon << "route" << routeId << "index" << waypointIndex;
-                
+
                 // Start animation timer for consistent pulsing
                 if (!waypointAnimationTimer->isActive()) {
                     waypointAnimationTimer->start();
                 }
-                
+
                 // Trigger map update
                 update();
                 return;
@@ -13263,7 +13263,7 @@ void EcWidget::highlightWaypoint(int routeId, int waypointIndex)
             currentIndex++;
         }
     }
-    
+
     qDebug() << "[HIGHLIGHT] Waypoint not found - route:" << routeId << "index:" << waypointIndex;
 }
 
@@ -13271,12 +13271,12 @@ void EcWidget::clearWaypointHighlight()
 {
     if (highlightedWaypoint.visible) {
         highlightedWaypoint.visible = false;
-        
+
         // Stop animation timer to save resources
         if (waypointAnimationTimer->isActive()) {
             waypointAnimationTimer->stop();
         }
-        
+
         qDebug() << "[HIGHLIGHT] Cleared waypoint highlight";
         update();
     }

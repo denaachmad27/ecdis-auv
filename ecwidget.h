@@ -944,6 +944,7 @@ protected:
   bool    currentGreyMode;
 
   QColor  bg;
+  QColor  textColor;
   QPixmap chartPixmap; // contains and stores the chart image
   QPixmap chartAisPixmap; // contains the chart image plus the AIS overlay image
   QPixmap drawPixmap; // pixmap used for the final drawing

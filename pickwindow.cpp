@@ -99,33 +99,40 @@ void PickWindow::fill(QList<EcFeature> & pickFeatureList)
             text.append(row);
             ownship.append(row);
         }
-        if (navShip.depth != 0){
-            //row = QString("Depth: %1</b><br>").arg(navShip.depth);
-            row = QString("<tr><td>DEP</td><td><b>%1 m</b></td></tr>").arg(navShip.depth);
+        if (navShip.heading != 0){
+            //row = QString("Heading: %1</b><br>").arg(navShip.heading);
+            row = QString("<tr><td>HDG</td><td><b>%1 °T</b></td></tr>").arg(navShip.heading);
             text.append(row);
             ownship.append(row);
         }
-        if (navShip.heading != 0){
-            //row = QString("Heading: %1</b><br>").arg(navShip.heading);
-            row = QString("<tr><td>HEAD</td><td><b>%1 °</b></td></tr>").arg(navShip.heading);
+        if (navShip.rot != 0){
+            //row = QString("Heading Over Ground: %1</b><br>").arg(navShip.heading_og);
+            row = QString("<tr><td>ROT</td><td><b>%1 °/min</b></td></tr>").arg(navShip.rot);
             text.append(row);
             ownship.append(row);
         }
         if (navShip.heading_og != 0){
             //row = QString("Heading Over Ground: %1</b><br>").arg(navShip.heading_og);
-            row = QString("<tr><td>HOG</td><td><b>%1 °</b></td></tr>").arg(navShip.heading_og);
-            text.append(row);
-            ownship.append(row);
-        }
-        if (navShip.speed != 0){
-            //row = QString("Speed: %1</b><br>").arg(navShip.speed);
-            row = QString("<tr><td>SPEED</td><td><b>%1 knots</b></td></tr>").arg(navShip.speed);
+            row = QString("<tr><td>COG</td><td><b>%1 °</b></td></tr>").arg(navShip.heading_og);
             text.append(row);
             ownship.append(row);
         }
         if (navShip.speed_og != 0){
             //row = QString("Speed Over Ground: %1</b><br>").arg(navShip.speed_og);
             row = QString("<tr><td>SOG</td><td><b>%1 knots</b></td></tr>").arg(navShip.speed_og);
+            text.append(row);
+            ownship.append(row);
+        }
+
+        if (navShip.depth != 0){
+            //row = QString("Depth: %1</b><br>").arg(navShip.depth);
+            row = QString("<tr><td>DEP</td><td><b>%1 m</b></td></tr>").arg(navShip.depth);
+            text.append(row);
+            ownship.append(row);
+        }
+        if (navShip.speed != 0){
+            //row = QString("Speed: %1</b><br>").arg(navShip.speed);
+            row = QString("<tr><td>SPEED</td><td><b>%1 knots</b></td></tr>").arg(navShip.speed);
             text.append(row);
             ownship.append(row);
         }
@@ -342,47 +349,131 @@ QString PickWindow::ownShipAutoFill()
     ownship.append("<table width='100%' cellspacing='0' cellpadding='2'>");
 
     if (navShip.lat != 0){
-        row = QString("<tr><td>LAT</td><td><b>%1</b></td></tr>").arg(navShip.slat);
-        //row = QString("<tr><td>LAT</td><td><b>%1 °</b></td></tr>").arg(navShip.lat);
+        row = QString(
+                  "<tr>"
+                  "<td style='vertical-align:middle;'>LAT</td>"
+                  "<td style='text-align:right;'>"
+                  "<span style='font-size:12px; color:#71C9FF; font-weight:bold;'>%1</span>"
+                  "</td>"
+                  "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>°</td>"
+                  "</tr>")
+                  .arg(navShip.lat);
         text.append(row);
         ownship.append(row);
     }
+
     if (navShip.lon != 0){
-        row = QString("<tr><td>LONG</td><td><b>%1</b></td></tr>").arg(navShip.slon);
-        //row = QString("<tr><td>LONG</td><td><b>%1 °</b></td></tr>").arg(navShip.slon);
+        row = QString(
+                  "<tr>"
+                  "<td style='vertical-align:middle;'>LON</td>"
+                  "<td style='text-align:right;'>"
+                  "<span style='font-size:12px; color:#71C9FF; font-weight:bold;'>%1</span>"
+                  "</td>"
+                  "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>°</td>"
+                  "</tr>")
+                  .arg(navShip.lon);
         text.append(row);
         ownship.append(row);
     }
-    if (navShip.depth != 0){
-        row = QString("<tr><td>DEP</td><td><b>%1 m</b></td></tr>").arg(navShip.depth);
+
+    if (navShip.heading != 0) {
+        row = QString(
+                  "<tr>"
+                  "<td style='vertical-align:middle;'>HDG</td>"
+                  "<td style='text-align:right;'>"
+                  "<span style='font-size:20px; color:#71C9FF; font-weight:bold;'>%1</span>"
+                  "</td>"
+                  "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>°T</td>"
+                  "</tr>")
+                  .arg(navShip.heading);
         text.append(row);
         ownship.append(row);
     }
-    if (navShip.heading != 0){
-        row = QString("<tr><td>HEAD</td><td><b>%1 °</b></td></tr>").arg(navShip.heading);
+
+    if (navShip.rot != 0){
+        row = QString(
+                  "<tr>"
+                  "<td style='vertical-align:middle;'>ROT</td>"
+                  "<td style='text-align:right;'>"
+                  "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
+                  "</td>"
+                  "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>°/min</td>"
+                  "</tr>")
+                  .arg(navShip.rot);
         text.append(row);
         ownship.append(row);
     }
+
     if (navShip.heading_og != 0){
-        row = QString("<tr><td>HOG</td><td><b>%1 °</b></td></tr>").arg(navShip.heading_og);
+        row = QString(
+                  "<tr>"
+                  "<td style='vertical-align:middle;'>COG</td>"
+                  "<td style='text-align:right;'>"
+                  "<span style='font-size:18px; color:#71C9FF; font-weight:bold;'>%1</span>"
+                  "</td>"
+                  "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>°</td>"
+                  "</tr>")
+                  .arg(navShip.heading_og);
         text.append(row);
         ownship.append(row);
     }
-    if (navShip.speed != 0){
-        row = QString("<tr><td>SPEED</td><td><b>%1 knots</b></td></tr>").arg(navShip.speed);
-        text.append(row);
-        ownship.append(row);
-    }
+
     if (navShip.speed_og != 0){
-        row = QString("<tr><td>SOG</td><td><b>%1 knots</b></td></tr>").arg(navShip.speed_og);
+        row = QString(
+                  "<tr>"
+                  "<td style='vertical-align:middle;'>SOG</td>"
+                  "<td style='text-align:right;'>"
+                  "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
+                  "</td>"
+                  "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>knots</td>"
+                  "</tr>")
+                  .arg(navShip.speed_og);
         text.append(row);
         ownship.append(row);
     }
+
+    if (navShip.depth != 0){
+        row = QString(
+                  "<tr>"
+                  "<td style='vertical-align:middle;'>DEP</td>"
+                  "<td style='text-align:right;'>"
+                  "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
+                  "</td>"
+                  "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>m</td>"
+                  "</tr>")
+                  .arg(navShip.depth);
+        text.append(row);
+        ownship.append(row);
+    }
+
+    if (navShip.speed != 0){
+        row = QString(
+                  "<tr>"
+                  "<td style='vertical-align:middle;'>SPD</td>"
+                  "<td style='text-align:right;'>"
+                  "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
+                  "</td>"
+                  "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>knots</td>"
+                  "</tr>")
+                  .arg(navShip.speed);
+        text.append(row);
+        ownship.append(row);
+    }
+
     if (navShip.z != 0){
-        row = QString("<tr><td>Z</td><td><b>%1 m</b></td></tr>").arg(navShip.z);
+        row = QString(
+                  "<tr>"
+                  "<td style='vertical-align:middle;'>Z</td>"
+                  "<td style='text-align:right;'>"
+                  "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
+                  "</td>"
+                  "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>m</td>"
+                  "</tr>")
+                  .arg(navShip.z);
         text.append(row);
         ownship.append(row);
     }
+
 
     return ownship;
 }

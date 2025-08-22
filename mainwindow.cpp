@@ -593,6 +593,8 @@ void MainWindow::createMenuBar(){
     ownShipText = new QTextEdit(dock);
     ownShipText->setText("");
     ownShipText->setReadOnly(true); // Membuat teks tidak dapat diedit
+    ownShipText->setMinimumWidth(200);
+    ownShipText->setMaximumWidth(220);
     dock->setWidget(ownShipText);
     addDockWidget(Qt::LeftDockWidgetArea, dock);
     viewMenu->addAction(dock->toggleViewAction());
