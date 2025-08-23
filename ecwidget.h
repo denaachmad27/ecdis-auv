@@ -698,6 +698,7 @@ public:
   void stopAllThread();
   void processAISJson(const QByteArray&);
   void processData(double, double, double, double, double, double, double, double, double);
+  void processDataQuickFix(double, double, double, double, double, double, double, double, double);
   void processMapInfoReq(QString);
   void processAis(QString);
   void publishToMOOSDB(QString, QString);

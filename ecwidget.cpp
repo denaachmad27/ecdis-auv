@@ -1034,18 +1034,18 @@ void EcWidget::Draw()
 }
 
 void EcWidget::waypointDraw(){
-    qDebug() << "[WAYPOINT-DRAW] Drawing" << waypointList.size() << "waypoints";
+    //qDebug() << "[WAYPOINT-DRAW] Drawing" << waypointList.size() << "waypoints";
 
     // Gambar waypoint dengan warna konsisten
     for (const Waypoint &wp : waypointList)
     {
         // Check visibility - skip hidden routes
         if (wp.routeId > 0 && !isRouteVisible(wp.routeId)) {
-            qDebug() << "[WAYPOINT-DRAW] Skipping waypoint" << wp.label << "from hidden route" << wp.routeId;
+            //qDebug() << "[WAYPOINT-DRAW] Skipping waypoint" << wp.label << "from hidden route" << wp.routeId;
             continue; // Skip waypoints from hidden routes
         }
 
-        qDebug() << "[WAYPOINT-DRAW] Drawing waypoint" << wp.label << "route:" << wp.routeId << "active:" << wp.active;
+        //qDebug() << "[WAYPOINT-DRAW] Drawing waypoint" << wp.label << "route:" << wp.routeId << "active:" << wp.active;
         QColor waypointColor;
         if (wp.active) {
             waypointColor = getRouteColor(wp.routeId);
@@ -2401,7 +2401,7 @@ void EcWidget::startAISConnection()
 
     connect(subscriber, &AISSubscriber::mapInfoReqReceived, this, &EcWidget::processMapInfoReq);
     connect(subscriber, &AISSubscriber::processingAis, this, &EcWidget::processAis);
-    connect(subscriber, &AISSubscriber::processingData, this, &EcWidget::processData);
+    connect(subscriber, &AISSubscriber::processingData, this, &EcWidget::processDataQuickFix);
 
     // ROUTE INFORMATION
     connect(subscriber, &AISSubscriber::rteWpBrgReceived, this, [=](const QString &v) { activeRoute.rteWpBrg = v;});
@@ -2561,6 +2561,16 @@ void EcWidget::processData(double lat, double lon, double cog, double sog, doubl
 
     // EKOR OWNSHIP
     //ownShipTrailPoints.append(qMakePair(EcCoordinate(lat), EcCoordinate(lon)));
+}
+
+void EcWidget::processDataQuickFix(double lat, double lon, double cog, double sog, double hdg, double spd, double dep, double yaw, double z){
+    QString nmea = AIVDOEncoder::encodeAIVDO1(lat, lon, cog, sog/10, hdg, 0, 1);
+    _aisObj->readAISVariable({nmea});
+
+    PickWindow *pickWindow = new PickWindow(this, dictInfo, denc);
+    delete pickWindow;
+
+    ownShipText->setHtml(pickWindow->ownShipAutoFill());
 }
 
 void EcWidget::processAis(QString ais){
@@ -3474,7 +3484,7 @@ bool EcWidget::deleteRoute(int routeId)
         setRouteAttachedToShip(routeId, false);
     }
 
-    qDebug() << "[ROUTE] Deleted route" << routeId << "with" << deletedCount << "waypoints";
+    //qDebug() << "[ROUTE] Deleted route" << routeId << "with" << deletedCount << "waypoints";
 
     // Save changes
     saveWaypoints();
@@ -3491,24 +3501,24 @@ bool EcWidget::deleteRoute(int routeId)
 
 void EcWidget::setRouteVisibility(int routeId, bool visible)
 {
-    qDebug() << "[ROUTE] *** setRouteVisibility called for route" << routeId << "to" << visible;
-    qDebug() << "[ROUTE] *** selectedRouteId:" << selectedRouteId;
-    qDebug() << "[ROUTE] *** Previous visibility for route" << routeId << "was:" << routeVisibility.value(routeId, true);
+    //qDebug() << "[ROUTE] *** setRouteVisibility called for route" << routeId << "to" << visible;
+    //qDebug() << "[ROUTE] *** selectedRouteId:" << selectedRouteId;
+    //qDebug() << "[ROUTE] *** Previous visibility for route" << routeId << "was:" << routeVisibility.value(routeId, true);
 
     routeVisibility[routeId] = visible;
-    qDebug() << "[ROUTE] *** Set route" << routeId << "visibility to" << visible;
+    //qDebug() << "[ROUTE] *** Set route" << routeId << "visibility to" << visible;
     Draw(); // Use Draw() instead of forceRedraw() to ensure AIS and waypoints are redrawn
 }
 
 bool EcWidget::isRouteVisible(int routeId) const
 {
-    qDebug() << "[ROUTE] *** isRouteVisible called for route" << routeId;
-    qDebug() << "[ROUTE] *** routeVisibility map contains" << routeVisibility.size() << "entries";
-    qDebug() << "[ROUTE] *** selectedRouteId:" << selectedRouteId;
+    //qDebug() << "[ROUTE] *** isRouteVisible called for route" << routeId;
+    //qDebug() << "[ROUTE] *** routeVisibility map contains" << routeVisibility.size() << "entries";
+    //qDebug() << "[ROUTE] *** selectedRouteId:" << selectedRouteId;
 
     // Check if routeId exists in the map first
     if (!routeVisibility.contains(routeId)) {
-        qDebug() << "[ROUTE] *** Route" << routeId << "NOT FOUND in routeVisibility map";
+        //qDebug() << "[ROUTE] *** Route" << routeId << "NOT FOUND in routeVisibility map";
         // Route not in map - check if route actually exists in routeList
         bool routeExists = false;
         for (const auto& route : routeList) {
@@ -3521,23 +3531,23 @@ bool EcWidget::isRouteVisible(int routeId) const
         if (routeExists) {
             // Route exists but not in visibility map - initialize to visible
             const_cast<QMap<int, bool>&>(routeVisibility)[routeId] = true;
-            qDebug() << "[ROUTE] *** Route" << routeId << "exists but not in visibility map, initialized to visible";
+            //qDebug() << "[ROUTE] *** Route" << routeId << "exists but not in visibility map, initialized to visible";
             return true;
         } else {
             // Route doesn't exist at all - return false
-            qDebug() << "[ROUTE] *** Route" << routeId << "does not exist, returning false";
+            //qDebug() << "[ROUTE] *** Route" << routeId << "does not exist, returning false";
             return false;
         }
     }
 
     // Route exists in visibility map - return saved state
     bool visible = routeVisibility[routeId];
-    qDebug() << "[ROUTE] *** Route" << routeId << "FOUND in routeVisibility map, returns:" << visible;
+    //qDebug() << "[ROUTE] *** Route" << routeId << "FOUND in routeVisibility map, returns:" << visible;
 
     // Print entire routeVisibility map for debugging
-    qDebug() << "[ROUTE] *** Current routeVisibility map contents:";
+    //qDebug() << "[ROUTE] *** Current routeVisibility map contents:";
     for (auto it = routeVisibility.begin(); it != routeVisibility.end(); ++it) {
-        qDebug() << "[ROUTE] ***   Route" << it.key() << "=" << it.value();
+        //qDebug() << "[ROUTE] ***   Route" << it.key() << "=" << it.value();
     }
 
     return visible;
@@ -3549,14 +3559,14 @@ void EcWidget::setRouteAttachedToShip(int routeId, bool attached)
     for (auto& route : routeList) {
         if (route.routeId == routeId) {
             route.attachedToShip = attached;
-            qDebug() << "[ROUTE] Set route" << routeId << "attached to ship:" << attached;
+            //qDebug() << "[ROUTE] Set route" << routeId << "attached to ship:" << attached;
 
             // Don't call saveRoutes or forceRedraw here to avoid recursive calls
             // These will be handled by the calling function
             return;
         }
     }
-    qDebug() << "[ROUTE] Warning: Route" << routeId << "not found when setting attached state";
+    //qDebug() << "[ROUTE] Warning: Route" << routeId << "not found when setting attached state";
 }
 
 bool EcWidget::isRouteAttachedToShip(int routeId) const
@@ -3571,17 +3581,17 @@ bool EcWidget::isRouteAttachedToShip(int routeId) const
 
 void EcWidget::attachRouteToShip(int routeId)
 {
-    qDebug() << "[ROUTE] attachRouteToShip called for route" << routeId;
+    //qDebug() << "[ROUTE] attachRouteToShip called for route" << routeId;
 
     // Preserve current visibility of the route being attached
     bool wasVisible = true;
     if (routeId > 0) {
         wasVisible = isRouteVisible(routeId);
-        qDebug() << "[ROUTE] Current visibility of route" << routeId << ":" << wasVisible;
+        //qDebug() << "[ROUTE] Current visibility of route" << routeId << ":" << wasVisible;
 
         // FORCE SET visibility to preserve it BEFORE save
         routeVisibility[routeId] = wasVisible;
-        qDebug() << "[ROUTE] PRESERVED visibility in routeVisibility before attachment";
+        //qDebug() << "[ROUTE] PRESERVED visibility in routeVisibility before attachment";
     }
 
     // Detach all routes first
@@ -3599,14 +3609,14 @@ void EcWidget::attachRouteToShip(int routeId)
             }
         }
 
-        qDebug() << "[ROUTE] Attached route" << routeId << "to ship";
+        //qDebug() << "[ROUTE] Attached route" << routeId << "to ship";
     } else {
-        qDebug() << "[ROUTE] Detached all routes from ship";
+        //qDebug() << "[ROUTE] Detached all routes from ship";
     }
 
     // Save the attachment state - visibility should be preserved now
     saveRoutes();
-    qDebug() << "[ROUTE] Saved routes with preserved visibility";
+    //qDebug() << "[ROUTE] Saved routes with preserved visibility";
 
     // Refresh chart to update colors - use Draw() to ensure AIS and waypoints are redrawn
     Draw(); // Changed from forceRedraw() to Draw() to include drawAISCell() and waypointDraw()
@@ -3696,7 +3706,7 @@ void EcWidget::createSeparateRouteWaypoint(const Waypoint &waypoint)
     // Add to our list
     waypointList.append(wp);
 
-    qDebug() << "[ROUTE] Added waypoint" << wp.label << "to route" << wp.routeId;
+    //qDebug() << "[ROUTE] Added waypoint" << wp.label << "to route" << wp.routeId;
 
     // Save to JSON file (like GuardZone does)
     saveWaypoints();
@@ -5163,12 +5173,12 @@ void EcWidget::drawRouteLines()
 
         // Check visibility
         if (!isRouteVisible(routeId)) {
-            qDebug() << "[ROUTE-DRAW] Route" << routeId << "is hidden, skipping";
+            //qDebug() << "[ROUTE-DRAW] Route" << routeId << "is hidden, skipping";
             continue;
         }
 
         if (indices.size() < 2) {
-            qDebug() << "[ROUTE-DRAW] Route" << routeId << "has only" << indices.size() << "waypoints, skipping lines";
+            //qDebug() << "[ROUTE-DRAW] Route" << routeId << "has only" << indices.size() << "waypoints, skipping lines";
             continue;
         }
 
@@ -5181,7 +5191,7 @@ void EcWidget::drawRouteLines()
 
         // Visual feedback for selected route - ALWAYS solid when selected
         if (routeId == selectedRouteId) {
-            qDebug() << "[ROUTE-DRAW] Drawing SELECTED route" << routeId << "as SOLID line";
+            //qDebug() << "[ROUTE-DRAW] Drawing SELECTED route" << routeId << "as SOLID line";
             pen.setWidth(4); // Thicker line for selected route
             pen.setStyle(Qt::SolidLine); // Solid line for selected route
             // Keep original color for selected route, don't make it lighter
@@ -5240,14 +5250,14 @@ void EcWidget::drawRouteLines()
                 arrowPen.setStyle(originalStyle);
                 painter.setPen(arrowPen);
 
-                qDebug() << "[ROUTE-DRAW] Drew line with arrow between" << wp1.label << "and" << wp2.label
-                         << "in route" << routeId << "style:" << (originalStyle == Qt::SolidLine ? "solid" : "dash");
+                //qDebug() << "[ROUTE-DRAW] Drew line with arrow between" << wp1.label << "and" << wp2.label
+                         //<< "in route" << routeId << "style:" << (originalStyle == Qt::SolidLine ? "solid" : "dash");
             }
         }
     }
 
     painter.end();
-    qDebug() << "[ROUTE-DRAW] Finished controlled route line drawing";
+    //qDebug() << "[ROUTE-DRAW] Finished controlled route line drawing";
 
     } catch (const std::exception& e) {
         qDebug() << "[ROUTE-LINES-ERROR] Exception in drawRouteLines:" << e.what();
@@ -12068,13 +12078,13 @@ void EcWidget::removeOutdatedObstacleMarkers()
 
 void EcWidget::startRouteMode()
 {
-    qDebug() << "[ROUTE] Starting route mode";
+    //qDebug() << "[ROUTE] Starting route mode";
     isRouteMode = true;
     // Ensure we start a brand-new route ID and clean state
     currentRouteId = getNextAvailableRouteId();
     routeWaypointCounter = 1;
     resetRouteConnections();
-    qDebug() << "[ROUTE] Route mode started. New route ID:" << currentRouteId;
+    //qDebug() << "[ROUTE] Route mode started. New route ID:" << currentRouteId;
 }
 
 void EcWidget::startAppendWaypointMode(int routeId)
@@ -12105,8 +12115,8 @@ void EcWidget::startAppendWaypointMode(int routeId)
         );
     }
 
-    qDebug() << "[ROUTE] Append waypoint mode started for route" << routeId
-             << "next index:" << routeWaypointCounter;
+    //qDebug() << "[ROUTE] Append waypoint mode started for route" << routeId
+             //<< "next index:" << routeWaypointCounter;
 }
 
 void EcWidget::resetRouteConnections()
@@ -12114,7 +12124,7 @@ void EcWidget::resetRouteConnections()
     // This function ensures that previous routes are properly terminated
     // and won't connect to the new route being created
 
-    qDebug() << "[ROUTE] Resetting route connections before starting new route" << (currentRouteId + 1);
+    //qDebug() << "[ROUTE] Resetting route connections before starting new route" << (currentRouteId + 1);
 
     // Force save current waypoints to ensure proper separation
     if (!waypointList.isEmpty()) {
@@ -12127,7 +12137,7 @@ void EcWidget::resetRouteConnections()
 
 void EcWidget::endRouteMode()
 {
-    qDebug() << "[ROUTE] Ending route mode";
+    //qDebug() << "[ROUTE] Ending route mode";
 
     if (isRouteMode) {
         // Finalize current route
@@ -12165,7 +12175,7 @@ void EcWidget::endRouteMode()
         mainWindow->setWindowTitle(APP_TITLE);
     }
 
-    qDebug() << "[ROUTE] Route mode ended. Next route ID will be:" << currentRouteId;
+    //qDebug() << "[ROUTE] Route mode ended. Next route ID will be:" << currentRouteId;
 }
 
 void EcWidget::drawRoutesSeparately()
@@ -12209,7 +12219,7 @@ EcCellId EcWidget::getOrCreateRouteCellId(int routeId)
 {
     // Check if we already have a cell for this route
     if (routeCells.contains(routeId)) {
-        qDebug() << "[ROUTE] Using existing cell for route" << routeId;
+        //qDebug() << "[ROUTE] Using existing cell for route" << routeId;
         return routeCells[routeId];
     }
 
@@ -12218,7 +12228,7 @@ EcCellId EcWidget::getOrCreateRouteCellId(int routeId)
 
     if (newRouteCell != EC_NOCELLID) {
         routeCells[routeId] = newRouteCell;
-        qDebug() << "[ROUTE] Created new cell for route" << routeId;
+        //qDebug() << "[ROUTE] Created new cell for route" << routeId;
         return newRouteCell;
     } else {
         qDebug() << "[ERROR] Failed to create new cell for route" << routeId;
@@ -12240,7 +12250,7 @@ EcCellId EcWidget::createNewRouteCellId()
     if (createWaypointCell()) {
         newCell = udoCid; // Get the newly created cell
         udoCid = tempUdoCid; // Restore original udoCid
-        qDebug() << "[ROUTE] Successfully created new route cell";
+        //qDebug() << "[ROUTE] Successfully created new route cell";
         return newCell;
     } else {
         udoCid = tempUdoCid; // Restore original udoCid on failure
@@ -12265,7 +12275,7 @@ void EcWidget::finalizeCurrentRoute()
         }
     }
 
-    qDebug() << "[ROUTE] Finalized route" << currentRouteId << "with" << waypointsInCurrentRoute << "waypoints";
+    //qDebug() << "[ROUTE] Finalized route" << currentRouteId << "with" << waypointsInCurrentRoute << "waypoints";
 
     // Force redraw to ensure proper visualization
     saveWaypoints();
@@ -12663,7 +12673,7 @@ void EcWidget::saveCurrentRoute()
         calculateRouteData(newRoute);
 
         routeList.append(newRoute);
-        qDebug() << "[ROUTE] Created new route" << currentRouteId << "with" << newRoute.waypoints.size() << "waypoints";
+        //qDebug() << "[ROUTE] Created new route" << currentRouteId << "with" << newRoute.waypoints.size() << "waypoints";
     }
 
     // Save to file
