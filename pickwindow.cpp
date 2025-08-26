@@ -432,7 +432,7 @@ QString PickWindow::ownShipAutoFill()
         ownship.append(row);
     }
 
-    if (navShip.depth != 0){
+    if (navShip.depth_below_keel != 0){
         row = QString(
                   "<tr>"
                   "<td style='vertical-align:middle;'>DEP</td>"
@@ -441,7 +441,7 @@ QString PickWindow::ownShipAutoFill()
                   "</td>"
                   "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>m</td>"
                   "</tr>")
-                  .arg(navShip.depth);
+                  .arg(navShip.depth_below_keel);
         text.append(row);
         ownship.append(row);
     }
