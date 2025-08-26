@@ -120,7 +120,9 @@ void AISSubscriber::onReadyRead() {
 
         emit connectionStatusChanged(true);
 
-        mainWindow->setReconnectStatusText("");
+        if (mainWindow) {
+            mainWindow->setReconnectStatusText("");
+        }
     }
 
     QList<QByteArray> lines;
