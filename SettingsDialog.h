@@ -12,6 +12,8 @@ class QLabel;
 class QButtonGroup;
 class QCheckBox;
 class QSlider;
+class QDoubleSpinBox;
+class QTimer;
 
 class SettingsDialog : public QDialog {
     Q_OBJECT
@@ -81,6 +83,15 @@ private:
     QLabel *trailLabelDistance;
     QSpinBox *trailSpin;
     QDoubleSpinBox *trailSpinDistance;
+
+    // NAVIGATION SAFETY
+    QDoubleSpinBox *shipDraftSpin;
+    QDoubleSpinBox *ukcDangerSpin;
+    QDoubleSpinBox *ukcWarningSpin;
+
+    // Safety notice UI
+    QLabel *ukcNoticeLabel;
+    QTimer *ukcNoticeTimer;
 };
 
 #endif // SETTINGSDIALOG_H

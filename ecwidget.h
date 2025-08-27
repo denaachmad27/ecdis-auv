@@ -299,6 +299,13 @@ public:
   bool initializeWaypointSystem();
   bool renameRoute(int routeId, const QString& newName);
   
+  // Route library (save/load without file picker)
+  bool saveRouteToLibrary(int routeId);
+  bool saveRouteToLibraryAs(int routeId, const QString& name);
+  bool loadRouteFromLibrary(const QString& routeName);
+  QStringList listSavedRouteNames() const;
+  QString getRouteLibraryFilePath() const;
+  
   // Route color customization
   void setRouteCustomColor(int routeId, const QColor& color);
   QColor getBaseRouteColor(int routeId) const; // returns custom or default base color
@@ -313,6 +320,9 @@ public:
   EcCellId getOrCreateRouteCellId(int routeId);
   EcCellId createNewRouteCellId();
   bool isInRouteMode() const { return isRouteMode; }
+
+  // Quick create route (simple form)
+  void showCreateRouteQuickDialog();
 
   DisplayOrientationMode displayOrientation = NorthUp;
   OSCenteringMode osCentering = Centered;
@@ -751,6 +761,9 @@ public:
   // WP CLICK
   void waypointRightClick(QMouseEvent *e);
   void waypointLeftClick(QMouseEvent *e);
+
+  // Show hazard info popup at a given position
+  void showHazardInfoAt(double lat, double lon);
 
 public slots:
   void updateAISTargetsList();

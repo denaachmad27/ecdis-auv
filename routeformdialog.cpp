@@ -422,27 +422,38 @@ void RouteFormDialog::showWaypointInputDialog(int editIndex)
     QDialog dialog(this);
     dialog.setWindowTitle(editIndex >= 0 ? "Edit Waypoint" : "Add Waypoint");
     dialog.setModal(true);
-    
+
     QFormLayout *layout = new QFormLayout(&dialog);
-    
+
     QLineEdit *labelEdit = new QLineEdit();
+    QComboBox *unitCombo = new QComboBox();
+    unitCombo->addItems(QStringList() << "Decimal Degrees" << "Deg-Min" << "Meters");
     QLineEdit *latEdit = new QLineEdit();
     QLineEdit *lonEdit = new QLineEdit();
     QDoubleSpinBox *radiusSpin = new QDoubleSpinBox();
     QLineEdit *remarkEdit = new QLineEdit();
     QCheckBox *activeCheck = new QCheckBox();
-    
+
+    // Dynamic labels for coordinates
+    QLabel *latLabel = new QLabel("Latitude:");
+    QLabel *lonLabel = new QLabel("Longitude:");
+
+    // Default validators for decimal degrees
     latEdit->setValidator(latValidator);
     lonEdit->setValidator(lonValidator);
-    
+    latEdit->setPlaceholderText("e.g., -7.256940");
+    lonEdit->setPlaceholderText("e.g., 112.751940");
+
+    // Turning radius (hidden per current UI policy)
     radiusSpin->setRange(0.1, 10.0);
     radiusSpin->setSingleStep(0.1);
     radiusSpin->setDecimals(1);
     radiusSpin->setSuffix(" NM");
-    radiusSpin->setValue(0.5); // Use default value since defaultTurningRadiusSpinBox is hidden
-    
+    radiusSpin->setValue(0.5);
+    radiusSpin->setVisible(false);
+
     activeCheck->setChecked(true);
-    
+
     // If editing, populate with existing data
     if (editIndex >= 0 && editIndex < waypoints.size()) {
         const RouteWaypointData &wp = waypoints[editIndex];
@@ -455,46 +466,152 @@ void RouteFormDialog::showWaypointInputDialog(int editIndex)
     } else if (autoLabelCheckBox->isChecked()) {
         labelEdit->setText(QString("WP%1").arg(waypoints.size() + 1));
     }
-    
+
+    // Update UI based on selected unit
+    auto updateUnitUI = [&]() {
+        QString unit = unitCombo->currentText();
+        if (unit == "Decimal Degrees") {
+            latLabel->setText("Latitude:");
+            lonLabel->setText("Longitude:");
+            latEdit->setValidator(latValidator);
+            lonEdit->setValidator(lonValidator);
+            latEdit->setPlaceholderText("e.g., -7.256940");
+            lonEdit->setPlaceholderText("e.g., 112.751940");
+        } else if (unit == "Deg-Min") {
+            latLabel->setText("Latitude (Deg-Min):");
+            lonLabel->setText("Longitude (Deg-Min):");
+            latEdit->setValidator(nullptr);
+            lonEdit->setValidator(nullptr);
+            latEdit->setPlaceholderText("e.g., 7 15.300 S or S 7 15.300");
+            lonEdit->setPlaceholderText("e.g., 112 45.120 E or E 112 45.120");
+        } else { // Meters
+            latLabel->setText("North (m):");
+            lonLabel->setText("East (m):");
+            latEdit->setValidator(new QDoubleValidator(-1e7, 1e7, 3, &dialog));
+            lonEdit->setValidator(new QDoubleValidator(-1e7, 1e7, 3, &dialog));
+            latEdit->setPlaceholderText("e.g., 0 (north offset)");
+            lonEdit->setPlaceholderText("e.g., 0 (east offset)");
+        }
+    };
+
+    QObject::connect(unitCombo, &QComboBox::currentTextChanged, &dialog, updateUnitUI);
+
+    // Initial UI state
+    updateUnitUI();
+
+    // Build form
     layout->addRow("Label:", labelEdit);
-    layout->addRow("Latitude:", latEdit);
-    layout->addRow("Longitude:", lonEdit);
-    // layout->addRow("Turn Radius:", radiusSpin); // HIDDEN: Turn radius field disabled
-    radiusSpin->setVisible(false); // HIDDEN: Hide turn radius spinbox
+    layout->addRow("Coordinate Units:", unitCombo);
+    layout->addRow(latLabel, latEdit);
+    layout->addRow(lonLabel, lonEdit);
+    // layout->addRow("Turn Radius:", radiusSpin); // kept hidden
     layout->addRow("Remark:", remarkEdit);
     layout->addRow("Active:", activeCheck);
-    
+
     QHBoxLayout *buttonLayout = new QHBoxLayout();
     QPushButton *okBtn = new QPushButton("OK");
     QPushButton *cancelBtn = new QPushButton("Cancel");
-    
     buttonLayout->addStretch();
     buttonLayout->addWidget(okBtn);
     buttonLayout->addWidget(cancelBtn);
-    
     layout->addRow(buttonLayout);
-    
+
     connect(okBtn, &QPushButton::clicked, &dialog, &QDialog::accept);
     connect(cancelBtn, &QPushButton::clicked, &dialog, &QDialog::reject);
-    
+
+    // Helper lambdas for parsing
+    auto parseDegMin = [](const QString& text, bool isLat, double& out) -> bool {
+        QString t = text.toUpper();
+        t.replace("°", " ");
+        t.replace("'", " ");
+        t.replace("\"", " ");
+        t.replace(",", " ");
+        t = t.simplified();
+
+        // Extract hemisphere
+        int sign = 1;
+        if (t.contains("S")) sign = -1;
+        if (t.contains("W")) sign = -1;
+        t.remove("N"); t.remove("S"); t.remove("E"); t.remove("W");
+        t = t.simplified();
+
+        QStringList parts = t.split(' ', Qt::SkipEmptyParts);
+        if (parts.size() < 1) return false;
+        bool okDeg=false, okMin=true;
+        int deg = parts[0].toInt(&okDeg);
+        double minutes = 0.0;
+        if (parts.size() >= 2) {
+            minutes = parts[1].toDouble(&okMin);
+        }
+        if (!okDeg || !okMin) return false;
+        if (minutes < 0.0 || minutes >= 60.0) return false;
+        if (isLat && (deg < 0 || deg > 90)) return false;
+        if (!isLat && (deg < 0 || deg > 180)) return false;
+
+        double decimal = deg + (minutes / 60.0);
+        out = sign * decimal;
+        return true;
+    };
+
+    auto metersToLatLon = [&](double north, double east, double& outLat, double& outLon) {
+        // Use current chart center as origin for local offsets
+        EcCoordinate oLat=0.0, oLon=0.0;
+        if (ecWidget) ecWidget->GetCenter(oLat, oLon);
+        double metersPerDegLat = 111320.0;
+        double metersPerDegLon = metersPerDegLat * qCos(qDegreesToRadians(static_cast<double>(oLat)));
+        outLat = static_cast<double>(oLat) + (north / metersPerDegLat);
+        if (metersPerDegLon == 0.0) metersPerDegLon = 1.0;
+        outLon = static_cast<double>(oLon) + (east / metersPerDegLon);
+    };
+
     if (dialog.exec() == QDialog::Accepted) {
         RouteWaypointData wp;
         wp.label = labelEdit->text().trimmed();
-        wp.lat = latEdit->text().toDouble();
-        wp.lon = lonEdit->text().toDouble();
         wp.turningRadius = radiusSpin->value();
         wp.remark = remarkEdit->text().trimmed();
         wp.active = activeCheck->isChecked();
-        
-        // Validate coordinates
-        if (wp.lat < -90.0 || wp.lat > 90.0 || wp.lon < -180.0 || wp.lon > 180.0) {
-            QMessageBox::warning(this, "Invalid Coordinates", 
-                "Please enter valid coordinates:\nLatitude: -90.0 to 90.0\nLongitude: -180.0 to 180.0");
+
+        QString unit = unitCombo->currentText();
+        bool okCoords = false;
+
+        if (unit == "Decimal Degrees") {
+            bool okLat=false, okLon=false;
+            double lat = latEdit->text().toDouble(&okLat);
+            double lon = lonEdit->text().toDouble(&okLon);
+            okCoords = okLat && okLon;
+            wp.lat = lat;
+            wp.lon = lon;
+        } else if (unit == "Deg-Min") {
+            double lat=0.0, lon=0.0;
+            bool okLat = parseDegMin(latEdit->text(), true, lat);
+            bool okLon = parseDegMin(lonEdit->text(), false, lon);
+            okCoords = okLat && okLon;
+            wp.lat = lat;
+            wp.lon = lon;
+        } else { // Meters
+            bool okNorth=false, okEast=false;
+            double north = latEdit->text().toDouble(&okNorth);
+            double east = lonEdit->text().toDouble(&okEast);
+            if (okNorth && okEast) {
+                double lat=0.0, lon=0.0;
+                metersToLatLon(north, east, lat, lon);
+                wp.lat = lat;
+                wp.lon = lon;
+                okCoords = true;
+            }
+        }
+
+        // Validate
+        if (!okCoords || wp.lat < -90.0 || wp.lat > 90.0 || wp.lon < -180.0 || wp.lon > 180.0) {
+            QMessageBox::warning(this, "Invalid Coordinates",
+                                 "Please enter valid coordinates.\n"
+                                 "- Decimal Degrees: -90..90 (lat), -180..180 (lon)\n"
+                                 "- Deg-Min: D M.MMM H (e.g., 7 15.300 S)\n"
+                                 "- Meters: North/East offsets relative to map center");
             return;
         }
-        
+
         if (editIndex >= 0) {
-            // Log coordinate changes for debugging
             qDebug() << "[WAYPOINT-EDIT] Waypoint" << editIndex + 1 << "coordinates changed from"
                      << waypoints[editIndex].lat << "," << waypoints[editIndex].lon
                      << "to" << wp.lat << "," << wp.lon;
@@ -505,7 +622,7 @@ void RouteFormDialog::showWaypointInputDialog(int editIndex)
             waypoints.append(wp);
             statusLabel->setText(QString("✓ Waypoint %1 (%2) added successfully - Total: %3 waypoints").arg(waypoints.size()).arg(wp.label).arg(waypoints.size()));
         }
-        
+
         updateWaypointList();
         updateButtonStates();
     }

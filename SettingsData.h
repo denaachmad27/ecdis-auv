@@ -36,6 +36,11 @@ struct SettingsData {
     int trailMode;
     int trailMinute;
     double trailDistance;
+
+    // NAVIGATION SAFETY
+    double shipDraftMeters; // Vessel draft used for depth-based hazard checks
+    double ukcDangerMeters; // Under Keel Clearance threshold for DANGEROUS
+    double ukcWarningMeters; // Under Keel Clearance threshold for CAUTION
 };
 
 #endif // SETTINGSDATA_H
