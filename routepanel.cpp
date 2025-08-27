@@ -367,30 +367,35 @@ void RoutePanel::setupUI()
     routeManagementGroup->setLayout(routeManagementLayout);
     
     addRouteButton = new QPushButton("Add Route");
+    saveRouteButton = new QPushButton("Save");
+    loadRouteButton = new QPushButton("Load");
     importRoutesButton = new QPushButton("Import");
     exportRoutesButton = new QPushButton("Export");
     refreshButton = new QPushButton("Refresh");
     clearAllButton = new QPushButton("Clear All");
     
     addRouteButton->setToolTip("Create new route");
+    saveRouteButton->setToolTip("Save selected route to library");
+    loadRouteButton->setToolTip("Load a route from library");
     importRoutesButton->setToolTip("Import routes from CSV file");
     exportRoutesButton->setToolTip("Export all routes to JSON file");
     refreshButton->setToolTip("Refresh route list");
     clearAllButton->setToolTip("Clear all routes");
     
     // Layout buttons in 3 columns, 2 rows
+    // Row 1: Add, Save, Load
     routeManagementLayout->addWidget(addRouteButton, 0, 0);
-    routeManagementLayout->addWidget(importRoutesButton, 0, 1);
-    routeManagementLayout->addWidget(exportRoutesButton, 0, 2);
-    routeManagementLayout->addWidget(refreshButton, 1, 0);
-    routeManagementLayout->addWidget(clearAllButton, 1, 1);
+    routeManagementLayout->addWidget(saveRouteButton, 0, 1);
+    routeManagementLayout->addWidget(loadRouteButton, 0, 2);
+    // Row 2: Clear All only (keep UI clean). Import/Export/Refresh hidden.
+    routeManagementLayout->addWidget(clearAllButton, 1, 0);
+    // Keep placeholders off-panel
+    importRoutesButton->setVisible(false);
+    exportRoutesButton->setVisible(false);
+    refreshButton->setVisible(false);
 
     // Ensure export is available in all modes
-    if (AppConfig::isProduction()){
-        // Keep import visibility policy if needed, but do not hide export
-        // importRoutesButton->setVisible(false);
-        exportRoutesButton->setVisible(true);
-    }
+    // Import/Export moved to main menu; keep hidden here
     
     mainLayout->addWidget(routeManagementGroup);
     
@@ -635,10 +640,14 @@ void RoutePanel::setupConnections()
     
     // Route Management Button connections
     connect(addRouteButton, &QPushButton::clicked, this, &RoutePanel::onAddRouteClicked);
+    // Import/Export moved to main menu; keep handlers accessible but buttons hidden
     connect(importRoutesButton, &QPushButton::clicked, this, &RoutePanel::onImportRoutesClicked);
     connect(exportRoutesButton, &QPushButton::clicked, this, &RoutePanel::onExportRoutesClicked);
-    connect(refreshButton, &QPushButton::clicked, this, &RoutePanel::onRefreshClicked);
+    // Refresh button removed to simplify UI
+    // connect(refreshButton, &QPushButton::clicked, this, &RoutePanel::onRefreshClicked);
     connect(clearAllButton, &QPushButton::clicked, this, &RoutePanel::onClearAllClicked);
+    connect(saveRouteButton, &QPushButton::clicked, this, &RoutePanel::onSaveRouteClicked);
+    connect(loadRouteButton, &QPushButton::clicked, this, &RoutePanel::onLoadRouteClicked);
     
     // Waypoint Management Button connections
     connect(addWaypointButton, &QPushButton::clicked, this, &RoutePanel::onAddWaypointClicked);
@@ -742,6 +751,17 @@ void RoutePanel::setupConnections()
         onToggleWaypointActive(); // Reuse button functionality
     });
     connect(deleteWaypointAction, &QAction::triggered, this, &RoutePanel::onDeleteWaypointFromContext);
+}
+
+// Public wrappers for main menu actions (avoid private slot access issue)
+void RoutePanel::handleImportRoutesFromMenu()
+{
+    onImportRoutesClicked();
+}
+
+void RoutePanel::handleExportRoutesFromMenu()
+{
+    onExportRoutesClicked();
 }
 
 void RoutePanel::refreshRouteList()
@@ -1346,8 +1366,244 @@ void RoutePanel::onChangeRouteColor()
 
 void RoutePanel::onAddRouteClicked()
 {
-    // Emit signal to main window to start route creation
-    emit requestCreateRoute();
+    // Offer choice between creating by click or by form
+    QMessageBox modeBox(this);
+    modeBox.setWindowTitle("Add Route");
+    modeBox.setText("How do you want to create the route?");
+    QPushButton* clickBtn = modeBox.addButton("By Click", QMessageBox::AcceptRole);
+    QPushButton* formBtn = modeBox.addButton("By Form", QMessageBox::ActionRole);
+    QPushButton* cancelBtn = modeBox.addButton(QMessageBox::Cancel);
+    modeBox.setDefaultButton(clickBtn);
+    modeBox.exec();
+
+    if (modeBox.clickedButton() == cancelBtn) return;
+
+    if (modeBox.clickedButton() == clickBtn) {
+        // Start create-by-click mode (existing behavior)
+        emit requestCreateRoute();
+        return;
+    }
+
+    // Create by form: open the simplified quick create dialog
+    if (ecWidget) {
+        ecWidget->showCreateRouteQuickDialog();
+    }
+}
+
+void RoutePanel::onSaveRouteClicked()
+{
+    if (selectedRouteId <= 0 || !ecWidget) {
+        QMessageBox::information(this, "No Route Selected", "Select a route to save to library.");
+        return;
+    }
+    // Show Windows-like confirmation dialog with Save, Save As, Cancel
+    EcWidget::Route r = ecWidget->getRouteById(selectedRouteId);
+    QString routeName = r.name.trimmed().isEmpty() ? QString("Route %1").arg(selectedRouteId) : r.name;
+
+    QDialog dlg(this);
+    dlg.setWindowTitle("Save Route");
+    QVBoxLayout* vlay = new QVBoxLayout(&dlg);
+    vlay->setContentsMargins(16,16,16,16);
+    vlay->setSpacing(12);
+    QLabel* text = new QLabel(QString("Do you want to save %1?").arg(routeName), &dlg);
+    vlay->addWidget(text);
+    QHBoxLayout* btns = new QHBoxLayout();
+    btns->addStretch();
+    QPushButton* saveBtn = new QPushButton("Save", &dlg);
+    QPushButton* saveAsBtn = new QPushButton("Save As", &dlg);
+    QPushButton* cancelBtn = new QPushButton("Cancel", &dlg);
+    btns->setSpacing(10);
+    btns->addWidget(saveBtn);
+    btns->addWidget(saveAsBtn);
+    btns->addWidget(cancelBtn);
+    vlay->addLayout(btns);
+
+    QObject::connect(saveBtn, &QPushButton::clicked, &dlg, &QDialog::accept);
+    QObject::connect(cancelBtn, &QPushButton::clicked, &dlg, &QDialog::reject);
+    // Save As handled by lambda
+    bool saveAsRequested = false;
+    QObject::connect(saveAsBtn, &QPushButton::clicked, [&](){ saveAsRequested = true; dlg.accept(); });
+
+    if (dlg.exec() != QDialog::Accepted) return;
+
+    if (!saveAsRequested) {
+        if (ecWidget->saveRouteToLibrary(selectedRouteId)) {
+            emit statusMessage(QString("Route %1 saved to library").arg(selectedRouteId));
+            QMessageBox::information(this, "Saved", "Route has been saved to library.");
+        } else {
+            QMessageBox::warning(this, "Save Failed", "Could not save route to library.");
+        }
+        return;
+    }
+
+    // Save As flow
+    bool ok=false;
+    QString newName = QInputDialog::getText(this, "Save Route As", "Route name:", QLineEdit::Normal, routeName, &ok);
+    if (!ok || newName.trimmed().isEmpty()) return;
+    if (ecWidget->saveRouteToLibraryAs(selectedRouteId, newName)) {
+        // Keep names consistent across UI: rename actual route too
+        ecWidget->renameRoute(selectedRouteId, newName);
+        refreshRouteList();
+        emit statusMessage(QString("Route saved as '%1' to library").arg(newName));
+        QMessageBox::information(this, "Saved", "Route has been saved to library with a new name.");
+    } else {
+        QMessageBox::warning(this, "Save Failed", "Could not save route to library.");
+    }
+}
+
+void RoutePanel::onLoadRouteClicked()
+{
+    if (!ecWidget) return;
+    QString libPath = ecWidget->getRouteLibraryFilePath();
+    QFile f(libPath);
+    if (!f.exists() || !f.open(QIODevice::ReadOnly)) {
+        QMessageBox::information(this, "No Saved Routes", "No routes found in library.");
+        return;
+    }
+    QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
+    f.close();
+    QJsonArray arr = doc.object().value("saved_routes").toArray();
+    if (arr.isEmpty()) {
+        QMessageBox::information(this, "No Saved Routes", "No routes found in library.");
+        return;
+    }
+
+    // Build selection dialog with checkboxes and details
+    QDialog dlg(this);
+    dlg.setWindowTitle("Load Route(s)");
+    QVBoxLayout* vlay = new QVBoxLayout(&dlg);
+    vlay->setContentsMargins(16,16,16,16);
+    vlay->setSpacing(10);
+    QLabel* info = new QLabel("Select one or more routes to load.", &dlg);
+    vlay->addWidget(info);
+
+    QTreeWidget* list = new QTreeWidget(&dlg);
+    list->setColumnCount(3);
+    list->setHeaderLabels({"Route Name", "Waypoints", "Distance (NM)"});
+    list->setRootIsDecorated(false);
+    list->setAlternatingRowColors(true);
+    list->setUniformRowHeights(false);
+    list->setStyleSheet("QTreeWidget::item{padding:6px 10px;} QTreeWidget{min-width:420px;}");
+    list->setSelectionMode(QAbstractItemView::SingleSelection);
+    list->setSelectionBehavior(QAbstractItemView::SelectRows);
+
+    // Populate with metadata
+    for (const auto &v : arr) {
+        QJsonObject o = v.toObject();
+        QString name = o.value("name").toString();
+        QJsonArray wps = o.value("waypoints").toArray();
+        int count = wps.size();
+        double dist_m = 0.0;
+        // Compute total distance
+        if (count >= 2) {
+            for (int i = 0; i < count - 1; ++i) {
+                QJsonObject w1 = wps[i].toObject();
+                QJsonObject w2 = wps[i+1].toObject();
+                double lat1 = w1.value("lat").toDouble();
+                double lon1 = w1.value("lon").toDouble();
+                double lat2 = w2.value("lat").toDouble();
+                double lon2 = w2.value("lon").toDouble();
+                dist_m += ecWidget->haversine(lat1, lon1, lat2, lon2); // meters
+            }
+        }
+        double dist_nm = dist_m / 1852.0; // convert meters to nautical miles
+        auto* it = new QTreeWidgetItem(list);
+        it->setText(0, name);
+        it->setText(1, QString::number(count));
+        it->setText(2, QString::number(dist_nm, 'f', 2));
+        it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsUserCheckable);
+        it->setCheckState(0, Qt::Unchecked);
+    }
+    list->resizeColumnToContents(0);
+    vlay->addWidget(list);
+
+    // Simplified, predictable behavior:
+    // - Click checkbox (col 0) toggles only that row
+    // - Click other columns checks that row (does not uncheck others)
+    QObject::connect(list, &QTreeWidget::itemClicked, &dlg, [list](QTreeWidgetItem* item, int column){
+        if (!item) return;
+        if (column == 0) {
+            item->setCheckState(0, item->checkState(0) == Qt::Checked ? Qt::Unchecked : Qt::Checked);
+        } else {
+            item->setCheckState(0, Qt::Checked);
+        }
+    });
+
+    QHBoxLayout* btns = new QHBoxLayout();
+    btns->addStretch();
+    QPushButton* loadBtn = new QPushButton("Load Selected", &dlg);
+    QPushButton* deleteBtn = new QPushButton("Delete Selected", &dlg);
+    QPushButton* cancelBtn = new QPushButton("Cancel", &dlg);
+    btns->setSpacing(10);
+    btns->addWidget(loadBtn);
+    btns->addWidget(deleteBtn);
+    btns->addWidget(cancelBtn);
+    vlay->addLayout(btns);
+    QObject::connect(loadBtn, &QPushButton::clicked, &dlg, &QDialog::accept);
+    QObject::connect(cancelBtn, &QPushButton::clicked, &dlg, &QDialog::reject);
+    // Delete selected from library
+    QObject::connect(deleteBtn, &QPushButton::clicked, &dlg, [&, list, libPath]() {
+        // Gather checked names
+        QStringList toDelete;
+        for (int i=0;i<list->topLevelItemCount();++i) {
+            auto* it = list->topLevelItem(i);
+            if (it->checkState(0) == Qt::Checked) toDelete << it->text(0);
+        }
+        if (toDelete.isEmpty()) {
+            QMessageBox::information(&dlg, "No Selection", "Please check at least one route to delete.");
+            return;
+        }
+        if (QMessageBox::question(&dlg, "Confirm Delete", QString("Delete %1 selected route(s) from library?").arg(toDelete.size())) != QMessageBox::Yes) {
+            return;
+        }
+        // Load JSON, remove entries, save back
+        QFile f(libPath);
+        if (!f.open(QIODevice::ReadOnly)) {
+            QMessageBox::warning(&dlg, "Delete Failed", "Could not open route library.");
+            return;
+        }
+        QJsonDocument d = QJsonDocument::fromJson(f.readAll());
+        f.close();
+        QJsonArray saved = d.object().value("saved_routes").toArray();
+        QJsonArray newSaved;
+        for (const auto &vv : saved) {
+            QJsonObject o = vv.toObject();
+            if (!toDelete.contains(o.value("name").toString())) newSaved.append(o);
+        }
+        QJsonObject root; root["saved_routes"] = newSaved;
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QMessageBox::warning(&dlg, "Delete Failed", "Could not write route library.");
+            return;
+        }
+        f.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+        f.close();
+        // Remove rows from UI
+        for (int i=list->topLevelItemCount()-1;i>=0;--i) {
+            auto* it = list->topLevelItem(i);
+            if (it->checkState(0) == Qt::Checked) delete list->takeTopLevelItem(i);
+        }
+        QMessageBox::information(&dlg, "Deleted", "Selected routes deleted from library.");
+    });
+
+    if (dlg.exec() != QDialog::Accepted) return;
+
+    // Load all checked routes
+    int loaded = 0;
+    for (int i = 0; i < list->topLevelItemCount(); ++i) {
+        QTreeWidgetItem* it = list->topLevelItem(i);
+        if (it->checkState(0) == Qt::Checked) {
+            QString name = it->text(0);
+            if (ecWidget->loadRouteFromLibrary(name)) {
+                loaded++;
+            }
+        }
+    }
+    if (loaded > 0) {
+        refreshRouteList();
+        emit statusMessage(QString("Loaded %1 route(s) from library").arg(loaded));
+    } else {
+        QMessageBox::information(this, "No Selection", "No routes were selected to load.");
+    }
 }
 
 

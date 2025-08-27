@@ -916,6 +916,15 @@ void MainWindow::createMenuBar(){
     }
 
 
+    // Import/Export moved from panel to main menu Route
+    if (routePanel) {
+        routeMenu->addSeparator();
+        QAction* importRoutesAct = routeMenu->addAction("Import Routes...");
+        QAction* exportRoutesAct = routeMenu->addAction("Export Routes...");
+        connect(importRoutesAct, &QAction::triggered, routePanel, &RoutePanel::handleImportRoutesFromMenu);
+        connect(exportRoutesAct, &QAction::triggered, routePanel, &RoutePanel::handleExportRoutesFromMenu);
+    }
+
     // ================================== ABOUT MENU
     QMenu *aboutMenu = menuBar()->addMenu("&About");
     aboutMenu->addAction("Release Notes", this, SLOT(openReleaseNotesDialog()) );

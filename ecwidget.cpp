@@ -11,6 +11,7 @@
 #include "ecwidget.h"
 #include "waypointdialog.h"
 #include "routeformdialog.h"
+#include "routequickformdialog.h"
 #include "alertsystem.h"
 #include "ais.h"
 #include "pickwindow.h"
@@ -3656,6 +3657,10 @@ void EcWidget::createWaypointAt(EcCoordinate lat, EcCoordinate lon)
     }
 
     qDebug() << "[INFO] Waypoint created successfully. Total waypoints:" << waypointList.size();
+
+    // After creating waypoint, show hazard info (caution/danger) at this position
+    // Show for both route and single waypoint creation
+    showHazardInfoAt(lat, lon);
 }
 
 bool EcWidget::createWaypointInRoute(int routeId, double lat, double lon, const QString& label)
@@ -11290,6 +11295,187 @@ QString EcWidget::extractObjectNameFromFeature(const EcFeature& feature)
     return objectName;
 }
 
+void EcWidget::showHazardInfoAt(double lat, double lon)
+{
+    try {
+        QList<EcFeature> pickedFeatureList;
+        GetPickedFeaturesSubs(pickedFeatureList, lat, lon);
+
+        if (pickedFeatureList.isEmpty()) {
+            return; // Nothing to show
+        }
+
+        struct HazardItem {
+            QString level;     // DANGEROUS / WARNING
+            QString title;     // Object name or feature name
+            QString feature;   // Feature class token/name
+            QString details;   // Extracted information
+        };
+
+        QList<HazardItem> hazards;
+        bool hasDanger = false;
+        bool hasWarning = false;
+
+        // Helper: extract min depth (DRVAL1) from feature if present
+        auto extractMinDepth = [&](const EcFeature& feature) -> double {
+            char attrStr[1024];
+            EcFindInfo fI;
+            Bool result = EcFeatureGetAttributes(feature, dictInfo, &fI, EC_FIRST, attrStr, sizeof(attrStr));
+            EcAttributeToken attrToken;
+            EcAttributeType attrType;
+            while (result) {
+                strncpy(attrToken, attrStr, EC_LENATRCODE);
+                attrToken[EC_LENATRCODE] = (char)0;
+                if (EcDictionaryGetAttributeType(dictInfo, attrStr, &attrType) == EC_DICT_OK) {
+                    if (QString::fromLatin1(attrToken) == "drval1") {
+                        // Value after token
+                        QString attrString = QString::fromLatin1(attrStr);
+                        int eq = attrString.indexOf('=');
+                        if (eq > 0) {
+                            bool ok = false;
+                            double v = attrString.mid(eq + 1).toDouble(&ok);
+                            if (ok) return v;
+                        }
+                    }
+                }
+                result = EcFeatureGetAttributes(feature, dictInfo, &fI, EC_NEXT, attrStr, sizeof(attrStr));
+            }
+            return std::numeric_limits<double>::quiet_NaN();
+        };
+
+        // Iterate features and collect relevant hazards
+        for (const EcFeature &feature : pickedFeatureList) {
+            char featToken[EC_LENATRCODE + 1];
+            char featName[256];
+
+            EcFeatureGetClass(feature, dictInfo, featToken, sizeof(featToken));
+            QString featureClass = QString::fromLatin1(featToken);
+
+            // Skip non-relevant features
+            if (featureClass == "aistar" || featureClass == "ownshp") {
+                continue;
+            }
+
+            // Determine hazard level of interest
+            QString level;
+            if (featureClass == "WRECKS" || featureClass == "OBSTNS" || featureClass == "UWTROC") {
+                level = "DANGEROUS";
+            } else if (featureClass == "CTNARE" || featureClass == "PIPARE" || featureClass == "CBLARE" || featureClass == "TSSBND" || featureClass == "BOYISD" || featureClass == "DRGARE") {
+                level = "WARNING"; // Caution-type features
+            } else if (featureClass == "DEPARE") {
+                // Classify by minimum depth (DRVAL1) vs ship draft
+                double minDepth = extractMinDepth(feature);
+                double shipDraft = SettingsManager::instance().data().shipDraftMeters;
+                if (!qIsNaN(minDepth)) {
+                    if (shipDraft > 0.0) {
+                        double ukc = minDepth - shipDraft; // under keel clearance
+                        double ukcDanger = SettingsManager::instance().data().ukcDangerMeters;
+                        double ukcWarning = SettingsManager::instance().data().ukcWarningMeters;
+                        if (ukc < ukcDanger) level = "DANGEROUS";
+                        else if (ukc < ukcWarning) level = "WARNING";
+                        else continue; // safe
+                    } else {
+                        // Fallback fixed thresholds
+                        if (minDepth < 2.0) level = "DANGEROUS";
+                        else if (minDepth < 5.0) level = "WARNING";
+                        else continue;
+                    }
+                } else {
+                    // If depth unknown, treat as caution to be safe
+                    level = "WARNING";
+                }
+            } else {
+                continue; // Only show caution/danger as requested
+            }
+
+            // Translate feature name
+            if (EcDictionaryTranslateObjectToken(dictInfo, featToken, featName, sizeof(featName)) != EC_DICT_OK) {
+                strcpy(featName, "Unknown Feature");
+            }
+
+            // Prefer object name/INFORM if available
+            QString title = extractObjectNameFromFeature(feature);
+            if (title.trimmed().isEmpty()) {
+                title = QString::fromLatin1(featName);
+            }
+
+            // Extract detailed information (attributes)
+            QString details = extractInformationFromFeature(feature);
+            // Enrich DEPARE with min depth if available
+            if (featureClass == "DEPARE") {
+                double minDepth = extractMinDepth(feature);
+                double shipDraft = SettingsManager::instance().data().shipDraftMeters;
+                if (!qIsNaN(minDepth)) {
+                    if (shipDraft > 0.0) {
+                        double ukc = minDepth - shipDraft;
+                        details = QString("Min depth: %1 m; UKC: %2 m; %3")
+                                     .arg(minDepth, 0, 'f', 1)
+                                     .arg(ukc, 0, 'f', 1)
+                                     .arg(details);
+                    } else {
+                        details = QString("Min depth: %1 m; %2")
+                                     .arg(minDepth, 0, 'f', 1)
+                                     .arg(details);
+                    }
+                }
+            }
+
+            hazards.append({level, title, QString::fromLatin1(featName), details});
+            if (level == "DANGEROUS") hasDanger = true; else hasWarning = true;
+        }
+
+        if (hazards.isEmpty()) {
+            return; // No caution/danger near this waypoint
+        }
+
+        // Compute distance and bearing from own ship to waypoint if available
+        double distNM = -1.0, bearing = -1.0;
+        if (ownShip.lat != 0.0 || ownShip.lon != 0.0) {
+            EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
+                                                   ownShip.lat, ownShip.lon,
+                                                   lat, lon,
+                                                   &distNM, &bearing);
+        }
+
+        // Build concise HTML message
+        QString msg;
+        msg += QString("<b>Waypoint at</b> %1, %2")
+                   .arg(lat, 0, 'f', 6)
+                   .arg(lon, 0, 'f', 6);
+        if (distNM >= 0.0) {
+            msg += QString(" &nbsp; <span style='color:#666'>(%1 NM, %2° from ship)</span>")
+                       .arg(distNM, 0, 'f', 3)
+                       .arg(bearing, 0, 'f', 1);
+        }
+        msg += "<br><br>";
+
+        int shown = 0;
+        for (const auto &h : hazards) {
+            // Limit items to avoid spamming
+            if (shown >= 5) break;
+            QString badge = (h.level == "DANGEROUS") ? "<span style='color:#b00020;font-weight:bold'>DANGEROUS</span>"
+                                                     : "<span style='color:#b58900;font-weight:bold'>CAUTION</span>";
+            msg += QString("%1: %2 (%3)<br>").arg(badge, h.title.toHtmlEscaped(), h.feature.toHtmlEscaped());
+            if (!h.details.trimmed().isEmpty()) {
+                msg += QString("<span style='color:#555'>%1</span><br>").arg(h.details.toHtmlEscaped());
+            }
+            msg += "<br>";
+            shown++;
+        }
+
+        QMessageBox box;
+        box.setWindowTitle(tr("Waypoint Hazard Information"));
+        box.setTextFormat(Qt::RichText);
+        box.setText(msg);
+        if (hasDanger) box.setIcon(QMessageBox::Critical);
+        else if (hasWarning) box.setIcon(QMessageBox::Warning);
+        else box.setIcon(QMessageBox::Information);
+        box.exec();
+    } catch (...) {
+        // Fail silently to not interrupt routing flow
+    }
+}
+
 void EcWidget::drawObstacleDetectionArea(QPainter& painter)
 {
     qDebug() << "[OBSTACLE-AREA-DEBUG] ========== Drawing Obstacle Detection Area ==========";
@@ -12809,9 +12995,21 @@ bool EcWidget::renameRoute(int routeId, const QString& newName)
     if (routeId <= 0 || newName.trimmed().isEmpty()) return false;
 
     bool found = false;
+    QString baseName = newName.trimmed();
+    // Build set of names excluding this routeId
+    QSet<QString> existingNames;
+    for (const auto &r : routeList) {
+        if (r.routeId != routeId) existingNames.insert(r.name.trimmed().toLower());
+    }
+    // Ensure unique name by appending (n) if needed
+    QString finalName = baseName;
+    int suffix = 2;
+    while (existingNames.contains(finalName.trimmed().toLower())) {
+        finalName = QString("%1 (%2)").arg(baseName).arg(suffix++);
+    }
     for (auto &route : routeList) {
         if (route.routeId == routeId) {
-            route.name = newName.trimmed();
+            route.name = finalName;
             route.modifiedDate = QDateTime::currentDateTime();
             found = true;
             break;
@@ -12937,6 +13135,206 @@ QString EcWidget::getRouteFilePath() const
         return basePath + "/routes.json";
 }
 
+QString EcWidget::getRouteLibraryFilePath() const
+{
+    QString basePath;
+#ifdef _WIN32
+    if (EcKernelGetEnv("APPDATA"))
+        basePath = QString(EcKernelGetEnv("APPDATA")) + "/SevenCs/EC2007/DENC";
+#else
+    if (EcKernelGetEnv("HOME"))
+        basePath = QString(EcKernelGetEnv("HOME")) + "/SevenCs/EC2007/DENC";
+#endif
+    if (basePath.isEmpty())
+        return "routes_library.json";
+    else
+        return basePath + "/routes_library.json";
+}
+
+QStringList EcWidget::listSavedRouteNames() const
+{
+    QString filePath = getRouteLibraryFilePath();
+    QFile file(filePath);
+    QStringList names;
+    if (!file.exists()) return names;
+    if (!file.open(QIODevice::ReadOnly)) return names;
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    file.close();
+    QJsonArray arr = doc.object().value("saved_routes").toArray();
+    for (const auto& v : arr) {
+        QJsonObject o = v.toObject();
+        QString name = o.value("name").toString();
+        if (!name.isEmpty()) names << name;
+    }
+    return names;
+}
+
+bool EcWidget::saveRouteToLibrary(int routeId)
+{
+    if (routeId <= 0) return false;
+    // Get a fresh copy of the route with current waypoints
+    Route routeCopy = getRouteById(routeId);
+    if (routeCopy.waypoints.isEmpty()) return false;
+    if (routeCopy.name.trimmed().isEmpty()) {
+        routeCopy.name = QString("Route %1").arg(routeId);
+    }
+
+    // Build JSON object for this route
+    QJsonObject routeObj;
+    routeObj["name"] = routeCopy.name;
+    routeObj["description"] = routeCopy.description;
+    // Persist custom color if present
+    if (routeCustomColors.contains(routeId)) {
+        routeObj["color"] = routeCustomColors.value(routeId).name(QColor::HexRgb);
+    }
+    // Waypoints
+    QJsonArray wps;
+    for (const auto &wp : routeCopy.waypoints) {
+        QJsonObject w;
+        w["lat"] = wp.lat;
+        w["lon"] = wp.lon;
+        w["label"] = wp.label;
+        w["remark"] = wp.remark;
+        w["turningRadius"] = wp.turningRadius;
+        w["active"] = wp.active;
+        wps.append(w);
+    }
+    routeObj["waypoints"] = wps;
+
+    // Read library, replace by name, write back
+    QString filePath = getRouteLibraryFilePath();
+    QDir dir = QFileInfo(filePath).dir();
+    if (!dir.exists()) dir.mkpath(".");
+    QJsonArray saved;
+    {
+        QFile f(filePath);
+        if (f.exists() && f.open(QIODevice::ReadOnly)) {
+            QJsonDocument d = QJsonDocument::fromJson(f.readAll());
+            f.close();
+            saved = d.object().value("saved_routes").toArray();
+        }
+    }
+    // Remove existing with same name
+    QJsonArray newSaved;
+    for (const auto &v : saved) {
+        QJsonObject o = v.toObject();
+        if (o.value("name").toString() != routeCopy.name) newSaved.append(o);
+    }
+    newSaved.append(routeObj);
+    QJsonObject root; root["saved_routes"] = newSaved;
+    QFile out(filePath);
+    if (!out.open(QIODevice::WriteOnly | QIODevice::Text)) return false;
+    out.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+    out.close();
+    qDebug() << "[ROUTE-LIB] Saved route to library:" << routeCopy.name << "at" << filePath;
+    return true;
+}
+
+bool EcWidget::saveRouteToLibraryAs(int routeId, const QString& name)
+{
+    if (routeId <= 0) return false;
+    Route routeCopy = getRouteById(routeId);
+    if (routeCopy.waypoints.isEmpty()) return false;
+
+    QString saveName = name.trimmed();
+    if (saveName.isEmpty()) {
+        saveName = routeCopy.name.trimmed();
+        if (saveName.isEmpty()) saveName = QString("Route %1").arg(routeId);
+    }
+
+    // Build JSON object for this route (same as saveRouteToLibrary but override name)
+    QJsonObject routeObj;
+    routeObj["name"] = saveName;
+    routeObj["description"] = routeCopy.description;
+    if (routeCustomColors.contains(routeId)) {
+        routeObj["color"] = routeCustomColors.value(routeId).name(QColor::HexRgb);
+    }
+    QJsonArray wps;
+    for (const auto &wp : routeCopy.waypoints) {
+        QJsonObject w;
+        w["lat"] = wp.lat;
+        w["lon"] = wp.lon;
+        w["label"] = wp.label;
+        w["remark"] = wp.remark;
+        w["turningRadius"] = wp.turningRadius;
+        w["active"] = wp.active;
+        wps.append(w);
+    }
+    routeObj["waypoints"] = wps;
+
+    // Read library and write back (replace same name)
+    QString filePath = getRouteLibraryFilePath();
+    QDir dir = QFileInfo(filePath).dir();
+    if (!dir.exists()) dir.mkpath(".");
+    QJsonArray saved;
+    {
+        QFile f(filePath);
+        if (f.exists() && f.open(QIODevice::ReadOnly)) {
+            QJsonDocument d = QJsonDocument::fromJson(f.readAll());
+            f.close();
+            saved = d.object().value("saved_routes").toArray();
+        }
+    }
+    QJsonArray newSaved;
+    for (const auto &v : saved) {
+        QJsonObject o = v.toObject();
+        if (o.value("name").toString() != saveName) newSaved.append(o);
+    }
+    newSaved.append(routeObj);
+    QJsonObject root; root["saved_routes"] = newSaved;
+    QFile out(filePath);
+    if (!out.open(QIODevice::WriteOnly | QIODevice::Text)) return false;
+    out.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+    out.close();
+    qDebug() << "[ROUTE-LIB] Saved AS to library:" << saveName << "(from routeId" << routeId << ") at" << filePath;
+    return true;
+}
+
+bool EcWidget::loadRouteFromLibrary(const QString& routeName)
+{
+    if (routeName.trimmed().isEmpty()) return false;
+    QString filePath = getRouteLibraryFilePath();
+    QFile file(filePath);
+    if (!file.exists() || !file.open(QIODevice::ReadOnly)) return false;
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    file.close();
+    QJsonArray arr = doc.object().value("saved_routes").toArray();
+    QJsonObject found;
+    for (const auto &v : arr) {
+        QJsonObject o = v.toObject();
+        if (o.value("name").toString() == routeName) { found = o; break; }
+    }
+    if (found.isEmpty()) return false;
+
+    // Create new route with next ID
+    int newRouteId = getNextAvailableRouteId();
+    QJsonArray wps = found.value("waypoints").toArray();
+    for (const auto &vw : wps) {
+        QJsonObject w = vw.toObject();
+        double lat = w.value("lat").toDouble();
+        double lon = w.value("lon").toDouble();
+        QString label = w.value("label").toString();
+        QString remark = w.value("remark").toString();
+        double turningRadius = w.value("turningRadius").toDouble(10.0);
+        bool active = w.value("active").toBool(true);
+        createWaypointFromForm(lat, lon, label, remark, newRouteId, turningRadius, active);
+    }
+    // Set name and color
+    renameRoute(newRouteId, found.value("name").toString());
+    QString colorStr = found.value("color").toString("");
+    if (!colorStr.isEmpty()) {
+        QColor c(colorStr);
+        if (c.isValid()) setRouteCustomColor(newRouteId, c);
+    }
+    // Ensure visible
+    setRouteVisibility(newRouteId, true);
+    saveRoutes();
+    emit waypointCreated();
+    Draw();
+    qDebug() << "[ROUTE-LIB] Loaded route from library:" << routeName << "as new routeId" << newRouteId;
+    return true;
+}
+
 void EcWidget::saveCurrentRoute()
 {
     if (currentRouteId <= 0) return;
@@ -12947,11 +13345,18 @@ void EcWidget::saveCurrentRoute()
         if (routeList[i].routeId == currentRouteId) {
             // Update existing route
             routeList[i].modifiedDate = QDateTime::currentDateTime();
-            // Preserve existing custom name; only set a default if empty
+            // Preserve existing custom name; only set a default if empty, ensure unique
             if (routeList[i].name.trimmed().isEmpty()) {
-                routeList[i].name = QString("Route %1").arg(currentRouteId);
+                QString base = QString("Route %1").arg(currentRouteId);
+                QSet<QString> existing;
+                for (const auto &r : routeList) if (r.routeId != currentRouteId) existing.insert(r.name.trimmed().toLower());
+                QString unique = base; int n=2;
+                while (existing.contains(unique.trimmed().toLower())) unique = QString("%1 (%2)").arg(base).arg(n++);
+                routeList[i].name = unique;
             }
-
+            // Ensure no stale custom color for new/updated route unless explicitly set
+            routeCustomColors.remove(currentRouteId);
+            
             // Recalculate route data
             calculateRouteData(routeList[i]);
             routeExists = true;
@@ -12963,7 +13368,15 @@ void EcWidget::saveCurrentRoute()
         // Create new route
         EcWidget::Route newRoute;
         newRoute.routeId = currentRouteId;
-        newRoute.name = QString("Route %1").arg(currentRouteId);
+        // Default name ensured unique
+        QString base = QString("Route %1").arg(currentRouteId);
+        QSet<QString> existing;
+        for (const auto &r : routeList) existing.insert(r.name.trimmed().toLower());
+        QString unique = base; int n=2;
+        while (existing.contains(unique.trimmed().toLower())) unique = QString("%1 (%2)").arg(base).arg(n++);
+        newRoute.name = unique;
+        // Clear any stale custom color (safety)
+        routeCustomColors.remove(currentRouteId);
         newRoute.description = QString("Route created on %1").arg(QDateTime::currentDateTime().toString());
 
         // Calculate route data
@@ -13344,6 +13757,65 @@ void EcWidget::showCreateRouteDialog()
                 mainWindow->logText->append(logMessage);
             }
         }
+    }
+}
+
+void EcWidget::showCreateRouteQuickDialog()
+{
+    RouteQuickFormDialog dialog(this, this);
+    if (dialog.exec() == QDialog::Accepted) {
+        QList<RouteWaypointData> waypoints = dialog.getWaypoints();
+        if (waypoints.isEmpty()) return;
+
+        // Generate next route id and default name
+        int maxId = 0;
+        for (const auto& r : routeList) {
+            if (r.routeId > maxId) maxId = r.routeId;
+        }
+        int routeId = maxId + 1;
+        QString routeName = dialog.getRouteName().trimmed();
+        if (routeName.isEmpty()) {
+            routeName = QString("Route %1").arg(routeId, 3, 10, QChar('0'));
+        }
+
+        // Enable route mode and set current route id
+        isRouteMode = true;
+        currentRouteId = routeId;
+
+        // Build route object
+        Route newRoute;
+        newRoute.routeId = routeId;
+        newRoute.name = routeName;
+        newRoute.description = QString();
+        newRoute.createdDate = QDateTime::currentDateTime();
+        newRoute.modifiedDate = newRoute.createdDate;
+
+        for (const RouteWaypointData& wp : waypoints) {
+            RouteWaypoint rw;
+            rw.lat = wp.lat;
+            rw.lon = wp.lon;
+            rw.label = wp.label;
+            rw.remark = wp.remark;
+            rw.turningRadius = wp.turningRadius;
+            rw.active = wp.active;
+            newRoute.waypoints.append(rw);
+        }
+
+        // Calculate metadata and append
+        calculateRouteData(newRoute);
+        routeList.append(newRoute);
+
+        // Create on-chart waypoints
+        for (const RouteWaypointData& wp : waypoints) {
+            createWaypointFromForm(wp.lat, wp.lon, wp.label, wp.remark, routeId, wp.turningRadius, wp.active);
+        }
+
+        // Make route visible initially
+        setRouteVisibility(routeId, true);
+        saveRoutes();
+        Draw();
+        update();
+        emit waypointCreated();
     }
 }
 

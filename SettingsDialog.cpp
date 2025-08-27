@@ -19,8 +19,10 @@
 #include <QGroupBox>
 #include <QCheckBox>
 #include <QSlider>
+#include <QDoubleSpinBox>
 #include <QDir>
 #include <QCoreApplication>
+#include <QTimer>
 
 SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
     setupUI();
@@ -79,6 +81,67 @@ void SettingsDialog::setupUI() {
         headingLabel->setVisible(isCourseUp);
         headingSpin->setVisible(isCourseUp);
     });
+
+    // --- Navigation Safety Tab ---
+    QWidget *safetyTab = new QWidget;
+    QFormLayout *safetyLayout = new QFormLayout;
+
+    // Ship Draft (meters)
+    shipDraftSpin = new QDoubleSpinBox;
+    shipDraftSpin->setRange(0.00, 30.00);
+    shipDraftSpin->setDecimals(2);
+    shipDraftSpin->setSingleStep(0.10);
+    shipDraftSpin->setSuffix(" m");
+    safetyLayout->addRow("Ship Draft:", shipDraftSpin);
+
+    // UKC thresholds (meters)
+    ukcDangerSpin = new QDoubleSpinBox;
+    ukcDangerSpin->setRange(0.00, 10.00);
+    ukcDangerSpin->setDecimals(2);
+    ukcDangerSpin->setSingleStep(0.10);
+    ukcDangerSpin->setSuffix(" m");
+    safetyLayout->addRow("UKC Danger Margin:", ukcDangerSpin);
+
+    ukcWarningSpin = new QDoubleSpinBox;
+    ukcWarningSpin->setRange(0.00, 20.00);
+    ukcWarningSpin->setDecimals(2);
+    ukcWarningSpin->setSingleStep(0.10);
+    ukcWarningSpin->setSuffix(" m");
+    safetyLayout->addRow("UKC Warning Margin:", ukcWarningSpin);
+
+    // Info notice for auto-adjust
+    ukcNoticeLabel = new QLabel(tr("UKC Warning disesuaikan agar tidak lebih kecil dari Danger"));
+    QFont f = ukcNoticeLabel->font();
+    f.setItalic(true);
+    ukcNoticeLabel->setFont(f);
+    ukcNoticeLabel->setStyleSheet("color: #888;");
+    ukcNoticeLabel->setVisible(false);
+    safetyLayout->addRow("", ukcNoticeLabel);
+
+    ukcNoticeTimer = new QTimer(this);
+    ukcNoticeTimer->setSingleShot(true);
+    connect(ukcNoticeTimer, &QTimer::timeout, this, [=]() {
+        ukcNoticeLabel->setVisible(false);
+    });
+
+    safetyTab->setLayout(safetyLayout);
+
+    // Validation: ensure Warning ≥ Danger at all times
+    auto enforceUkcOrder = [this]() {
+        double danger = ukcDangerSpin->value();
+        double warning = ukcWarningSpin->value();
+        if (warning < danger) {
+            ukcWarningSpin->setValue(danger);
+            // Show notice for 2 seconds
+            ukcNoticeLabel->setVisible(true);
+            ukcNoticeTimer->start(2000);
+        }
+        // Keep warning minimum tied to danger
+        ukcWarningSpin->setMinimum(danger);
+    };
+    // Connect value changes to enforcement
+    connect(ukcDangerSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [=](double){ enforceUkcOrder(); });
+    connect(ukcWarningSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [=](double){ enforceUkcOrder(); });
 
     trailCombo = new QComboBox;
     trailCombo->addItem("Every Update", 0);
@@ -301,6 +364,7 @@ void SettingsDialog::setupUI() {
 
     tabWidget->addTab(moosTab, "MOOSDB");
     tabWidget->addTab(ownShipTab, "Own Ship");
+    tabWidget->addTab(safetyTab, "Safety");
 
     tabWidget->addTab(displayTab, "Display");
 
@@ -423,6 +487,19 @@ void SettingsDialog::loadSettings() {
     soundAlarmCombo->setEnabled(soundEnabled);
     soundVolumeSlider->setEnabled(soundEnabled);
     soundVolumeLabel->setEnabled(soundEnabled);
+
+    // Navigation safety
+    shipDraftSpin->setValue(settings.value("OwnShip/ship_draft", 2.5).toDouble());
+    ukcDangerSpin->setValue(settings.value("OwnShip/ukc_danger", 0.5).toDouble());
+    ukcWarningSpin->setValue(settings.value("OwnShip/ukc_warning", 2.0).toDouble());
+    // Enforce relation after loading
+    {
+        double danger = ukcDangerSpin->value();
+        if (ukcWarningSpin->value() < danger) {
+            ukcWarningSpin->setValue(danger);
+        }
+        ukcWarningSpin->setMinimum(danger);
+    }
 }
 
 void SettingsDialog::saveSettings() {
@@ -460,6 +537,11 @@ void SettingsDialog::saveSettings() {
     settings.setValue("OwnShip/mode", trailCombo->currentData().toString());
     settings.setValue("OwnShip/interval", trailSpin->value());
     settings.setValue("OwnShip/distance", trailSpinDistance->value());
+
+    // Navigation safety
+    settings.setValue("OwnShip/ship_draft", shipDraftSpin->value());
+    settings.setValue("OwnShip/ukc_danger", ukcDangerSpin->value());
+    settings.setValue("OwnShip/ukc_warning", ukcWarningSpin->value());
 
     // Alert Settings
     settings.setValue("Alert/visual_flashing", visualFlashingCheckBox->isChecked());
@@ -510,6 +592,9 @@ SettingsData SettingsDialog::loadSettingsFromFile(const QString &filePath) {
     data.trailMode = settings.value("OwnShip/mode", 2).toInt();
     data.trailMinute = settings.value("OwnShip/interval", 1).toInt();
     data.trailDistance = settings.value("OwnShip/distance", 0.01).toDouble();
+    data.shipDraftMeters = settings.value("OwnShip/ship_draft", 2.5).toDouble();
+    data.ukcDangerMeters = settings.value("OwnShip/ukc_danger", 0.5).toDouble();
+    data.ukcWarningMeters = settings.value("OwnShip/ukc_warning", 2.0).toDouble();
 
     // Alert Settings
     data.visualFlashingEnabled = settings.value("Alert/visual_flashing", true).toBool();
@@ -548,6 +633,15 @@ void SettingsDialog::accept() {
     data.trailMode = trailCombo->currentData().toInt();
     data.trailMinute = trailSpin->value();
     data.trailDistance = trailSpinDistance->value();
+    data.shipDraftMeters = shipDraftSpin->value();
+    // Final validation: force Warning ≥ Danger
+    double dangerVal = ukcDangerSpin->value();
+    double warningVal = ukcWarningSpin->value();
+    if (warningVal < dangerVal) {
+        warningVal = dangerVal;
+    }
+    data.ukcDangerMeters = dangerVal;
+    data.ukcWarningMeters = warningVal;
 
     // Alert settings
     data.visualFlashingEnabled = visualFlashingCheckBox->isChecked();

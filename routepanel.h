@@ -83,6 +83,9 @@ public slots:
     void onRouteCreated();
     void onRouteModified();
     void onRouteDeleted();
+    // Expose import/export for main menu actions
+    void handleImportRoutesFromMenu();
+    void handleExportRoutesFromMenu();
     
     // Manual update functions for specific changes
     void onWaypointAdded();
@@ -104,6 +107,9 @@ private slots:
     void onExportRoutesClicked();
     void onRefreshClicked();
     void onClearAllClicked();
+    void onSaveRouteClicked();
+    void onLoadRouteClicked();
+    
     
     // Waypoint Management
     void onAddWaypointClicked();
@@ -153,6 +159,9 @@ private:
     QPushButton* exportRoutesButton;
     QPushButton* refreshButton;
     QPushButton* clearAllButton;
+    QPushButton* saveRouteButton;
+    QPushButton* loadRouteButton;
+    
     
     // Waypoint Management buttons
     QHBoxLayout* waypointButtonLayout;
