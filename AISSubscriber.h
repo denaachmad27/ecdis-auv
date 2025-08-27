@@ -61,6 +61,8 @@ signals:
     // CONNECTION STATUS
     void connectionStatusChanged(bool connected);
 
+    void startDrawTimer();
+
 private slots:
     void onReadyRead();
     void onSocketError(QAbstractSocket::SocketError socketError);

@@ -66,6 +66,7 @@ public:
     void readAISLogfileWDelay(const QString &logFile, int delayMs, std::atomic<bool>* stopFlag);
     void readAISVariableString( const QString& );
     void readAISVariable( const QStringList& );
+    void readAISVariableThread( const QStringList& );
     void nmeaSelection(const QString &line, QString &outNmea);
 
     void extractNMEA(QString nmea);
@@ -92,6 +93,7 @@ public:
 
     static void AISTargetUpdateCallback( EcAISTargetInfo* );
     static void AISTargetUpdateCallbackOld( EcAISTargetInfo* );
+    static void AISTargetUpdateCallbackThread( EcAISTargetInfo* );
 
     // CPA TCPA
     void setCPAPanel(CPATCPAPanel* panel) { _cpaPanel = panel; }
@@ -108,6 +110,8 @@ public:
 signals:
     void signalRefreshChartDisplay( double, double, double );
     void signalRefreshCenter( double, double );
+    void nmeaTextAppend(const QString&);
+    void pickWindowOwnship();
 
 private slots:
     void slotReadAISServerData();
@@ -154,6 +158,12 @@ private:
     void handleAISTargetUpdate(EcAISTargetInfo *ti);
 
     QDateTime lastTrailDrawTime;
+
+    struct OwnShipSnapshot {
+        double lat = 0;
+        double lon = 0;
+        double heading = 0;
+    };
 };
 
 #endif

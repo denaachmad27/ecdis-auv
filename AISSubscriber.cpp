@@ -123,6 +123,9 @@ void AISSubscriber::onReadyRead() {
         if (mainWindow) {
             mainWindow->setReconnectStatusText("");
         }
+
+        // TIMER
+        emit startDrawTimer();
     }
 
     QList<QByteArray> lines;

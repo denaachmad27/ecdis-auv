@@ -1,4 +1,5 @@
 #include "CompassWidget.h"
+#include "qdebug.h"
 #include "qpainterpath.h"
 #include <QtMath>
 #include <QPainter>

@@ -408,7 +408,6 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   // waypointList and drop route waypoints on startup.
 
   qDebug() << "[ECWIDGET] Route/Waypoint system initialized";
-
 }
 
 /*---------------------------------------------------------------------------*/
@@ -927,7 +926,7 @@ int EcWidget::ApplyUpdate()
 // Protected members
 /*---------------------------------------------------------------------------*/
 
-void EcWidget::draw(bool upd)
+void EcWidget::drawWorks(bool upd)
 {
   if (!initialized) return;
 
@@ -1002,6 +1001,97 @@ void EcWidget::draw(bool upd)
   emit projection();
   emit scale(currentScale);
 }
+
+// AUV WORKS
+void EcWidget::draw(bool upd)
+{
+    static bool inDraw = false;
+    if(inDraw) return;        // ❌ prevent reentrant crash
+    if(!initialized) return;
+
+    inDraw = true;
+
+    clearBackground();
+
+    // Outline ship/target symbols
+    if(currentScale < 10000)
+    {
+        EcChartSetOutlinedShipSymbol(view, True);
+        EcChartSetOutlinedTargetSymbol(view, True);
+    }
+    else
+    {
+        EcChartSetOutlinedShipSymbol(view, False);
+        EcChartSetOutlinedTargetSymbol(view, False);
+    }
+
+    EcDrawSetProjection(view, currentProjection, currentLat, currentLon, 0, 0);
+
+    if(!denc) {
+        QMessageBox::critical(this, tr("showAIS - Drawing"), tr("DENC structure could not be found"));
+        inDraw = false;
+        return;
+    }
+
+    EcCatList *catList = EcDENCGetCatalogueList(denc);
+    if(!catList) {
+        inDraw = false;
+        return;
+    }
+
+#ifdef _WIN32
+    if(!hdc || !hBitmap) { inDraw = false; return; }
+    HPALETTE oldPal = SelectPalette(hdc, hPalette, true);
+
+    EcCellId aisCellId = (_aisObj) ? _aisObj->getAISCell() : EC_NOCELLID;
+    if(aisCellId != EC_NOCELLID)
+        EcChartUnAssignCellFromView(view, aisCellId);
+
+    EcDrawNTDrawChart(view, hdc, NULL, dictInfo, catList, currentLat, currentLon, GetRange(currentScale), currentHeading);
+
+    if(aisCellId != EC_NOCELLID)
+        EcChartAssignCellToView(view, aisCellId);
+
+    if(showGrid)
+        EcDrawNTDrawGrid(view, hdc, chartPixmap.width(), chartPixmap.height(), 8, 8, True);
+
+    if(hBitmap)
+        chartPixmap = QtWin::fromHBITMAP(hBitmap);
+
+    drawPixmap = chartPixmap;
+    SelectPalette(hdc, oldPal, false);
+
+#else
+    #if QT_VERSION > 0x040400
+        if(!drawGC || !x11pixmap) { inDraw = false; return; }
+
+        EcDrawX11DrawChart(view, drawGC, x11pixmap, dictInfo, catList, currentLat, currentLon, GetRange(currentScale), currentHeading);
+
+        if(showGrid)
+            EcDrawX11DrawGrid(view, drawGC, x11pixmap, chartPixmap.width(), chartPixmap.height(), 8, 8, True);
+
+        chartPixmap = QPixmap::fromX11Pixmap(x11pixmap);
+        drawPixmap = chartPixmap;
+    #else
+        if(!drawGC) { inDraw = false; return; }
+
+        EcDrawX11DrawChart(view, drawGC, chartPixmap.handle(), dictInfo, catList, currentLat, currentLon, GetRange(currentScale), currentHeading);
+
+        if(showGrid)
+            EcDrawX11DrawGrid(view, drawGC, chartPixmap.handle(), chartPixmap.width(), chartPixmap.height(), 8, 8, True);
+
+        drawPixmap = chartPixmap;
+    #endif
+#endif
+
+    if(upd) update();
+
+    emit projection();
+    emit scale(currentScale);
+
+    inDraw = false;
+}
+
 
 /*---------------------------------------------------------------------------*/
 
@@ -2249,8 +2339,8 @@ void EcWidget::InitAIS( EcDictInfo *dict)
     ownShip.sog, ownShip.cog, dWarnDist, dWarnCPA,
     iWarnTCPA, strAisLib, iTimeOut, bInternalGPS, &bAISSymbolize, strErrLogAis );
 
-  QObject::connect( _aisObj, SIGNAL( signalRefreshChartDisplay( double, double, double ) ), this, SLOT( slotRefreshChartDisplay( double, double, double ) ) );
-  QObject::connect( _aisObj, SIGNAL( signalRefreshCenter( double, double ) ), this, SLOT( slotRefreshCenter( double, double ) ) );
+  // QObject::connect( _aisObj, SIGNAL( signalRefreshChartDisplay( double, double, double ) ), this, SLOT( slotRefreshChartDisplay( double, double, double ) ) );
+  // QObject::connect( _aisObj, SIGNAL( signalRefreshCenter( double, double ) ), this, SLOT( slotRefreshCenter( double, double ) ) );
 }
 
 void EcWidget::setCPAPanelToAIS(CPATCPAPanel* panel) {
@@ -2384,7 +2474,7 @@ void EcWidget::startAISConnection()
     connect(subscriber, &AISSubscriber::navDepthReceived, this, [=](double depth) { navShip.depth = depth;});
     connect(subscriber, &AISSubscriber::navHeadingReceived, this, [=](double hdg) {
         navShip.heading = hdg;
-        if (mainWindow){
+        if (mainWindow && SettingsManager::instance().data().orientationMode == NorthUp){
             mainWindow->setCompassHeading(hdg);
         }
     });
@@ -2401,7 +2491,7 @@ void EcWidget::startAISConnection()
 
     connect(subscriber, &AISSubscriber::mapInfoReqReceived, this, &EcWidget::processMapInfoReq);
     connect(subscriber, &AISSubscriber::processingAis, this, &EcWidget::processAis);
-    connect(subscriber, &AISSubscriber::processingData, this, &EcWidget::processDataQuickFix);
+    connect(subscriber, &AISSubscriber::processingData, this, &EcWidget::processData);
 
     // ROUTE INFORMATION
     connect(subscriber, &AISSubscriber::rteWpBrgReceived, this, [=](const QString &v) { activeRoute.rteWpBrg = v;});
@@ -2414,6 +2504,52 @@ void EcWidget::startAISConnection()
     connect(subscriber, &AISSubscriber::rteEtaReceived, this, [=](const QString &v) { activeRoute.rteEta = v;});
 
     connect(subscriber, &AISSubscriber::publishToMOOSDB, this, &EcWidget::publishToMOOSDB);
+
+    // AIS
+    connect(_aisObj, &Ais::nmeaTextAppend, this, [=](const QString &msg){
+        nmeaText->append(msg);
+    });
+
+    connect(_aisObj, &Ais::signalRefreshChartDisplay, this, &EcWidget::slotRefreshChartDisplayThread, Qt::QueuedConnection);
+    connect(_aisObj, &Ais::signalRefreshCenter, this, &EcWidget::slotRefreshCenter, Qt::QueuedConnection);
+
+
+    EcDENC *denc = nullptr;
+    EcDictInfo *dictInfo = nullptr;
+    QWidget *parentWidget = nullptr;
+
+    PickWindow *pickWindow = new PickWindow(parentWidget, dictInfo, denc);
+
+    connect(_aisObj, &Ais::pickWindowOwnship, this, [=](){
+        if (navShip.lat != 0){
+            ownShipText->setHtml(pickWindow->ownShipAutoFill());
+            //_cpaPanel->updateOwnShipInfo(navShip.lat, navShip.lon, navShip.speed_og, navShip.heading_og);
+        }
+    });
+
+    // DRAW TIMER START
+    timer.setInterval(1000);
+    timer.setSingleShot(true);
+
+    connect(subscriber, &AISSubscriber::startDrawTimer, this, [this]() {
+        // DRAW TIMER START
+        qDebug() << "TIMER STARTED!";
+        timer.start();
+    });
+
+    connect(&timer, &QTimer::timeout, this, [=](){
+        drawPerTime();
+        canRun = true; // setelah 1 detik boleh dipanggil lagi
+    });
+
+    // PUBLISH TIMER START
+    timerPublish.setInterval(1000);
+    timerPublish.setSingleShot(true);
+
+    connect(&timerPublish, &QTimer::timeout, this, [=](){
+        publishPerTime();
+        canPublish = true; // setelah 1 detik boleh dipanggil lagi
+    });
 
     connect(subscriber, &AISSubscriber::errorOccurred, this, [](const QString &msg) { qWarning() << "Error:" << msg; });
     connect(subscriber, &AISSubscriber::disconnected, this, []() { qDebug() << "Disconnected from AIS source.";});
@@ -2507,13 +2643,26 @@ void EcWidget::stopAllThread()
 
 void EcWidget::processData(double lat, double lon, double cog, double sog, double hdg, double spd, double dep, double yaw, double z){
     QString nmea = AIVDOEncoder::encodeAIVDO1(lat, lon, cog, sog/10, hdg, 0, 1);
-
-    _aisObj->readAISVariable({nmea});
+    _aisObj->readAISVariableThread({nmea});
 
     IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
     if (dvr && dvr->isRecording() && !nmea.isEmpty()) {
         dvr->recordRawNmea(nmea);
     }
+
+    // PUBLISH NAV INFO
+    //publishNavInfo(lat, lon);
+    publishPerTime();
+
+    // INSERT TO DATABASE
+    // PLEASE WAIT!!
+    // AisDatabaseManager::instance().insertOwnShipToDB(lat, lon, dep, hdg, cog, spd, sog, yaw, z);
+
+    // EKOR OWNSHIP
+    //ownShipTrailPoints.append(qMakePair(EcCoordinate(lat), EcCoordinate(lon)));
+}
+
+void EcWidget::publishNavInfo(double lat, double lon){
 
     QList<EcFeature> pickedFeatureList;
     GetPickedFeaturesSubs(pickedFeatureList, lat, lon);
@@ -2551,38 +2700,58 @@ void EcWidget::processData(double lat, double lon, double cog, double sog, doubl
 
     sendSocket->deleteLater();
     delete pickWindow;
+}
 
-    // OWNSHIP PANEL
-    ownShipText->setHtml(pickWindow->ownShipAutoFill());
+void EcWidget::publishPerTime(){
+    if (!canPublish) { return;}
+    if (subscriber){
+        if (!subscriber->hasData()){
+            qWarning() << "Automatic Publish Stopped";
+            return;
+        }
+    }
+    else {
+        qCritical() << "Automatic Publish Stopped";
+        return;
+    }
 
-    // INSERT TO DATABASE
-    // PLEASE WAIT!!
-    // AisDatabaseManager::instance().insertOwnShipToDB(lat, lon, dep, hdg, cog, spd, sog, yaw, z);
+    qWarning() << "Automatic Publish (per second)";
+    publishNavInfo(navShip.lat, navShip.lon);
 
-    // EKOR OWNSHIP
-    //ownShipTrailPoints.append(qMakePair(EcCoordinate(lat), EcCoordinate(lon)));
+    canPublish = false;
+    timerPublish.start(); // mulai countdown 1 detik
 }
 
 void EcWidget::processDataQuickFix(double lat, double lon, double cog, double sog, double hdg, double spd, double dep, double yaw, double z){
     QString nmea = AIVDOEncoder::encodeAIVDO1(lat, lon, cog, sog/10, hdg, 0, 1);
-    _aisObj->readAISVariable({nmea});
+    //_aisObj->readAISVariable({nmea});
 
-    PickWindow *pickWindow = new PickWindow(this, dictInfo, denc);
-    delete pickWindow;
+    // AUV WORKS
+    _aisObj->readAISVariableThread({nmea});
 
-    ownShipText->setHtml(pickWindow->ownShipAutoFill());
+    // COMMENT BELOW DOWN FOR AUV WORKS vvv
+    // PickWindow *pickWindow = new PickWindow(this, dictInfo, denc);
+    // QString html = pickWindow->ownShipAutoFill();
+    // delete pickWindow;
+
+    // ownShipText->setHtml(html);
 }
 
-void EcWidget::processAis(QString ais){
-    if (ais.startsWith("!AIVDM")) {
-        QStringList nmeaData{ais};
-        IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
+void EcWidget::processAis(QString ais)
+{
+    // pecah kalau ada beberapa kalimat dalam satu baris
+    QStringList sentences = ais.split(QRegExp("(?=[!$])"), Qt::SkipEmptyParts);
 
-        if (dvr && dvr->isRecording() && !ais.isEmpty()) {
-            dvr->recordRawNmea(ais);
+    for (const QString &sentence : sentences) {
+        if (sentence.startsWith("!AIVDM")) {
+            IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
+
+            if (dvr && dvr->isRecording() && !sentence.isEmpty()) {
+                dvr->recordRawNmea(sentence);
+            }
+
+            _aisObj->readAISVariableString(sentence);
         }
-
-        _aisObj->readAISVariableString(ais);
     }
 }
 
@@ -2787,36 +2956,36 @@ void EcWidget::StopReadAISVariable()
     qDebug() << _aisObj;
 
     // Release AIS object.
-//     if( _aisObj )
-//     {
-//         _aisObj->stopAnimation();
+    //     if( _aisObj )
+    //     {
+    //         _aisObj->stopAnimation();
 
-//         int iCnt = 0;
-//         while( QCoreApplication::hasPendingEvents() == True && iCnt < 20 )
-//         {
-// #ifdef _WINNT_SOURCE
-//             Sleep( 100 );
-// #endif \
-//             qDebug() << iCnt;
-//             iCnt++;
-//         }
+    //         int iCnt = 0;
+    //         while( QCoreApplication::hasPendingEvents() == True && iCnt < 20 )
+    //         {
+    // #ifdef _WINNT_SOURCE
+    //             Sleep( 100 );
+    // #endif \
+    //             qDebug() << iCnt;
+    //             iCnt++;
+    //         }
 
-//         if( QObject::disconnect( _aisObj, 0, this, 0 ) == False )
-//         {
-//             QObject::disconnect( _aisObj, 0, this, 0 );
-//         }
+    //         if( QObject::disconnect( _aisObj, 0, this, 0 ) == False )
+    //         {
+    //             QObject::disconnect( _aisObj, 0, this, 0 );
+    //         }
 
 
-//         if( deleteAISCell() == false )
-//         {
-//             QMessageBox::warning( this, tr( "ReadAISLogfile" ), tr( "Could not remove old AIS overlay cell. Please restart the program." ) );
-//             return;
-//         }
+    //         if( deleteAISCell() == false )
+    //         {
+    //             QMessageBox::warning( this, tr( "ReadAISLogfile" ), tr( "Could not remove old AIS overlay cell. Please restart the program." ) );
+    //             return;
+    //         }
 
-//         _aisObj = NULL;
-//     }
+    //         _aisObj = NULL;
+    //     }
 
-    // qDebug() << _aisObj;
+        // qDebug() << _aisObj;
 }
 
 // Update AIS targtes and own ship on chart.
@@ -3119,7 +3288,7 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon, double head )
 
   // ========== TAMBAHAN UNTUK RED DOT TRACKER ==========
   // Update red dot position if attached to ship
-  if (redDotAttachedToShip) {
+  if (redDotAttachedToShip && AppConfig::isDevelopment()) {
       // PERBAIKAN: Update heading ownship dari data real-time
       double oldHeading = ownShip.heading;
       ownShip.heading = head;
@@ -3137,7 +3306,7 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon, double head )
 
   // PERBAIKAN: Hanya buat guardzone jika belum ada DAN user sudah aktifkan redDotAttachedToShip
   // DAN belum ada guardzone fisik yang ter-render
-  if (attachedGuardZoneId == -1 && lat != 0 && lon != 0 && !qIsNaN(lat) && !qIsNaN(lon) && redDotAttachedToShip) {
+  if (attachedGuardZoneId == -1 && lat != 0 && lon != 0 && !qIsNaN(lat) && !qIsNaN(lon) && redDotAttachedToShip && AppConfig::isDevelopment()) {
       // Cek apakah ada guardzone yang attachedToShip dari file yang belum ter-render
       bool hasAttachedFromFile = false;
       int attachedGuardZoneCount = 0;
@@ -3165,8 +3334,132 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon, double head )
   // ==================================================
 }
 
-QRect EcWidget::GetVisibleMapRect(){
-    return QRect(0, 0, width(), height());
+void EcWidget::slotRefreshChartDisplayThread(double lat, double lon, double head)
+{
+    // ===== STEP 1: THREAD-SAFE SNAPSHOT =====
+    {
+        QMutexLocker locker(&aisDataMutex);
+        lastSnapshot.lat = lat;
+        lastSnapshot.lon = lon;
+        lastSnapshot.heading = head;
+        lastSnapshot.navShip = navShip; // copy struct
+    }
+
+    // ===== STEP 2: THROTTLE UPDATE =====
+    if (!aisGuiTimer.isValid() || aisGuiTimer.elapsed() >= 100) // max 10 Hz
+    {
+        aisGuiTimer.restart();
+
+        AISSnapshot snapshot;
+        {
+            QMutexLocker locker(&aisDataMutex);
+            snapshot = lastSnapshot; // ambil snapshot aman
+        }
+
+        // ===== STEP 3: UPDATE GUI =====
+        if (!showAIS) return;
+
+        // Pastikan data valid
+        if (qIsNaN(snapshot.lat) || qIsNaN(snapshot.lon)) return;
+
+        // Centering
+        if (snapshot.lat != 0 && snapshot.lon != 0 && trackTarget.isEmpty())
+        {
+            OSCenteringMode mode = SettingsManager::instance().data().centeringMode;
+
+            if (mode == LookAhead)
+            {
+                double offsetNM = GetRange(currentScale) * 0.5;
+                double headingRad = snapshot.heading * M_PI / 180.0;
+                double offsetLat = offsetNM * cos(headingRad) / 60.0;
+                double offsetLon = offsetNM * sin(headingRad) / (60.0 * cos(snapshot.lat * M_PI / 180.0));
+                SetCenter(snapshot.lat + offsetLat, snapshot.lon + offsetLon);
+            }
+            else if (mode == Centered)
+            {
+                SetCenter(snapshot.lat, snapshot.lon);
+            }
+            else if (mode == AutoRecenter)
+            {
+                int x, y;
+                if (LatLonToXy(snapshot.lat, snapshot.lon, x, y))
+                {
+                    QRect visibleRect = GetVisibleMapRect();
+                    int marginX = visibleRect.width() * 0.1;
+                    int marginY = visibleRect.height() * 0.1;
+                    QRect safeRect(
+                        visibleRect.left() + marginX,
+                        visibleRect.top() + marginY,
+                        visibleRect.width() - 2 * marginX,
+                        visibleRect.height() - 2 * marginY
+                    );
+                    if (!safeRect.contains(x, y))
+                        SetCenter(snapshot.lat, snapshot.lon);
+                }
+            }
+        }
+
+        // Heading
+        DisplayOrientationMode orientation = SettingsManager::instance().data().orientationMode;
+        if (orientation == HeadUp)
+        {
+            SetHeading(snapshot.heading);
+            if (mainWindow)
+            {
+                mainWindow->oriEditSetText(snapshot.heading);
+                mainWindow->setCompassHeading(0);
+                mainWindow->setCompassRotation(snapshot.heading);
+            }
+        }
+        else if (orientation == CourseUp)
+        {
+            int course = SettingsManager::instance().data().courseUpHeading;
+            SetHeading(course);
+
+            if (mainWindow)
+            {
+                mainWindow->oriEditSetText(course);
+                mainWindow->setCompassHeading(snapshot.heading - course);
+                mainWindow->setCompassRotation(course);
+            }
+        }
+        else
+        {
+            SetHeading(0);
+            if (mainWindow)
+            {
+                mainWindow->oriEditSetText(0);
+                mainWindow->setCompassRotation(0);
+            }
+        }
+
+        // Draw chart dan update AIS targets
+        //draw(true);
+        //drawPerTime();
+        //slotUpdateAISTargets(true);
+    }
+}
+
+void EcWidget::drawPerTime(){
+    if (!canRun) { return;}
+    if (subscriber){
+        if (!subscriber->hasData()){
+            qWarning() << "Automatic Drawing Stopped";
+            return;
+        }
+    }
+    else {
+        qCritical() << "Automatic Drawing Stopped";
+        return;
+    }
+
+    qWarning() << "Automatic Drawing (per second)";
+    draw(true);
+    slotUpdateAISTargets(true);
+
+    canRun = false;
+    timer.start(); // mulai countdown 1 detik
+
 }
 
 void EcWidget::slotRefreshCenter( double lat, double lon )
@@ -3186,9 +3479,13 @@ void EcWidget::slotRefreshCenter( double lat, double lon )
         }
     }
 
-    draw(true);
-    slotUpdateAISTargets( true );
+    // draw(true);
+    // slotUpdateAISTargets( true );
   }
+}
+
+QRect EcWidget::GetVisibleMapRect(){
+    return QRect(0, 0, width(), height());
 }
 //////////////////////////////////////////////////////////////   END AIS   /////////////////////////////////////////////////////
 

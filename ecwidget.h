@@ -129,6 +129,7 @@ class GuardZoneManager; // Forward declaration
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QElapsedTimer>
 
 // forward declerations1
 class PickWindow;
@@ -698,6 +699,7 @@ public:
   void stopAllThread();
   void processAISJson(const QByteArray&);
   void processData(double, double, double, double, double, double, double, double, double);
+  void publishNavInfo(double, double);
   void processDataQuickFix(double, double, double, double, double, double, double, double, double);
   void processMapInfoReq(QString);
   void processAis(QString);
@@ -826,6 +828,7 @@ signals:
 private slots:
   void slotUpdateAISTargets( Bool bSymbolize );
   void slotRefreshChartDisplay( double lat, double lon, double head );
+  void slotRefreshChartDisplayThread( double lat, double lon, double head );
   void slotRefreshCenter( double lat, double lon );
 
   // Alert Systems
@@ -842,6 +845,7 @@ protected:
   void clearBackground();
 
   virtual void draw (bool update);
+  virtual void drawWorks (bool update);
   virtual void drawAISCell ();
 
   virtual void paintEvent  (QPaintEvent*);
@@ -1244,6 +1248,29 @@ private:
   QDialog *toolbox = nullptr;
   EcCoordinate toolboxLat, toolboxLon;
 
+
+
+  QMutex aisDataMutex;
+  QElapsedTimer aisGuiTimer;
+
+  // Struct snapshot untuk thread-safe copy
+  struct AISSnapshot {
+      double lat = 0;
+      double lon = 0;
+      double heading = 0;
+      ShipStruct navShip;
+  };
+  AISSnapshot lastSnapshot;
+
+  // DRAW TIME
+  void drawPerTime();
+  bool canRun = true;
+  QTimer timer;
+
+  // NAV INFO TIME
+  void publishPerTime();
+  bool canPublish = true;
+  QTimer timerPublish;
 }; // EcWidget
 
 #endif // _ec_widget_h_

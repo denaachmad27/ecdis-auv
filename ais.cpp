@@ -376,6 +376,53 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
     }
 }
 
+void Ais::AISTargetUpdateCallbackThread(EcAISTargetInfo *ti)
+{
+    if (!ti || !_myAis) return;
+
+    EcAISTargetInfo tiCopy = *ti; // copy biar aman
+
+    // =================== OWN SHIP ===================
+    if (tiCopy.ownShip == True)
+    {
+        _myAis->handleOwnShipUpdate(&tiCopy);
+
+        EcCoordinate ownLat, ownLon;
+        _myAis->getOwnShipPos(ownLat, ownLon);
+
+        // ===== emit via queued connection =====
+        QMetaObject::invokeMethod(_myAis, [snapshotLat = ownLat, snapshotLon = ownLon, snapshotHead = tiCopy.heading]() {
+            emit _myAis->signalRefreshChartDisplay(snapshotLat, snapshotLon, snapshotHead);
+        }, Qt::QueuedConnection);
+
+        return;
+    }
+
+    // =================== OTHER AIS TARGET ===================
+    if (tiCopy.ownShip == False)
+    {
+        _myAis->handleAISTargetUpdate(&tiCopy);
+
+        AISTargetData ais;
+        _myAis->getAISTrack(ais);
+
+        if (!ais.mmsi.isEmpty() && ais.mmsi == QString::number(tiCopy.mmsi))
+        {
+            EcCoordinate targetLat, targetLon;
+            _myAis->getTargetPos(targetLat, targetLon);
+            ais.lat = targetLat;
+            ais.lon = targetLon;
+            _myAis->setAISTrack(ais);
+        }
+
+        // ===== emit target update via queued connection =====
+        QMetaObject::invokeMethod(_myAis, [ais]() {
+            emit _myAis->signalRefreshCenter(ais.lat, ais.lon);
+        }, Qt::QueuedConnection);
+
+        return;
+    }
+}
 
 // Fungsi khusus untuk handle ownship update
 void Ais::handleOwnShipUpdate(EcAISTargetInfo *ti)
@@ -590,7 +637,11 @@ Bool Ais::createTransponderObject()
   }
 
   // Set AIS callback.
-  EcAISSetTargetUpdateCallBack( _transponder, AISTargetUpdateCallback );
+  // EcAISSetTargetUpdateCallBack( _transponder, AISTargetUpdateCallback);
+
+  // AUV WORKS
+  EcAISSetTargetUpdateCallBack( _transponder, AISTargetUpdateCallbackThread );
+
   return True;
 }
 
@@ -874,14 +925,74 @@ void Ais::readAISVariable( const QStringList &dataLines )
 
         // OWNSHIP PANEL
         PickWindow *pickWindow = new PickWindow(parentWidget, dictInfo, denc);
+
         if (navShip.lat != 0){
             ownShipText->setHtml(pickWindow->ownShipAutoFill());
             _cpaPanel->updateOwnShipInfo(navShip.lat, navShip.lon, navShip.speed_og, navShip.heading_og);
         }
 
-        if( EcAISAddTransponderOutput( _transponder, (unsigned char*)line.toStdString().c_str(), line.count() ) == False )
+        std::string lineStd = line.toStdString();
+        if( EcAISAddTransponderOutput( _transponder, (unsigned char*)lineStd.c_str(), line.count() ) == False )
         {
             addLogFileEntry( QString( "Error in readAISLogfile(): EcAISAddTransponderOutput() failed in input line %1" ).arg( iLineNo ) );
+            break;
+        }
+
+        iLineNo++;
+    }
+
+    stopAnimation();
+}
+
+void Ais::readAISVariableThread(const QStringList &dataLines)
+{
+    _bReadFromFile = False;
+    _bReadFromVariable = True;
+    _bReadFromServer = False;
+
+    if( !_transponder )
+    {
+        qCritical() << ( QString( "Error in readAISVariable(): Transponder object is not initialized!" ) );
+        return;
+    }
+
+    if( _bReadFromVariable == False )
+    {
+        qCritical() << ( QString( "Error in readAISVariable(): Read from AIS variable permitted!" ) );
+        return;
+    }
+
+    // Read AIS logfile line by line and add each line to the AIS transponder object by calling EcAISAddTransponderOutput.
+    // EcAISAddTransponderOutput calls the callback AISTargetUpdateCallback for each line read from the logfile.
+    int iLineNo = 1;
+    // for( const QString &sLine : dataLines )
+    foreach (const QString &sLine, dataLines)
+    {
+        if( _bReadFromVariable == False )
+        {
+            break;
+        }
+
+        if( _transponder == NULL )
+        {
+            break;
+        }
+
+        QString line = sLine + "\r\n";
+
+        // APPEND NMEA TO SIGNAL
+        emit nmeaTextAppend(sLine);
+
+        extractNMEA(sLine);
+
+        qDebug() << sLine;
+
+        emit pickWindowOwnship();
+
+        std::string lineStd = line.toStdString();
+        if( EcAISAddTransponderOutput( _transponder, (unsigned char*)lineStd.c_str(), line.count() ) == False )
+        {
+            qDebug() << ( QString( "Error in readAISLogfile(): EcAISAddTransponderOutput() failed in input line %1" ).arg( iLineNo ) );
             break;
         }
 
