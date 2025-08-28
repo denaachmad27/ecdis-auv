@@ -638,6 +638,7 @@ void MainWindow::createMenuBar(){
         setupGuardZonePanel();
         setupAISTargetPanel();
         setupObstacleDetectionPanel(); // Also setup obstacle detection for additional tabify
+        // setupAOIPanel(); // lazy-create via menu
     }
     
     qDebug() << "[TABIFY] Setup panels for tab integration - GuardZone, AIS Target, Route, Obstacle Detection";
@@ -695,6 +696,11 @@ void MainWindow::createMenuBar(){
     QMenu *settingMenu = menuBar()->addMenu("&Settings");
     settingMenu->addAction("Setting Manager", this, SLOT(openSettingsDialog()) );
 
+    // ================================== AOI MENU
+    QMenu *aoiMenu = menuBar()->addMenu("&AOI");
+    aoiMenu->addAction("Create AOI by Click", this, SLOT(onCreateAOIByClick()));
+    aoiMenu->addAction("Open AOI Panel", this, SLOT(onOpenAOIPanel()));
+
     // Delay refresh route panel untuk memastikan data sudah fully loaded
     QTimer::singleShot(100, [this]() {
         if (routePanel) {
@@ -737,6 +743,12 @@ void MainWindow::createMenuBar(){
     // ========== INITIALIZE ALERT PANEL POINTERS ==========
     alertPanel = nullptr;
     alertDock = nullptr;
+
+    // ========== INITIALIZE AOI PANEL POINTERS ==========
+    aoiPanel = nullptr;
+    aoiDock = nullptr;
+    // ===================================================
+
     // ===================================================
 
     // ================================== GUARDZONE MENU
@@ -2836,6 +2848,103 @@ void MainWindow::setupGuardZonePanel()
         QMessageBox::critical(this, tr("Setup Error"),
                               tr("Unknown error occurred while setting up GuardZone panel"));
     }
+}
+
+void MainWindow::setupAOIPanel()
+{
+    if (!ecchart) return;
+    aoiPanel = new AOIPanel(ecchart, this);
+    aoiDock = new QDockWidget(tr("AOI / ROI"), this);
+    aoiDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    aoiDock->setWidget(aoiPanel);
+    addDockWidget(Qt::RightDockWidgetArea, aoiDock);
+
+    // Tabify AOI with existing right-side docks (match behavior of other panels)
+    if (aisTargetDock) {
+        tabifyDockWidget(aisTargetDock, aoiDock);
+    } else if (guardZoneDock) {
+        tabifyDockWidget(guardZoneDock, aoiDock);
+    } else if (obstacleDetectionDock) {
+        tabifyDockWidget(obstacleDetectionDock, aoiDock);
+    } else if (routeDock) {
+        // Fallback: group with route-related tabs if others absent
+        tabifyDockWidget(routeDock, aoiDock);
+    }
+
+    // Add to Sidebar menu
+    QMenu* sidebarMenu = nullptr;
+    QList<QMenu*> menus = menuBar()->findChildren<QMenu*>();
+    for (QMenu* menu : menus) {
+        if (menu->title().contains("Sidebar") || menu->title().contains("&Sidebar")) {
+            sidebarMenu = menu;
+            break;
+        }
+    }
+    if (sidebarMenu) sidebarMenu->addAction(aoiDock->toggleViewAction());
+    aoiDock->setVisible(false);
+}
+
+
+void MainWindow::onCreateAOIByClick()
+{
+    if (!ecchart) return;
+    QDialog dlg(this);
+    dlg.setWindowTitle("Create AOI by Click");
+    QFormLayout* form = new QFormLayout(&dlg);
+    QLineEdit* nameEdit = new QLineEdit();
+    // Prefill default AOI name so user can proceed quickly
+    nameEdit->setText(QString("AOI %1").arg(ecchart->getNextAoiId()));
+    QComboBox* typeCombo = new QComboBox();
+    typeCombo->addItems({"AOI", "ROZ", "MEZ", "WEZ", "Patrol Area", "SOA", "AOR", "JOA"});
+    form->addRow("Name:", nameEdit);
+    form->addRow("Type:", typeCombo);
+    QHBoxLayout* btns = new QHBoxLayout();
+    QPushButton* ok = new QPushButton("Start");
+    QPushButton* cancel = new QPushButton("Cancel");
+    btns->addStretch();
+    btns->addWidget(ok);
+    btns->addWidget(cancel);
+    form->addRow(btns);
+    QObject::connect(ok, &QPushButton::clicked, &dlg, &QDialog::accept);
+    QObject::connect(cancel, &QPushButton::clicked, &dlg, &QDialog::reject);
+    if (dlg.exec() != QDialog::Accepted) return;
+    QString name = nameEdit->text().trimmed(); if (name.isEmpty()) name = "AOI";
+    AOIType type = aoiTypeFromString(typeCombo->currentText());
+    ecchart->startAOICreation(name, type);
+}
+
+void MainWindow::onOpenAOIPanel()
+{
+    // Lazy-create AOI dock/panel on demand to avoid init-order crashes
+    if (!aoiDock) {
+        if (!ecchart) return;
+        aoiPanel = new AOIPanel(ecchart, this);
+        aoiDock = new QDockWidget(tr("AOI / ROI"), this);
+        aoiDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+        aoiDock->setWidget(aoiPanel);
+        addDockWidget(Qt::RightDockWidgetArea, aoiDock);
+
+        // Tabify AOI with existing right-side docks upon creation
+        if (aisTargetDock) {
+            tabifyDockWidget(aisTargetDock, aoiDock);
+        } else if (guardZoneDock) {
+            tabifyDockWidget(guardZoneDock, aoiDock);
+        } else if (obstacleDetectionDock) {
+            tabifyDockWidget(obstacleDetectionDock, aoiDock);
+        } else if (routeDock) {
+            tabifyDockWidget(routeDock, aoiDock);
+        }
+
+        // Add to Sidebar menu if available
+        QMenu* sidebarMenu = nullptr;
+        QList<QMenu*> menus = menuBar()->findChildren<QMenu*>();
+        for (QMenu* menu : menus) {
+            if (menu->title().contains("Sidebar") || menu->title().contains("&Sidebar")) { sidebarMenu = menu; break; }
+        }
+        if (sidebarMenu) sidebarMenu->addAction(aoiDock->toggleViewAction());
+    }
+    aoiDock->setVisible(true);
+    aoiDock->raise(); // Focus AOI tab when opened via menu
 }
 
 // ========== SETUP AIS TARGET PANEL ==========

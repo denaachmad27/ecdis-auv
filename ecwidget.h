@@ -28,6 +28,7 @@
 #endif
 
 #include "guardzone.h"
+#include "aoi.h"
 #include "AISSubscriber.h"
 
 //popup
@@ -324,6 +325,22 @@ public:
 
   // Quick create route (simple form)
   void showCreateRouteQuickDialog();
+
+  // AOI/ROI lightweight management
+  QList<AOI> getAOIs() const { return aoiList; }
+  int getNextAoiId() const { return nextAoiId; }
+  void addAOI(const AOI& aoi);
+  void removeAOI(int id);
+  void toggleAOIVisibility(int id);
+  void drawAOIs(QPainter& painter);
+  void startAOICreation(const QString& name, AOIType type);
+  void cancelAOICreation();
+  void finishAOICreation();
+  bool isCreatingAOI() const { return creatingAOI; }
+  // AOI edit
+  void startEditAOI(int aoiId);
+  void finishEditAOI();
+  void cancelEditAOI();
 
   DisplayOrientationMode displayOrientation = NorthUp;
   OSCenteringMode osCentering = Centered;
@@ -829,6 +846,8 @@ signals:
   void guardZoneModified();
   void guardZoneDeleted();
   void attachToShipStateChanged(bool attached);
+  // AOI signals
+  void aoiListChanged();
 
   // Alert system signals
   void alertTriggered(const AlertData& alert);
@@ -970,6 +989,18 @@ protected:
 
   bool initialized;
   Ais  *_aisObj;
+
+  // AOI store
+  QList<AOI> aoiList;
+  int nextAoiId = 1;
+  bool creatingAOI = false;
+  QString pendingAOIName;
+  AOIType pendingAOIType = AOIType::AOI;
+  QVector<QPointF> aoiVerticesLatLon; // lat,lon pairs during creation
+  bool editingAOI = false;
+  int editingAoiId = -1;
+  int draggedAoiVertex = -1;
+  double handleDetectRadiusPx = 10.0;
 
   //popup
   void leaveEvent(QEvent *event) override;
