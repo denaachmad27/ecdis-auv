@@ -42,10 +42,12 @@ void SettingsManager::load() {
     m_data.trailMinute = settings.value("OwnShip/interval", 1).toInt();
     m_data.trailDistance = settings.value("OwnShip/distance", 0.01).toDouble();
 
-    // NAVIGATION SAFETY
-    m_data.shipDraftMeters = settings.value("OwnShip/ship_draft", 2.5).toDouble();
-    m_data.ukcDangerMeters = settings.value("OwnShip/ukc_danger", 0.5).toDouble();
-    m_data.ukcWarningMeters = settings.value("OwnShip/ukc_warning", 2.0).toDouble();
+    if(AppConfig::isDevelopment()){
+        // NAVIGATION SAFETY
+        m_data.shipDraftMeters = settings.value("OwnShip/ship_draft", 2.5).toDouble();
+        m_data.ukcDangerMeters = settings.value("OwnShip/ukc_danger", 0.5).toDouble();
+        m_data.ukcWarningMeters = settings.value("OwnShip/ukc_warning", 2.0).toDouble();
+    }
 }
 
 void SettingsManager::save(const SettingsData& data) {
@@ -84,10 +86,12 @@ void SettingsManager::save(const SettingsData& data) {
     settings.setValue("OwnShip/interval", data.trailMinute);
     settings.setValue("OwnShip/distance", data.trailDistance);
 
-    // NAVIGATION SAFETY
-    settings.setValue("OwnShip/ship_draft", data.shipDraftMeters);
-    settings.setValue("OwnShip/ukc_danger", data.ukcDangerMeters);
-    settings.setValue("OwnShip/ukc_warning", data.ukcWarningMeters);
+    if(AppConfig::isDevelopment()){
+        // NAVIGATION SAFETY
+        settings.setValue("OwnShip/ship_draft", data.shipDraftMeters);
+        settings.setValue("OwnShip/ukc_danger", data.ukcDangerMeters);
+        settings.setValue("OwnShip/ukc_warning", data.ukcWarningMeters);
+    }
 }
 
 const SettingsData& SettingsManager::data() const {

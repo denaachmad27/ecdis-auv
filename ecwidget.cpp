@@ -409,6 +409,16 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   // waypointList and drop route waypoints on startup.
 
   qDebug() << "[ECWIDGET] Route/Waypoint system initialized";
+
+  // ICON-ICON
+  editAction = new QAction(QIcon(":/icon/edit_white.svg"), tr("Edit Route Point"), this);
+  moveAction = new QAction(QIcon(":/icon/move_white.svg"), tr("Move Waypoint"), this);
+  deleteWaypointAction = new QAction(QIcon(":/icon/delete_wp_white.svg"), tr("Delete Waypoint"), this);
+  deleteRouteAction = new QAction(QIcon(":/icon/delete_route_white.svg"), tr("Delete Route"), this);
+  publishAction = new QAction(QIcon(":/icon/publish_white.svg"), tr("Publish Waypoint"), this);
+  insertWaypointAction = new QAction(QIcon(":/icon/create_wp_white.svg"), tr("Insert Waypoint"), this);
+  createRouteAction = new QAction(QIcon(":/icon/create_route_white.svg"), tr("Create Route"), this);
+  pickInfoAction = new QAction(QIcon(":/icon/create_route_white.svg"), tr("Pick Info"), this);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -3660,7 +3670,9 @@ void EcWidget::createWaypointAt(EcCoordinate lat, EcCoordinate lon)
 
     // After creating waypoint, show hazard info (caution/danger) at this position
     // Show for both route and single waypoint creation
-    showHazardInfoAt(lat, lon);
+    if (AppConfig::isDevelopment()){
+        showHazardInfoAt(lat, lon);
+    }
 }
 
 bool EcWidget::createWaypointInRoute(int routeId, double lat, double lon, const QString& label)
@@ -4715,32 +4727,17 @@ void EcWidget::showWaypointContextMenu(const QPoint& pos, int waypointIndex)
 
     QMenu contextMenu(this);
 
-    // Edit waypoint properties
-    QAction* editAction = contextMenu.addAction(tr("Edit Route Point"));
-    editAction->setIcon(QIcon(":/icon/edit_white.svg"));
-
-    // Move waypoint
-    QAction* moveAction = contextMenu.addAction(tr("Move Waypoint"));
-    moveAction->setIcon(QIcon(":/icon/move_white.svg"));
-
+    contextMenu.addAction(editAction);
+    contextMenu.addAction(moveAction);
     contextMenu.addSeparator();
+    contextMenu.addAction(deleteWaypointAction);
 
-    // Delete waypoint
-    QAction* deleteWaypointAction = contextMenu.addAction(tr("Delete Waypoint"));
-    deleteWaypointAction->setIcon(QIcon(":/icon/delete_wp_white.svg"));
-
-    // Delete route (only if waypoint is part of a route)
-    QAction* deleteRouteAction = nullptr;
     if (waypoint.routeId > 0) {
-        deleteRouteAction = contextMenu.addAction(tr("Delete Route"));
-        deleteRouteAction->setIcon(QIcon(":/icon/delete_route_white.svg"));
+        contextMenu.addAction(deleteRouteAction);
     }
 
     contextMenu.addSeparator();
-
-    // Publish waypoint
-    QAction* publishAction = contextMenu.addAction(tr("Publish Waypoint"));
-    publishAction->setIcon(QIcon(":/icon/publish_white.svg"));
+    contextMenu.addAction(publishAction);
 
     // Execute menu
     QAction* selectedAction = contextMenu.exec(mapToGlobal(pos));
@@ -4882,15 +4879,9 @@ void EcWidget::showLeglineContextMenu(const QPoint& pos, int routeId, int segmen
 
     QMenu contextMenu(this);
 
-    // Insert waypoint at clicked position
-    QAction* insertWaypointAction = contextMenu.addAction(tr("Insert Waypoint"));
-    insertWaypointAction->setIcon(QIcon(":/icon/create_wp_white.svg"));
-
+    contextMenu.addAction(insertWaypointAction);
     contextMenu.addSeparator();
-
-    // Delete route
-    QAction* deleteRouteAction = contextMenu.addAction(tr("Delete Route"));
-    deleteRouteAction->setIcon(QIcon(":/icon/delete_route_white.svg"));
+    contextMenu.addAction(deleteRouteAction);
 
     // Execute menu
     QAction* selectedAction = contextMenu.exec(mapToGlobal(pos));
@@ -4949,8 +4940,9 @@ void EcWidget::showMapContextMenu(const QPoint& pos)
     QMenu contextMenu(this);
 
     // Create Route option
-    QAction* createRouteAction = contextMenu.addAction(tr("Create Route"));
-    createRouteAction->setIcon(QIcon(":/icon/create_route_white.svg"));
+    contextMenu.addAction(createRouteAction);
+    contextMenu.addSeparator();
+    contextMenu.addAction(pickInfoAction);
 
     // Execute menu
     QAction* selectedAction = contextMenu.exec(mapToGlobal(pos));
@@ -4966,6 +4958,13 @@ void EcWidget::showMapContextMenu(const QPoint& pos)
         }
 
         qDebug() << "[CONTEXT-MENU] Create Route mode started";
+    }
+    else if (selectedAction == pickInfoAction){
+        QList<EcFeature> pickedFeatureList;
+        GetPickedFeatures(pickedFeatureList);
+
+        pickWindow->fill(pickedFeatureList);
+        pickWindow->show();
     }
 }
 
@@ -5316,6 +5315,29 @@ void EcWidget::drawLeglineLabels()
     }
 
     painter.end();
+}
+
+void EcWidget::iconUpdate(bool dark){
+    if (dark){
+        editAction->setIcon(QIcon(":/icon/edit_white.svg"));
+        moveAction->setIcon(QIcon(":/icon/move_white.svg"));
+        deleteWaypointAction->setIcon(QIcon(":/icon/delete_wp_white.svg"));
+        deleteRouteAction->setIcon(QIcon(":/icon/delete_route_white.svg"));
+        publishAction->setIcon(QIcon(":/icon/publish_white.svg"));
+        insertWaypointAction->setIcon(QIcon(":/icon/create_wp_white.svg"));
+        createRouteAction->setIcon(QIcon(":/icon/create_route_white.svg"));
+        pickInfoAction->setIcon(QIcon(":/icon/create_route_white.svg"));
+    }
+    else {
+        editAction->setIcon(QIcon(":/icon/edit.svg"));
+        moveAction->setIcon(QIcon(":/icon/move.svg"));
+        deleteWaypointAction->setIcon(QIcon(":/icon/delete_wp.svg"));
+        deleteRouteAction->setIcon(QIcon(":/icon/delete_route.svg"));
+        publishAction->setIcon(QIcon(":/icon/publish.svg"));
+        insertWaypointAction->setIcon(QIcon(":/icon/create_wp.svg"));
+        createRouteAction->setIcon(QIcon(":/icon/create_route.svg"));
+        pickInfoAction->setIcon(QIcon(":/icon/create_route.svg"));
+    }
 }
 
 // ====== ROUTE LINE DRAWING OVERLAY (Like GuardZone approach) ======

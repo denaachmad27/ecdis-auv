@@ -1769,6 +1769,43 @@ void MainWindow::onMouseMove(EcCoordinate lat, EcCoordinate lon)
 
 void MainWindow::onMouseRightClick(const QPoint& pos)
 {
+    if (AppConfig::isDevelopment()){
+        // ROUTE
+        QMenu contextMenu(this);
+
+        // Create Route option
+        contextMenu.addAction(ecchart->createRouteAction);
+        contextMenu.addSeparator();
+        contextMenu.addAction(ecchart->pickInfoAction);
+
+        // Execute menu
+        QAction* selectedAction = contextMenu.exec(ecchart->mapToGlobal(pos));
+
+        if (selectedAction == ecchart->createRouteAction) {
+            // Start route creation mode
+            ecchart->startRouteMode();
+            ecchart->setActiveFunction(EcWidget::CREATE_ROUTE);
+
+            setWindowTitle(QString(APP_TITLE) + " - Create Route");
+            routesStatusText->setText(tr("Route Mode: Click to add waypoints. Press ESC or right-click to end route creation"));
+
+            qDebug() << "[CONTEXT-MENU] Create Route mode started";
+        }
+        else if (selectedAction == ecchart->pickInfoAction){
+            QList<EcFeature> pickedFeatureList;
+            ecchart->GetPickedFeatures(pickedFeatureList);
+
+            pickWindow->fillJsonSubs(pickedFeatureList);
+            pickWindow->show();
+
+            // EcCoordinate lat, lon;
+            // ecchart->XyToLatLon(pos.x(), pos.y(), lat, lon);
+            // ecchart->showHazardInfoAt(lat, lon);
+        }
+    }
+
+
+
     // KLIK TARGET AIS
     EcAISTargetInfo* target = ecchart->findAISTargetInfoAtPosition(pos);
 
@@ -4480,6 +4517,7 @@ void MainWindow::setDarkMode() {
     setTitleBarDark(true);
 
     updateIcon(true);
+    if (ecchart){ecchart->iconUpdate(true);}
     emit routePanel->updateThemeAwareStyles();
 }
 
@@ -4491,6 +4529,7 @@ void MainWindow::setLightMode() {
     setTitleBarDark(false);
 
     updateIcon(false);
+    if (ecchart){ecchart->iconUpdate(false);}
     emit routePanel->updateThemeAwareStyles();
 }
 
@@ -4522,6 +4561,7 @@ void MainWindow::setDimMode()
     setTitleBarDark(true);
 
     updateIcon(true);
+    if (ecchart){ecchart->iconUpdate(true);}
     emit routePanel->updateThemeAwareStyles();
 }
 

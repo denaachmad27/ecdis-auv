@@ -271,6 +271,8 @@ public:
   void drawRouteLines(); // Gambar garis route dengan warna berbeda per route (DEPRECATED)
   void drawRouteLinesOverlay(QPainter& painter); // Draw route lines directly to widget like GuardZone
 
+  void iconUpdate(bool);
+
   void loadWaypoints();
   QString getWaypointFilePath() const;
   int getWaypointCount() const { return waypointList.size(); }
@@ -767,6 +769,10 @@ public:
   // Show hazard info popup at a given position
   void showHazardInfoAt(double lat, double lon);
 
+  // ACTION
+  QAction* createRouteAction;
+  QAction* pickInfoAction;
+
 public slots:
   void updateAISTargetsList();
   void addOrUpdateAISTarget(const AISTargetData& target);
@@ -1261,8 +1267,6 @@ private:
   QDialog *toolbox = nullptr;
   EcCoordinate toolboxLat, toolboxLon;
 
-
-
   QMutex aisDataMutex;
   QElapsedTimer aisGuiTimer;
 
@@ -1284,6 +1288,16 @@ private:
   void publishPerTime();
   bool canPublish = true;
   QTimer timerPublish;
+
+  // RIGHT CLICK ICON
+  QAction* editAction;
+  QAction* moveAction;
+  QAction* deleteWaypointAction;
+  QAction* deleteRouteAction;
+  QAction* publishAction;
+
+  QAction* insertWaypointAction;
+
 }; // EcWidget
 
 #endif // _ec_widget_h_
