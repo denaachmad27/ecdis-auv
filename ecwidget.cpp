@@ -17,6 +17,7 @@
 #include "pickwindow.h"
 #include "aistooltip.h"
 #include "mainwindow.h"
+#include "aoi.h"
 
 // Waypoint
 #include "SettingsManager.h"
@@ -152,6 +153,7 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   if (nextGuardZoneId == 0) {
       nextGuardZoneId = 1;
   }
+
 
   // Initialize test guardzone
       testGuardZoneEnabled = false;
@@ -1207,6 +1209,172 @@ void EcWidget::paintEvent (QPaintEvent *e)
       drawRedDotTracker();
   }
 
+  // Draw AOIs always on top of chart
+  drawAOIs(painter);
+  // Draw AOI creation preview (only if drawing system ready)
+  if (creatingAOI && aoiVerticesLatLon.size() >= 1 && initialized && view) {
+      painter.setRenderHint(QPainter::Antialiasing, true);
+      QVector<QPoint> pts;
+      for (const auto& ll : aoiVerticesLatLon) {
+          int x=0,y=0; if (LatLonToXy(ll.x(), ll.y(), x, y)) pts.append(QPoint(x,y));
+      }
+      if (!pts.isEmpty()) {
+          // add current mouse position as last temp point
+          QPoint mp = lastMousePos;
+          pts.append(mp);
+          // Choose rubber-band color based on theme for visibility
+          QColor win = palette().color(QPalette::Window);
+          int luma = qRound(0.2126*win.red() + 0.7152*win.green() + 0.0722*win.blue());
+          bool darkTheme = (luma < 128);
+          // Force dark gray projection line regardless of theme
+          QColor lineColor = QColor(80,80,80);
+          QPen pen(lineColor);
+          pen.setStyle(Qt::DashLine);
+          pen.setWidth(3); // Match route creation ghost line thickness
+          painter.setPen(pen);
+          painter.setBrush(Qt::NoBrush);
+          for (int i=1;i<pts.size();++i) painter.drawLine(pts[i-1], pts[i]);
+
+          // Show cursor lat/lon in deg-min near the cursor
+          EcCoordinate lat, lon;
+          if (XyToLatLon(mp.x(), mp.y(), lat, lon)) {
+              const QString latStr = latLonToDegMin(lat, true);
+              const QString lonStr = latLonToDegMin(lon, false);
+
+              // Compute distance and bearing from last vertex to cursor
+              QString distBrgText;
+              if (!aoiVerticesLatLon.isEmpty()) {
+                  const QPointF& last = aoiVerticesLatLon.last();
+                  double distNM = 0.0, bearing = 0.0;
+                  EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
+                                                         last.x(), last.y(),
+                                                         lat, lon,
+                                                         &distNM, &bearing);
+                  distBrgText = QString("\n%1 NM  @ %2°")
+                                    .arg(QString::number(distNM, 'f', 2))
+                                    .arg(QString::number(bearing, 'f', 0));
+              }
+
+              // Compute perimeter (includes segment to cursor) and area (if >=3 points incl. cursor)
+              QString perimText;
+              QString areaText;
+              if (!aoiVerticesLatLon.isEmpty()) {
+                  double perimNM = 0.0;
+                  // Build list including cursor as last point
+                  QVector<QPointF> ptsLL = aoiVerticesLatLon;
+                  ptsLL.append(QPointF(lat, lon));
+
+                  for (int i = 1; i < ptsLL.size(); ++i) {
+                      double d=0.0, b=0.0;
+                      EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
+                                                             ptsLL[i-1].x(), ptsLL[i-1].y(),
+                                                             ptsLL[i].x(),   ptsLL[i].y(),
+                                                             &d, &b);
+                      perimNM += d;
+                  }
+                  perimText = QString("\nPerim: %1 NM").arg(QString::number(perimNM, 'f', 2));
+
+                  if (ptsLL.size() >= 3) {
+                      // Approximate area in NM^2 using local tangent plane
+                      double lat0 = 0.0, lon0 = 0.0;
+                      for (const auto& p : ptsLL) { lat0 += p.x(); lon0 += p.y(); }
+                      lat0 /= ptsLL.size(); lon0 /= ptsLL.size();
+                      double lat0rad = lat0 * M_PI / 180.0;
+                      double k = 60.0; // deg -> NM
+                      QVector<QPointF> ptsXY; ptsXY.reserve(ptsLL.size());
+                      for (const auto& p : ptsLL) {
+                          double x = (p.y() - lon0) * k * std::cos(lat0rad);
+                          double y = (p.x() - lat0) * k;
+                          ptsXY.append(QPointF(x, y));
+                      }
+                      // Shoelace area for closed polygon: close back to first
+                      double area = 0.0;
+                      for (int i = 0; i < ptsXY.size(); ++i) {
+                          const QPointF& a = ptsXY[i];
+                          const QPointF& b = ptsXY[(i+1) % ptsXY.size()];
+                          area += a.x()*b.y() - b.x()*a.y();
+                      }
+                      area = std::fabs(area) * 0.5; // NM^2
+                      areaText = QString::fromUtf8("\nArea: %1 NM²").arg(QString::number(area, 'f', 2));
+                  }
+              }
+
+              // Cursor overlay: show only coordinates
+              const QString text = latStr + "  " + lonStr;
+
+              QFont f = painter.font();
+              f.setPointSizeF(9.0);
+              f.setBold(false);
+              painter.setFont(f);
+              QFontMetrics fm(f);
+              int pad = 4;
+              QRect br = fm.boundingRect(QRect(0,0, 600, 2000), Qt::AlignLeft|Qt::AlignTop, text);
+              QRect bg(mp.x() + 12, mp.y() + 12, br.width() + pad*2, br.height() + pad*2);
+
+              // Background for readability (theme-aware)
+              painter.setPen(Qt::NoPen);
+              QColor bgCol = darkTheme ? QColor(0,0,0,160) : QColor(255,255,255,210);
+              QColor fgCol = darkTheme ? QColor(240,240,240) : QColor(30,30,30);
+              painter.setBrush(bgCol);
+              painter.drawRoundedRect(bg, 4, 4);
+
+              // Text (theme-aware)
+              painter.setPen(fgCol);
+              painter.drawText(bg.adjusted(pad, pad, -pad, -pad), Qt::AlignLeft | Qt::AlignTop, text);
+
+              // Center label: show AOI title and area at polygon centroid during creation
+              if (pts.size() >= 3) {
+                  // Compute screen centroid
+                  double cx = 0.0, cy = 0.0;
+                  for (const QPoint& p : pts) { cx += p.x(); cy += p.y(); }
+                  cx /= pts.size(); cy /= pts.size();
+
+                  QString title = pendingAOIName.isEmpty() ? QString("AOI %1").arg(nextAoiId) : pendingAOIName;
+                  QString areaLine = areaText.isEmpty() ? QString("") : areaText.mid(1); // remove leading \n
+                  QString centerText = title;
+                  if (!areaLine.isEmpty()) centerText += "\n" + areaLine;
+
+                  QFont tf = painter.font();
+                  tf.setPointSizeF(10.0);
+                  tf.setBold(true);
+                  painter.setFont(tf);
+                  QFontMetrics tfm(tf);
+                  QRect tb = tfm.boundingRect(QRect(0,0, 800, 2000), Qt::AlignHCenter|Qt::AlignTop, centerText);
+                  int w = tb.width();
+                  int h = tb.height();
+                  QRect labelRect(static_cast<int>(cx - w/2) - 6, static_cast<int>(cy - h/2) - 6,
+                                  w + 12, h + 12);
+                  // Background
+                  painter.setPen(Qt::NoPen);
+                  painter.setBrush(QColor(0,0,0,120));
+                  painter.drawRoundedRect(labelRect, 4, 4);
+                  // Text colored by AOI type color
+                  QColor aoiColor = aoiDefaultColor(pendingAOIType);
+                  painter.setPen(aoiColor.darker(110));
+                  painter.drawText(labelRect, Qt::AlignCenter, centerText);
+              }
+          }
+      }
+  }
+
+
+  // Draw AOI edit handles (vertex squares) when editing
+  if (editingAOI && initialized && view) {
+      const AOI* target = nullptr;
+      for (const auto& a : aoiList) { if (a.id == editingAoiId) { target = &a; break; } }
+      if (target && target->vertices.size() >= 3) {
+          QPen pen(QColor(255,255,255)); pen.setWidth(1);
+          QBrush hb(QColor(0,0,0));
+          painter.setPen(pen);
+          painter.setBrush(hb);
+          for (const auto& ll : target->vertices) {
+              int x=0,y=0; if (LatLonToXy(ll.x(), ll.y(), x, y)) {
+                  painter.drawRect(x-4,y-4,8,8);
+              }
+          }
+      }
+  }
+
   // ========== DRAW TEST GUARDZONE ==========
 
   // DRAW AIS TARGET DANGEROUS BOX
@@ -1305,6 +1473,179 @@ void EcWidget::setDisplayCategoryInternal(int category){
     displayCategory = category;
 }
 
+// Format latitude/longitude in degrees-minutes with hemisphere, e.g. 07° 12.345' S
+QString EcWidget::latLonToDegMin(double value, bool isLatitude)
+{
+    // Determine hemisphere
+    QChar hemi;
+    double absVal = std::fabs(value);
+    if (isLatitude) {
+        hemi = (value < 0) ? 'S' : 'N';
+        if (absVal > 90.0) absVal = std::fmod(absVal, 90.0); // clamp extremes defensively
+    } else {
+        hemi = (value < 0) ? 'W' : 'E';
+        if (absVal > 180.0) absVal = std::fmod(absVal, 180.0);
+    }
+
+    int deg = static_cast<int>(std::floor(absVal));
+    double min = (absVal - deg) * 60.0;
+
+    // Zero-pad degrees for consistent width (2 for lat, 3 for lon)
+    int degWidth = isLatitude ? 2 : 3;
+    QString degStr = QString("%1").arg(deg, degWidth, 10, QLatin1Char('0'));
+    QString minStr = QString::number(min, 'f', 3); // 3 decimals for minutes
+
+    return QString("%1° %2' %3").arg(degStr, minStr, QString(hemi));
+}
+
+void EcWidget::addAOI(const AOI& aoi)
+{
+    AOI copy = aoi;
+    if (copy.id <= 0) copy.id = nextAoiId++;
+    else nextAoiId = qMax(nextAoiId, copy.id + 1);
+    if (!copy.color.isValid()) copy.color = aoiDefaultColor(copy.type);
+    aoiList.append(copy);
+    emit aoiListChanged();
+}
+
+void EcWidget::removeAOI(int id)
+{
+    for (int i = 0; i < aoiList.size(); ++i) {
+        if (aoiList[i].id == id) { aoiList.removeAt(i); emit aoiListChanged(); break; }
+    }
+}
+
+void EcWidget::toggleAOIVisibility(int id)
+{
+    for (auto& a : aoiList) {
+        if (a.id == id) { a.visible = !a.visible; emit aoiListChanged(); break; }
+    }
+}
+
+void EcWidget::drawAOIs(QPainter& painter)
+{
+    if (aoiList.isEmpty()) return;
+    if (!initialized || !view) return;
+    QPen pen; QBrush brush;
+    for (const auto& a : aoiList) {
+        if (!a.visible || a.vertices.size() < 3) continue;
+
+        QVector<QPoint> pts;
+        pts.reserve(a.vertices.size());
+        for (const QPointF& ll : a.vertices) {
+            int x=0, y=0;
+            if (LatLonToXy(ll.x(), ll.y(), x, y)) {
+                pts.append(QPoint(x, y));
+            }
+        }
+        if (pts.size() < 3) continue;
+
+        QColor c = a.color;
+        QColor fill = c; fill.setAlpha(50);
+        pen.setColor(c.darker(120)); pen.setWidth(2);
+        brush.setColor(fill); brush.setStyle(Qt::SolidPattern);
+
+        painter.setPen(pen);
+        painter.setBrush(Qt::NoBrush); // Transparent area (outline only)
+        painter.drawPolygon(QPolygon(pts));
+
+        // Draw label near centroid (match AOI color tone) with waypoint-like font
+        double cx=0, cy=0; for (const QPoint& p : pts) { cx += p.x(); cy += p.y(); }
+        cx/=pts.size(); cy/=pts.size();
+        painter.setPen(pen.color()); // same color as outline
+        QFont labelFont("Arial", 9, QFont::Bold);
+        painter.setFont(labelFont);
+        QFontMetrics fm(labelFont);
+
+        // Compute area in NM^2 using local tangent-plane approximation
+        double lat0 = 0.0, lon0 = 0.0;
+        for (const QPointF& ll : a.vertices) { lat0 += ll.x(); lon0 += ll.y(); }
+        lat0 /= a.vertices.size(); lon0 /= a.vertices.size();
+        double lat0rad = lat0 * M_PI / 180.0;
+        const double k = 60.0; // deg -> NM
+        QVector<QPointF> ptsXY; ptsXY.reserve(a.vertices.size());
+        for (const QPointF& ll : a.vertices) {
+            double xnm = (ll.y() - lon0) * k * std::cos(lat0rad);
+            double ynm = (ll.x() - lat0) * k;
+            ptsXY.append(QPointF(xnm, ynm));
+        }
+        double areaNM2 = 0.0;
+        for (int i = 0; i < ptsXY.size(); ++i) {
+            const QPointF& p1 = ptsXY[i];
+            const QPointF& p2 = ptsXY[(i+1) % ptsXY.size()];
+            areaNM2 += p1.x()*p2.y() - p2.x()*p1.y();
+        }
+        areaNM2 = std::fabs(areaNM2) * 0.5; // NM^2
+
+        QString areaLine = QString::fromUtf8("Area: %1 NM²").arg(QString::number(areaNM2, 'f', 2));
+
+        // Draw name and area on two lines, aligned near centroid
+        QPoint namePos(static_cast<int>(cx) + 6, static_cast<int>(cy));
+        painter.drawText(namePos, a.name);
+        // Second line below
+        QPoint areaPos(namePos.x(), namePos.y() + fm.height());
+        painter.drawText(areaPos, areaLine);
+    }
+}
+
+void EcWidget::startAOICreation(const QString& name, AOIType type)
+{
+    creatingAOI = true;
+    // Set default name similar to Route default if not specified
+    if (name.trimmed().isEmpty() || name.trimmed().toUpper() == "AOI") {
+        pendingAOIName = QString("AOI %1").arg(nextAoiId);
+    } else {
+        pendingAOIName = name;
+    }
+    pendingAOIType = type;
+    aoiVerticesLatLon.clear();
+    update();
+}
+
+void EcWidget::cancelAOICreation()
+{
+    creatingAOI = false;
+    aoiVerticesLatLon.clear();
+    update();
+}
+
+void EcWidget::finishAOICreation()
+{
+    if (!creatingAOI || aoiVerticesLatLon.size() < 3) { cancelAOICreation(); return; }
+    AOI a; a.id = nextAoiId++; a.name = pendingAOIName; a.type = pendingAOIType; a.color = aoiDefaultColor(a.type); a.visible = true;
+    a.vertices = aoiVerticesLatLon;
+    aoiList.append(a);
+    emit aoiListChanged();
+    creatingAOI = false;
+    aoiVerticesLatLon.clear();
+    update();
+}
+
+
+
+void EcWidget::startEditAOI(int aoiId)
+{
+    bool exists = false;
+    for (const auto& a : aoiList) { if (a.id == aoiId) { exists = true; break; } }
+    if (!exists) return;
+    editingAOI = true;
+    editingAoiId = aoiId;
+    draggedAoiVertex = -1;
+    update();
+}
+
+void EcWidget::finishEditAOI()
+{
+    editingAOI = false;
+    editingAoiId = -1;
+    draggedAoiVertex = -1;
+    update();
+}
+
+void EcWidget::cancelEditAOI()
+{
+    finishEditAOI();
+}
 void EcWidget::drawOwnShipTrail(QPainter &painter)
 {
     if (ownShipTrailPoints.size() < 2)
@@ -1528,6 +1869,92 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
     // This provides better UX by removing distracting highlights
     clearWaypointHighlight();
 
+    // ========== AOI CREATION MODE ==========
+    if (creatingAOI) {
+        if (e->button() == Qt::LeftButton) {
+            EcCoordinate lat, lon;
+            if (XyToLatLon(e->x(), e->y(), lat, lon)) {
+                aoiVerticesLatLon.append(QPointF(lat, lon));
+                update();
+            }
+        } else if (e->button() == Qt::RightButton) {
+            // Right-click to finish (require >=3 points)
+            if (aoiVerticesLatLon.size() >= 3) {
+                finishAOICreation();
+            } else {
+                cancelAOICreation();
+            }
+        }
+        return;
+    }
+
+
+    // ========== AOI EDIT MODE ==========
+    if (editingAOI) {
+        if (e->button() == Qt::LeftButton) {
+            // Check if clicked on a handle
+            int idx = -1; double best=1e9;
+            // get AOI
+            for (auto& a : aoiList) {
+                if (a.id == editingAoiId) {
+                    for (int i=0;i<a.vertices.size();++i) {
+                        int x=0,y=0; if (LatLonToXy(a.vertices[i].x(), a.vertices[i].y(), x, y)) {
+                            double dx = x - e->x(); double dy = y - e->y(); double d = std::sqrt(dx*dx+dy*dy);
+                            if (d < best && d <= handleDetectRadiusPx) { best = d; idx = i; }
+                        }
+                    }
+                    break;
+                }
+            }
+            if (idx >= 0) {
+                draggedAoiVertex = idx;
+            }
+        } else if (e->button() == Qt::RightButton) {
+            // Right click: delete handle if close, else add on nearest edge
+            for (int ai=0;ai<aoiList.size();++ai) if (aoiList[ai].id == editingAoiId) {
+                auto& a = aoiList[ai];
+                // check remove
+                int hit=-1; for (int i=0;i<a.vertices.size();++i) {
+                    int x=0,y=0; if (LatLonToXy(a.vertices[i].x(), a.vertices[i].y(), x, y)) {
+                        double dx = x - e->x(); double dy = y - e->y(); if (std::sqrt(dx*dx+dy*dy) <= handleDetectRadiusPx) { hit = i; break; }
+                    }
+                }
+                if (hit>=0 && a.vertices.size()>3) {
+                    a.vertices.remove(hit);
+                    emit aoiListChanged();
+                    update();
+                    return;
+                }
+                // add on nearest edge
+                // convert click to lat/lon
+                EcCoordinate lat, lon; if (!XyToLatLon(e->x(), e->y(), lat, lon)) { return; }
+                // find nearest segment in screen space
+                int bestSeg=-1; double bestDist=1e9; QPoint click(e->x(), e->y());
+                QVector<QPoint> pts; pts.reserve(a.vertices.size());
+                for (const auto& ll : a.vertices) { int x=0,y=0; if (LatLonToXy(ll.x(), ll.y(), x, y)) pts.append(QPoint(x,y)); }
+                for (int i=0;i<pts.size();++i) {
+                    QPoint p1 = pts[i]; QPoint p2 = pts[(i+1)%pts.size()];
+                    QPointF v = p2 - p1; QPointF w = click - p1;
+                    double c1 = QPointF::dotProduct(w,v);
+                    double c2 = QPointF::dotProduct(v,v);
+                    double t = c2>0? c1/c2 : 0;
+                    t = std::max(0.0, std::min(1.0, t));
+                    QPointF proj = p1 + t*v;
+                    double d = std::hypot(click.x()-proj.x(), click.y()-proj.y());
+                    if (d < bestDist) { bestDist = d; bestSeg = i; }
+                }
+                if (bestSeg>=0) {
+                    // insert new vertex at clicked lat/lon after bestSeg
+                    a.vertices.insert(bestSeg+1, QPointF(lat, lon));
+                    emit aoiListChanged();
+                    update();
+                }
+                return;
+            }
+        }
+        return; // consume
+    }
+
     // ========== HANDLING EDIT GUARDZONE MODE VIA MANAGER ==========
     if (guardZoneManager && guardZoneManager->isEditingGuardZone()) {
         if (guardZoneManager->handleMousePress(e)) {
@@ -1745,6 +2172,29 @@ void EcWidget::mouseMoveEvent(QMouseEvent *e)
     // Simpan posisi mouse terakhir
     lastMousePos = e->pos();
 
+    if (editingAOI) {
+        if (draggedAoiVertex >= 0) {
+            // move vertex to new lat/lon
+            EcCoordinate lat, lon; if (XyToLatLon(e->x(), e->y(), lat, lon)) {
+                for (auto& a : aoiList) if (a.id == editingAoiId) {
+                    if (draggedAoiVertex >=0 && draggedAoiVertex < a.vertices.size()) {
+                        a.vertices[draggedAoiVertex] = QPointF(lat, lon);
+                        emit aoiListChanged();
+                        update();
+                    }
+                    break;
+                }
+            }
+        }
+        return;
+    }
+
+
+    if (creatingAOI) {
+        update();
+        return;
+    }
+
     // Cek apakah mouse masih di atas AIS target yang sama
     EcAISTargetInfo* targetInfo = findAISTargetInfoAtPosition(lastMousePos);
 
@@ -1855,11 +2305,19 @@ void EcWidget::mouseMoveEvent(QMouseEvent *e)
     }
 }
 
+
+
 /*---------------------------------------------------------------------------*/
 
 
 void EcWidget::mouseReleaseEvent(QMouseEvent *e)
 {
+    if (editingAOI) {
+        if (e->button() == Qt::LeftButton) {
+            draggedAoiVertex = -1;
+            return;
+        }
+    }
     if (guardZoneManager && guardZoneManager->isEditingGuardZone()) {
         if (guardZoneManager->handleMouseRelease(e)) {
             return; // Event handled by manager
@@ -2845,27 +3303,7 @@ void EcWidget::processAISJson(const QByteArray& rawData){
     qDebug() << data;
 }
 
-QString EcWidget::latLonToDegMin(double value, bool isLatitude){
-    // Tentukan arah (N/S atau E/W)
-    char hemi;
-    if (isLatitude) {
-        hemi = (value >= 0) ? 'N' : 'S';
-    } else {
-        hemi = (value >= 0) ? 'E' : 'W';
-    }
-
-    value = std::fabs(value);
-
-    // Pecah jadi derajat dan menit
-    int deg = (int)value;
-    double minutes = (value - deg) * 60.0;
-
-    // Format: 07° 11.71' S
-    char buf[64];
-    std::snprintf(buf, sizeof(buf), "%02d° %05.2f' %c", deg, minutes, hemi);
-
-    return QString(buf);
-}
+// (Removed duplicate latLonToDegMin definition; consolidated above)
 
 // REAL FUNCTION
 void EcWidget::publishToMOOSDB(QString varName, QString data){
@@ -4252,7 +4690,7 @@ void EcWidget::drawGhostWaypoint(QPainter& painter, double lat, double lon, cons
     painter.setPen(pen);
 
     QBrush brush(QColor(255, 140, 0, 60)); // Fill semi-transparent
-    painter.setBrush(brush);
+    painter.setBrush(Qt::NoBrush); // Transparent area (outline only)
 
     // Gambar ghost donut
     painter.drawEllipse(QPoint(x, y), 8, 8);
@@ -7668,6 +8106,17 @@ void EcWidget::drawFeedbackOverlay(QPainter& painter)
 
 void EcWidget::keyPressEvent(QKeyEvent *e)
 {
+    // AOI edit/create ESC handling first
+    if (e->key() == Qt::Key_Escape) {
+        if (editingAOI) {
+            finishEditAOI();
+            return;
+        }
+        if (creatingAOI) {
+            cancelAOICreation();
+            return;
+        }
+    }
     // Handle key press for GuardZone editing
     if (guardZoneManager && guardZoneManager->isEditingGuardZone()) {
         if (guardZoneManager->handleKeyPress(e)) {

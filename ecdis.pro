@@ -67,6 +67,8 @@ HEADERS += mainwindow.h ecwidget.h pickwindow.h ais.h \
     routedetaildialog.h \
     waypointdialog.h \
     routeformdialog.h \
+    aoi.h \
+    aoipanel.h \
     routequickformdialog.h \
 
 SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
@@ -98,6 +100,7 @@ SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     routedetaildialog.cpp \
     waypointdialog.cpp \
     routeformdialog.cpp \
+    aoipanel.cpp \
     routequickformdialog.cpp \
 
 RESOURCES += \

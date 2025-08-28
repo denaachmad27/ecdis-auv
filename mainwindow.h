@@ -8,6 +8,7 @@
 #include "IAisDvrPlugin.h"
 #include "ecwidget.h"
 #include "guardzonepanel.h"
+#include "aoipanel.h"
 #include "alertpanel.h"
 #include "alertsystem.h"
 #include "aistargetpanel.h"
@@ -196,6 +197,10 @@ protected slots:
     void onGuardZoneEditRequested(int guardZoneId);
     void onGuardZoneVisibilityChanged(int guardZoneId, bool visible);
 
+    // AOI
+    void onCreateAOIByClick();
+    void onOpenAOIPanel();
+
     // Route Panel slots
     void onRouteSelected(int routeId);
     void onRouteVisibilityChanged(int routeId, bool visible);
@@ -279,11 +284,14 @@ private slots:
 private:
     GuardZonePanel* guardZonePanel;
     QDockWidget* guardZoneDock;
+    AOIPanel* aoiPanel = nullptr;
+    QDockWidget* aoiDock = nullptr;
     AISTargetPanel* aisTargetPanel;
     QDockWidget* aisTargetDock;
     ObstacleDetectionPanel* obstacleDetectionPanel;
     QDockWidget* obstacleDetectionDock;
     void setupGuardZonePanel();
+    void setupAOIPanel();
     void setupAISTargetPanel();
     void setupObstacleDetectionPanel();
     void setupTestingMenu();
