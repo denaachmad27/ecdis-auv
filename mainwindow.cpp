@@ -566,6 +566,11 @@ void MainWindow::createMenuBar(){
         routeMenu->addAction("Route Management", this, SLOT(openRouteManager()));
     }
 
+    // ================================== AOI MENU
+    QMenu *aoiMenu = menuBar()->addMenu("&AOI");
+    aoiMenu->addAction("Create AOI by Click", this, SLOT(onCreateAOIByClick()));
+    aoiMenu->addAction("Open AOI Panel", this, SLOT(onOpenAOIPanel()));
+
     // ================================== MOOSDB MENU
     QMenu *moosMenu = menuBar()->addMenu("&Connection");
 
@@ -695,11 +700,6 @@ void MainWindow::createMenuBar(){
     // ================================== SETTINGS MANAGER MENU
     QMenu *settingMenu = menuBar()->addMenu("&Settings");
     settingMenu->addAction("Setting Manager", this, SLOT(openSettingsDialog()) );
-
-    // ================================== AOI MENU
-    QMenu *aoiMenu = menuBar()->addMenu("&AOI");
-    aoiMenu->addAction("Create AOI by Click", this, SLOT(onCreateAOIByClick()));
-    aoiMenu->addAction("Open AOI Panel", this, SLOT(onOpenAOIPanel()));
 
     // Delay refresh route panel untuk memastikan data sudah fully loaded
     QTimer::singleShot(100, [this]() {
@@ -2955,34 +2955,45 @@ void MainWindow::onOpenAOIPanel()
     // Lazy-create AOI dock/panel on demand to avoid init-order crashes
     if (!aoiDock) {
         if (!ecchart) return;
-        aoiPanel = new AOIPanel(ecchart, this);
+
+        // AOI panel parent = aoiDock, bukan MainWindow (lebih aman)
         aoiDock = new QDockWidget(tr("AOI / ROI"), this);
+        aoiPanel = new AOIPanel(ecchart, aoiDock);
         aoiDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
         aoiDock->setWidget(aoiPanel);
         addDockWidget(Qt::RightDockWidgetArea, aoiDock);
 
-        // Tabify AOI with existing right-side docks upon creation
-        if (aisTargetDock) {
+        // ==== Deterministic tabify order ====
+        if (routeDock) {
+            tabifyDockWidget(routeDock, aoiDock);
+        } else if (aisTargetDock) {
             tabifyDockWidget(aisTargetDock, aoiDock);
         } else if (guardZoneDock) {
             tabifyDockWidget(guardZoneDock, aoiDock);
         } else if (obstacleDetectionDock) {
             tabifyDockWidget(obstacleDetectionDock, aoiDock);
-        } else if (routeDock) {
-            tabifyDockWidget(routeDock, aoiDock);
         }
+        // Kalau semua gak ada, AOI tetap standalone di kanan.
 
         // Add to Sidebar menu if available
         QMenu* sidebarMenu = nullptr;
         QList<QMenu*> menus = menuBar()->findChildren<QMenu*>();
         for (QMenu* menu : menus) {
-            if (menu->title().contains("Sidebar") || menu->title().contains("&Sidebar")) { sidebarMenu = menu; break; }
+            if (menu->title().contains("Sidebar") || menu->title().contains("&Sidebar")) {
+                sidebarMenu = menu;
+                break;
+            }
         }
-        if (sidebarMenu) sidebarMenu->addAction(aoiDock->toggleViewAction());
+        if (sidebarMenu) {
+            sidebarMenu->addAction(aoiDock->toggleViewAction());
+        }
     }
+
+    // Pastikan terlihat + aktif
     aoiDock->setVisible(true);
-    aoiDock->raise(); // Focus AOI tab when opened via menu
+    aoiDock->raise(); // Fokus ke tab AOI
 }
+
 
 // ========== SETUP AIS TARGET PANEL ==========
 void MainWindow::setupAISTargetPanel()
@@ -4329,17 +4340,17 @@ void MainWindow::setupRoutePanel()
 {
     // Create Route panel
     routePanel = new RoutePanel(ecchart, this);
-    
+
     // Create dock widget untuk panel
     routeDock = new QDockWidget(tr("Routes"), this);
     routeDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     routeDock->setWidget(routePanel);
-    
+
     // Add dock to main window
     addDockWidget(Qt::RightDockWidgetArea, routeDock);
-    
+
     // Note: Tabify logic moved to setupAISTargetPanel() after all panels are created
-    
+
     // Add Route Panel to Sidebar menu
     QMenu* sidebarMenu = nullptr;
     QList<QMenu*> menus = menuBar()->findChildren<QMenu*>();
@@ -4349,38 +4360,38 @@ void MainWindow::setupRoutePanel()
             break;
         }
     }
-    
+
     if (sidebarMenu) {
         sidebarMenu->addAction(routeDock->toggleViewAction());
         qDebug() << "Route Panel added to Sidebar menu successfully";
     } else {
         qDebug() << "[MAIN] Warning: Sidebar menu not found for Route Panel";
     }
-    
+
     // Connect signals
-    connect(routePanel, &RoutePanel::routeSelectionChanged, 
+    connect(routePanel, &RoutePanel::routeSelectionChanged,
             this, &MainWindow::onRouteSelected);
-    connect(routePanel, &RoutePanel::routeVisibilityChanged, 
+    connect(routePanel, &RoutePanel::routeVisibilityChanged,
             this, &MainWindow::onRouteVisibilityChanged);
     connect(routePanel, &RoutePanel::requestCreateRoute,
             this, &MainWindow::onCreateRoute);
     connect(routePanel, &RoutePanel::requestEditRoute,
             this, &MainWindow::onEditRouteByForm);
-    connect(routePanel, &RoutePanel::statusMessage, 
+    connect(routePanel, &RoutePanel::statusMessage,
             this, [this](const QString& message) {
                 routesStatusText->setText(message);
                 // statusBar()->showMessage(message, 3000);
             });
-    
+
     // Connect EcWidget signals to RoutePanel
     if (ecchart) {
-        connect(ecchart, &EcWidget::waypointCreated, 
+        connect(ecchart, &EcWidget::waypointCreated,
                 routePanel, &RoutePanel::onWaypointAdded);
     }
-    
+
     // Set initial visibility (default disabled, will be controlled via tabify)
     routeDock->setVisible(false);
-    
+
     qDebug() << "Route Panel setup completed";
 }
 

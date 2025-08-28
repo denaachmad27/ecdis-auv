@@ -1348,9 +1348,11 @@ void EcWidget::paintEvent (QPaintEvent *e)
                   painter.setPen(Qt::NoPen);
                   painter.setBrush(QColor(0,0,0,120));
                   painter.drawRoundedRect(labelRect, 4, 4);
+
                   // Text colored by AOI type color
                   QColor aoiColor = aoiDefaultColor(pendingAOIType);
-                  painter.setPen(aoiColor.darker(110));
+                  painter.setPen(Qt::white);
+                  //painter.setPen(aoiColor.darker(110));
                   painter.drawText(labelRect, Qt::AlignCenter, centerText);
               }
           }
@@ -1542,7 +1544,13 @@ void EcWidget::drawAOIs(QPainter& painter)
 
         QColor c = a.color;
         QColor fill = c; fill.setAlpha(50);
-        pen.setColor(c.darker(120)); pen.setWidth(2);
+
+        // STATIC COLOR
+        // pen.setColor(c.darker(120)); pen.setWidth(2);
+        pen.setColor(Qt::red);
+        pen.setWidth(2);
+
+        pen.setStyle(Qt::DashLine);
         brush.setColor(fill); brush.setStyle(Qt::SolidPattern);
 
         painter.setPen(pen);
@@ -13827,7 +13835,7 @@ void EcWidget::saveCurrentRoute()
             }
             // Ensure no stale custom color for new/updated route unless explicitly set
             routeCustomColors.remove(currentRouteId);
-            
+
             // Recalculate route data
             calculateRouteData(routeList[i]);
             routeExists = true;

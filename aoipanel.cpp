@@ -15,19 +15,24 @@ AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
     tree->setHeaderLabels({"Name", "Type", "Visible"});
     v->addWidget(tree);
 
-    QHBoxLayout* btns = new QHBoxLayout();
+    QGridLayout* btns = new QGridLayout();
     addBtn = new QPushButton("Add AOI (Form)");
     createByClickBtn = new QPushButton("Create by Click");
     editBtn = new QPushButton("Edit");
     deleteBtn = new QPushButton("Delete");
     toggleBtn = new QPushButton("Toggle Vis");
-    btns->addWidget(addBtn);
-    btns->addWidget(createByClickBtn);
-    btns->addWidget(editBtn);
-    btns->addWidget(deleteBtn);
-    btns->addWidget(toggleBtn);
-    btns->addStretch();
+
+    // Baris 1
+    btns->addWidget(addBtn,          0, 0);
+    btns->addWidget(createByClickBtn,0, 1);
+
+    // Baris 2
+    btns->addWidget(editBtn,         1, 0);
+    btns->addWidget(deleteBtn,       1, 1);
+    btns->addWidget(toggleBtn,       1, 2);
+
     v->addLayout(btns);
+
 
     main->addWidget(group);
 
@@ -80,7 +85,16 @@ void AOIPanel::onAddAOI()
     QFormLayout* form = new QFormLayout(&dlg);
     QLineEdit* nameEdit = new QLineEdit();
     QComboBox* typeCombo = new QComboBox();
-    typeCombo->addItems({"AOI", "ROZ", "MEZ", "WEZ", "Patrol Area", "SOA", "AOR", "JOA"});
+
+    typeCombo->addItem("Area of Interest (AOI)", "AOI");
+    typeCombo->addItem("Restricted Operations Zone (ROZ)", "ROZ");
+    typeCombo->addItem("Missile Engagement Zone (MEZ)", "MEZ");
+    typeCombo->addItem("Weapons Engagement Zone (WEZ)", "WEZ");
+    typeCombo->addItem("Patrol Area", "Patrol Area");
+    typeCombo->addItem("Sector of Action (SOA)", "SOA");
+    typeCombo->addItem("Area of Responsibility (AOR)", "AOR");
+    typeCombo->addItem("Joint Operations Area (JOA)", "JOA");
+
     QTextEdit* coordsEdit = new QTextEdit();
     coordsEdit->setPlaceholderText("Enter vertices (one per line):\nlat,lon\nlat,lon\n...");
 
@@ -104,7 +118,7 @@ void AOIPanel::onAddAOI()
     AOI aoi;
     aoi.id = ecWidget->getNextAoiId();
     aoi.name = nameEdit->text().trimmed();
-    aoi.type = aoiTypeFromString(typeCombo->currentText());
+    aoi.type = aoiTypeFromString(typeCombo->currentData().toString());
     aoi.color = aoiDefaultColor(aoi.type);
     aoi.visible = true;
 
@@ -154,7 +168,16 @@ void AOIPanel::onCreateByClick()
     // Prefill default AOI name
     nameEdit->setText(QString("AOI %1").arg(ecWidget->getNextAoiId()));
     QComboBox* typeCombo = new QComboBox();
-    typeCombo->addItems({"AOI", "ROZ", "MEZ", "WEZ", "Patrol Area", "SOA", "AOR", "JOA"});
+
+    typeCombo->addItem("Area of Interest (AOI)", "AOI");
+    typeCombo->addItem("Restricted Operations Zone (ROZ)", "ROZ");
+    typeCombo->addItem("Missile Engagement Zone (MEZ)", "MEZ");
+    typeCombo->addItem("Weapons Engagement Zone (WEZ)", "WEZ");
+    typeCombo->addItem("Patrol Area", "Patrol Area");
+    typeCombo->addItem("Sector of Action (SOA)", "SOA");
+    typeCombo->addItem("Area of Responsibility (AOR)", "AOR");
+    typeCombo->addItem("Joint Operations Area (JOA)", "JOA");
+
     form->addRow("Name:", nameEdit);
     form->addRow("Type:", typeCombo);
     QHBoxLayout* btns = new QHBoxLayout();
@@ -170,7 +193,7 @@ void AOIPanel::onCreateByClick()
 
     QString name = nameEdit->text().trimmed();
     if (name.isEmpty()) name = "AOI";
-    AOIType type = aoiTypeFromString(typeCombo->currentText());
+    AOIType type = aoiTypeFromString(typeCombo->currentData().toString());
     ecWidget->startAOICreation(name, type);
     emit statusMessage("AOI mode: Left-click to add points, Right-click to finish (min 3 points)");
 }

@@ -419,7 +419,7 @@ void RoutePanel::setupUI()
     routeListGroup->setLayout(listGroupLayout);
     
     routeTreeWidget = new QTreeWidget(this);
-    routeTreeWidget->setMinimumHeight(200);
+    routeTreeWidget->setMinimumHeight(100);
     routeTreeWidget->setSelectionMode(QAbstractItemView::SingleSelection);
     routeTreeWidget->setSelectionBehavior(QAbstractItemView::SelectRows); // Select entire rows
     routeTreeWidget->setContextMenuPolicy(Qt::CustomContextMenu);
