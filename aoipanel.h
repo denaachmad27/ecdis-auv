@@ -7,6 +7,7 @@
 #include <QGroupBox>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QHeaderView>
 #include <QLabel>
 #include <QComboBox>
 #include <QLineEdit>
@@ -33,7 +34,7 @@ private slots:
     void onAddAOI();
     void onCreateByClick();
     void onDeleteAOI();
-    void onToggleVisibility();
+    void onItemChanged(QTreeWidgetItem* item, int column);
 
 private:
     EcWidget* ecWidget;
@@ -42,7 +43,6 @@ private:
     QPushButton* createByClickBtn;
     QPushButton* editBtn;
     QPushButton* deleteBtn;
-    QPushButton* toggleBtn;
 };
 
 #endif // AOIPANEL_H

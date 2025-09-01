@@ -334,6 +334,7 @@ public:
   void addAOI(const AOI& aoi);
   void removeAOI(int id);
   void toggleAOIVisibility(int id);
+  void setAOIVisibility(int id, bool visible);
   void drawAOIs(QPainter& painter);
   void startAOICreation(const QString& name, AOIType type);
   void cancelAOICreation();
@@ -1009,6 +1010,10 @@ protected:
   int editingAoiId = -1;
   int draggedAoiVertex = -1;
   double handleDetectRadiusPx = 10.0;
+
+  // AOI context helpers
+  void showAoiVertexContextMenu(const QPoint& pos, int aoiId, int vertexIndex);
+  bool getAoiVertexAtPosition(int x, int y, int& outAoiId, int& outVertexIndex);
 
   //popup
   void leaveEvent(QEvent *event) override;

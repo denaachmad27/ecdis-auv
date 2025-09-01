@@ -12,24 +12,31 @@ AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
 
     tree = new QTreeWidget(this);
     tree->setColumnCount(3);
-    tree->setHeaderLabels({"Name", "Type", "Visible"});
+    tree->setHeaderLabels({"Name", "Type", "Show"});
+    tree->setRootIsDecorated(false);
+    tree->setUniformRowHeights(true);
+    // Better spacing: Name stretches, Type/Show sized to contents
+    tree->header()->setStretchLastSection(false);
+    tree->header()->setSectionResizeMode(0, QHeaderView::Stretch);
+    tree->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    tree->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+    tree->setColumnWidth(1, 110);
+    tree->setColumnWidth(2, 60);
     v->addWidget(tree);
 
+    // Arrange buttons into exactly 2 rows (2 columns each) to keep panel narrow
     QGridLayout* btns = new QGridLayout();
     addBtn = new QPushButton("Add AOI (Form)");
     createByClickBtn = new QPushButton("Create by Click");
     editBtn = new QPushButton("Edit");
     deleteBtn = new QPushButton("Delete");
-    toggleBtn = new QPushButton("Toggle Vis");
 
-    // Baris 1
-    btns->addWidget(addBtn,          0, 0);
-    btns->addWidget(createByClickBtn,0, 1);
-
-    // Baris 2
-    btns->addWidget(editBtn,         1, 0);
-    btns->addWidget(deleteBtn,       1, 1);
-    btns->addWidget(toggleBtn,       1, 2);
+    // Row 1
+    btns->addWidget(addBtn,           0, 0);
+    btns->addWidget(createByClickBtn, 0, 1);
+    // Row 2
+    btns->addWidget(editBtn,          1, 0);
+    btns->addWidget(deleteBtn,        1, 1);
 
     v->addLayout(btns);
 
@@ -38,8 +45,8 @@ AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
 
     connect(addBtn, &QPushButton::clicked, this, &AOIPanel::onAddAOI);
     connect(deleteBtn, &QPushButton::clicked, this, &AOIPanel::onDeleteAOI);
-    connect(toggleBtn, &QPushButton::clicked, this, &AOIPanel::onToggleVisibility);
     connect(createByClickBtn, &QPushButton::clicked, this, &AOIPanel::onCreateByClick);
+    connect(tree, &QTreeWidget::itemChanged, this, &AOIPanel::onItemChanged);
 
     // Auto-refresh when AOI list changes in EcWidget (e.g., create-by-click finishes)
     if (ecWidget) {
@@ -59,6 +66,7 @@ AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
 
 void AOIPanel::refreshList()
 {
+    tree->blockSignals(true);
     tree->clear();
     if (!ecWidget) return;
     const auto aoiList = ecWidget->getAOIs();
@@ -66,14 +74,16 @@ void AOIPanel::refreshList()
         auto* item = new QTreeWidgetItem(tree);
         item->setText(0, aoi.name);
         item->setText(1, aoiTypeToString(aoi.type));
-        item->setText(2, aoi.visible ? "Yes" : "No");
+        // Checkbox for show/hide in column 2
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable | Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+        item->setCheckState(2, aoi.visible ? Qt::Checked : Qt::Unchecked);
+        item->setText(2, "");
         item->setData(0, Qt::UserRole, aoi.id);
         // Colorize by type
         item->setForeground(0, QBrush(aoi.color));
         item->setForeground(1, QBrush(aoi.color));
     }
-    tree->resizeColumnToContents(0);
-    tree->resizeColumnToContents(1);
+    tree->blockSignals(false);
 }
 
 void AOIPanel::onAddAOI()
@@ -198,13 +208,14 @@ void AOIPanel::onCreateByClick()
     emit statusMessage("AOI mode: Left-click to add points, Right-click to finish (min 3 points)");
 }
 
-void AOIPanel::onToggleVisibility()
+void AOIPanel::onItemChanged(QTreeWidgetItem* item, int column)
 {
-    if (!ecWidget) return;
-    auto* item = this->tree->currentItem();
-    if (!item) return;
+    if (!item || !ecWidget) return;
+    if (column != 2) return; // Only handle checkbox column
     int id = item->data(0, Qt::UserRole).toInt();
-    ecWidget->toggleAOIVisibility(id);
-    refreshList();
+    bool visible = (item->checkState(2) == Qt::Checked);
+    // Prefer explicit setter if available; fallback to toggle if necessary
+    // This relies on EcWidget::setAOIVisibility being present (added below).
+    ecWidget->setAOIVisibility(id, visible);
     ecWidget->update();
 }

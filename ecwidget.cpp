@@ -1216,150 +1216,171 @@ void EcWidget::paintEvent (QPaintEvent *e)
 
   // Draw AOIs always on top of chart
   drawAOIs(painter);
-  // Draw AOI creation preview (only if drawing system ready)
-  if (creatingAOI && aoiVerticesLatLon.size() >= 1 && initialized && view) {
+  // Draw AOI creation preview (including first-point ghost)
+  if (creatingAOI && initialized && view) {
       painter.setRenderHint(QPainter::Antialiasing, true);
+
+      // Current mouse position
+      QPoint mp = lastMousePos;
+
+      // Theme-aware colors
+      QColor win = palette().color(QPalette::Window);
+      int luma = qRound(0.2126*win.red() + 0.7152*win.green() + 0.0722*win.blue());
+      bool darkTheme = (luma < 128);
+
+      // Force dark gray projection line regardless of theme
+      QColor lineColor = QColor(80,80,80);
+      QPen pen(lineColor);
+      pen.setStyle(Qt::DashLine);
+      pen.setWidth(3); // Match route creation ghost line thickness
+      painter.setPen(pen);
+      painter.setBrush(Qt::NoBrush);
+
+      // Build existing vertices (screen)
       QVector<QPoint> pts;
       for (const auto& ll : aoiVerticesLatLon) {
           int x=0,y=0; if (LatLonToXy(ll.x(), ll.y(), x, y)) pts.append(QPoint(x,y));
       }
+
       if (!pts.isEmpty()) {
-          // add current mouse position as last temp point
-          QPoint mp = lastMousePos;
+          // Add current mouse position as last temp point and draw preview segments
           pts.append(mp);
-          // Choose rubber-band color based on theme for visibility
-          QColor win = palette().color(QPalette::Window);
-          int luma = qRound(0.2126*win.red() + 0.7152*win.green() + 0.0722*win.blue());
-          bool darkTheme = (luma < 128);
-          // Force dark gray projection line regardless of theme
-          QColor lineColor = QColor(80,80,80);
-          QPen pen(lineColor);
-          pen.setStyle(Qt::DashLine);
-          pen.setWidth(3); // Match route creation ghost line thickness
-          painter.setPen(pen);
-          painter.setBrush(Qt::NoBrush);
           for (int i=1;i<pts.size();++i) painter.drawLine(pts[i-1], pts[i]);
 
-          // Show cursor lat/lon in deg-min near the cursor
-          EcCoordinate lat, lon;
-          if (XyToLatLon(mp.x(), mp.y(), lat, lon)) {
-              const QString latStr = latLonToDegMin(lat, true);
-              const QString lonStr = latLonToDegMin(lon, false);
+          // Draw ghost circle at cursor for next point placement (like first-point preview)
+          QPen ghostPen2(lineColor);
+          ghostPen2.setStyle(Qt::DashLine);
+          ghostPen2.setWidth(2);
+          painter.setPen(ghostPen2);
+          painter.drawEllipse(mp, 6, 6);
+      } else {
+          // First point preview: show a ghost vertex following the cursor
+          QPen ghostPen(lineColor);
+          ghostPen.setStyle(Qt::DashLine);
+          ghostPen.setWidth(2);
+          painter.setPen(ghostPen);
+          painter.drawEllipse(mp, 6, 6);
+      }
 
-              // Compute distance and bearing from last vertex to cursor
-              QString distBrgText;
-              if (!aoiVerticesLatLon.isEmpty()) {
-                  const QPointF& last = aoiVerticesLatLon.last();
-                  double distNM = 0.0, bearing = 0.0;
+      // Show cursor lat/lon in deg-min near the cursor
+      EcCoordinate lat, lon;
+      if (XyToLatLon(mp.x(), mp.y(), lat, lon)) {
+          const QString latStr = latLonToDegMin(lat, true);
+          const QString lonStr = latLonToDegMin(lon, false);
+
+          // Compute distance and bearing from last vertex to cursor
+          QString distBrgText;
+          if (!aoiVerticesLatLon.isEmpty()) {
+              const QPointF& last = aoiVerticesLatLon.last();
+              double distNM = 0.0, bearing = 0.0;
+              EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
+                                                     last.x(), last.y(),
+                                                     lat, lon,
+                                                     &distNM, &bearing);
+              distBrgText = QString("\n%1 NM  @ %2°")
+                                .arg(QString::number(distNM, 'f', 2))
+                                .arg(QString::number(bearing, 'f', 0));
+          }
+
+          // Compute perimeter (includes segment to cursor) and area (if >=3 points incl. cursor)
+          QString perimText;
+          QString areaText;
+          if (!aoiVerticesLatLon.isEmpty()) {
+              double perimNM = 0.0;
+              // Build list including cursor as last point
+              QVector<QPointF> ptsLL = aoiVerticesLatLon;
+              ptsLL.append(QPointF(lat, lon));
+
+              for (int i = 1; i < ptsLL.size(); ++i) {
+                  double d=0.0, b=0.0;
                   EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
-                                                         last.x(), last.y(),
-                                                         lat, lon,
-                                                         &distNM, &bearing);
-                  distBrgText = QString("\n%1 NM  @ %2°")
-                                    .arg(QString::number(distNM, 'f', 2))
-                                    .arg(QString::number(bearing, 'f', 0));
+                                                         ptsLL[i-1].x(), ptsLL[i-1].y(),
+                                                         ptsLL[i].x(),   ptsLL[i].y(),
+                                                         &d, &b);
+                  perimNM += d;
               }
+              perimText = QString("\nPerim: %1 NM").arg(QString::number(perimNM, 'f', 2));
 
-              // Compute perimeter (includes segment to cursor) and area (if >=3 points incl. cursor)
-              QString perimText;
-              QString areaText;
-              if (!aoiVerticesLatLon.isEmpty()) {
-                  double perimNM = 0.0;
-                  // Build list including cursor as last point
-                  QVector<QPointF> ptsLL = aoiVerticesLatLon;
-                  ptsLL.append(QPointF(lat, lon));
-
-                  for (int i = 1; i < ptsLL.size(); ++i) {
-                      double d=0.0, b=0.0;
-                      EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
-                                                             ptsLL[i-1].x(), ptsLL[i-1].y(),
-                                                             ptsLL[i].x(),   ptsLL[i].y(),
-                                                             &d, &b);
-                      perimNM += d;
+              if (ptsLL.size() >= 3) {
+                  // Approximate area in NM^2 using local tangent plane
+                  double lat0 = 0.0, lon0 = 0.0;
+                  for (const auto& p : ptsLL) { lat0 += p.x(); lon0 += p.y(); }
+                  lat0 /= ptsLL.size(); lon0 /= ptsLL.size();
+                  double lat0rad = lat0 * M_PI / 180.0;
+                  double k = 60.0; // deg -> NM
+                  QVector<QPointF> ptsXY; ptsXY.reserve(ptsLL.size());
+                  for (const auto& p : ptsLL) {
+                      double x = (p.y() - lon0) * k * std::cos(lat0rad);
+                      double y = (p.x() - lat0) * k;
+                      ptsXY.append(QPointF(x, y));
                   }
-                  perimText = QString("\nPerim: %1 NM").arg(QString::number(perimNM, 'f', 2));
-
-                  if (ptsLL.size() >= 3) {
-                      // Approximate area in NM^2 using local tangent plane
-                      double lat0 = 0.0, lon0 = 0.0;
-                      for (const auto& p : ptsLL) { lat0 += p.x(); lon0 += p.y(); }
-                      lat0 /= ptsLL.size(); lon0 /= ptsLL.size();
-                      double lat0rad = lat0 * M_PI / 180.0;
-                      double k = 60.0; // deg -> NM
-                      QVector<QPointF> ptsXY; ptsXY.reserve(ptsLL.size());
-                      for (const auto& p : ptsLL) {
-                          double x = (p.y() - lon0) * k * std::cos(lat0rad);
-                          double y = (p.x() - lat0) * k;
-                          ptsXY.append(QPointF(x, y));
-                      }
-                      // Shoelace area for closed polygon: close back to first
-                      double area = 0.0;
-                      for (int i = 0; i < ptsXY.size(); ++i) {
-                          const QPointF& a = ptsXY[i];
-                          const QPointF& b = ptsXY[(i+1) % ptsXY.size()];
-                          area += a.x()*b.y() - b.x()*a.y();
-                      }
-                      area = std::fabs(area) * 0.5; // NM^2
-                      areaText = QString::fromUtf8("\nArea: %1 NM²").arg(QString::number(area, 'f', 2));
+                  // Shoelace area for closed polygon: close back to first
+                  double area = 0.0;
+                  for (int i = 0; i < ptsXY.size(); ++i) {
+                      const QPointF& a = ptsXY[i];
+                      const QPointF& b = ptsXY[(i+1) % ptsXY.size()];
+                      area += a.x()*b.y() - b.x()*a.y();
                   }
+                  area = std::fabs(area) * 0.5; // NM^2
+                  areaText = QString::fromUtf8("\nArea: %1 NM²").arg(QString::number(area, 'f', 2));
               }
+          }
 
-              // Cursor overlay: show only coordinates
-              const QString text = latStr + "  " + lonStr;
+          // Cursor overlay: show only coordinates
+          const QString text = latStr + "  " + lonStr;
 
-              QFont f = painter.font();
-              f.setPointSizeF(9.0);
-              f.setBold(false);
-              painter.setFont(f);
-              QFontMetrics fm(f);
-              int pad = 4;
-              QRect br = fm.boundingRect(QRect(0,0, 600, 2000), Qt::AlignLeft|Qt::AlignTop, text);
-              QRect bg(mp.x() + 12, mp.y() + 12, br.width() + pad*2, br.height() + pad*2);
+          QFont f = painter.font();
+          f.setPointSizeF(9.0);
+          f.setBold(false);
+          painter.setFont(f);
+          QFontMetrics fm(f);
+          int pad = 4;
+          QRect br = fm.boundingRect(QRect(0,0, 600, 2000), Qt::AlignLeft|Qt::AlignTop, text);
+          QRect bg(mp.x() + 12, mp.y() + 12, br.width() + pad*2, br.height() + pad*2);
 
-              // Background for readability (theme-aware)
+          // Background for readability (theme-aware)
+          painter.setPen(Qt::NoPen);
+          QColor bgCol = darkTheme ? QColor(0,0,0,160) : QColor(255,255,255,210);
+          QColor fgCol = darkTheme ? QColor(240,240,240) : QColor(30,30,30);
+          painter.setBrush(bgCol);
+          painter.drawRoundedRect(bg, 4, 4);
+
+          // Text (theme-aware)
+          painter.setPen(fgCol);
+          painter.drawText(bg.adjusted(pad, pad, -pad, -pad), Qt::AlignLeft | Qt::AlignTop, text);
+
+          // Center label: show AOI title and area at polygon centroid during creation
+          if (pts.size() >= 3) {
+              // Compute screen centroid
+              double cx = 0.0, cy = 0.0;
+              for (const QPoint& p : pts) { cx += p.x(); cy += p.y(); }
+              cx /= pts.size(); cy /= pts.size();
+
+              QString title = pendingAOIName.isEmpty() ? QString("AOI %1").arg(nextAoiId) : pendingAOIName;
+              QString areaLine = areaText.isEmpty() ? QString("") : areaText.mid(1); // remove leading \n
+              QString centerText = title;
+              if (!areaLine.isEmpty()) centerText += "\n" + areaLine;
+
+              QFont tf = painter.font();
+              tf.setPointSizeF(10.0);
+              tf.setBold(true);
+              painter.setFont(tf);
+              QFontMetrics tfm(tf);
+              QRect tb = tfm.boundingRect(QRect(0,0, 800, 2000), Qt::AlignHCenter|Qt::AlignTop, centerText);
+              int w = tb.width();
+              int h = tb.height();
+              QRect labelRect(static_cast<int>(cx - w/2) - 6, static_cast<int>(cy - h/2) - 6,
+                              w + 12, h + 12);
+              // Background
               painter.setPen(Qt::NoPen);
-              QColor bgCol = darkTheme ? QColor(0,0,0,160) : QColor(255,255,255,210);
-              QColor fgCol = darkTheme ? QColor(240,240,240) : QColor(30,30,30);
-              painter.setBrush(bgCol);
-              painter.drawRoundedRect(bg, 4, 4);
+              painter.setBrush(QColor(0,0,0,120));
+              painter.drawRoundedRect(labelRect, 4, 4);
 
-              // Text (theme-aware)
-              painter.setPen(fgCol);
-              painter.drawText(bg.adjusted(pad, pad, -pad, -pad), Qt::AlignLeft | Qt::AlignTop, text);
-
-              // Center label: show AOI title and area at polygon centroid during creation
-              if (pts.size() >= 3) {
-                  // Compute screen centroid
-                  double cx = 0.0, cy = 0.0;
-                  for (const QPoint& p : pts) { cx += p.x(); cy += p.y(); }
-                  cx /= pts.size(); cy /= pts.size();
-
-                  QString title = pendingAOIName.isEmpty() ? QString("AOI %1").arg(nextAoiId) : pendingAOIName;
-                  QString areaLine = areaText.isEmpty() ? QString("") : areaText.mid(1); // remove leading \n
-                  QString centerText = title;
-                  if (!areaLine.isEmpty()) centerText += "\n" + areaLine;
-
-                  QFont tf = painter.font();
-                  tf.setPointSizeF(10.0);
-                  tf.setBold(true);
-                  painter.setFont(tf);
-                  QFontMetrics tfm(tf);
-                  QRect tb = tfm.boundingRect(QRect(0,0, 800, 2000), Qt::AlignHCenter|Qt::AlignTop, centerText);
-                  int w = tb.width();
-                  int h = tb.height();
-                  QRect labelRect(static_cast<int>(cx - w/2) - 6, static_cast<int>(cy - h/2) - 6,
-                                  w + 12, h + 12);
-                  // Background
-                  painter.setPen(Qt::NoPen);
-                  painter.setBrush(QColor(0,0,0,120));
-                  painter.drawRoundedRect(labelRect, 4, 4);
-
-                  // Text colored by AOI type color
-                  QColor aoiColor = aoiDefaultColor(pendingAOIType);
-                  painter.setPen(Qt::white);
-                  //painter.setPen(aoiColor.darker(110));
-                  painter.drawText(labelRect, Qt::AlignCenter, centerText);
-              }
+              // Text colored by AOI type color
+              QColor aoiColor = aoiDefaultColor(pendingAOIType);
+              painter.setPen(Qt::white);
+              //painter.setPen(aoiColor.darker(110));
+              painter.drawText(labelRect, Qt::AlignCenter, centerText);
           }
       }
   }
@@ -1529,6 +1550,19 @@ void EcWidget::toggleAOIVisibility(int id)
     }
 }
 
+void EcWidget::setAOIVisibility(int id, bool visible)
+{
+    for (auto& a : aoiList) {
+        if (a.id == id) {
+            if (a.visible != visible) {
+                a.visible = visible;
+                emit aoiListChanged();
+            }
+            break;
+        }
+    }
+}
+
 void EcWidget::drawAOIs(QPainter& painter)
 {
     if (aoiList.isEmpty()) return;
@@ -1561,6 +1595,19 @@ void EcWidget::drawAOIs(QPainter& painter)
         painter.setPen(pen);
         painter.setBrush(Qt::NoBrush); // Transparent area (outline only)
         painter.drawPolygon(QPolygon(pts));
+
+        // Draw vertex markers (donut circles) at each AOI vertex for easier edit/move discovery
+        {
+            QPen vpen(pen.color());
+            vpen.setWidth(2);
+            vpen.setStyle(Qt::SolidLine);
+            painter.setPen(vpen);
+            painter.setBrush(Qt::NoBrush);
+            const int vr = 6; // vertex radius similar to waypoint donut
+            for (const QPoint& vp : pts) {
+                painter.drawEllipse(vp, vr, vr);
+            }
+        }
 
         // Draw label near centroid (match AOI color tone) with waypoint-like font
         double cx=0, cy=0; for (const QPoint& p : pts) { cx += p.x(); cy += p.y(); }
