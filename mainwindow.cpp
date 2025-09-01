@@ -1781,7 +1781,54 @@ void MainWindow::onMouseMove(EcCoordinate lat, EcCoordinate lon)
 
 void MainWindow::onMouseRightClick(const QPoint& pos)
 {
-    if (AppConfig::isDevelopment()){
+    // KLIK TARGET AIS
+    EcAISTargetInfo* target = ecchart->findAISTargetInfoAtPosition(pos);
+    QList<EcFeature> pickedFeatureList;
+
+    if (target) {
+        QString mmsiStr = QString::number(target->mmsi);
+        AISTargetData ais;
+
+        ais.mmsi = mmsiStr;
+        ais.lat = ((double)target->latitude / 10000) / 60;
+        ais.lon = ((double)target->longitude / 10000) / 60;
+
+        ecchart->setAISTrack(ais);
+        ecchart->TrackTarget(mmsiStr);
+
+        qDebug() << "Track Target MMSI:" << mmsiStr;
+
+        ecchart->GetPickedFeatures(pickedFeatureList);
+        pickWindow->fill(pickedFeatureList);
+
+        if (!aisTemp->toPlainText().trimmed().isEmpty()){
+            aisText->setHtml(aisTemp->toHtml());
+        }
+
+        return;
+    }
+
+    if (ecchart->isTrackTarget()){
+        AISTargetData ais;
+
+        ais.mmsi = "";
+        ais.lat = 0;
+        ais.lon = 0;
+
+        ecchart->setAISTrack(ais);
+        ecchart->TrackTarget("");
+
+        qDebug() << "Track Ownship";
+
+        aisText->setHtml("");
+
+        // if (!ownShipTemp->toPlainText().trimmed().isEmpty()){
+        //     ownShipText->setHtml(ownShipTemp->toHtml());
+        // }
+
+        return;
+    }
+    else {
         // ROUTE
         QMenu contextMenu(this);
 
@@ -1789,6 +1836,7 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
         contextMenu.addAction(ecchart->createRouteAction);
         contextMenu.addSeparator();
         contextMenu.addAction(ecchart->pickInfoAction);
+        contextMenu.addAction(ecchart->warningInfoAction);
 
         // Execute menu
         QAction* selectedAction = contextMenu.exec(ecchart->mapToGlobal(pos));
@@ -1804,76 +1852,21 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
             qDebug() << "[CONTEXT-MENU] Create Route mode started";
         }
         else if (selectedAction == ecchart->pickInfoAction){
-            QList<EcFeature> pickedFeatureList;
+            EcCoordinate lat, lon;
+            ecchart->XyToLatLon(pos.x(), pos.y(), lat, lon);
             ecchart->GetPickedFeatures(pickedFeatureList);
 
-            pickWindow->fillJsonSubs(pickedFeatureList);
+            pickWindow->fillStyle(pickedFeatureList, lat, lon);
             pickWindow->show();
-
-            // EcCoordinate lat, lon;
-            // ecchart->XyToLatLon(pos.x(), pos.y(), lat, lon);
-            // ecchart->showHazardInfoAt(lat, lon);
         }
-    }
+        else if (selectedAction == ecchart->warningInfoAction){
+            EcCoordinate lat, lon;
+            ecchart->XyToLatLon(pos.x(), pos.y(), lat, lon);
+            ecchart->GetPickedFeatures(pickedFeatureList);
 
-
-
-    // KLIK TARGET AIS
-    EcAISTargetInfo* target = ecchart->findAISTargetInfoAtPosition(pos);
-
-    // GET FEATURE
-	QList<EcFeature> pickedFeatureList;
-
-	ecchart->GetPickedFeatures(pickedFeatureList);
-
-    pickWindow->fill(pickedFeatureList);
-
-    //pickWindow->fillJson(pickedFeatureList);
-
-    if (!aisTemp->toPlainText().trimmed().isEmpty()){
-        aisText->setHtml(aisTemp->toHtml());
-    }
-    else {
-        aisText->setHtml("");
-    }
-
-    if (!ownShipTemp->toPlainText().trimmed().isEmpty()){
-        ownShipText->setHtml(ownShipTemp->toHtml());
-    }
-
-    if (target) {
-        QString mmsiStr = QString::number(target->mmsi);
-        AISTargetData ais;
-
-        ais.mmsi = mmsiStr;
-        ais.lat = ((double)target->latitude / 10000) / 60;
-        ais.lon = ((double)target->longitude / 10000) / 60;
-
-        ecchart->setAISTrack(ais);
-        ecchart->TrackTarget(mmsiStr);
-
-        qDebug() << "Track Target MMSI:" << mmsiStr;
-
-        return;
-    }
-    else {
-        AISTargetData ais;
-
-        ais.mmsi = "";
-        ais.lat = 0;
-        ais.lon = 0;
-
-        ecchart->setAISTrack(ais);
-        ecchart->TrackTarget("");
-
-        qDebug() << "Track Ownship";
-
-        return;
-    }
-
-
-    if (AppConfig::isDevelopment()){
-        pickWindow->show();
+            pickWindow->fillWarningOnly(pickedFeatureList, lat, lon);
+            pickWindow->show();
+        }
     }
 
     //changeText();

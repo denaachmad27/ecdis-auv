@@ -597,6 +597,7 @@ public:
 
   // Swiches the track of AIS Target
   void TrackTarget(QString mmsi);
+  bool isTrackTarget();
   void TrackShip(bool on);
   void ShowDangerTarget(bool on);
 
@@ -789,6 +790,7 @@ public:
   // ACTION
   QAction* createRouteAction;
   QAction* pickInfoAction;
+  QAction* warningInfoAction;
 
 public slots:
   void updateAISTargetsList();

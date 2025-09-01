@@ -5,6 +5,7 @@
 #include "pickwindow.h"
 #include "ecwidget.h"
 #include "nmeadecoder.h"
+#include "appconfig.h"
 
 PickWindow::PickWindow(QWidget *parent, EcDictInfo *dict, EcDENC *dc)
 : QDialog(parent)
@@ -12,9 +13,9 @@ PickWindow::PickWindow(QWidget *parent, EcDictInfo *dict, EcDENC *dc)
   dictInfo = dict;
   denc = dc;
 
-  setWindowTitle("Pick Report");
+  setWindowTitle("Map Information");
 
-  setMinimumSize( QSize( 800, 600 ) );
+  setMinimumSize( QSize( 400, 500 ) );
 
   textEdit = new QTextEdit;
   textEdit->setReadOnly(true);  // Make it read-only
@@ -252,13 +253,15 @@ void PickWindow::fill(QList<EcFeature> & pickFeatureList)
 
     textEdit->setHtml(text);
     aisTemp->setHtml(ais);
-    ownShipTemp->setHtml(ownship);
+    //ownShipTemp->setHtml(ownship);
 
   }
 }
 
-void PickWindow::fillStyle(QList<EcFeature> & pickFeatureList)
+void PickWindow::fillStyle(QList<EcFeature> & pickFeatureList, EcCoordinate lat, EcCoordinate lon)
 {
+    setWindowTitle("Map Information");
+
     EcFeature        feature;
     EcFindInfo       fI;
     EcClassToken     featToken;
@@ -270,100 +273,350 @@ void PickWindow::fillStyle(QList<EcFeature> & pickFeatureList)
     char             attrText[1024];
     Bool             result;
 
-    QString          text = "";
+    QString text = "";
 
-    // Kita pakai struktur map untuk grouping attribute berdasarkan token
-    QMap<QString, QList<QString>> groupedAttributes;
+    QColor headerColor;
 
-    QList<EcFeature>::Iterator iT;
-    for (iT=pickFeatureList.begin(); iT!=pickFeatureList.end(); ++iT)
+    if (AppConfig::isLight()) {
+        headerColor = QColor(224, 224, 224); // abu terang (#e0e0e0)
+    }
+    else if (AppConfig::isDark()) {
+        headerColor = QColor(20, 20, 20); // abu gelap
+    }
+    else {
+        headerColor = QColor(20, 20, 40); // biru gelap
+    }
+
+    QString headerColorStr = headerColor.name();
+
+    // koordinat
+    text += "<div style='font-family:Arial; font-size:10pt; margin-bottom:8px;'>";
+    text += QString(
+                "<tr style='background-color:%1; font-weight:bold;'>"
+                "<td colspan='2' style='padding:4px;'>LAT: %2 &nbsp;&nbsp; LON: %3</td>"
+                "</tr>")
+                .arg(headerColorStr)
+                .arg(lat, 0, 'f', 6)
+                .arg(lon, 0, 'f', 6);
+    text += "</div>";
+
+    // buka table
+    text += "<div style='font-family:Arial; font-size:10pt;'>";
+    text += "<table width='100%' cellspacing='0' cellpadding='6' "
+            "style='border-collapse:collapse; font-size:10pt;'>";
+
+    QMap<QString, int> featureCounters;
+
+    for (auto iT = pickFeatureList.begin(); iT != pickFeatureList.end(); ++iT)
     {
         feature = (*iT);
 
-        // Get token feature
         EcFeatureGetClass(feature, dictInfo, featToken, sizeof(featToken));
         if (EcDictionaryTranslateObjectToken(dictInfo, featToken, featName, sizeof(featName)) != EC_DICT_OK)
-            strcpy(featName,"unknown");
+            strcpy(featName, "unknown");
 
-        // Reset grouping untuk feature ini
-        groupedAttributes.clear();
+        QString featTokenStr = QString(featToken);
+        QString featNameStr  = QString(featName);
 
-        // Get attributes
+        int count = featureCounters.value(featTokenStr, 0) + 1;
+        featureCounters[featTokenStr] = count;
+
+        // header row
+        text += QString(
+                    "<tr style='background-color:%1; font-weight:bold;'>"
+                    "<td colspan='2' style='padding:4px;'>[%2 %3]</td>"
+                    "</tr>")
+                    .arg(headerColorStr)
+                    .arg(featNameStr.toUpper())
+                    .arg(count);
+
+        // loop attribute
         result = EcFeatureGetAttributes(feature, dictInfo, &fI, EC_FIRST, attrStr, sizeof(attrStr));
-
-        while (result) {
+        while (result)
+        {
             strncpy(attrToken, attrStr, EC_LENATRCODE);
             attrToken[EC_LENATRCODE] = (char)0;
 
+            QString attrNameStr;
+            QString attrValueStr;
+
             if (EcDictionaryTranslateAttributeToken(dictInfo, attrToken, attrName, sizeof(attrName))) {
+                attrNameStr = QString(attrName);
                 if (EcDictionaryGetAttributeType(dictInfo, attrStr, &attrType) == EC_DICT_OK) {
                     if (attrType == EC_ATTR_ENUM || attrType == EC_ATTR_LIST) {
-                        if (!EcDictionaryTranslateAttributeValue(dictInfo, attrStr, attrText, sizeof(attrText))) {
-                            attrText[0]=(char)0;
-                        }
+                        if (!EcDictionaryTranslateAttributeValue(dictInfo, attrStr, attrText, sizeof(attrText)))
+                            attrText[0] = (char)0;
+                        attrValueStr = QString(attrText);
                     } else {
                         strcpy(attrText, &attrStr[EC_LENATRCODE]);
+                        attrValueStr = QString(attrText);
                     }
                 }
-
-                // Simpan ke grouping
-                QString key = QString(attrName);   // bisa juga pakai attrToken
-                QString val = QString(attrText);
-                groupedAttributes[key].append(val);
             }
+
+            // formatting khusus Source date
+            if (attrNameStr.compare("Source date", Qt::CaseInsensitive) == 0) {
+                QDate date = QDate::fromString(attrValueStr, "yyyyMMdd");
+                if (date.isValid()) {
+                    attrValueStr = date.toString("dd-MM-yyyy");
+                }
+            }
+
+            // formatting khusus Textual description (baca file isi TXT)
+            if (attrNameStr.compare("Textual description", Qt::CaseInsensitive) == 0) {
+                QString fileName = attrValueStr.trimmed();
+                if (!fileName.isEmpty()) {
+                    QString path = QString("%1/SevenCs/EC2007/DENC/TXT/%2/%3/%4/%5")
+                    .arg("C:/Users/Ali/AppData/Roaming")
+                        .arg(fileName.mid(0,2))
+                        .arg(fileName.mid(2,2))
+                        .arg(fileName.mid(4,2))
+                        .arg(fileName);
+                    QString parsed = parseTxtFile(path);
+                    attrValueStr = parsed.isEmpty() ? QString("(tidak ada isi)") : parsed;
+                }
+            }
+
+            // tambah row attribute
+            text += QString(
+                        "<tr style='border-bottom:1px solid #ddd;'>"
+                        "<td style='width:40%; font-weight:bold; vertical-align:top;'>%1</td>"
+                        "<td style='width:60%; vertical-align:top; white-space:pre-wrap;'>%2</td>"
+                        "</tr>")
+                        .arg(attrNameStr)
+                        .arg(attrValueStr.toHtmlEscaped());
 
             result = EcFeatureGetAttributes(feature, dictInfo, &fI, EC_NEXT, attrStr, sizeof(attrStr));
         }
-
-        // ===== Render HTML tabel =====
-        QString tableHtml = "<table width='100%' cellspacing='0' cellpadding='4' "
-                            "style='border-collapse:collapse; font-family:Arial; font-size:10pt;'>";
-
-        // Header nama feature
-        tableHtml += QString("<tr style='background-color:#f0f0f0;'>"
-                             "<td colspan='2'><b>%1 (%2)</b></td></tr>")
-                         .arg(QString(featName))
-                         .arg(QString(featToken));
-
-        // Iterasi hasil grouping
-        for (auto it = groupedAttributes.constBegin(); it != groupedAttributes.constEnd(); ++it) {
-            QString attrNameStr = it.key();
-            QList<QString> values = it.value();
-
-            if (values.size() == 1) {
-                // kalau hanya satu value → row biasa
-                tableHtml += QString("<tr>"
-                                     "<td style='border:1px solid #ccc; width:35%;'><b>%1</b></td>"
-                                     "<td style='border:1px solid #ccc;'>%2</td>"
-                                     "</tr>")
-                                 .arg(attrNameStr)
-                                 .arg(values.first());
-            } else {
-                // kalau lebih dari satu → rowspan di kolom kiri
-                tableHtml += QString("<tr>"
-                                     "<td style='border:1px solid #ccc;' rowspan='%1'><b>%2</b></td>"
-                                     "<td style='border:1px solid #ccc;'>%3</td>"
-                                     "</tr>")
-                                 .arg(values.size())
-                                 .arg(attrNameStr)
-                                 .arg(values.at(0));
-
-                // render baris berikutnya tanpa kolom kiri
-                for (int v = 1; v < values.size(); ++v) {
-                    tableHtml += QString("<tr>"
-                                         "<td style='border:1px solid #ccc;'>%1</td>"
-                                         "</tr>").arg(values.at(v));
-                }
-            }
-        }
-
-        tableHtml += "</table><br>";
-        text.append(tableHtml);
     }
 
-    // tampilkan hasil
+    // tutup table
+    text += "</table></div>";
+
+    // tampilkan
     textEdit->setHtml(text);
 }
+
+void PickWindow::fillWarningOnly(QList<EcFeature> & pickFeatureList, EcCoordinate lat, EcCoordinate lon)
+{
+    setWindowTitle("Caution and Restricted Information");
+
+    EcFeature        feature;
+    EcFindInfo       fI;
+    EcClassToken     featToken;
+    EcAttributeToken attrToken;
+    EcAttributeType  attrType;
+    char             featName[1024];
+    char             attrStr[1024];
+    char             attrName[1024];
+    char             attrText[1024];
+    Bool             result;
+
+    QString text = "";
+
+    QColor headerColor;
+
+    if (AppConfig::isLight()) {
+        headerColor = QColor(224, 224, 224); // abu terang (#e0e0e0)
+    }
+    else if (AppConfig::isDark()) {
+        headerColor = QColor(20, 20, 20); // abu gelap
+    }
+    else {
+        headerColor = QColor(20, 20, 40); // biru gelap
+    }
+
+    QString headerColorStr = headerColor.name();
+
+    // koordinat
+    text += "<div style='font-family:Arial; font-size:10pt; margin-bottom:8px;'>"
+            + QString("<tr style='background-color:%1; font-weight:bold;'>"
+                      "<td colspan='2' style='padding:4px;'>LAT: %2 &nbsp;&nbsp; LON: %3</td>"
+                      "</tr>")
+                  .arg(headerColorStr)
+                  .arg(lat, 0, 'f', 6)
+                  .arg(lon, 0, 'f', 6)
+            + "</div>";
+
+    // buka table
+    text += "<div style='font-family:Arial; font-size:10pt;'>"
+            "<table width='100%' cellspacing='0' cellpadding='6' "
+            "style='border-collapse:collapse; font-size:10pt;'>";
+
+    QMap<QString, int> featureCounters;
+
+    // daftar feature yang diizinkan
+    static const QSet<QString> allowedFeatures = {
+        "CTNARE", "RESARE", "FERYRT", "MIPARE", "OSPARE", "SPLARE", "SUBTLN"
+    };
+
+    for (auto iT = pickFeatureList.begin(); iT != pickFeatureList.end(); ++iT)
+    {
+        feature = (*iT);
+
+        EcFeatureGetClass(feature, dictInfo, featToken, sizeof(featToken));
+        if (EcDictionaryTranslateObjectToken(dictInfo, featToken, featName, sizeof(featName)) != EC_DICT_OK)
+            strcpy(featName, "unknown");
+
+        QString featTokenStr = QString(featToken);
+        QString featNameStr  = QString(featName);
+
+        // filter hanya feature tertentu
+        if (!allowedFeatures.contains(featTokenStr)) {
+            continue;
+        }
+
+        int count = featureCounters.value(featTokenStr, 0) + 1;
+        featureCounters[featTokenStr] = count;
+
+        // header row
+        text += QString(
+                    "<tr style='background-color:%1; font-weight:bold;'>"
+                    "<td colspan='2' style='padding:4px;'>[%2 %3]</td>"
+                    "</tr>")
+                    .arg(headerColorStr)
+                    .arg(featNameStr.toUpper())
+                    .arg(count);
+
+        // loop attribute
+        result = EcFeatureGetAttributes(feature, dictInfo, &fI, EC_FIRST, attrStr, sizeof(attrStr));
+        while (result)
+        {
+            strncpy(attrToken, attrStr, EC_LENATRCODE);
+            attrToken[EC_LENATRCODE] = (char)0;
+
+            QString attrNameStr;
+            QString attrValueStr;
+
+            if (EcDictionaryTranslateAttributeToken(dictInfo, attrToken, attrName, sizeof(attrName))) {
+                attrNameStr = QString(attrName);
+                if (EcDictionaryGetAttributeType(dictInfo, attrStr, &attrType) == EC_DICT_OK) {
+                    if (attrType == EC_ATTR_ENUM || attrType == EC_ATTR_LIST) {
+                        if (!EcDictionaryTranslateAttributeValue(dictInfo, attrStr, attrText, sizeof(attrText)))
+                            attrText[0] = (char)0;
+                        attrValueStr = QString(attrText);
+                    } else {
+                        strcpy(attrText, &attrStr[EC_LENATRCODE]);
+                        attrValueStr = QString(attrText);
+                    }
+                }
+            }
+
+            if (attrNameStr.compare("Information in national language", Qt::CaseInsensitive) == 0) {
+                result = EcFeatureGetAttributes(feature, dictInfo, &fI, EC_NEXT, attrStr, sizeof(attrStr));
+                continue;
+            }
+
+            // formatting khusus Source date
+            if (attrNameStr.compare("Source date", Qt::CaseInsensitive) == 0) {
+                QDate date = QDate::fromString(attrValueStr, "yyyyMMdd");
+                if (date.isValid()) {
+                    attrValueStr = date.toString("dd-MM-yyyy");
+                }
+            }
+
+            // formatting khusus Textual description (baca file isi TXT)
+            if (attrNameStr.compare("Textual description", Qt::CaseInsensitive) == 0) {
+                QString fileName = attrValueStr.trimmed();
+                if (!fileName.isEmpty()) {
+                    QString path = QString("%1/SevenCs/EC2007/DENC/TXT/%2/%3/%4/%5")
+                    .arg("C:/Users/Ali/AppData/Roaming")
+                        .arg(fileName.mid(0,2))
+                        .arg(fileName.mid(2,2))
+                        .arg(fileName.mid(4,2))
+                        .arg(fileName);
+                    QString parsed = parseTxtFile(path);
+                    attrValueStr = parsed.isEmpty() ? QString("(tidak ada isi)") : parsed;
+                }
+            }
+
+            // tambah row attribute
+            text += QString(
+                        "<tr style='border-bottom:1px solid #ddd;'>"
+                        "<td style='width:40%; font-weight:bold; vertical-align:top;'>%1</td>"
+                        "<td style='width:60%; vertical-align:top; white-space:pre-wrap;'>%2</td>"
+                        "</tr>")
+                        .arg(attrNameStr)
+                        .arg(attrValueStr.toHtmlEscaped());
+
+            result = EcFeatureGetAttributes(feature, dictInfo, &fI, EC_NEXT, attrStr, sizeof(attrStr));
+        }
+    }
+
+    // tutup table
+    text += "</table></div>";
+
+    // tampilkan
+    textEdit->setHtml(text);
+}
+
+
+
+// Tambahan helper untuk parsing isi TXT
+QString PickWindow::parseTxtFile(const QString &filePath)
+{
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return QString("Tidak bisa membuka file: %1").arg(filePath);
+    }
+
+    QString content = QString::fromUtf8(file.readAll());
+    file.close();
+
+    // Pisah per baris
+    QStringList lines = content.split(QRegExp("[\r\n]+"), Qt::SkipEmptyParts);
+
+    QString currentTitle;
+    QString currentBody;
+    QList<QPair<QString, QString>> blocks;
+
+    for (int i = 0; i < lines.size(); ++i) {
+        QString line = lines[i].trimmed();
+
+        if (line.isEmpty()) continue;
+
+        // Deteksi apakah line ALL CAPS = Judul
+        if (line.toUpper() == line && line.length() > 2) {
+            // simpan blok sebelumnya jika ada
+            if (!currentTitle.isEmpty() || !currentBody.isEmpty()) {
+                blocks.append(qMakePair(currentTitle, currentBody.trimmed()));
+                currentBody.clear();
+            }
+            currentTitle = line;
+        } else {
+            // bagian isi
+            currentBody += (currentBody.isEmpty() ? "" : " ") + line;
+        }
+    }
+
+    // simpan blok terakhir
+    if (!currentTitle.isEmpty() || !currentBody.isEmpty()) {
+        blocks.append(qMakePair(currentTitle, currentBody.trimmed()));
+    }
+
+    // ambil hasil
+    QString finalTitle;
+    QString finalBody;
+    if (!blocks.isEmpty()) {
+        auto lastBlock = blocks.last();  // ambil terakhir
+        finalTitle = lastBlock.first;
+        finalBody  = lastBlock.second;
+    }
+
+    if (finalTitle.isEmpty() && finalBody.isEmpty()) {
+        return QString();
+    }
+
+    // Format akhir
+    QString result;
+    if (!finalTitle.isEmpty())
+        result += finalTitle + "\n";
+    if (!finalBody.isEmpty())
+        result += finalBody;
+
+    return result.trimmed();
+}
+
 
 
 // QString PickWindow::ownShipAutoFill(QList<EcFeature> & pickFeatureList)

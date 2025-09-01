@@ -41,5 +41,9 @@
         <file>icon/edit_white.svg</file>
         <file>icon/move_white.svg</file>
         <file>icon/publish_white.svg</file>
+        <file>icon/info_white.svg</file>
+        <file>icon/warning_white.svg</file>
+        <file>icon/info.svg</file>
+        <file>icon/warning.svg</file>
     </qresource>
 </RCC>

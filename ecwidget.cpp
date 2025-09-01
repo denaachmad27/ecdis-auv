@@ -420,7 +420,8 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   publishAction = new QAction(QIcon(":/icon/publish_white.svg"), tr("Publish Waypoint"), this);
   insertWaypointAction = new QAction(QIcon(":/icon/create_wp_white.svg"), tr("Insert Waypoint"), this);
   createRouteAction = new QAction(QIcon(":/icon/create_route_white.svg"), tr("Create Route"), this);
-  pickInfoAction = new QAction(QIcon(":/icon/create_route_white.svg"), tr("Pick Info"), this);
+  pickInfoAction = new QAction(QIcon(":/icon/info_white.svg"), tr("Map Information"), this);
+  warningInfoAction = new QAction(QIcon(":/icon/warning_white.svg"), tr("Caution and Restricted Info"), this);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -735,6 +736,10 @@ void EcWidget::ShowAIS(bool on)
 
 void EcWidget::TrackTarget(QString mmsi){
     trackTarget = mmsi;
+}
+
+bool EcWidget::isTrackTarget(){
+    return !trackTarget.isEmpty();
 }
 
 void EcWidget::TrackShip(bool on)
@@ -4116,8 +4121,17 @@ void EcWidget::createWaypointAt(EcCoordinate lat, EcCoordinate lon)
 
     // After creating waypoint, show hazard info (caution/danger) at this position
     // Show for both route and single waypoint creation
+
+    // if (AppConfig::isProduction()){
+    //     showHazardInfoAt(lat, lon);
+    // }
+
     if (AppConfig::isDevelopment()){
-        showHazardInfoAt(lat, lon);
+        QList<EcFeature> pickedFeatureList;
+        GetPickedFeaturesSubs(pickedFeatureList, lat, lon);
+
+        mainWindow->pickWindow->fillWarningOnly(pickedFeatureList, lat, lon);
+        mainWindow->pickWindow->show();
     }
 }
 
@@ -5772,7 +5786,8 @@ void EcWidget::iconUpdate(bool dark){
         publishAction->setIcon(QIcon(":/icon/publish_white.svg"));
         insertWaypointAction->setIcon(QIcon(":/icon/create_wp_white.svg"));
         createRouteAction->setIcon(QIcon(":/icon/create_route_white.svg"));
-        pickInfoAction->setIcon(QIcon(":/icon/create_route_white.svg"));
+        pickInfoAction->setIcon(QIcon(":/icon/info_white.svg"));
+        warningInfoAction->setIcon(QIcon(":/icon/warning_white.svg"));
     }
     else {
         editAction->setIcon(QIcon(":/icon/edit.svg"));
@@ -5782,7 +5797,8 @@ void EcWidget::iconUpdate(bool dark){
         publishAction->setIcon(QIcon(":/icon/publish.svg"));
         insertWaypointAction->setIcon(QIcon(":/icon/create_wp.svg"));
         createRouteAction->setIcon(QIcon(":/icon/create_route.svg"));
-        pickInfoAction->setIcon(QIcon(":/icon/create_route.svg"));
+        pickInfoAction->setIcon(QIcon(":/icon/info.svg"));
+        warningInfoAction->setIcon(QIcon(":/icon/warning.svg"));
     }
 }
 

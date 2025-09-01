@@ -26,10 +26,14 @@ class PickWindow : public QDialog
 public:
     PickWindow(QWidget *parent, EcDictInfo *dict, EcDENC *dc);
     void fill(QList<EcFeature> & pickFeatureList);
-    void fillStyle(QList<EcFeature> & pickFeatureList);
+    void fillStyle(QList<EcFeature> & pickFeatureList, EcCoordinate lat, EcCoordinate lon);
+    void fillWarningOnly(QList<EcFeature> & pickFeatureList, EcCoordinate lat, EcCoordinate lon);
+
     QString ownShipAutoFill();
     QJsonObject fillJson(QList<EcFeature> & pickFeatureList);
     QJsonObject fillJsonSubs(QList<EcFeature> & pickFeatureList);
+
+    QString parseTxtFile(const QString &filePath);
 
 private:
     QTextEdit  *textEdit;
