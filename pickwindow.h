@@ -26,6 +26,7 @@ class PickWindow : public QDialog
 public:
     PickWindow(QWidget *parent, EcDictInfo *dict, EcDENC *dc);
     void fill(QList<EcFeature> & pickFeatureList);
+    void fillStyle(QList<EcFeature> & pickFeatureList);
     QString ownShipAutoFill();
     QJsonObject fillJson(QList<EcFeature> & pickFeatureList);
     QJsonObject fillJsonSubs(QList<EcFeature> & pickFeatureList);

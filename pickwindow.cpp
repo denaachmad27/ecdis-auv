@@ -257,6 +257,115 @@ void PickWindow::fill(QList<EcFeature> & pickFeatureList)
   }
 }
 
+void PickWindow::fillStyle(QList<EcFeature> & pickFeatureList)
+{
+    EcFeature        feature;
+    EcFindInfo       fI;
+    EcClassToken     featToken;
+    EcAttributeToken attrToken;
+    EcAttributeType  attrType;
+    char             featName[1024];
+    char             attrStr[1024];
+    char             attrName[1024];
+    char             attrText[1024];
+    Bool             result;
+
+    QString          text = "";
+
+    // Kita pakai struktur map untuk grouping attribute berdasarkan token
+    QMap<QString, QList<QString>> groupedAttributes;
+
+    QList<EcFeature>::Iterator iT;
+    for (iT=pickFeatureList.begin(); iT!=pickFeatureList.end(); ++iT)
+    {
+        feature = (*iT);
+
+        // Get token feature
+        EcFeatureGetClass(feature, dictInfo, featToken, sizeof(featToken));
+        if (EcDictionaryTranslateObjectToken(dictInfo, featToken, featName, sizeof(featName)) != EC_DICT_OK)
+            strcpy(featName,"unknown");
+
+        // Reset grouping untuk feature ini
+        groupedAttributes.clear();
+
+        // Get attributes
+        result = EcFeatureGetAttributes(feature, dictInfo, &fI, EC_FIRST, attrStr, sizeof(attrStr));
+
+        while (result) {
+            strncpy(attrToken, attrStr, EC_LENATRCODE);
+            attrToken[EC_LENATRCODE] = (char)0;
+
+            if (EcDictionaryTranslateAttributeToken(dictInfo, attrToken, attrName, sizeof(attrName))) {
+                if (EcDictionaryGetAttributeType(dictInfo, attrStr, &attrType) == EC_DICT_OK) {
+                    if (attrType == EC_ATTR_ENUM || attrType == EC_ATTR_LIST) {
+                        if (!EcDictionaryTranslateAttributeValue(dictInfo, attrStr, attrText, sizeof(attrText))) {
+                            attrText[0]=(char)0;
+                        }
+                    } else {
+                        strcpy(attrText, &attrStr[EC_LENATRCODE]);
+                    }
+                }
+
+                // Simpan ke grouping
+                QString key = QString(attrName);   // bisa juga pakai attrToken
+                QString val = QString(attrText);
+                groupedAttributes[key].append(val);
+            }
+
+            result = EcFeatureGetAttributes(feature, dictInfo, &fI, EC_NEXT, attrStr, sizeof(attrStr));
+        }
+
+        // ===== Render HTML tabel =====
+        QString tableHtml = "<table width='100%' cellspacing='0' cellpadding='4' "
+                            "style='border-collapse:collapse; font-family:Arial; font-size:10pt;'>";
+
+        // Header nama feature
+        tableHtml += QString("<tr style='background-color:#f0f0f0;'>"
+                             "<td colspan='2'><b>%1 (%2)</b></td></tr>")
+                         .arg(QString(featName))
+                         .arg(QString(featToken));
+
+        // Iterasi hasil grouping
+        for (auto it = groupedAttributes.constBegin(); it != groupedAttributes.constEnd(); ++it) {
+            QString attrNameStr = it.key();
+            QList<QString> values = it.value();
+
+            if (values.size() == 1) {
+                // kalau hanya satu value → row biasa
+                tableHtml += QString("<tr>"
+                                     "<td style='border:1px solid #ccc; width:35%;'><b>%1</b></td>"
+                                     "<td style='border:1px solid #ccc;'>%2</td>"
+                                     "</tr>")
+                                 .arg(attrNameStr)
+                                 .arg(values.first());
+            } else {
+                // kalau lebih dari satu → rowspan di kolom kiri
+                tableHtml += QString("<tr>"
+                                     "<td style='border:1px solid #ccc;' rowspan='%1'><b>%2</b></td>"
+                                     "<td style='border:1px solid #ccc;'>%3</td>"
+                                     "</tr>")
+                                 .arg(values.size())
+                                 .arg(attrNameStr)
+                                 .arg(values.at(0));
+
+                // render baris berikutnya tanpa kolom kiri
+                for (int v = 1; v < values.size(); ++v) {
+                    tableHtml += QString("<tr>"
+                                         "<td style='border:1px solid #ccc;'>%1</td>"
+                                         "</tr>").arg(values.at(v));
+                }
+            }
+        }
+
+        tableHtml += "</table><br>";
+        text.append(tableHtml);
+    }
+
+    // tampilkan hasil
+    textEdit->setHtml(text);
+}
+
+
 // QString PickWindow::ownShipAutoFill(QList<EcFeature> & pickFeatureList)
 // {
 //     EcFeature        feature;
