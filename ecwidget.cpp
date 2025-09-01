@@ -1596,14 +1596,14 @@ void EcWidget::drawAOIs(QPainter& painter)
         painter.setBrush(Qt::NoBrush); // Transparent area (outline only)
         painter.drawPolygon(QPolygon(pts));
 
-        // Draw vertex markers (donut circles) at each AOI vertex for easier edit/move discovery
+        // Draw vertex markers: smaller and filled after creation
         {
             QPen vpen(pen.color());
-            vpen.setWidth(2);
+            vpen.setWidth(1);
             vpen.setStyle(Qt::SolidLine);
             painter.setPen(vpen);
-            painter.setBrush(Qt::NoBrush);
-            const int vr = 6; // vertex radius similar to waypoint donut
+            painter.setBrush(vpen.color());
+            const int vr = 3; // vertex radius similar to waypoint donut
             for (const QPoint& vp : pts) {
                 painter.drawEllipse(vp, vr, vr);
             }
