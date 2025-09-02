@@ -24,6 +24,9 @@ class AOIPanel : public QWidget
     Q_OBJECT
 public:
     explicit AOIPanel(EcWidget* ecWidget, QWidget* parent = nullptr);
+
+    void setAttachDetachButton(bool connection);
+
 public slots:
     void refreshList();
 
@@ -36,6 +39,8 @@ signals:
       void onDeleteAOI();
       void onExportAOI();
       void onItemChanged(QTreeWidgetItem* item, int column);
+      void onAttach();
+      void onDetach();
 
 private:
     EcWidget* ecWidget;
@@ -45,6 +50,12 @@ private:
       QPushButton* editBtn;
       QPushButton* deleteBtn;
       QPushButton* exportBtn;
+
+    QPushButton* attachBtn;
+    QPushButton* detachBtn;
+
+    QList<AOI> getAOIById(int aoiId);
+    void publishToMOOSDB();
 };
 
 #endif // AOIPANEL_H

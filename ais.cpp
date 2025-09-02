@@ -921,7 +921,7 @@ void Ais::readAISVariable( const QStringList &dataLines )
         nmeaText->append(sLine);
         extractNMEA(sLine);
 
-        qDebug() << sLine;
+        // qDebug() << sLine;
 
         // OWNSHIP PANEL
         PickWindow *pickWindow = new PickWindow(parentWidget, dictInfo, denc);
@@ -985,7 +985,7 @@ void Ais::readAISVariableThread(const QStringList &dataLines)
 
         extractNMEA(sLine);
 
-        qDebug() << sLine;
+        //qDebug() << sLine;
 
         emit pickWindowOwnship();
 
@@ -1036,7 +1036,7 @@ void Ais::readAISVariableString( const QString &data )
     }
 
     QString line = data + "\r\n";
-    qDebug() << data;
+    // qDebug() << data;
 
     if( EcAISAddTransponderOutput( _transponder, (unsigned char*)line.toStdString().c_str(), line.count() ) == False )
     {

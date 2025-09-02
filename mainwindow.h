@@ -362,6 +362,8 @@ private:
     void setTitleBarDark(bool dark);
     void applyPalette(const QPalette &palette, const QString &styleName);
     void updateIcon(bool dark);
+
+    bool conn = false;
 };
 
 #endif // _mainwindow_h_

@@ -240,6 +240,13 @@ void MainWindow::onMoosConnectionStatusChanged(bool connected)
 
     // ROUTE PANEL
     routePanel->setAttachDetachButton(connected);
+
+    // AREA
+    if(aoiPanel){
+        aoiPanel->setAttachDetachButton(connected);
+    }
+
+    conn = connected;
 }
 
 // STATUS BAR
@@ -567,9 +574,9 @@ void MainWindow::createMenuBar(){
     }
 
     // ================================== AOI MENU
-    QMenu *aoiMenu = menuBar()->addMenu("&AOI");
-    aoiMenu->addAction("Create AOI by Click", this, SLOT(onCreateAOIByClick()));
-    aoiMenu->addAction("Open AOI Panel", this, SLOT(onOpenAOIPanel()));
+    QMenu *aoiMenu = menuBar()->addMenu("&Area Tools");
+    aoiMenu->addAction("Create by Click", this, SLOT(onCreateAOIByClick()));
+    aoiMenu->addAction("Open Area Panel", this, SLOT(onOpenAOIPanel()));
 
     // ================================== MOOSDB MENU
     QMenu *moosMenu = menuBar()->addMenu("&Connection");
@@ -643,9 +650,9 @@ void MainWindow::createMenuBar(){
         setupGuardZonePanel();
         setupAISTargetPanel();
         setupObstacleDetectionPanel(); // Also setup obstacle detection for additional tabify
-        // setupAOIPanel(); // lazy-create via menu
+        //setupAOIPanel(); // lazy-create via menu
     }
-    
+
     qDebug() << "[TABIFY] Setup panels for tab integration - GuardZone, AIS Target, Route, Obstacle Detection";
 
     viewMenu->addSeparator();
@@ -2884,7 +2891,7 @@ void MainWindow::setupAOIPanel()
 {
     if (!ecchart) return;
     aoiPanel = new AOIPanel(ecchart, this);
-    aoiDock = new QDockWidget(tr("AOI / ROI"), this);
+    aoiDock = new QDockWidget(tr("Area"), this);
     aoiDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     aoiDock->setWidget(aoiPanel);
     addDockWidget(Qt::RightDockWidgetArea, aoiDock);
@@ -2919,13 +2926,21 @@ void MainWindow::onCreateAOIByClick()
 {
     if (!ecchart) return;
     QDialog dlg(this);
-    dlg.setWindowTitle("Create AOI by Click");
+    dlg.setWindowTitle("Create by Click");
     QFormLayout* form = new QFormLayout(&dlg);
     QLineEdit* nameEdit = new QLineEdit();
     // Prefill default AOI name so user can proceed quickly
-    nameEdit->setText(QString("AOI %1").arg(ecchart->getNextAoiId()));
+    nameEdit->setText(QString("Area %1").arg(ecchart->getNextAoiId()));
     QComboBox* typeCombo = new QComboBox();
-    typeCombo->addItems({"AOI", "ROZ", "MEZ", "WEZ", "Patrol Area", "SOA", "AOR", "JOA"});
+
+    typeCombo->addItem("Restricted Operations Zone (ROZ)", "ROZ");
+    typeCombo->addItem("Missile Engagement Zone (MEZ)", "MEZ");
+    typeCombo->addItem("Weapons Engagement Zone (WEZ)", "WEZ");
+    typeCombo->addItem("Patrol Area", "Patrol Area");
+    typeCombo->addItem("Sector of Action (SOA)", "SOA");
+    typeCombo->addItem("Area of Responsibility (AOR)", "AOR");
+    typeCombo->addItem("Joint Operations Area (JOA)", "JOA");
+
     form->addRow("Name:", nameEdit);
     form->addRow("Type:", typeCombo);
     QHBoxLayout* btns = new QHBoxLayout();
@@ -2938,8 +2953,8 @@ void MainWindow::onCreateAOIByClick()
     QObject::connect(ok, &QPushButton::clicked, &dlg, &QDialog::accept);
     QObject::connect(cancel, &QPushButton::clicked, &dlg, &QDialog::reject);
     if (dlg.exec() != QDialog::Accepted) return;
-    QString name = nameEdit->text().trimmed(); if (name.isEmpty()) name = "AOI";
-    AOIType type = aoiTypeFromString(typeCombo->currentText());
+    QString name = nameEdit->text().trimmed(); if (name.isEmpty()) name = "Area";
+    AOIType type = aoiTypeFromString(typeCombo->currentData().toString());
     ecchart->startAOICreation(name, type);
 }
 
@@ -2950,7 +2965,7 @@ void MainWindow::onOpenAOIPanel()
         if (!ecchart) return;
 
         // AOI panel parent = aoiDock, bukan MainWindow (lebih aman)
-        aoiDock = new QDockWidget(tr("AOI / ROI"), this);
+        aoiDock = new QDockWidget(tr("Area"), this);
         aoiPanel = new AOIPanel(ecchart, aoiDock);
         aoiDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
         aoiDock->setWidget(aoiPanel);
@@ -2985,6 +3000,8 @@ void MainWindow::onOpenAOIPanel()
     // Pastikan terlihat + aktif
     aoiDock->setVisible(true);
     aoiDock->raise(); // Fokus ke tab AOI
+
+    aoiPanel->setAttachDetachButton(conn);
 }
 
 

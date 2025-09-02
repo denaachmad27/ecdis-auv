@@ -11,7 +11,7 @@ AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
 {
     QVBoxLayout* main = new QVBoxLayout(this);
 
-    QGroupBox* group = new QGroupBox("AOI / ROI Management");
+    QGroupBox* group = new QGroupBox("Area Management");
     QVBoxLayout* v = new QVBoxLayout(group);
 
     tree = new QTreeWidget(this);
@@ -30,20 +30,32 @@ AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
 
     // Arrange buttons into 2 columns; add rows as needed (max 3 rows here)
     QGridLayout* btns = new QGridLayout();
-    addBtn = new QPushButton("Add AOI (Form)");
+    addBtn = new QPushButton("Create by Form");
     createByClickBtn = new QPushButton("Create by Click");
     editBtn = new QPushButton("Edit");
     deleteBtn = new QPushButton("Delete");
     exportBtn = new QPushButton("Export");
 
+    attachBtn = new QPushButton("Attach");
+    detachBtn = new QPushButton("Detach");
+
+    attachBtn->setEnabled(true);
+    detachBtn->setEnabled(false);
+
+    attachBtn->setVisible(false);
+    detachBtn->setVisible(false);
+
     // Row 1
     btns->addWidget(addBtn,           0, 0);
     btns->addWidget(createByClickBtn, 0, 1);
     // Row 2
-    btns->addWidget(editBtn,          1, 0);
+    btns->addWidget(exportBtn,        1, 0);
     btns->addWidget(deleteBtn,        1, 1);
-    // Row 3 (optional when space not enough; still 2 columns)
-    btns->addWidget(exportBtn,        2, 0, 1, 2); // span 2 columns to keep layout tidy
+    // Row 3
+    btns->addWidget(attachBtn,        2, 0);
+    btns->addWidget(detachBtn,        2, 1);
+
+    //btns->addWidget(editBtn,          1, 0);
 
     v->addLayout(btns);
 
@@ -56,6 +68,10 @@ AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
     connect(tree, &QTreeWidget::itemChanged, this, &AOIPanel::onItemChanged);
     connect(exportBtn, &QPushButton::clicked, this, &AOIPanel::onExportAOI);
 
+    connect(attachBtn, &QPushButton::clicked, this, &AOIPanel::onAttach);
+    connect(detachBtn, &QPushButton::clicked, this, &AOIPanel::onDetach);
+
+
     // Auto-refresh when AOI list changes in EcWidget (e.g., create-by-click finishes)
     if (ecWidget) {
         connect(ecWidget, SIGNAL(aoiListChanged()), this, SLOT(refreshList()));
@@ -66,7 +82,7 @@ AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
         if (!item || !this->ecWidget) return;
         int id = item->data(0, Qt::UserRole).toInt();
         this->ecWidget->startEditAOI(id);
-        emit statusMessage("Edit AOI: drag vertices; right-click handle for Move/Delete; right-click edge to add; click to drop; ESC to finish");
+        emit statusMessage("Edit Area: drag vertices; right-click handle for Move/Delete; right-click edge to add; click to drop; ESC to finish");
     });
 
     refreshList();
@@ -104,12 +120,11 @@ void AOIPanel::onAddAOI()
     if (!ecWidget) return;
 
     QDialog dlg(this);
-    dlg.setWindowTitle("Add AOI / ROI");
+    dlg.setWindowTitle("Add Area");
     QFormLayout* form = new QFormLayout(&dlg);
     QLineEdit* nameEdit = new QLineEdit();
     QComboBox* typeCombo = new QComboBox();
 
-    typeCombo->addItem("Area of Interest (AOI)", "AOI");
     typeCombo->addItem("Restricted Operations Zone (ROZ)", "ROZ");
     typeCombo->addItem("Missile Engagement Zone (MEZ)", "MEZ");
     typeCombo->addItem("Weapons Engagement Zone (WEZ)", "WEZ");
@@ -166,7 +181,7 @@ void AOIPanel::onAddAOI()
     ecWidget->addAOI(aoi);
     refreshList();
     ecWidget->update();
-    emit statusMessage(QString("AOI '%1' created (%2 points)").arg(aoi.name).arg(aoi.vertices.size()));
+    emit statusMessage(QString("Area '%1' created (%2 points)").arg(aoi.name).arg(aoi.vertices.size()));
 }
 
 void AOIPanel::onDeleteAOI()
@@ -185,13 +200,13 @@ void AOIPanel::onExportAOI()
     if (!ecWidget) return;
     QString suggested = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss");
     QString filename = QFileDialog::getSaveFileName(this,
-                                                   tr("Export AOIs to JSON"),
-                                                   QDir::homePath() + "/AOIs_" + suggested + ".json",
+                                                   tr("Export Areas to JSON"),
+                                                   QDir::homePath() + "/Areas_" + suggested + ".json",
                                                    tr("JSON Files (*.json);;All Files (*.*)"));
     if (filename.isEmpty()) return;
     if (!filename.endsWith(".json", Qt::CaseInsensitive)) filename += ".json";
     bool ok = ecWidget->exportAOIsToFile(filename);
-    if (ok) emit statusMessage(tr("AOIs exported to %1").arg(QFileInfo(filename).fileName()));
+    if (ok) emit statusMessage(tr("Areas exported to %1").arg(QFileInfo(filename).fileName()));
 }
 
 void AOIPanel::onCreateByClick()
@@ -199,14 +214,13 @@ void AOIPanel::onCreateByClick()
     if (!ecWidget) return;
 
     QDialog dlg(this);
-    dlg.setWindowTitle("Create AOI by Click");
+    dlg.setWindowTitle("Create by Click");
     QFormLayout* form = new QFormLayout(&dlg);
     QLineEdit* nameEdit = new QLineEdit();
     // Prefill default AOI name
-    nameEdit->setText(QString("AOI %1").arg(ecWidget->getNextAoiId()));
+    nameEdit->setText(QString("Area %1").arg(ecWidget->getNextAoiId()));
     QComboBox* typeCombo = new QComboBox();
 
-    typeCombo->addItem("Area of Interest (AOI)", "AOI");
     typeCombo->addItem("Restricted Operations Zone (ROZ)", "ROZ");
     typeCombo->addItem("Missile Engagement Zone (MEZ)", "MEZ");
     typeCombo->addItem("Weapons Engagement Zone (WEZ)", "WEZ");
@@ -229,10 +243,10 @@ void AOIPanel::onCreateByClick()
     if (dlg.exec() != QDialog::Accepted) return;
 
     QString name = nameEdit->text().trimmed();
-    if (name.isEmpty()) name = "AOI";
+    if (name.isEmpty()) name = "Area";
     AOIType type = aoiTypeFromString(typeCombo->currentData().toString());
     ecWidget->startAOICreation(name, type);
-    emit statusMessage("AOI mode: Left-click to add points, Right-click to finish (min 3 points)");
+    emit statusMessage("Area mode: Left-click to add points, Right-click to finish (min 3 points)");
 }
 
 void AOIPanel::onItemChanged(QTreeWidgetItem* item, int column)
@@ -245,4 +259,88 @@ void AOIPanel::onItemChanged(QTreeWidgetItem* item, int column)
     // This relies on EcWidget::setAOIVisibility being present (added below).
     ecWidget->setAOIVisibility(id, visible);
     ecWidget->update();
+}
+
+void AOIPanel::setAttachDetachButton(bool connection){
+    attachBtn->setVisible(connection);
+    detachBtn->setVisible(connection);
+}
+
+void AOIPanel::publishToMOOSDB(){
+    auto* item = this->tree->currentItem();
+    if (!item) return;
+    int id = item->data(0, Qt::UserRole).toInt();
+
+    QList<AOI> selectedData = getAOIById(id);
+    QStringList coordPairs;
+
+    for (const AOI& aoi : selectedData) {
+        for (const QPointF &pt : aoi.vertices){
+            coordPairs << QString::number(pt.x(), 'f', 6) + ", " + QString::number(pt.y(), 'f', 6);
+        }
+    }
+
+    QString result = "pts={" + coordPairs.join(": ") + "}";
+    ecWidget->publishToMOOS("AREA_NAV", result);
+}
+
+void AOIPanel::onAttach(){
+    if (!ecWidget) return;
+    auto* item = this->tree->currentItem();
+    if (!item) return;
+    int id = item->data(0, Qt::UserRole).toInt();
+
+    if (id > 0 && ecWidget) {
+        // Attach this route to ship (detaches others)
+        //ecWidget->attachRouteToShip(selectedRouteId);
+        publishToMOOSDB();
+
+        // Update button states
+        attachBtn->setEnabled(false);
+        detachBtn->setEnabled(true);
+
+        // Use a timer to refresh the list after attachment is complete
+        QTimer::singleShot(100, [this]() {
+            refreshList();
+        });
+    }
+}
+
+void AOIPanel::onDetach(){
+    if (ecWidget) {
+        // Preserve visibility before detaching
+        //bool currentVisibility = ecWidget->isRouteVisible(selectedRouteId);
+
+        // Detach this route from ship (this will make all routes blue again)
+        //ecWidget->attachRouteToShip(-1); // Detach all routes
+        ecWidget->publishToMOOS("AREA_NAV", "");
+
+        // Ensure visibility is maintained
+        //ecWidget->setRouteVisibility(selectedRouteId, currentVisibility);
+
+        // Update button states
+        attachBtn->setEnabled(true);
+        detachBtn->setEnabled(false);
+
+        // Use a timer to refresh the list after detachment is complete
+        QTimer::singleShot(100, [this]() {
+            refreshList();
+        });
+    }
+}
+
+QList<AOI> AOIPanel::getAOIById(int aoiId)
+{
+    if (!ecWidget) return {};
+
+    QList<AOI> aois = ecWidget->getAOIs();
+    QList<AOI> aoiSelect;
+
+    for (const auto& aoi : aois) {
+        if (aoi.id == aoiId) {
+            aoiSelect.append(aoi);
+        }
+    }
+
+    return aoiSelect;
 }
