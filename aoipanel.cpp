@@ -1,6 +1,10 @@
 #include "aoipanel.h"
 #include "ecwidget.h"
 #include <QMessageBox>
+#include <QFileDialog>
+#include <QDateTime>
+#include <QDir>
+#include <QFileInfo>
 
 AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
     : QWidget(parent), ecWidget(ecWidget)
@@ -24,12 +28,13 @@ AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
     tree->setColumnWidth(2, 60);
     v->addWidget(tree);
 
-    // Arrange buttons into exactly 2 rows (2 columns each) to keep panel narrow
+    // Arrange buttons into 2 columns; add rows as needed (max 3 rows here)
     QGridLayout* btns = new QGridLayout();
     addBtn = new QPushButton("Add AOI (Form)");
     createByClickBtn = new QPushButton("Create by Click");
     editBtn = new QPushButton("Edit");
     deleteBtn = new QPushButton("Delete");
+    exportBtn = new QPushButton("Export");
 
     // Row 1
     btns->addWidget(addBtn,           0, 0);
@@ -37,6 +42,8 @@ AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
     // Row 2
     btns->addWidget(editBtn,          1, 0);
     btns->addWidget(deleteBtn,        1, 1);
+    // Row 3 (optional when space not enough; still 2 columns)
+    btns->addWidget(exportBtn,        2, 0, 1, 2); // span 2 columns to keep layout tidy
 
     v->addLayout(btns);
 
@@ -47,6 +54,7 @@ AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
     connect(deleteBtn, &QPushButton::clicked, this, &AOIPanel::onDeleteAOI);
     connect(createByClickBtn, &QPushButton::clicked, this, &AOIPanel::onCreateByClick);
     connect(tree, &QTreeWidget::itemChanged, this, &AOIPanel::onItemChanged);
+    connect(exportBtn, &QPushButton::clicked, this, &AOIPanel::onExportAOI);
 
     // Auto-refresh when AOI list changes in EcWidget (e.g., create-by-click finishes)
     if (ecWidget) {
@@ -170,6 +178,20 @@ void AOIPanel::onDeleteAOI()
     ecWidget->removeAOI(id);
     refreshList();
     ecWidget->update();
+}
+
+void AOIPanel::onExportAOI()
+{
+    if (!ecWidget) return;
+    QString suggested = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss");
+    QString filename = QFileDialog::getSaveFileName(this,
+                                                   tr("Export AOIs to JSON"),
+                                                   QDir::homePath() + "/AOIs_" + suggested + ".json",
+                                                   tr("JSON Files (*.json);;All Files (*.*)"));
+    if (filename.isEmpty()) return;
+    if (!filename.endsWith(".json", Qt::CaseInsensitive)) filename += ".json";
+    bool ok = ecWidget->exportAOIsToFile(filename);
+    if (ok) emit statusMessage(tr("AOIs exported to %1").arg(QFileInfo(filename).fileName()));
 }
 
 void AOIPanel::onCreateByClick()

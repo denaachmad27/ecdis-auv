@@ -30,19 +30,21 @@ public slots:
 signals:
     void statusMessage(const QString& message);
 
-private slots:
-    void onAddAOI();
-    void onCreateByClick();
-    void onDeleteAOI();
-    void onItemChanged(QTreeWidgetItem* item, int column);
+  private slots:
+      void onAddAOI();
+      void onCreateByClick();
+      void onDeleteAOI();
+      void onExportAOI();
+      void onItemChanged(QTreeWidgetItem* item, int column);
 
 private:
     EcWidget* ecWidget;
     QTreeWidget* tree;
     QPushButton* addBtn;
-    QPushButton* createByClickBtn;
-    QPushButton* editBtn;
-    QPushButton* deleteBtn;
+      QPushButton* createByClickBtn;
+      QPushButton* editBtn;
+      QPushButton* deleteBtn;
+      QPushButton* exportBtn;
 };
 
 #endif // AOIPANEL_H

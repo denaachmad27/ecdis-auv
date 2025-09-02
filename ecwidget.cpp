@@ -1400,6 +1400,48 @@ void EcWidget::paintEvent (QPaintEvent *e)
                   painter.drawRect(x-4,y-4,8,8);
               }
           }
+
+          // When moving a vertex (draggedAoiVertex >= 0), show live lat/lon label near cursor
+          if (draggedAoiVertex >= 0) {
+              // Cursor position and theme-aware colors
+              QPoint mp = lastMousePos;
+              QColor win = palette().color(QPalette::Window);
+              int luma = qRound(0.2126*win.red() + 0.7152*win.green() + 0.0722*win.blue());
+              bool darkTheme = (luma < 128);
+
+              EcCoordinate lat, lon;
+              if (XyToLatLon(mp.x(), mp.y(), lat, lon)) {
+                  const QString latStr = latLonToDegMin(lat, true);
+                  const QString lonStr = latLonToDegMin(lon, false);
+                  const QString text = latStr + "  " + lonStr;
+
+                  // Small ghost indicator at cursor
+                  QPen ghostPen(QColor(80,80,80));
+                  ghostPen.setStyle(Qt::DashLine);
+                  ghostPen.setWidth(2);
+                  painter.setPen(ghostPen);
+                  painter.setBrush(Qt::NoBrush);
+                  painter.drawEllipse(mp, 6, 6);
+
+                  // Text styling
+                  QFont f = painter.font();
+                  f.setPointSizeF(9.0);
+                  painter.setFont(f);
+                  QFontMetrics fm(f);
+                  int pad = 4;
+                  QRect br = fm.boundingRect(QRect(0,0,600,2000), Qt::AlignLeft|Qt::AlignTop, text);
+                  QRect bg(mp.x() + 12, mp.y() + 12, br.width() + pad*2, br.height() + pad*2);
+
+                  painter.setPen(Qt::NoPen);
+                  QColor bgCol = darkTheme ? QColor(0,0,0,160) : QColor(255,255,255,210);
+                  QColor fgCol = darkTheme ? QColor(240,240,240) : QColor(30,30,30);
+                  painter.setBrush(bgCol);
+                  painter.drawRoundedRect(bg, 4, 4);
+
+                  painter.setPen(fgCol);
+                  painter.drawText(bg.adjusted(pad, pad, -pad, -pad), Qt::AlignLeft | Qt::AlignTop, text);
+              }
+          }
       }
   }
 
@@ -1705,6 +1747,60 @@ void EcWidget::finishEditAOI()
 void EcWidget::cancelEditAOI()
 {
     finishEditAOI();
+}
+
+bool EcWidget::exportAOIsToFile(const QString& filename)
+{
+    if (aoiList.isEmpty()) {
+        QMessageBox::warning(this, tr("Export AOIs"), tr("No AOIs to export."));
+        return false;
+    }
+
+    QJsonArray aoiArray;
+
+    for (const AOI& a : aoiList) {
+        QJsonObject obj;
+        obj["id"] = a.id;
+        obj["name"] = a.name;
+        obj["type"] = aoiTypeToString(a.type);
+        obj["visible"] = a.visible;
+        // Save color as hex string #RRGGBB
+        obj["color"] = a.color.name(QColor::HexRgb);
+
+        QJsonArray verts;
+        for (const QPointF& p : a.vertices) {
+            QJsonObject v;
+            v["lat"] = p.x();
+            v["lon"] = p.y();
+            verts.append(v);
+        }
+        obj["vertices"] = verts;
+
+        aoiArray.append(obj);
+    }
+
+    QJsonObject root;
+    root["aois"] = aoiArray;
+    root["exported_on"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    root["count"] = aoiList.size();
+
+    QJsonDocument doc(root);
+
+    QFile file(filename);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QMessageBox::critical(this, tr("Export Failed"),
+                              tr("Failed to write %1: %2").arg(filename, file.errorString()));
+        return false;
+    }
+
+    file.write(doc.toJson(QJsonDocument::Indented));
+    file.close();
+
+    QMessageBox::information(this, tr("Export Successful"),
+                             tr("Exported %1 AOI(s) to %2")
+                                 .arg(aoiList.size())
+                                 .arg(QFileInfo(filename).fileName()));
+    return true;
 }
 bool EcWidget::getAoiVertexAtPosition(int x, int y, int& outAoiId, int& outVertexIndex)
 {

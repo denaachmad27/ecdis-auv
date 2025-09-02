@@ -344,6 +344,7 @@ public:
   void startEditAOI(int aoiId);
   void finishEditAOI();
   void cancelEditAOI();
+  bool exportAOIsToFile(const QString& filename);
 
   DisplayOrientationMode displayOrientation = NorthUp;
   OSCenteringMode osCentering = Centered;
