@@ -22,7 +22,9 @@ CPATCPAPanel::CPATCPAPanel(QWidget *parent)
 
     // Update setiap interval detik
     CPATCPASettings& settings = CPATCPASettings::instance();
-    refreshTimer->start(settings.getAlarmUpdateInterval() * 1000);
+    //refreshTimer->start(settings.getAlarmUpdateInterval() * 1000);
+
+    refreshTimer->start(60 * 1000);
 
     if (AppConfig::isDevelopment()){
         // Add tooltips
@@ -47,21 +49,21 @@ void CPATCPAPanel::setupUI()
     setupStatusPanel();
 
     // Own Ship Info Panel
-    ownShipGroup = new QGroupBox("Own Ship");
-    QGridLayout* ownShipLayout = new QGridLayout();
-    ownShipGroup->setLayout(ownShipLayout);
+    // ownShipGroup = new QGroupBox("Own Ship");
+    // QGridLayout* ownShipLayout = new QGridLayout();
+    // ownShipGroup->setLayout(ownShipLayout);
 
     ownShipLatLabel = new QLabel("LAT: 0");
     ownShipLonLabel = new QLabel("LON: 0");
     ownShipCogLabel = new QLabel("COG: 0");
     ownShipSogLabel = new QLabel("SOG: 0");
 
-    ownShipLayout->addWidget(new QLabel("Position:"), 0, 0);
-    ownShipLayout->addWidget(ownShipLatLabel, 0, 1);
-    ownShipLayout->addWidget(ownShipLonLabel, 0, 2);
-    ownShipLayout->addWidget(new QLabel("Course/Speed:"), 1, 0);
-    ownShipLayout->addWidget(ownShipCogLabel, 1, 1);
-    ownShipLayout->addWidget(ownShipSogLabel, 1, 2);
+    // ownShipLayout->addWidget(new QLabel("Position:"), 0, 0);
+    // ownShipLayout->addWidget(ownShipLatLabel, 0, 1);
+    // ownShipLayout->addWidget(ownShipLonLabel, 0, 2);
+    // ownShipLayout->addWidget(new QLabel("Course/Speed:"), 1, 0);
+    // ownShipLayout->addWidget(ownShipCogLabel, 1, 1);
+    // ownShipLayout->addWidget(ownShipSogLabel, 1, 2);
 
     // Targets Table Panel
     setupTargetsTable();
