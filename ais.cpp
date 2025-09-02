@@ -54,7 +54,6 @@ Ais::Ais( EcWidget *parent, EcView *view, EcDictInfo *dict,
   ownShipSog = 0.0;
 
   deleteOldOwnShipFeature();
-
 }
 
 Ais::~Ais()
@@ -1196,10 +1195,13 @@ void Ais::setAISCell( EcCellId cid )
   _cid = cid;
 
   EcCoordinate coorList[2] = {0,0};
+
   EcPrimitive primitive;
   // create the own ship feature
   // this is usually not done with the AIS transponder but independently with other positioning sensors
-  _featureOwnShip = EcObjectCreate(_cid, _dictInfo, "ownshp", EC_OS_DELETABLE, "", '|', coorList, 1, EC_P_PRIM, &primitive);
+  //_featureOwnShip = EcObjectCreate(_cid, _dictInfo, "ownshp", EC_OS_DELETABLE, "", '|', coorList, 1, EC_P_PRIM, &primitive);
+
+  // ^^ ERASE DUMMY OWNSHIP ICON AT 0, 0
 }
 
 // Return AIS cell.
