@@ -368,6 +368,9 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   // Waypoint (load after routes for single waypoints)
   loadWaypoints(); // Muat single waypoint dari file JSON
 
+  // AOIs
+  loadAOIs(); // Muat AOI dari file JSON
+
   // Convert legacy single waypoints to routes for compatibility
   convertSingleWaypointsToRoutes();
 
@@ -1576,12 +1579,13 @@ void EcWidget::addAOI(const AOI& aoi)
     if (!copy.color.isValid()) copy.color = aoiDefaultColor(copy.type);
     aoiList.append(copy);
     emit aoiListChanged();
+    saveAOIs();
 }
 
 void EcWidget::removeAOI(int id)
 {
     for (int i = 0; i < aoiList.size(); ++i) {
-        if (aoiList[i].id == id) { aoiList.removeAt(i); emit aoiListChanged(); break; }
+        if (aoiList[i].id == id) { aoiList.removeAt(i); emit aoiListChanged(); saveAOIs(); break; }
     }
 }
 
@@ -1599,6 +1603,7 @@ void EcWidget::setAOIVisibility(int id, bool visible)
             if (a.visible != visible) {
                 a.visible = visible;
                 emit aoiListChanged();
+                saveAOIs();
             }
             break;
         }
@@ -1610,6 +1615,8 @@ void EcWidget::drawAOIs(QPainter& painter)
     if (aoiList.isEmpty()) return;
     if (!initialized || !view) return;
     QPen pen; QBrush brush;
+    // Make AOI lines smooth and crisp like route overlay
+    painter.setRenderHint(QPainter::Antialiasing, true);
     for (const auto& a : aoiList) {
         if (!a.visible || a.vertices.size() < 3) continue;
 
@@ -1624,19 +1631,28 @@ void EcWidget::drawAOIs(QPainter& painter)
         if (pts.size() < 3) continue;
 
         QColor c = a.color;
+        QColor outline = Qt::red; // keep AOI outline in red as requested
         QColor fill = c; fill.setAlpha(50);
 
-        // STATIC COLOR
-        // pen.setColor(c.darker(120)); pen.setWidth(2);
-        pen.setColor(Qt::red);
+        pen.setColor(outline);
         pen.setWidth(2);
-
-        pen.setStyle(Qt::DashLine);
-        brush.setColor(fill); brush.setStyle(Qt::SolidPattern);
+        pen.setStyle(Qt::DashLine); // match route style; change to SolidLine if desired
+        pen.setCapStyle(Qt::RoundCap);
+        pen.setJoinStyle(Qt::RoundJoin);
+        pen.setCosmetic(true);
+        brush.setColor(fill); brush.setStyle(Qt::NoBrush);
 
         painter.setPen(pen);
-        painter.setBrush(Qt::NoBrush); // Transparent area (outline only)
-        painter.drawPolygon(QPolygon(pts));
+        painter.setBrush(Qt::NoBrush);
+
+        // Use QPainterPath for smoother joins
+        QPainterPath path;
+        path.moveTo(pts[0]);
+        for (int i = 1; i < pts.size(); ++i) {
+            path.lineTo(pts[i]);
+        }
+        path.closeSubpath();
+        painter.drawPath(path);
 
         // Draw vertex markers: smaller and filled after creation
         {
@@ -1654,7 +1670,7 @@ void EcWidget::drawAOIs(QPainter& painter)
         // Draw label near centroid (match AOI color tone) with waypoint-like font
         double cx=0, cy=0; for (const QPoint& p : pts) { cx += p.x(); cy += p.y(); }
         cx/=pts.size(); cy/=pts.size();
-        painter.setPen(pen.color()); // same color as outline
+        painter.setPen(outline); // same color as outline
         QFont labelFont("Arial", 9, QFont::Bold);
         painter.setFont(labelFont);
         QFontMetrics fm(labelFont);
@@ -1720,6 +1736,8 @@ void EcWidget::finishAOICreation()
     emit aoiListChanged();
     creatingAOI = false;
     aoiVerticesLatLon.clear();
+    // Persist AOIs after creation
+    saveAOIs();
     update();
 }
 
@@ -1741,6 +1759,8 @@ void EcWidget::finishEditAOI()
     editingAOI = false;
     editingAoiId = -1;
     draggedAoiVertex = -1;
+    // Persist AOIs after edit
+    saveAOIs();
     update();
 }
 
@@ -1801,6 +1821,108 @@ bool EcWidget::exportAOIsToFile(const QString& filename)
                                  .arg(aoiList.size())
                                  .arg(QFileInfo(filename).fileName()));
     return true;
+}
+
+void EcWidget::saveAOIs()
+{
+    QJsonArray aoiArray;
+    for (const AOI& a : aoiList) {
+        QJsonObject obj;
+        obj["id"] = a.id;
+        obj["name"] = a.name;
+        obj["type"] = aoiTypeToString(a.type);
+        obj["visible"] = a.visible;
+        obj["color"] = a.color.name(QColor::HexRgb);
+        QJsonArray verts;
+        for (const QPointF& p : a.vertices) {
+            QJsonObject v; v["lat"] = p.x(); v["lon"] = p.y(); verts.append(v);
+        }
+        obj["vertices"] = verts;
+        aoiArray.append(obj);
+    }
+
+    QJsonObject root; root["aois"] = aoiArray;
+    QJsonDocument doc(root);
+
+    QString filePath = getAOIFilePath();
+    QDir dir = QFileInfo(filePath).dir();
+    if (!dir.exists()) {
+        if (!dir.mkpath(".")) {
+            qDebug() << "[ERROR] Could not create directory for AOIs:" << dir.path();
+            filePath = "aois.json"; // fallback
+        }
+    }
+
+    QFile file(filePath);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        file.write(doc.toJson(QJsonDocument::Indented));
+        file.close();
+        qDebug() << "[INFO] AOIs saved to" << filePath;
+    } else {
+        qDebug() << "[ERROR] Failed to save AOIs to" << filePath << ":" << file.errorString();
+        QFile fallback("aois.json");
+        if (fallback.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            fallback.write(doc.toJson(QJsonDocument::Indented));
+            fallback.close();
+            qDebug() << "[INFO] AOIs saved to fallback location: aois.json";
+        }
+    }
+}
+
+void EcWidget::loadAOIs()
+{
+    QString filePath = getAOIFilePath();
+    QFile file(filePath);
+    if (!file.exists()) {
+        qDebug() << "[INFO] AOI file not found. Starting with empty AOI list.";
+        return;
+    }
+    if (!file.open(QIODevice::ReadOnly)) {
+        qDebug() << "[ERROR] Failed to open AOI file:" << filePath;
+        return;
+    }
+    QByteArray data = file.readAll(); file.close();
+    QJsonDocument doc = QJsonDocument::fromJson(data);
+    if (!doc.isObject()) return;
+    QJsonArray arr = doc.object().value("aois").toArray();
+    aoiList.clear();
+    int maxId = 0;
+    for (const auto& v : arr) {
+        QJsonObject o = v.toObject();
+        AOI a;
+        a.id = o.value("id").toInt();
+        a.name = o.value("name").toString();
+        a.type = aoiTypeFromString(o.value("type").toString());
+        a.visible = o.value("visible").toBool(true);
+        QString colorStr = o.value("color").toString();
+        QColor c(colorStr); a.color = c.isValid() ? c : aoiDefaultColor(a.type);
+        QJsonArray verts = o.value("vertices").toArray();
+        for (const auto& vv : verts) {
+            QJsonObject vo = vv.toObject();
+            a.vertices.append(QPointF(vo.value("lat").toDouble(), vo.value("lon").toDouble()));
+        }
+        aoiList.append(a);
+        if (a.id > maxId) maxId = a.id;
+    }
+    nextAoiId = qMax(maxId + 1, nextAoiId);
+    emit aoiListChanged();
+    qDebug() << "[INFO] Loaded" << aoiList.size() << "AOIs from" << filePath;
+}
+
+QString EcWidget::getAOIFilePath() const
+{
+    QString basePath;
+#ifdef _WIN32
+    if (EcKernelGetEnv("APPDATA"))
+        basePath = QString(EcKernelGetEnv("APPDATA")) + "/SevenCs/EC2007/DENC";
+#else
+    if (EcKernelGetEnv("HOME"))
+        basePath = QString(EcKernelGetEnv("HOME")) + "/SevenCs/EC2007/DENC";
+#endif
+    if (basePath.isEmpty())
+        return "aois.json";
+    else
+        return basePath + "/aois.json";
 }
 bool EcWidget::getAoiVertexAtPosition(int x, int y, int& outAoiId, int& outVertexIndex)
 {
@@ -2072,11 +2194,61 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
     // Clear waypoint highlight when clicking anywhere on the map
     // This provides better UX by removing distracting highlights
     clearWaypointHighlight();
-    // AOI vertex context menu on right-click (global, even outside edit mode)
+    // AOI context menu on right-click (global, even outside edit mode)
     if (e->button() == Qt::RightButton) {
         int aoiId=-1, vIdx=-1;
         if (getAoiVertexAtPosition(e->x(), e->y(), aoiId, vIdx)) {
             showAoiVertexContextMenu(e->pos(), aoiId, vIdx);
+            return; // handled
+        }
+
+        // If not on a vertex, allow adding a point on nearest edge of any visible AOI
+        int bestAoiId = -1;
+        int bestSeg = -1;
+        double bestDist = 1e9;
+        const QPoint click = e->pos();
+        const int edgeProximityPx = static_cast<int>(std::round(handleDetectRadiusPx + 4));
+
+        for (const auto& a : aoiList) {
+            if (!a.visible || a.vertices.size() < 3) continue;
+            // Build screen-space points
+            QVector<QPoint> pts; pts.reserve(a.vertices.size());
+            for (const auto& ll : a.vertices) { int x=0, y=0; if (LatLonToXy(ll.x(), ll.y(), x, y)) pts.append(QPoint(x,y)); }
+            if (pts.size() < 3) continue;
+
+            for (int i = 0; i < pts.size(); ++i) {
+                QPoint p1 = pts[i]; QPoint p2 = pts[(i+1) % pts.size()];
+                QPointF v = p2 - p1; QPointF w = click - p1;
+                double c1 = QPointF::dotProduct(w, v);
+                double c2 = QPointF::dotProduct(v, v);
+                double t = c2 > 0 ? c1 / c2 : 0;
+                t = std::max(0.0, std::min(1.0, t));
+                QPointF proj = p1 + t * v;
+                double d = std::hypot(click.x() - proj.x(), click.y() - proj.y());
+                if (d < bestDist) { bestDist = d; bestAoiId = a.id; bestSeg = i; }
+            }
+        }
+
+        if (bestAoiId >= 0 && bestSeg >= 0 && bestDist <= edgeProximityPx) {
+            // Confirm via context menu
+            QMenu contextMenu(this);
+            QAction* addPointAct = contextMenu.addAction(tr("Add Point"));
+            QAction* chosen = contextMenu.exec(mapToGlobal(e->pos()));
+            if (chosen == addPointAct) {
+                // Insert at clicked position (convert click to lat/lon)
+                EcCoordinate lat, lon;
+                if (XyToLatLon(e->x(), e->y(), lat, lon)) {
+                    for (int ai = 0; ai < aoiList.size(); ++ai) {
+                        if (aoiList[ai].id == bestAoiId) {
+                            aoiList[ai].vertices.insert(bestSeg + 1, QPointF(lat, lon));
+                            emit aoiListChanged();
+                            saveAOIs();
+                            update();
+                            break;
+                        }
+                    }
+                }
+            }
             return; // handled
         }
     }
@@ -2152,6 +2324,7 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
                         if (a.vertices.size() > 3) {
                             a.vertices.remove(hit);
                             emit aoiListChanged();
+                            saveAOIs();
                             update();
                         } else {
                             emit statusMessage(tr("Cannot remove vertex: polygon must have at least 3 vertices"));
@@ -2180,10 +2353,17 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
                     if (d < bestDist) { bestDist = d; bestSeg = i; }
                 }
                 if (bestSeg>=0) {
-                    // insert new vertex at clicked lat/lon after bestSeg
-                    a.vertices.insert(bestSeg+1, QPointF(lat, lon));
-                    emit aoiListChanged();
-                    update();
+                    // Show context menu to confirm adding a point on the edge
+                    QMenu contextMenu(this);
+                    QAction* addPointAct = contextMenu.addAction(tr("Add Point"));
+                    QAction* chosen = contextMenu.exec(mapToGlobal(e->pos()));
+                    if (chosen == addPointAct) {
+                        // insert new vertex at clicked lat/lon after bestSeg
+                        a.vertices.insert(bestSeg+1, QPointF(lat, lon));
+                        emit aoiListChanged();
+                        saveAOIs();
+                        update();
+                    }
                 }
                 return;
             }

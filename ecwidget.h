@@ -345,6 +345,10 @@ public:
   void finishEditAOI();
   void cancelEditAOI();
   bool exportAOIsToFile(const QString& filename);
+  // AOI persistence
+  void saveAOIs();
+  void loadAOIs();
+  QString getAOIFilePath() const;
 
   DisplayOrientationMode displayOrientation = NorthUp;
   OSCenteringMode osCentering = Centered;
