@@ -1706,6 +1706,54 @@ void EcWidget::cancelEditAOI()
 {
     finishEditAOI();
 }
+bool EcWidget::getAoiVertexAtPosition(int x, int y, int& outAoiId, int& outVertexIndex)
+{
+    outAoiId = -1; outVertexIndex = -1;
+    double best = 1e9;
+    for (const auto& a : aoiList) {
+        if (a.vertices.size() < 3 || !a.visible) continue;
+        for (int i = 0; i < a.vertices.size(); ++i) {
+            int sx=0, sy=0; if (LatLonToXy(a.vertices[i].x(), a.vertices[i].y(), sx, sy)) {
+                double dx = sx - x; double dy = sy - y; double d = std::sqrt(dx*dx + dy*dy);
+                if (d <= handleDetectRadiusPx && d < best) { best = d; outAoiId = a.id; outVertexIndex = i; }
+            }
+        }
+    }
+    return (outAoiId >= 0 && outVertexIndex >= 0);
+}
+
+void EcWidget::showAoiVertexContextMenu(const QPoint& pos, int aoiId, int vertexIndex)
+{
+    QMenu contextMenu(this);
+    QAction* moveAct = contextMenu.addAction(tr("Move"));
+    QAction* delAct  = contextMenu.addAction(tr("Delete"));
+    QAction* chosen = contextMenu.exec(mapToGlobal(pos));
+    if (!chosen) return;
+
+    // Find AOI reference
+    for (int ai = 0; ai < aoiList.size(); ++ai) if (aoiList[ai].id == aoiId) {
+        auto& a = aoiList[ai];
+        if (chosen == moveAct) {
+            // Ensure edit mode and start click-move
+            editingAOI = true;
+            editingAoiId = aoiId;
+            draggedAoiVertex = vertexIndex;
+            emit statusMessage(tr("Moving AOI vertex: move cursor, click to drop"));
+            update();
+            return;
+        } else if (chosen == delAct) {
+            if (a.vertices.size() > 3) {
+                a.vertices.remove(vertexIndex);
+                emit aoiListChanged();
+                update();
+            } else {
+                emit statusMessage(tr("Cannot remove vertex: polygon must have at least 3 vertices"));
+            }
+            return;
+        }
+        break;
+    }
+}
 void EcWidget::drawOwnShipTrail(QPainter &painter)
 {
     if (ownShipTrailPoints.size() < 2)
@@ -1928,6 +1976,14 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
     // Clear waypoint highlight when clicking anywhere on the map
     // This provides better UX by removing distracting highlights
     clearWaypointHighlight();
+    // AOI vertex context menu on right-click (global, even outside edit mode)
+    if (e->button() == Qt::RightButton) {
+        int aoiId=-1, vIdx=-1;
+        if (getAoiVertexAtPosition(e->x(), e->y(), aoiId, vIdx)) {
+            showAoiVertexContextMenu(e->pos(), aoiId, vIdx);
+            return; // handled
+        }
+    }
 
     // ========== AOI CREATION MODE ==========
     if (creatingAOI) {
@@ -1951,7 +2007,15 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
 
     // ========== AOI EDIT MODE ==========
     if (editingAOI) {
-        if (e->button() == Qt::LeftButton) {
+        if (e->button() == Qt::LeftButton) {            // If currently moving a vertex via click-move, a left-click drops it
+            if (draggedAoiVertex >= 0) {
+                draggedAoiVertex = -1;
+                emit statusMessage(tr("Vertex moved"));
+                // Automatically exit AOI edit mode after dropping the vertex
+                finishEditAOI();
+                update();
+                return;
+            }
             // Check if clicked on a handle
             int idx = -1; double best=1e9;
             // get AOI
@@ -1970,7 +2034,7 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
                 draggedAoiVertex = idx;
             }
         } else if (e->button() == Qt::RightButton) {
-            // Right click: delete handle if close, else add on nearest edge
+            // Right click: on vertex shows Move/Delete; else add on nearest edge
             for (int ai=0;ai<aoiList.size();++ai) if (aoiList[ai].id == editingAoiId) {
                 auto& a = aoiList[ai];
                 // check remove
@@ -1979,11 +2043,27 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
                         double dx = x - e->x(); double dy = y - e->y(); if (std::sqrt(dx*dx+dy*dy) <= handleDetectRadiusPx) { hit = i; break; }
                     }
                 }
-                if (hit>=0 && a.vertices.size()>3) {
-                    a.vertices.remove(hit);
-                    emit aoiListChanged();
-                    update();
-                    return;
+                if (hit>=0) {
+                    QMenu contextMenu(this);
+                    QAction* moveAct = contextMenu.addAction(tr("Move"));
+                    QAction* delAct  = contextMenu.addAction(tr("Delete"));
+                    QAction* chosen = contextMenu.exec(mapToGlobal(e->pos()));
+                    if (chosen == moveAct) {
+                        draggedAoiVertex = hit; // start click-move mode
+                        emit statusMessage(tr("Moving AOI vertex: move cursor, click to drop"));
+                        return;
+                    } else if (chosen == delAct) {
+                        if (a.vertices.size() > 3) {
+                            a.vertices.remove(hit);
+                            emit aoiListChanged();
+                            update();
+                        } else {
+                            emit statusMessage(tr("Cannot remove vertex: polygon must have at least 3 vertices"));
+                        }
+                        return;
+                    } else {
+                        return; // cancelled
+                    }
                 }
                 // add on nearest edge
                 // convert click to lat/lon
@@ -2374,7 +2454,10 @@ void EcWidget::mouseReleaseEvent(QMouseEvent *e)
 {
     if (editingAOI) {
         if (e->button() == Qt::LeftButton) {
+            // Ensure we also exit edit mode on release if applicable
             draggedAoiVertex = -1;
+            finishEditAOI();
+            update();
             return;
         }
     }
@@ -14555,7 +14638,6 @@ void EcWidget::highlightWaypoint(int routeId, int waypointIndex)
 {
     // Clear previous highlight
     clearWaypointHighlight();
-
     // Find the waypoint to highlight
     int currentIndex = 0;
     for (const auto& wp : waypointList) {
@@ -14602,4 +14684,3 @@ void EcWidget::clearWaypointHighlight()
         update();
     }
 }
-

@@ -58,7 +58,7 @@ AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
         if (!item || !this->ecWidget) return;
         int id = item->data(0, Qt::UserRole).toInt();
         this->ecWidget->startEditAOI(id);
-        emit statusMessage("Edit AOI: drag vertices; right-click handle to delete; right-click edge to add; ESC to finish");
+        emit statusMessage("Edit AOI: drag vertices; right-click handle for Move/Delete; right-click edge to add; click to drop; ESC to finish");
     });
 
     refreshList();
@@ -68,6 +68,10 @@ void AOIPanel::refreshList()
 {
     tree->blockSignals(true);
     tree->clear();
+    // Determine theme-based text color for list items
+    QColor win = palette().color(QPalette::Window);
+    int luma = qRound(0.2126*win.red() + 0.7152*win.green() + 0.0722*win.blue());
+    QColor listTextColor = (luma < 128) ? QColor(255,255,255) : QColor(0,0,0);
     if (!ecWidget) return;
     const auto aoiList = ecWidget->getAOIs();
     for (const auto& aoi : aoiList) {
@@ -80,8 +84,9 @@ void AOIPanel::refreshList()
         item->setText(2, "");
         item->setData(0, Qt::UserRole, aoi.id);
         // Colorize by type
-        item->setForeground(0, QBrush(aoi.color));
-        item->setForeground(1, QBrush(aoi.color));
+        item->setForeground(0, QBrush(listTextColor));
+        item->setForeground(1, QBrush(listTextColor));
+        item->setForeground(2, QBrush(listTextColor));
     }
     tree->blockSignals(false);
 }
