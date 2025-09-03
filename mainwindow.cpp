@@ -577,6 +577,10 @@ void MainWindow::createMenuBar(){
     QMenu *aoiMenu = menuBar()->addMenu("&Area Tools");
     aoiMenu->addAction("Create by Click", this, SLOT(onCreateAOIByClick()));
     aoiMenu->addAction("Open Area Panel", this, SLOT(onOpenAOIPanel()));
+    QAction* toggleSegLabels = aoiMenu->addAction("Show Segment Distances");
+    toggleSegLabels->setCheckable(true);
+    toggleSegLabels->setChecked(false);
+    connect(toggleSegLabels, &QAction::toggled, this, &MainWindow::onToggleAoiSegmentLabels);
 
     // ================================== MOOSDB MENU
     QMenu *moosMenu = menuBar()->addMenu("&Connection");
@@ -3002,6 +3006,12 @@ void MainWindow::onOpenAOIPanel()
     aoiDock->raise(); // Fokus ke tab AOI
 
     aoiPanel->setAttachDetachButton(conn);
+}
+
+void MainWindow::onToggleAoiSegmentLabels(bool checked)
+{
+    if (!ecchart) return;
+    ecchart->setEnableAoiSegmentLabels(checked);
 }
 
 

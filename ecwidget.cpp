@@ -1620,19 +1620,45 @@ void EcWidget::drawAOIs(QPainter& painter)
 {
     if (aoiList.isEmpty()) return;
     if (!initialized || !view) return;
+    static bool aoiDebugLogged = false;
+    if (!aoiDebugLogged) {
+        qDebug() << "[AOI-DRAW] Start drawAOIs. Count:" << aoiList.size();
+    }
     QPen pen; QBrush brush;
     // Make AOI lines smooth and crisp like route overlay
     painter.setRenderHint(QPainter::Antialiasing, true);
     for (const auto& a : aoiList) {
+        if (!aoiDebugLogged) {
+            qDebug() << "[AOI-DRAW] AOI id=" << a.id << " verts=" << a.vertices.size() << " visible=" << a.visible;
+        }
         if (!a.visible || a.vertices.size() < 3) continue;
 
         QVector<QPoint> pts;
+        QVector<QPointF> ptsXYFiltered; // NM coords aligned with pts (fallback removed below)
+        QVector<int> projIndexMap;      // map to original vertex indices
         pts.reserve(a.vertices.size());
-        for (const QPointF& ll : a.vertices) {
+        ptsXYFiltered.reserve(a.vertices.size());
+        projIndexMap.reserve(a.vertices.size());
+        // Precompute local-projection scaling for NM distances
+        double lat0_for_proj = 0.0, lon0_for_proj = 0.0;
+        for (const QPointF& ll : a.vertices) { lat0_for_proj += ll.x(); lon0_for_proj += ll.y(); }
+        lat0_for_proj /= a.vertices.size(); lon0_for_proj /= a.vertices.size();
+        double lat0rad_for_proj = lat0_for_proj * M_PI / 180.0;
+        const double k_nm = 60.0;
+        for (int vi = 0; vi < a.vertices.size(); ++vi) {
+            const QPointF& ll = a.vertices[vi];
+            if (!qIsFinite(ll.x()) || !qIsFinite(ll.y())) continue;
             int x=0, y=0;
             if (LatLonToXy(ll.x(), ll.y(), x, y)) {
                 pts.append(QPoint(x, y));
+                double xnm = (ll.y() - lon0_for_proj) * k_nm * std::cos(lat0rad_for_proj);
+                double ynm = (ll.x() - lat0_for_proj) * k_nm;
+                ptsXYFiltered.append(QPointF(xnm, ynm));
+                projIndexMap.append(vi);
             }
+        }
+        if (!aoiDebugLogged) {
+            qDebug() << "[AOI-DRAW] projected points=" << pts.size() << " mapIdx=" << projIndexMap.size();
         }
         if (pts.size() < 3) continue;
 
@@ -1707,14 +1733,70 @@ void EcWidget::drawAOIs(QPainter& painter)
         }
         areaNM2 = std::fabs(areaNM2) * 0.5; // NM^2
 
-        QString areaLine = QString::fromUtf8("Area: %1 NM²").arg(QString::number(areaNM2, 'f', 2));
+        // Compose area label without prefix, e.g., "11.68 NM²"
+        QString areaLine = QString::fromUtf8("%1 NM²").arg(QString::number(areaNM2, 'f', 2));
 
-        // Draw name and area on two lines, aligned near centroid
-        QPoint namePos(static_cast<int>(cx) + 6, static_cast<int>(cy));
+        // Draw AOI name centered at centroid (baseline positioning)
+        int nameW = fm.horizontalAdvance(a.name);
+        int nameH = fm.height();
+        QPoint namePos(static_cast<int>(cx) - nameW/2, static_cast<int>(cy));
         painter.drawText(namePos, a.name);
-        // Second line below
-        QPoint areaPos(namePos.x(), namePos.y() + fm.height());
+        // Draw area centered below the name at centroid (baseline positioning)
+        int areaW = fm.horizontalAdvance(areaLine);
+        int areaH = fm.height();
+        QPoint areaPos(static_cast<int>(cx) - areaW/2, static_cast<int>(cy) + areaH);
         painter.drawText(areaPos, areaLine);
+
+        // Draw AOI segment distance labels for all visible AOIs (no toggle, no bearing)
+        {
+            painter.save();
+            QFont distFont("Arial", 9, QFont::Bold);
+            painter.setFont(distFont);
+            QFontMetrics dfm(distFont);
+            painter.setPen(outline);
+            // Build projected points and index map (reuse existing pts/projIndexMap created above)
+            if (projIndexMap.size() == pts.size() && pts.size() >= 2) {
+                for (int i = 0; i < pts.size(); ++i) {
+                    const QPoint& s1 = pts[i];
+                    const QPoint& s2 = pts[(i+1) % pts.size()];
+                    // Skip too-short segments (avoid clutter)
+                    int dxpx = s2.x() - s1.x();
+                    int dypx = s2.y() - s1.y();
+                    if ((dxpx*dxpx + dypx*dypx) < 18*18) continue; // ~18px threshold
+
+                    int idx1 = projIndexMap[i];
+                    int idx2 = projIndexMap[(i+1) % projIndexMap.size()];
+                    if (idx1 < 0 || idx2 < 0 || idx1 >= a.vertices.size() || idx2 >= a.vertices.size()) continue;
+                    const QPointF &v1 = a.vertices[idx1];
+                    const QPointF &v2 = a.vertices[idx2];
+                    if (!qIsFinite(v1.x()) || !qIsFinite(v1.y()) || !qIsFinite(v2.x()) || !qIsFinite(v2.y())) continue;
+
+                    EcCoordinate lat1 = v1.x(); EcCoordinate lon1 = v1.y();
+                    EcCoordinate lat2 = v2.x(); EcCoordinate lon2 = v2.y();
+                    double distNM = 0.0, bearingDummy = 0.0;
+                    EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84, lat1, lon1, lat2, lon2, &distNM, &bearingDummy);
+
+                    QString text = QString("%1 NM").arg(QString::number(distNM, 'f', 2));
+                    int midX = (s1.x() + s2.x()) / 2;
+                    int midY = (s1.y() + s2.y()) / 2;
+                    // Offset label away from the line along its screen-space normal
+                    double len = std::sqrt(double(dxpx*dxpx + dypx*dypx));
+                    double nx = (len > 0.0) ? (-double(dypx) / len) : 0.0;
+                    double ny = (len > 0.0) ? ( double(dxpx) / len) : 0.0;
+                    // Increase offset further to avoid overlap with the line
+                    int offset = qMax(24, int(dfm.height() * 2 + 4));
+                    int lx = midX + int(nx * offset);
+                    int ly = midY + int(ny * offset);
+                    int tw = dfm.horizontalAdvance(text);
+                    painter.drawText(QPoint(lx - tw/2, ly), text);
+                }
+            }
+            painter.restore();
+        }
+    }
+    if (!aoiDebugLogged) {
+        qDebug() << "[AOI-DRAW] Completed first draw cycle";
+        aoiDebugLogged = true;
     }
 }
 
@@ -2762,6 +2844,11 @@ void EcWidget::mouseMoveEvent(QMouseEvent *e)
     EcCoordinate lat, lon;
     if (XyToLatLon(e->x(), e->y(), lat, lon)) {
         emit mouseMove(lat, lon);
+    }
+
+    // Update AOI hover segment label state
+    if (enableAoiSegmentLabels) {
+        updateAoiHoverLabel(e->pos());
     }
 }
 
@@ -15003,4 +15090,77 @@ void EcWidget::clearWaypointHighlight()
         qDebug() << "[HIGHLIGHT] Cleared waypoint highlight";
         update();
     }
+}
+void EcWidget::updateAoiHoverLabel(const QPoint& mousePos)
+{
+    hoverAoiId = -1;
+    hoverAoiEdgeIndex = -1;
+    hoverAoiLabelText.clear();
+
+    if (attachedAoiId < 0) { update(); return; }
+
+    // Find attached AOI
+    const AOI* target = nullptr;
+    for (const auto& a : aoiList) { if (a.id == attachedAoiId) { target = &a; break; } }
+    if (!target) { update(); return; }
+    if (!target->visible || target->vertices.size() < 2) { update(); return; }
+
+    // Project vertices; keep mapping to original indices
+    QVector<QPoint> pts;
+    QVector<int> idxMap;
+    pts.reserve(target->vertices.size());
+    idxMap.reserve(target->vertices.size());
+    for (int i = 0; i < target->vertices.size(); ++i) {
+        const QPointF& ll = target->vertices[i];
+        if (!qIsFinite(ll.x()) || !qIsFinite(ll.y())) continue;
+        int x=0, y=0;
+        if (LatLonToXy(ll.x(), ll.y(), x, y)) { pts.append(QPoint(x, y)); idxMap.append(i); }
+    }
+    if (pts.size() < 2) { update(); return; }
+
+    // Find nearest segment to mouse in screen space
+    auto distPointToSeg2 = [](const QPoint& p, const QPoint& a, const QPoint& b) -> double {
+        double px = p.x(), py = p.y();
+        double x1 = a.x(), y1 = a.y();
+        double x2 = b.x(), y2 = b.y();
+        double vx = x2 - x1, vy = y2 - y1;
+        double wx = px - x1, wy = py - y1;
+        double c1 = vx*wx + vy*wy;
+        if (c1 <= 0) return (px-x1)*(px-x1) + (py-y1)*(py-y1);
+        double c2 = vx*vx + vy*vy;
+        if (c2 <= 0) return (px-x1)*(px-x1) + (py-y1)*(py-y1);
+        double t = c1 / c2; if (t < 0) t = 0; else if (t > 1) t = 1;
+        double projx = x1 + t*vx, projy = y1 + t*vy;
+        double dx = px - projx, dy = py - projy;
+        return dx*dx + dy*dy;
+    };
+
+    int bestEdge = -1; double bestD2 = 1e18; QPoint bestMid;
+    for (int i = 0; i < pts.size(); ++i) {
+        const QPoint& a = pts[i];
+        const QPoint& b = pts[(i+1) % pts.size()];
+        double d2 = distPointToSeg2(mousePos, a, b);
+        if (d2 < bestD2) { bestD2 = d2; bestEdge = i; bestMid = QPoint((a.x()+b.x())/2, (a.y()+b.y())/2); }
+    }
+
+    // Threshold: only show if cursor is close enough (~20 px)
+    if (bestEdge < 0 || bestD2 > 20.0*20.0) { update(); return; }
+
+    // Compute length of that edge using haversine on original vertices
+    int idx1 = idxMap[bestEdge];
+    int idx2 = idxMap[(bestEdge+1) % idxMap.size()];
+    if (idx1 < 0 || idx2 < 0 || idx1 >= target->vertices.size() || idx2 >= target->vertices.size()) { update(); return; }
+    double lat1 = target->vertices[idx1].x();
+    double lon1 = target->vertices[idx1].y();
+    double lat2 = target->vertices[idx2].x();
+    double lon2 = target->vertices[idx2].y();
+    if (!qIsFinite(lat1) || !qIsFinite(lon1) || !qIsFinite(lat2) || !qIsFinite(lon2)) { update(); return; }
+    double meters = haversine(lat1, lon1, lat2, lon2);
+    double distNM = meters / 1852.0;
+
+    hoverAoiId = attachedAoiId;
+    hoverAoiEdgeIndex = bestEdge;
+    hoverAoiLabelScreenPos = QPoint(bestMid.x(), bestMid.y() - 4);
+    hoverAoiLabelText = QString::number(distNM, 'f', 2) + " NM";
+    update();
 }

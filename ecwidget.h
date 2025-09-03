@@ -1022,6 +1022,16 @@ protected:
   double handleDetectRadiusPx = 10.0;
   // AOI attach state
   int attachedAoiId = -1;
+  // AOI render options
+  bool enableAoiSegmentLabels = false; // safety default: off
+public:
+  void setEnableAoiSegmentLabels(bool on) { enableAoiSegmentLabels = on; update(); }
+  // AOI hover segment label state (hover-only labeling)
+  void updateAoiHoverLabel(const QPoint& mousePos);
+  int hoverAoiId = -1;
+  int hoverAoiEdgeIndex = -1;
+  QPoint hoverAoiLabelScreenPos;
+  QString hoverAoiLabelText;
 
   // AOI context helpers
   void showAoiVertexContextMenu(const QPoint& pos, int aoiId, int vertexIndex);
