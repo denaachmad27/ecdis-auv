@@ -1020,6 +1020,10 @@ protected:
   int editingAoiId = -1;
   int draggedAoiVertex = -1;
   double handleDetectRadiusPx = 10.0;
+  // AOI vertex drag ghost preview
+  bool aoiVertexDragging = false;
+  double aoiGhostLat = 0.0;
+  double aoiGhostLon = 0.0;
   // AOI attach state
   int attachedAoiId = -1;
   // AOI render options

@@ -1404,7 +1404,7 @@ void EcWidget::paintEvent (QPaintEvent *e)
               }
           }
 
-          // When moving a vertex (draggedAoiVertex >= 0), show live lat/lon label near cursor
+          // When moving a vertex (draggedAoiVertex >= 0), draw ghost polygon and live labels
           if (draggedAoiVertex >= 0) {
               // Cursor position and theme-aware colors
               QPoint mp = lastMousePos;
@@ -1412,37 +1412,115 @@ void EcWidget::paintEvent (QPaintEvent *e)
               int luma = qRound(0.2126*win.red() + 0.7152*win.green() + 0.0722*win.blue());
               bool darkTheme = (luma < 128);
 
+              // Draw ghost dashed lines only for affected edges (prev->ghost) and (ghost->next)
+              QVector<QPoint> ghostPts;
+              ghostPts.reserve(target->vertices.size());
+              for (int i = 0; i < target->vertices.size(); ++i) {
+                  double vlat = target->vertices[i].x();
+                  double vlon = target->vertices[i].y();
+                  if (i == draggedAoiVertex && aoiVertexDragging) { vlat = aoiGhostLat; vlon = aoiGhostLon; }
+                  int x=0,y=0; if (LatLonToXy(vlat, vlon, x, y)) ghostPts.append(QPoint(x,y));
+              }
+              if (ghostPts.size() >= 2) {
+                  int n = ghostPts.size();
+                  int gi = draggedAoiVertex;
+                  if (gi >= 0 && gi < n) {
+                      int pi = (gi - 1 + n) % n;
+                      int ni = (gi + 1) % n;
+                      QPen ghostPen(QColor(128,128,128)); ghostPen.setStyle(Qt::DashLine); ghostPen.setWidth(3);
+                      painter.setPen(ghostPen); painter.setBrush(Qt::NoBrush);
+                      painter.drawLine(ghostPts[pi], ghostPts[gi]);
+                      painter.drawLine(ghostPts[gi], ghostPts[ni]);
+                  }
+              }
+
+              // Live overlay: lat/lon at cursor with adjacent segment distances
               EcCoordinate lat, lon;
               if (XyToLatLon(mp.x(), mp.y(), lat, lon)) {
                   const QString latStr = latLonToDegMin(lat, true);
                   const QString lonStr = latLonToDegMin(lon, false);
-                  const QString text = latStr + "  " + lonStr;
+
+                  QString overlay = latStr + "  " + lonStr;
+                  // Adjacent distances: prev->ghost and ghost->next
+                  int n = target->vertices.size();
+                  if (n >= 2 && draggedAoiVertex >= 0 && draggedAoiVertex < n) {
+                      int prev = (draggedAoiVertex - 1 + n) % n;
+                      int next = (draggedAoiVertex + 1) % n;
+                      double d1=0.0, b1=0.0, d2=0.0, b2=0.0;
+                      EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
+                                                             target->vertices[prev].x(), target->vertices[prev].y(),
+                                                             lat, lon, &d1, &b1);
+                      EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
+                                                             lat, lon,
+                                                             target->vertices[next].x(), target->vertices[next].y(),
+                                                             &d2, &b2);
+                      overlay += QString("\nPrev: %1 NM  Next: %2 NM")
+                                     .arg(QString::number(d1, 'f', 2))
+                                     .arg(QString::number(d2, 'f', 2));
+                  }
 
                   // Small ghost indicator at cursor
-                  QPen ghostPen(QColor(80,80,80));
-                  ghostPen.setStyle(Qt::DashLine);
-                  ghostPen.setWidth(2);
-                  painter.setPen(ghostPen);
+                  QPen ghostPen2(QColor(80,80,80));
+                  ghostPen2.setStyle(Qt::DashLine);
+                  ghostPen2.setWidth(2);
+                  painter.setPen(ghostPen2);
                   painter.setBrush(Qt::NoBrush);
                   painter.drawEllipse(mp, 6, 6);
 
-                  // Text styling
-                  QFont f = painter.font();
-                  f.setPointSizeF(9.0);
-                  painter.setFont(f);
-                  QFontMetrics fm(f);
-                  int pad = 4;
-                  QRect br = fm.boundingRect(QRect(0,0,600,2000), Qt::AlignLeft|Qt::AlignTop, text);
-                  QRect bg(mp.x() + 12, mp.y() + 12, br.width() + pad*2, br.height() + pad*2);
+                  // Also draw segment distance labels for ghost-adjacent edges at midpoints with offset from line
+                  if (ghostPts.size() == target->vertices.size()) {
+                      int n = ghostPts.size();
+                      int gi = draggedAoiVertex;
+                      int pi = (gi - 1 + n) % n;
+                      int ni = (gi + 1) % n;
+                      // prev -> ghost
+                      QPoint p1 = ghostPts[pi]; QPoint p2 = ghostPts[gi];
+                      int dxpx = p2.x() - p1.x(); int dypx = p2.y() - p1.y();
+                      if ((dxpx*dxpx + dypx*dypx) >= 18*18) {
+                          double d1=0.0, b1=0.0; EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
+                              target->vertices[pi].x(), target->vertices[pi].y(), lat, lon, &d1, &b1);
+                          QString t = QString("%1 NM").arg(QString::number(d1, 'f', 2));
+                          QFont df("Arial", 9, QFont::Bold); painter.setFont(df); QFontMetrics dfm(df);
+                          double len = std::sqrt(double(dxpx*dxpx + dypx*dypx));
+                          double nx = (len>0.0)? (-double(dypx)/len) : 0.0; double ny = (len>0.0)? (double(dxpx)/len) : 0.0;
+                          int midX = (p1.x()+p2.x())/2; int midY = (p1.y()+p2.y())/2;
+                          int offset = qMax(24, int(dfm.height()*2 + 4));
+                          int lx = midX + int(nx*offset); int ly = midY + int(ny*offset);
+                          int tw = dfm.horizontalAdvance(t);
+                          painter.setPen(QColor(128,128,128)); // ghost label color (gray)
+                          painter.drawText(QPoint(lx - tw/2, ly), t);
+                      }
+                      // ghost -> next
+                      p1 = ghostPts[gi]; p2 = ghostPts[ni];
+                      dxpx = p2.x() - p1.x(); dypx = p2.y() - p1.y();
+                      if ((dxpx*dxpx + dypx*dypx) >= 18*18) {
+                          double d2=0.0, b2=0.0; EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
+                              lat, lon, target->vertices[ni].x(), target->vertices[ni].y(), &d2, &b2);
+                          QString t2 = QString("%1 NM").arg(QString::number(d2, 'f', 2));
+                          QFont df("Arial", 9, QFont::Bold); painter.setFont(df); QFontMetrics dfm(df);
+                          double len = std::sqrt(double(dxpx*dxpx + dypx*dypx));
+                          double nx = (len>0.0)? (-double(dypx)/len) : 0.0; double ny = (len>0.0)? (double(dxpx)/len) : 0.0;
+                          int midX = (p1.x()+p2.x())/2; int midY = (p1.y()+p2.y())/2;
+                          int offset = qMax(24, int(dfm.height()*2 + 4));
+                          int lx = midX + int(nx*offset); int ly = midY + int(ny*offset);
+                          int tw = dfm.horizontalAdvance(t2);
+                          painter.setPen(QColor(128,128,128)); // ghost label color (gray)
+                          painter.drawText(QPoint(lx - tw/2, ly), t2);
+                      }
+                  }
 
+                  // Text styling and background (cursor box)
+                  QFont f = painter.font(); f.setPointSizeF(9.0); painter.setFont(f);
+                  QFontMetrics fm(f); int pad = 4;
+                  QRect br = fm.boundingRect(QRect(0,0,600,2000), Qt::AlignLeft|Qt::AlignTop, overlay);
+                  QRect bg(mp.x() + 12, mp.y() + 12, br.width() + pad*2, br.height() + pad*2);
                   painter.setPen(Qt::NoPen);
                   QColor bgCol = darkTheme ? QColor(0,0,0,160) : QColor(255,255,255,210);
                   QColor fgCol = darkTheme ? QColor(240,240,240) : QColor(30,30,30);
                   painter.setBrush(bgCol);
                   painter.drawRoundedRect(bg, 4, 4);
-
                   painter.setPen(fgCol);
-                  painter.drawText(bg.adjusted(pad, pad, -pad, -pad), Qt::AlignLeft | Qt::AlignTop, text);
+                  painter.drawText(bg.adjusted(pad, pad, -pad, -pad), Qt::AlignLeft | Qt::AlignTop, overlay);
               }
           }
       }
@@ -2401,13 +2479,9 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
 
     // ========== AOI EDIT MODE ==========
     if (editingAOI) {
-        if (e->button() == Qt::LeftButton) {            // If currently moving a vertex via click-move, a left-click drops it
-            if (draggedAoiVertex >= 0) {
-                draggedAoiVertex = -1;
-                emit statusMessage(tr("Vertex moved"));
-                // Automatically exit AOI edit mode after dropping the vertex
-                finishEditAOI();
-                update();
+        if (e->button() == Qt::LeftButton) {            // Start drag if clicking a handle; if already dragging, wait for release to commit
+            if (draggedAoiVertex >= 0 && aoiVertexDragging) {
+                // Do nothing on press; commit on release
                 return;
             }
             // Check if clicked on a handle
@@ -2425,7 +2499,15 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
                 }
             }
             if (idx >= 0) {
-                draggedAoiVertex = idx;
+                draggedAoiVertex = idx; aoiVertexDragging = true;
+                // Initialize ghost to current vertex position
+                for (const auto& a : aoiList) if (a.id == editingAoiId) {
+                    if (idx >= 0 && idx < a.vertices.size()) {
+                        aoiGhostLat = a.vertices[idx].x();
+                        aoiGhostLon = a.vertices[idx].y();
+                    }
+                    break;
+                }
             }
         } else if (e->button() == Qt::RightButton) {
             // Right click: on vertex shows Move/Delete; else add on nearest edge
@@ -2716,16 +2798,13 @@ void EcWidget::mouseMoveEvent(QMouseEvent *e)
 
     if (editingAOI) {
         if (draggedAoiVertex >= 0) {
-            // move vertex to new lat/lon
-            EcCoordinate lat, lon; if (XyToLatLon(e->x(), e->y(), lat, lon)) {
-                for (auto& a : aoiList) if (a.id == editingAoiId) {
-                    if (draggedAoiVertex >=0 && draggedAoiVertex < a.vertices.size()) {
-                        a.vertices[draggedAoiVertex] = QPointF(lat, lon);
-                        emit aoiListChanged();
-                        update();
-                    }
-                    break;
-                }
+            // Ghost move: do not modify original AOI until drop
+            EcCoordinate lat, lon; 
+            if (XyToLatLon(e->x(), e->y(), lat, lon)) {
+                aoiVertexDragging = true;
+                aoiGhostLat = lat;
+                aoiGhostLon = lon;
+                update();
             }
         }
         return;
@@ -2861,7 +2940,20 @@ void EcWidget::mouseReleaseEvent(QMouseEvent *e)
 {
     if (editingAOI) {
         if (e->button() == Qt::LeftButton) {
-            // Ensure we also exit edit mode on release if applicable
+            // Commit ghost move if active
+            if (draggedAoiVertex >= 0 && aoiVertexDragging) {
+                for (int ai = 0; ai < aoiList.size(); ++ai) if (aoiList[ai].id == editingAoiId) {
+                    auto& a = aoiList[ai];
+                    if (draggedAoiVertex >=0 && draggedAoiVertex < a.vertices.size()) {
+                        a.vertices[draggedAoiVertex] = QPointF(aoiGhostLat, aoiGhostLon);
+                        emit aoiListChanged();
+                        saveAOIs();
+                    }
+                    break;
+                }
+            }
+            // Reset drag state and exit edit mode
+            aoiVertexDragging = false;
             draggedAoiVertex = -1;
             finishEditAOI();
             update();
