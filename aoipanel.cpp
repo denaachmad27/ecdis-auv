@@ -74,8 +74,9 @@ AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
 
 
     // Auto-refresh when AOI list changes in EcWidget (e.g., create-by-click finishes)
+    // Use QueuedConnection to avoid re-entrant refresh while handling itemChanged
     if (ecWidget) {
-        connect(ecWidget, SIGNAL(aoiListChanged()), this, SLOT(refreshList()));
+        connect(ecWidget, SIGNAL(aoiListChanged()), this, SLOT(refreshList()), Qt::QueuedConnection);
     }
 
     connect(editBtn, &QPushButton::clicked, [this]() {
@@ -97,7 +98,7 @@ void AOIPanel::refreshList()
     QColor win = palette().color(QPalette::Window);
     int luma = qRound(0.2126*win.red() + 0.7152*win.green() + 0.0722*win.blue());
     QColor listTextColor = (luma < 128) ? QColor(255,255,255) : QColor(0,0,0);
-    if (!ecWidget) return;
+    if (!ecWidget) { tree->blockSignals(false); return; }
     const auto aoiList = ecWidget->getAOIs();
     for (const auto& aoi : aoiList) {
         auto* item = new QTreeWidgetItem(tree);
