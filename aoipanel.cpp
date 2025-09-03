@@ -5,6 +5,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
+#include <QSignalBlocker>
 
 AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
     : QWidget(parent), ecWidget(ecWidget)
@@ -92,13 +93,13 @@ AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
 
 void AOIPanel::refreshList()
 {
-    tree->blockSignals(true);
+    QSignalBlocker guard(tree); // RAII: block and restore signals safely
     tree->clear();
     // Determine theme-based text color for list items
     QColor win = palette().color(QPalette::Window);
     int luma = qRound(0.2126*win.red() + 0.7152*win.green() + 0.0722*win.blue());
     QColor listTextColor = (luma < 128) ? QColor(255,255,255) : QColor(0,0,0);
-    if (!ecWidget) { tree->blockSignals(false); return; }
+    if (!ecWidget) return;
     const auto aoiList = ecWidget->getAOIs();
     for (const auto& aoi : aoiList) {
         auto* item = new QTreeWidgetItem(tree);
@@ -118,7 +119,6 @@ void AOIPanel::refreshList()
         item->setForeground(1, QBrush(listTextColor));
         item->setForeground(2, QBrush(listTextColor));
     }
-    tree->blockSignals(false);
     updateAttachButtons();
 }
 
@@ -262,8 +262,12 @@ void AOIPanel::onItemChanged(QTreeWidgetItem* item, int column)
     if (column != 2) return; // Only handle checkbox column
     int id = item->data(0, Qt::UserRole).toInt();
     bool visible = (item->checkState(2) == Qt::Checked);
-    // Prefer explicit setter if available; fallback to toggle if necessary
-    // This relies on EcWidget::setAOIVisibility being present (added below).
+    // Ignore no-op changes to avoid redundant signals/refresh
+    bool currentVisible = visible;
+    const auto list = ecWidget->getAOIs();
+    for (const auto& a : list) { if (a.id == id) { currentVisible = a.visible; break; } }
+    if (currentVisible == visible) { updateAttachButtons(); return; }
+    // Apply visibility
     ecWidget->setAOIVisibility(id, visible);
     ecWidget->update();
     updateAttachButtons();
