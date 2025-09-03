@@ -66,6 +66,7 @@ AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
     connect(deleteBtn, &QPushButton::clicked, this, &AOIPanel::onDeleteAOI);
     connect(createByClickBtn, &QPushButton::clicked, this, &AOIPanel::onCreateByClick);
     connect(tree, &QTreeWidget::itemChanged, this, &AOIPanel::onItemChanged);
+    connect(tree, &QTreeWidget::currentItemChanged, this, &AOIPanel::onCurrentItemChanged);
     connect(exportBtn, &QPushButton::clicked, this, &AOIPanel::onExportAOI);
 
     connect(attachBtn, &QPushButton::clicked, this, &AOIPanel::onAttach);
@@ -100,7 +101,11 @@ void AOIPanel::refreshList()
     const auto aoiList = ecWidget->getAOIs();
     for (const auto& aoi : aoiList) {
         auto* item = new QTreeWidgetItem(tree);
-        item->setText(0, aoi.name);
+        QString name = aoi.name;
+        if (ecWidget && ecWidget->isAOIAttachedToShip(aoi.id)) {
+            name += " (Active)";
+        }
+        item->setText(0, name);
         item->setText(1, aoiTypeToString(aoi.type));
         // Checkbox for show/hide in column 2
         item->setFlags(item->flags() | Qt::ItemIsUserCheckable | Qt::ItemIsEnabled | Qt::ItemIsSelectable);
@@ -113,6 +118,7 @@ void AOIPanel::refreshList()
         item->setForeground(2, QBrush(listTextColor));
     }
     tree->blockSignals(false);
+    updateAttachButtons();
 }
 
 void AOIPanel::onAddAOI()
@@ -259,6 +265,7 @@ void AOIPanel::onItemChanged(QTreeWidgetItem* item, int column)
     // This relies on EcWidget::setAOIVisibility being present (added below).
     ecWidget->setAOIVisibility(id, visible);
     ecWidget->update();
+    updateAttachButtons();
 }
 
 void AOIPanel::setAttachDetachButton(bool connection){
@@ -293,11 +300,11 @@ void AOIPanel::onAttach(){
     if (id > 0 && ecWidget) {
         // Attach this route to ship (detaches others)
         //ecWidget->attachRouteToShip(selectedRouteId);
+        ecWidget->attachAOIToShip(id);
         publishToMOOSDB();
 
         // Update button states
-        attachBtn->setEnabled(false);
-        detachBtn->setEnabled(true);
+        updateAttachButtons();
 
         // Use a timer to refresh the list after attachment is complete
         QTimer::singleShot(100, [this]() {
@@ -313,14 +320,14 @@ void AOIPanel::onDetach(){
 
         // Detach this route from ship (this will make all routes blue again)
         //ecWidget->attachRouteToShip(-1); // Detach all routes
+        ecWidget->attachAOIToShip(-1);
         ecWidget->publishToMOOS("AREA_NAV", "");
 
         // Ensure visibility is maintained
         //ecWidget->setRouteVisibility(selectedRouteId, currentVisibility);
 
         // Update button states
-        attachBtn->setEnabled(true);
-        detachBtn->setEnabled(false);
+        updateAttachButtons();
 
         // Use a timer to refresh the list after detachment is complete
         QTimer::singleShot(100, [this]() {
@@ -343,4 +350,21 @@ QList<AOI> AOIPanel::getAOIById(int aoiId)
     }
 
     return aoiSelect;
+}
+
+void AOIPanel::onCurrentItemChanged(QTreeWidgetItem* current, QTreeWidgetItem* /*previous*/)
+{
+    Q_UNUSED(current);
+    updateAttachButtons();
+}
+
+void AOIPanel::updateAttachButtons()
+{
+    if (!ecWidget) { attachBtn->setEnabled(false); detachBtn->setEnabled(false); return; }
+    auto* item = tree->currentItem();
+    if (!item) { attachBtn->setEnabled(false); detachBtn->setEnabled(false); return; }
+    int id = item->data(0, Qt::UserRole).toInt();
+    bool isAttached = ecWidget->isAOIAttachedToShip(id);
+    attachBtn->setEnabled(!isAttached);
+    detachBtn->setEnabled(isAttached);
 }

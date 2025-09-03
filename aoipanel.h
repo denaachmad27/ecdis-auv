@@ -41,6 +41,7 @@ signals:
       void onItemChanged(QTreeWidgetItem* item, int column);
       void onAttach();
       void onDetach();
+      void onCurrentItemChanged(QTreeWidgetItem* current, QTreeWidgetItem* previous);
 
 private:
     EcWidget* ecWidget;
@@ -56,6 +57,7 @@ private:
 
     QList<AOI> getAOIById(int aoiId);
     void publishToMOOSDB();
+    void updateAttachButtons();
 };
 
 #endif // AOIPANEL_H

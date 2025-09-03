@@ -1585,7 +1585,13 @@ void EcWidget::addAOI(const AOI& aoi)
 void EcWidget::removeAOI(int id)
 {
     for (int i = 0; i < aoiList.size(); ++i) {
-        if (aoiList[i].id == id) { aoiList.removeAt(i); emit aoiListChanged(); saveAOIs(); break; }
+        if (aoiList[i].id == id) {
+            aoiList.removeAt(i);
+            if (attachedAoiId == id) attachedAoiId = -1; // clear attachment if removed
+            emit aoiListChanged();
+            saveAOIs();
+            break;
+        }
     }
 }
 
@@ -1631,7 +1637,13 @@ void EcWidget::drawAOIs(QPainter& painter)
         if (pts.size() < 3) continue;
 
         QColor c = a.color;
-        QColor outline = Qt::red; // keep AOI outline in red as requested
+        // If an AOI is attached, gray out others; keep attached in red
+        QColor outline;
+        if (attachedAoiId >= 0) {
+            outline = (a.id == attachedAoiId) ? Qt::red : QColor(128,128,128);
+        } else {
+            outline = Qt::red; // default
+        }
         QColor fill = c; fill.setAlpha(50);
 
         pen.setColor(outline);
@@ -1704,6 +1716,30 @@ void EcWidget::drawAOIs(QPainter& painter)
         QPoint areaPos(namePos.x(), namePos.y() + fm.height());
         painter.drawText(areaPos, areaLine);
     }
+}
+
+void EcWidget::attachAOIToShip(int aoiId)
+{
+    // -1 detaches all
+    if (aoiId < 0) {
+        attachedAoiId = -1;
+        update();
+        emit aoiListChanged();
+        return;
+    }
+    // Verify AOI exists; if not, detach
+    bool exists = false;
+    for (const auto& a : aoiList) {
+        if (a.id == aoiId) { exists = true; break; }
+    }
+    attachedAoiId = exists ? aoiId : -1;
+    update();
+    emit aoiListChanged();
+}
+
+bool EcWidget::isAOIAttachedToShip(int aoiId) const
+{
+    return (aoiId >= 0) && (aoiId == attachedAoiId);
 }
 
 void EcWidget::startAOICreation(const QString& name, AOIType type)
@@ -1841,7 +1877,7 @@ void EcWidget::saveAOIs()
         aoiArray.append(obj);
     }
 
-    QJsonObject root; root["aois"] = aoiArray;
+    QJsonObject root; root["aois"] = aoiArray; root["attachedAoiId"] = attachedAoiId;
     QJsonDocument doc(root);
 
     QString filePath = getAOIFilePath();
@@ -1884,7 +1920,8 @@ void EcWidget::loadAOIs()
     QByteArray data = file.readAll(); file.close();
     QJsonDocument doc = QJsonDocument::fromJson(data);
     if (!doc.isObject()) return;
-    QJsonArray arr = doc.object().value("aois").toArray();
+    QJsonObject rootObj = doc.object();
+    QJsonArray arr = rootObj.value("aois").toArray();
     aoiList.clear();
     int maxId = 0;
     for (const auto& v : arr) {
@@ -1905,6 +1942,13 @@ void EcWidget::loadAOIs()
         if (a.id > maxId) maxId = a.id;
     }
     nextAoiId = qMax(maxId + 1, nextAoiId);
+    // restore attached AOI id if present and valid
+    int loadedAttachedId = rootObj.contains("attachedAoiId") ? rootObj.value("attachedAoiId").toInt(-1) : -1;
+    bool exists = false;
+    if (loadedAttachedId >= 0) {
+        for (const auto& a : aoiList) { if (a.id == loadedAttachedId) { exists = true; break; } }
+    }
+    attachedAoiId = exists ? loadedAttachedId : -1;
     emit aoiListChanged();
     qDebug() << "[INFO] Loaded" << aoiList.size() << "AOIs from" << filePath;
 }

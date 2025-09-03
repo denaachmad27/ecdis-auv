@@ -340,6 +340,11 @@ public:
   void cancelAOICreation();
   void finishAOICreation();
   bool isCreatingAOI() const { return creatingAOI; }
+  // AOI attach-to-ship behavior (single active AOI like route)
+  void attachAOIToShip(int aoiId);   // pass -1 to detach all
+  bool isAOIAttachedToShip(int aoiId) const;
+  int  getAttachedAOIId() const { return attachedAoiId; }
+  bool hasAttachedAOI() const { return attachedAoiId >= 0; }
   // AOI edit
   void startEditAOI(int aoiId);
   void finishEditAOI();
@@ -1015,6 +1020,8 @@ protected:
   int editingAoiId = -1;
   int draggedAoiVertex = -1;
   double handleDetectRadiusPx = 10.0;
+  // AOI attach state
+  int attachedAoiId = -1;
 
   // AOI context helpers
   void showAoiVertexContextMenu(const QPoint& pos, int aoiId, int vertexIndex);
