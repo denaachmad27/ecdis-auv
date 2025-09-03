@@ -1271,8 +1271,8 @@ void EcWidget::paintEvent (QPaintEvent *e)
           const QString latStr = latLonToDegMin(lat, true);
           const QString lonStr = latLonToDegMin(lon, false);
 
-          // Compute distance and bearing from last vertex to cursor
-          QString distBrgText;
+          // Compute distance from last vertex to cursor (segment length preview)
+          QString distText;
           if (!aoiVerticesLatLon.isEmpty()) {
               const QPointF& last = aoiVerticesLatLon.last();
               double distNM = 0.0, bearing = 0.0;
@@ -1280,9 +1280,8 @@ void EcWidget::paintEvent (QPaintEvent *e)
                                                      last.x(), last.y(),
                                                      lat, lon,
                                                      &distNM, &bearing);
-              distBrgText = QString("\n%1 NM  @ %2°")
-                                .arg(QString::number(distNM, 'f', 2))
-                                .arg(QString::number(bearing, 'f', 0));
+              // Show only distance (NM) without bearing for cleaner UI
+              distText = QString("\n%1 NM").arg(QString::number(distNM, 'f', 2));
           }
 
           // Compute perimeter (includes segment to cursor) and area (if >=3 points incl. cursor)
@@ -1329,8 +1328,9 @@ void EcWidget::paintEvent (QPaintEvent *e)
               }
           }
 
-          // Cursor overlay: show only coordinates
-          const QString text = latStr + "  " + lonStr;
+          // Cursor overlay: show coordinates and (if available) segment distance
+          QString text = latStr + "  " + lonStr;
+          if (!distText.isEmpty()) text += distText;
 
           QFont f = painter.font();
           f.setPointSizeF(9.0);
