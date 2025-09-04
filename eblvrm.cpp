@@ -6,7 +6,7 @@
 
 void EblVrm::onMouseMove(EcWidget* w, int x, int y)
 {
-  if (!measureMode || !w) return;
+  if (!measureMode || !w || !w->isReady()) return;
   // Convert cursor to lat/lon
   EcCoordinate lat, lon;
   if (!w->XyToLatLon(x, y, lat, lon)) {
@@ -29,7 +29,7 @@ void EblVrm::onMouseMove(EcWidget* w, int x, int y)
 
 void EblVrm::draw(EcWidget* w, QPainter& p)
 {
-  if (!w) return;
+  if (!w || !w->isReady()) return;
   // Project ownship
   int cx=0, cy=0;
   if (!w->LatLonToXy(w->getOwnShipLat(), w->getOwnShipLon(), cx, cy)) return;

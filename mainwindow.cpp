@@ -779,8 +779,8 @@ void MainWindow::createMenuBar(){
 
     // ===================================================
 
-    // ================================== GUARDZONE MENU
-    if (AppConfig::isDevelopment()) {
+    // ================================== GUARDZONE MENU (Production-visible)
+    {
         QMenu *guardZoneMenu = menuBar()->addMenu("&GuardZone");
 
         QAction *enableGuardZoneAction = guardZoneMenu->addAction("Enable GuardZone");
