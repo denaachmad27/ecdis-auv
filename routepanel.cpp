@@ -982,15 +982,11 @@ void RoutePanel::updateRouteInfoDisplay(const RouteInfo& info)
     totalDistanceLabel->setText(QString("📏 %1").arg(formatDistance(info.totalDistance)));
     // Try to show ETA if available from EcWidget activeRoute or compute fallback
     QString etaText = "-";
-    if (ecWidget) {
-        // Prefer ETA from AIS/MOOS activeRoute if available
-        if (!ecWidget->activeRoute.rteEta.isEmpty()) {
-            etaText = ecWidget->activeRoute.rteEta;
-        } else if (!ecWidget->activeRoute.rteTtg.isEmpty()) {
-            etaText = QString("TTG %1").arg(ecWidget->activeRoute.rteTtg);
-        } else if (info.totalTime > 0.0) {
-            etaText = formatTime(info.totalTime);
-        }
+    // Prefer ETA/TTG from global activeRoute if available (updated by AIS/MOOS)
+    if (!activeRoute.rteEta.isEmpty()) {
+        etaText = activeRoute.rteEta;
+    } else if (!activeRoute.rteTtg.isEmpty()) {
+        etaText = QString("TTG %1").arg(activeRoute.rteTtg);
     } else if (info.totalTime > 0.0) {
         etaText = formatTime(info.totalTime);
     }
