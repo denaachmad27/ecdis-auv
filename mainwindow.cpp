@@ -577,10 +577,10 @@ void MainWindow::createMenuBar(){
     QMenu *aoiMenu = menuBar()->addMenu("&Area Tools");
     aoiMenu->addAction("Create by Click", this, SLOT(onCreateAOIByClick()));
     aoiMenu->addAction("Open Area Panel", this, SLOT(onOpenAOIPanel()));
-    QAction* toggleSegLabels = aoiMenu->addAction("Show Segment Distances");
-    toggleSegLabels->setCheckable(true);
-    toggleSegLabels->setChecked(false);
-    connect(toggleSegLabels, &QAction::toggled, this, &MainWindow::onToggleAoiSegmentLabels);
+    QAction* toggleAllLabels = aoiMenu->addAction("Show AOI Labels");
+    toggleAllLabels->setCheckable(true);
+    toggleAllLabels->setChecked(true);
+    connect(toggleAllLabels, &QAction::toggled, this, &MainWindow::onToggleAoiLabels);
 
     // ================================== MOOSDB MENU
     QMenu *moosMenu = menuBar()->addMenu("&Connection");
@@ -3008,10 +3008,10 @@ void MainWindow::onOpenAOIPanel()
     aoiPanel->setAttachDetachButton(conn);
 }
 
-void MainWindow::onToggleAoiSegmentLabels(bool checked)
+void MainWindow::onToggleAoiLabels(bool checked)
 {
     if (!ecchart) return;
-    ecchart->setEnableAoiSegmentLabels(checked);
+    ecchart->setShowAoiLabels(checked);
 }
 
 

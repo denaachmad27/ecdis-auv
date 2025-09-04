@@ -200,7 +200,7 @@ protected slots:
     // AOI
     void onCreateAOIByClick();
   void onOpenAOIPanel();
-  void onToggleAoiSegmentLabels(bool checked);
+  void onToggleAoiLabels(bool checked);
 
     // Route Panel slots
     void onRouteSelected(int routeId);

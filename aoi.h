@@ -23,9 +23,10 @@ struct AOI {
     AOIType type;
     QColor color;
     bool visible;
+    bool showLabel; // per-AOI label (name+area) visibility
     QVector<QPointF> vertices; // lat,lon pairs as QPointF(lat, lon)
 
-    AOI() : id(-1), type(AOIType::AOI), color(Qt::yellow), visible(true) {}
+    AOI() : id(-1), type(AOIType::AOI), color(Qt::yellow), visible(true), showLabel(true) {}
 };
 
 inline QColor aoiDefaultColor(AOIType type) {

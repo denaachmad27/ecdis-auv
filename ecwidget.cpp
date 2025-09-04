@@ -1265,11 +1265,11 @@ void EcWidget::paintEvent (QPaintEvent *e)
           painter.drawEllipse(mp, 6, 6);
       }
 
-      // Show cursor lat/lon in deg-min near the cursor
-      EcCoordinate lat, lon;
-      if (XyToLatLon(mp.x(), mp.y(), lat, lon)) {
-          const QString latStr = latLonToDegMin(lat, true);
-          const QString lonStr = latLonToDegMin(lon, false);
+          // Show cursor lat/lon in deg-min near the cursor (obey showAoiLabels)
+          EcCoordinate lat, lon;
+          if (XyToLatLon(mp.x(), mp.y(), lat, lon)) {
+              const QString latStr = latLonToDegMin(lat, true);
+              const QString lonStr = latLonToDegMin(lon, false);
 
           // Compute distance from last vertex to cursor (segment length preview)
           QString distText;
@@ -1341,16 +1341,18 @@ void EcWidget::paintEvent (QPaintEvent *e)
           QRect br = fm.boundingRect(QRect(0,0, 600, 2000), Qt::AlignLeft|Qt::AlignTop, text);
           QRect bg(mp.x() + 12, mp.y() + 12, br.width() + pad*2, br.height() + pad*2);
 
-          // Background for readability (theme-aware)
-          painter.setPen(Qt::NoPen);
-          QColor bgCol = darkTheme ? QColor(0,0,0,160) : QColor(255,255,255,210);
-          QColor fgCol = darkTheme ? QColor(240,240,240) : QColor(30,30,30);
-          painter.setBrush(bgCol);
-          painter.drawRoundedRect(bg, 4, 4);
+          if (showAoiLabels) {
+              // Background for readability (theme-aware)
+              painter.setPen(Qt::NoPen);
+              QColor bgCol = darkTheme ? QColor(0,0,0,160) : QColor(255,255,255,210);
+              QColor fgCol = darkTheme ? QColor(240,240,240) : QColor(30,30,30);
+              painter.setBrush(bgCol);
+              painter.drawRoundedRect(bg, 4, 4);
 
-          // Text (theme-aware)
-          painter.setPen(fgCol);
-          painter.drawText(bg.adjusted(pad, pad, -pad, -pad), Qt::AlignLeft | Qt::AlignTop, text);
+              // Text (theme-aware)
+              painter.setPen(fgCol);
+              painter.drawText(bg.adjusted(pad, pad, -pad, -pad), Qt::AlignLeft | Qt::AlignTop, text);
+          }
 
           // Center label: show AOI title and area at polygon centroid during creation
           if (pts.size() >= 3) {
@@ -1361,29 +1363,30 @@ void EcWidget::paintEvent (QPaintEvent *e)
 
               QString title = pendingAOIName.isEmpty() ? QString("AOI %1").arg(nextAoiId) : pendingAOIName;
               QString areaLine = areaText.isEmpty() ? QString("") : areaText.mid(1); // remove leading \n
-              QString centerText = title;
-              if (!areaLine.isEmpty()) centerText += "\n" + areaLine;
+              if (showAoiLabels) {
+                  QString centerText = title;
+                  if (!areaLine.isEmpty()) centerText += "\n" + areaLine;
 
-              QFont tf = painter.font();
-              tf.setPointSizeF(10.0);
-              tf.setBold(true);
-              painter.setFont(tf);
-              QFontMetrics tfm(tf);
-              QRect tb = tfm.boundingRect(QRect(0,0, 800, 2000), Qt::AlignHCenter|Qt::AlignTop, centerText);
-              int w = tb.width();
-              int h = tb.height();
-              QRect labelRect(static_cast<int>(cx - w/2) - 6, static_cast<int>(cy - h/2) - 6,
-                              w + 12, h + 12);
-              // Background
-              painter.setPen(Qt::NoPen);
-              painter.setBrush(QColor(0,0,0,120));
-              painter.drawRoundedRect(labelRect, 4, 4);
+                  QFont tf = painter.font();
+                  tf.setPointSizeF(10.0);
+                  tf.setBold(true);
+                  painter.setFont(tf);
+                  QFontMetrics tfm(tf);
+                  QRect tb = tfm.boundingRect(QRect(0,0, 800, 2000), Qt::AlignHCenter|Qt::AlignTop, centerText);
+                  int w = tb.width();
+                  int h = tb.height();
+                  QRect labelRect(static_cast<int>(cx - w/2) - 6, static_cast<int>(cy - h/2) - 6,
+                                  w + 12, h + 12);
+                  // Background
+                  painter.setPen(Qt::NoPen);
+                  painter.setBrush(QColor(0,0,0,120));
+                  painter.drawRoundedRect(labelRect, 4, 4);
 
-              // Text colored by AOI type color
-              QColor aoiColor = aoiDefaultColor(pendingAOIType);
-              painter.setPen(Qt::white);
-              //painter.setPen(aoiColor.darker(110));
-              painter.drawText(labelRect, Qt::AlignCenter, centerText);
+                  // Text colored by AOI type color
+                  QColor aoiColor = aoiDefaultColor(pendingAOIType);
+                  painter.setPen(Qt::white);
+                  painter.drawText(labelRect, Qt::AlignCenter, centerText);
+              }
           }
       }
   }
@@ -1434,7 +1437,7 @@ void EcWidget::paintEvent (QPaintEvent *e)
                   }
               }
 
-              // Live overlay: lat/lon at cursor with adjacent segment distances
+              // Live overlay: lat/lon at cursor with adjacent segment distances (obey showAoiLabels)
               EcCoordinate lat, lon;
               if (XyToLatLon(mp.x(), mp.y(), lat, lon)) {
                   const QString latStr = latLonToDegMin(lat, true);
@@ -1509,18 +1512,20 @@ void EcWidget::paintEvent (QPaintEvent *e)
                       }
                   }
 
-                  // Text styling and background (cursor box)
-                  QFont f = painter.font(); f.setPointSizeF(9.0); painter.setFont(f);
-                  QFontMetrics fm(f); int pad = 4;
-                  QRect br = fm.boundingRect(QRect(0,0,600,2000), Qt::AlignLeft|Qt::AlignTop, overlay);
-                  QRect bg(mp.x() + 12, mp.y() + 12, br.width() + pad*2, br.height() + pad*2);
-                  painter.setPen(Qt::NoPen);
-                  QColor bgCol = darkTheme ? QColor(0,0,0,160) : QColor(255,255,255,210);
-                  QColor fgCol = darkTheme ? QColor(240,240,240) : QColor(30,30,30);
-                  painter.setBrush(bgCol);
-                  painter.drawRoundedRect(bg, 4, 4);
-                  painter.setPen(fgCol);
-                  painter.drawText(bg.adjusted(pad, pad, -pad, -pad), Qt::AlignLeft | Qt::AlignTop, overlay);
+                  if (showAoiLabels) {
+                      // Text styling and background (cursor box)
+                      QFont f = painter.font(); f.setPointSizeF(9.0); painter.setFont(f);
+                      QFontMetrics fm(f); int pad = 4;
+                      QRect br = fm.boundingRect(QRect(0,0,600,2000), Qt::AlignLeft|Qt::AlignTop, overlay);
+                      QRect bg(mp.x() + 12, mp.y() + 12, br.width() + pad*2, br.height() + pad*2);
+                      painter.setPen(Qt::NoPen);
+                      QColor bgCol = darkTheme ? QColor(0,0,0,160) : QColor(255,255,255,210);
+                      QColor fgCol = darkTheme ? QColor(240,240,240) : QColor(30,30,30);
+                      painter.setBrush(bgCol);
+                      painter.drawRoundedRect(bg, 4, 4);
+                      painter.setPen(fgCol);
+                      painter.drawText(bg.adjusted(pad, pad, -pad, -pad), Qt::AlignLeft | Qt::AlignTop, overlay);
+                  }
               }
           }
       }
@@ -1694,6 +1699,20 @@ void EcWidget::setAOIVisibility(int id, bool visible)
     }
 }
 
+void EcWidget::setAOILabelVisibility(int id, bool showLabel)
+{
+    for (auto& a : aoiList) {
+        if (a.id == id) {
+            if (a.showLabel != showLabel) {
+                a.showLabel = showLabel;
+                emit aoiListChanged();
+                saveAOIs();
+            }
+            break;
+        }
+    }
+}
+
 void EcWidget::drawAOIs(QPainter& painter)
 {
     if (aoiList.isEmpty()) return;
@@ -1814,19 +1833,21 @@ void EcWidget::drawAOIs(QPainter& painter)
         // Compose area label without prefix, e.g., "11.68 NM²"
         QString areaLine = QString::fromUtf8("%1 NM²").arg(QString::number(areaNM2, 'f', 2));
 
-        // Draw AOI name centered at centroid (baseline positioning)
-        int nameW = fm.horizontalAdvance(a.name);
-        int nameH = fm.height();
-        QPoint namePos(static_cast<int>(cx) - nameW/2, static_cast<int>(cy));
-        painter.drawText(namePos, a.name);
-        // Draw area centered below the name at centroid (baseline positioning)
-        int areaW = fm.horizontalAdvance(areaLine);
-        int areaH = fm.height();
-        QPoint areaPos(static_cast<int>(cx) - areaW/2, static_cast<int>(cy) + areaH);
-        painter.drawText(areaPos, areaLine);
+        if (showAoiLabels && a.showLabel) {
+            // Draw AOI name centered at centroid (baseline positioning)
+            int nameW = fm.horizontalAdvance(a.name);
+            int nameH = fm.height();
+            QPoint namePos(static_cast<int>(cx) - nameW/2, static_cast<int>(cy));
+            painter.drawText(namePos, a.name);
+            // Draw area centered below the name at centroid (baseline positioning)
+            int areaW = fm.horizontalAdvance(areaLine);
+            int areaH = fm.height();
+            QPoint areaPos(static_cast<int>(cx) - areaW/2, static_cast<int>(cy) + areaH);
+            painter.drawText(areaPos, areaLine);
+        }
 
-        // Draw AOI segment distance labels for all visible AOIs (no toggle, no bearing)
-        {
+        // Draw AOI segment distance labels for all visible AOIs (obey showAoiLabels)
+        if (showAoiLabels && a.showLabel) {
             painter.save();
             QFont distFont("Arial", 9, QFont::Bold);
             painter.setFont(distFont);
@@ -1980,6 +2001,7 @@ bool EcWidget::exportAOIsToFile(const QString& filename)
         obj["name"] = a.name;
         obj["type"] = aoiTypeToString(a.type);
         obj["visible"] = a.visible;
+        obj["showLabel"] = a.showLabel;
         // Save color as hex string #RRGGBB
         obj["color"] = a.color.name(QColor::HexRgb);
 
@@ -2028,6 +2050,7 @@ void EcWidget::saveAOIs()
         obj["name"] = a.name;
         obj["type"] = aoiTypeToString(a.type);
         obj["visible"] = a.visible;
+        obj["showLabel"] = a.showLabel;
         obj["color"] = a.color.name(QColor::HexRgb);
         QJsonArray verts;
         for (const QPointF& p : a.vertices) {
@@ -2091,6 +2114,7 @@ void EcWidget::loadAOIs()
         a.name = o.value("name").toString();
         a.type = aoiTypeFromString(o.value("type").toString());
         a.visible = o.value("visible").toBool(true);
+        a.showLabel = o.contains("showLabel") ? o.value("showLabel").toBool(true) : true;
         QString colorStr = o.value("color").toString();
         QColor c(colorStr); a.color = c.isValid() ? c : aoiDefaultColor(a.type);
         QJsonArray verts = o.value("vertices").toArray();

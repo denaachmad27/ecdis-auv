@@ -16,8 +16,8 @@ AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
     QVBoxLayout* v = new QVBoxLayout(group);
 
     tree = new QTreeWidget(this);
-    tree->setColumnCount(3);
-    tree->setHeaderLabels({"Name", "Type", "Show"});
+    tree->setColumnCount(4);
+    tree->setHeaderLabels({"Name", "Type", "Show", "Label"});
     tree->setRootIsDecorated(false);
     tree->setUniformRowHeights(true);
     // Better spacing: Name stretches, Type/Show sized to contents
@@ -25,8 +25,10 @@ AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
     tree->header()->setSectionResizeMode(0, QHeaderView::Stretch);
     tree->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
     tree->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+    tree->header()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
     tree->setColumnWidth(1, 110);
     tree->setColumnWidth(2, 60);
+    tree->setColumnWidth(3, 60);
     v->addWidget(tree);
 
     // Arrange buttons into 2 columns; add rows as needed (max 3 rows here)
@@ -109,15 +111,18 @@ void AOIPanel::refreshList()
         }
         item->setText(0, name);
         item->setText(1, aoiTypeToString(aoi.type));
-        // Checkbox for show/hide in column 2
+        // Checkbox for show/hide in column 2 and label in column 3
         item->setFlags(item->flags() | Qt::ItemIsUserCheckable | Qt::ItemIsEnabled | Qt::ItemIsSelectable);
         item->setCheckState(2, aoi.visible ? Qt::Checked : Qt::Unchecked);
         item->setText(2, "");
+        item->setCheckState(3, aoi.showLabel ? Qt::Checked : Qt::Unchecked);
+        item->setText(3, "");
         item->setData(0, Qt::UserRole, aoi.id);
         // Colorize by type
         item->setForeground(0, QBrush(listTextColor));
         item->setForeground(1, QBrush(listTextColor));
         item->setForeground(2, QBrush(listTextColor));
+        item->setForeground(3, QBrush(listTextColor));
     }
     updateAttachButtons();
 }
@@ -259,17 +264,23 @@ void AOIPanel::onCreateByClick()
 void AOIPanel::onItemChanged(QTreeWidgetItem* item, int column)
 {
     if (!item || !ecWidget) return;
-    if (column != 2) return; // Only handle checkbox column
     int id = item->data(0, Qt::UserRole).toInt();
-    bool visible = (item->checkState(2) == Qt::Checked);
-    // Ignore no-op changes to avoid redundant signals/refresh
-    bool currentVisible = visible;
     const auto list = ecWidget->getAOIs();
-    for (const auto& a : list) { if (a.id == id) { currentVisible = a.visible; break; } }
-    if (currentVisible == visible) { updateAttachButtons(); return; }
-    // Apply visibility
-    ecWidget->setAOIVisibility(id, visible);
-    ecWidget->update();
+    if (column == 2) {
+        bool visible = (item->checkState(2) == Qt::Checked);
+        bool currentVisible = visible;
+        for (const auto& a : list) { if (a.id == id) { currentVisible = a.visible; break; } }
+        if (currentVisible != visible) ecWidget->setAOIVisibility(id, visible);
+        ecWidget->update();
+    } else if (column == 3) {
+        bool showLabel = (item->checkState(3) == Qt::Checked);
+        bool currentShow = showLabel;
+        for (const auto& a : list) { if (a.id == id) { currentShow = a.showLabel; break; } }
+        if (currentShow != showLabel) ecWidget->setAOILabelVisibility(id, showLabel);
+        ecWidget->update();
+    } else {
+        return;
+    }
     updateAttachButtons();
 }
 

@@ -335,6 +335,7 @@ public:
   void removeAOI(int id);
   void toggleAOIVisibility(int id);
   void setAOIVisibility(int id, bool visible);
+  void setAOILabelVisibility(int id, bool showLabel);
   void drawAOIs(QPainter& painter);
   void startAOICreation(const QString& name, AOIType type);
   void cancelAOICreation();
@@ -1028,8 +1029,10 @@ protected:
   int attachedAoiId = -1;
   // AOI render options
   bool enableAoiSegmentLabels = false; // safety default: off
+  bool showAoiLabels = true;           // master toggle for AOI labels
 public:
   void setEnableAoiSegmentLabels(bool on) { enableAoiSegmentLabels = on; update(); }
+  void setShowAoiLabels(bool on) { showAoiLabels = on; update(); }
   // AOI hover segment label state (hover-only labeling)
   void updateAoiHoverLabel(const QPoint& mousePos);
   int hoverAoiId = -1;
