@@ -582,6 +582,7 @@ void MainWindow::createMenuBar(){
     toggleAllLabels->setChecked(true);
     connect(toggleAllLabels, &QAction::toggled, this, &MainWindow::onToggleAoiLabels);
 
+
     // ========================= EBL/VRM MENU (Dev-only) =========================
     if (AppConfig::isDevelopment()) {
         QMenu *measureMenu = menuBar()->addMenu("&EBL / VRM");
@@ -3030,6 +3031,7 @@ void MainWindow::onToggleAoiLabels(bool checked)
     if (!ecchart) return;
     ecchart->setShowAoiLabels(checked);
 }
+
 
 void MainWindow::onToggleEBL(bool checked)
 {

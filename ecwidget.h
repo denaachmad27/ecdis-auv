@@ -933,10 +933,12 @@ public:
   // Ownship getters for helpers
   inline EcCoordinate getOwnShipLat() const { return ownShip.lat; }
   inline EcCoordinate getOwnShipLon() const { return ownShip.lon; }
+  inline bool isReady() const { return initialized && (view != nullptr); }
   // EBL/VRM
   void setEblEnabled(bool on) { eblvrm.setEblEnabled(on); update(); }
   void setVrmEnabled(bool on) { eblvrm.setVrmEnabled(on); update(); }
   void setEblVrmMeasureMode(bool on) { eblvrm.setMeasureMode(on); update(); }
+  void setShipDotEnabled(bool on) { shipDotEnabled = on; update(); }
 
   // Red Dot Tracker variables
   bool redDotTrackerEnabled;
@@ -944,6 +946,7 @@ public:
   EcCoordinate redDotLat, redDotLon;
   QColor redDotColor;
   double redDotSize;
+  bool shipDotEnabled = false;
 
   // Waypoint
   EcFeature         wp1;
@@ -952,7 +955,9 @@ public:
   virtual void drawWaypointCell ();
 
   // GuardZone
-  void drawGuardZone();
+  void drawGuardZone(QPainter& painter);
+  void updateAttachedGuardZoneFromNavShip();
+  void drawShipDot(QPainter& painter);
   void createCircularGuardZone(EcCoordinate lat, EcCoordinate lon, double radius);
   void createPolygonGuardZone();
   void highlightDangersInGuardZone();

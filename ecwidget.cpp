@@ -1200,7 +1200,7 @@ void EcWidget::paintEvent (QPaintEvent *e)
   }
 
   if (AppConfig::isDevelopment()){
-      drawGuardZone();
+      // drawGuardZone moved to use main painter later in paintEvent
 
       // TEMPORARY: Disabled untuk presentasi - obstacle area menyebukang crash
       // drawObstacleDetectionArea(painter); // Show obstacle detection area (now safe)
@@ -1219,8 +1219,12 @@ void EcWidget::paintEvent (QPaintEvent *e)
 
   // Draw AOIs always on top of chart
   drawAOIs(painter);
+  // Draw GuardZones using the same painter
+  drawGuardZone(painter);
   // Draw EBL/VRM overlays
   eblvrm.draw(this, painter);
+  // Draw ship dot if enabled (debug/utility)
+  drawShipDot(painter);
   // Draw AOI creation preview (including first-point ghost)
   if (creatingAOI && initialized && view) {
       painter.setRenderHint(QPainter::Antialiasing, true);
@@ -3612,12 +3616,16 @@ void EcWidget::startAISConnection()
 
         QString slat = latLonToDegMin(lat, true);
         navShip.slat = slat;
+        updateAttachedGuardZoneFromNavShip();
+        if (shipDotEnabled) update();
     });
     connect(subscriber, &AISSubscriber::navLongReceived, this, [=](double lon) {
         navShip.lon = lon;
 
         QString slon = latLonToDegMin(lon, false);
         navShip.slon = slon;
+        updateAttachedGuardZoneFromNavShip();
+        if (shipDotEnabled) update();
     });
 
 
@@ -3627,6 +3635,7 @@ void EcWidget::startAISConnection()
         if (mainWindow && SettingsManager::instance().data().orientationMode == NorthUp){
             mainWindow->setCompassHeading(hdg);
         }
+        updateAttachedGuardZoneFromNavShip();
     });
     connect(subscriber, &AISSubscriber::navHeadingOGReceived, this, [=](double cog) { navShip.heading_og = cog;});
     connect(subscriber, &AISSubscriber::navSpeedReceived, this, [=](double sog) { navShip.speed_og = sog;});
@@ -4418,7 +4427,7 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon, double head )
 
   // ========== TAMBAHAN UNTUK RED DOT TRACKER ==========
   // Update red dot position if attached to ship
-  if (redDotAttachedToShip && AppConfig::isDevelopment()) {
+  if (redDotAttachedToShip) {
       // PERBAIKAN: Update heading ownship dari data real-time
       double oldHeading = ownShip.heading;
       ownShip.heading = head;
@@ -4436,7 +4445,8 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon, double head )
 
   // PERBAIKAN: Hanya buat guardzone jika belum ada DAN user sudah aktifkan redDotAttachedToShip
   // DAN belum ada guardzone fisik yang ter-render
-  if (attachedGuardZoneId == -1 && lat != 0 && lon != 0 && !qIsNaN(lat) && !qIsNaN(lon) && redDotAttachedToShip && AppConfig::isDevelopment()) {
+  if (attachedGuardZoneId == -1 && lat != 0 && lon != 0 && !qIsNaN(lat) && !qIsNaN(lon)
+      && redDotAttachedToShip && initialized && view && guardZoneManager) {
       // Cek apakah ada guardzone yang attachedToShip dari file yang belum ter-render
       bool hasAttachedFromFile = false;
       int attachedGuardZoneCount = 0;
@@ -4453,10 +4463,12 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon, double head )
       // PERBAIKAN: Hanya buat jika tidak ada guardzone attached yang sudah ada
       if (!hasAttachedFromFile && attachedGuardZoneCount == 0) {
           qDebug() << "[POSITION-UPDATE] Valid ownship position received, creating delayed attached guardzone";
-          createAttachedGuardZone();
-
-          // PERBAIKAN: Emit signal untuk sync UI setelah guardzone dibuat
-          emit attachToShipStateChanged(true);
+          try {
+              createAttachedGuardZone();
+              emit attachToShipStateChanged(true);
+          } catch (...) {
+              qDebug() << "[ATTACH-CREATE] Suppressed exception creating attached guardzone";
+          }
       } else {
           qDebug() << "[POSITION-UPDATE] Skipping creation - attached guardzone already exists (" << attachedGuardZoneCount << " found)";
       }
@@ -7410,22 +7422,14 @@ void EcWidget::checkGuardZone()
     highlightDangersInGuardZone();
 }
 
-void EcWidget::drawGuardZone()
+void EcWidget::drawGuardZone(QPainter& painter)
 {
+    // Safety guards to avoid crashes in early frames
+    if (!initialized || !view) return;
     qDebug() << "[DRAW-GUARDZONE-DEBUG] ========== STARTING DRAW GUARDZONE ==========";
+    QElapsedTimer timer; timer.start();
 
-    // TAMBAHAN: Performance timer
-    QElapsedTimer timer;
-    timer.start();
-
-    qDebug() << "[DRAW-GUARDZONE-DEBUG] Creating QPainter...";
-    QPainter painter(this);
-    if (!painter.isActive()) {
-        qDebug() << "[DRAW-GUARDZONE-ERROR] QPainter is not active - aborting";
-        return;
-    }
-    qDebug() << "[DRAW-GUARDZONE-DEBUG] QPainter created successfully";
-
+    if (!painter.isActive()) return;
     painter.setRenderHint(QPainter::Antialiasing, true);
     qDebug() << "[DRAW-GUARDZONE-DEBUG] Antialiasing set";
 
@@ -7453,7 +7457,9 @@ void EcWidget::drawGuardZone()
 
     qDebug() << "[DRAW-GUARDZONE-DEBUG] === STARTING GUARDZONE ITERATION ===";
 
-    for (const GuardZone &gz : guardZones) {
+    // Copy to avoid concurrent modification during draw
+    const QList<GuardZone> gzCopy = guardZones;
+    for (const GuardZone &gz : gzCopy) {
         qDebug() << "[DRAW-GUARDZONE-DEBUG] ===== PROCESSING GUARDZONE" << gz.id << "=====";
         qDebug() << "[DRAW-GUARDZONE-DEBUG] - Name:" << gz.name;
         qDebug() << "[DRAW-GUARDZONE-DEBUG] - Active:" << gz.active;
@@ -7502,8 +7508,14 @@ void EcWidget::drawGuardZone()
 
             if (gz.attachedToShip) {
                 qDebug() << "[DRAW-GUARDZONE-DEBUG] Processing attached guardzone" << gz.id;
-                // PERBAIKAN: Untuk attached guardzone, gunakan redDot position yang current
-                if (redDotTrackerEnabled && redDotLat != 0.0 && redDotLon != 0.0) {
+                // Prefer NAV ship position if available (live from MOOS/AIS)
+                if (navShip.lat != 0.0 && navShip.lon != 0.0) {
+                    lat = navShip.lat;
+                    lon = navShip.lon;
+                    qDebug() << "[DRAW-GUARDZONE] Using navShip position for attached guardzone";
+                }
+                // Else use redDot tracker if enabled
+                else if (redDotTrackerEnabled && redDotLat != 0.0 && redDotLon != 0.0) {
                     lat = redDotLat;
                     lon = redDotLon;
                     qDebug() << "[DRAW-GUARDZONE] Using current redDot position for attached guardzone";
@@ -10426,8 +10438,10 @@ void EcWidget::setRedDotAttachedToShip(bool attached)
 
         qDebug() << "Ship Guardian activated with obstacle detection";
 
-        // Try to get current ownship position
-        if (ownShip.lat != 0.0 && ownShip.lon != 0.0) {
+        // Try to get current ship position (prefer navShip)
+        if ((navShip.lat != 0.0 && navShip.lon != 0.0)) {
+            updateRedDotPosition(navShip.lat, navShip.lon);
+        } else if (ownShip.lat != 0.0 && ownShip.lon != 0.0) {
             updateRedDotPosition(ownShip.lat, ownShip.lon);
         }
 
@@ -11632,8 +11646,8 @@ void EcWidget::createAttachedGuardZone()
 
     // Set posisi dan radius (menggunakan nilai red dot yang sudah ada)
     // PERBAIKAN: Use robust coordinate fallback system
-    double useLat = ownShip.lat;
-    double useLon = ownShip.lon;
+    double useLat = (navShip.lat != 0.0 ? navShip.lat : ownShip.lat);
+    double useLon = (navShip.lon != 0.0 ? navShip.lon : ownShip.lon);
 
     qDebug() << "[CREATE-ATTACHED-DEBUG] === CREATING ATTACHED GUARDZONE ===";
     qDebug() << "[CREATE-ATTACHED-DEBUG] OwnShip position:" << useLat << "," << useLon;
@@ -12091,10 +12105,15 @@ void EcWidget::checkPickReportObstaclesInShipGuardian()
     double centerLat = attachedGuardZone->centerLat;
     double centerLon = attachedGuardZone->centerLon;
 
-    // For attach to ship, center should follow ship position
+    // For attach to ship, center should follow ship position (prefer navShip if available)
     if (attachedGuardZone->attachedToShip) {
-        centerLat = ownShip.lat;
-        centerLon = ownShip.lon;
+        if (navShip.lat != 0.0 && navShip.lon != 0.0) {
+            centerLat = navShip.lat;
+            centerLon = navShip.lon;
+        } else {
+            centerLat = ownShip.lat;
+            centerLon = ownShip.lon;
+        }
     }
 
     // Check center (guardzone center)
@@ -13025,8 +13044,12 @@ void EcWidget::performAutoGuardZoneCheck()
                 double centerLat, centerLon;
 
                 if (activeGuardZone->attachedToShip) {
-                    // Gunakan redDot position jika available (current), fallback ke ownShip
-                    if (redDotTrackerEnabled && redDotLat != 0.0 && redDotLon != 0.0) {
+                    // Prefer navShip live position, then redDot, then ownShip
+                    if (navShip.lat != 0.0 && navShip.lon != 0.0) {
+                        centerLat = navShip.lat;
+                        centerLon = navShip.lon;
+                        qDebug() << "[AUTO-CHECK] Using navShip position for attached guardzone" << activeGuardZone->id;
+                    } else if (redDotTrackerEnabled && redDotLat != 0.0 && redDotLon != 0.0) {
                         centerLat = redDotLat;
                         centerLon = redDotLon;
                         qDebug() << "[AUTO-CHECK] Using current redDot position for attached guardzone" << activeGuardZone->id;
@@ -15301,4 +15324,49 @@ void EcWidget::updateAoiHoverLabel(const QPoint& mousePos)
     hoverAoiLabelScreenPos = QPoint(bestMid.x(), bestMid.y() - 4);
     hoverAoiLabelText = QString::number(distNM, 'f', 2) + " NM";
     update();
+}
+
+void EcWidget::drawShipDot(QPainter& painter)
+{
+    if (!shipDotEnabled) return;
+    // Prefer navShip live position
+    double lat = 0.0, lon = 0.0;
+    if (navShip.lat != 0.0 && navShip.lon != 0.0) { lat = navShip.lat; lon = navShip.lon; }
+    else if (ownShip.lat != 0.0 && ownShip.lon != 0.0) { lat = ownShip.lat; lon = ownShip.lon; }
+    else return;
+
+    int x=0, y=0; if (!LatLonToXy(lat, lon, x, y)) return;
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    QPen pen(Qt::black); pen.setWidth(2);
+    painter.setPen(pen);
+    painter.setBrush(QColor(255,0,0));
+    int r = 6;
+    painter.drawEllipse(QPoint(x,y), r, r);
+    painter.restore();
+}
+
+void EcWidget::updateAttachedGuardZoneFromNavShip()
+{
+    if (!(navShip.lat != 0.0 && navShip.lon != 0.0)) return;
+    bool changed = false;
+    for (auto &gz : guardZones) {
+        if (gz.attachedToShip) {
+            gz.centerLat = navShip.lat;
+            gz.centerLon = navShip.lon;
+            double currentHeading = navShip.heading;
+            if (qIsNaN(currentHeading) || qIsInf(currentHeading)) {
+                currentHeading = ownShip.heading;
+            }
+            if (!qIsNaN(currentHeading) && !qIsInf(currentHeading)) {
+                gz.startAngle = fmod(currentHeading + 90.0, 360.0);
+                gz.endAngle   = fmod(currentHeading + 270.0, 360.0);
+            }
+            changed = true;
+        }
+    }
+    if (changed) {
+        emit guardZoneModified();
+        update();
+    }
 }
