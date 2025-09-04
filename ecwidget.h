@@ -792,6 +792,7 @@ public:
 
   // DISPLAY CATEGORY
   void setDisplayCategoryInternal(int category);
+  int getDisplayCategory();
 
   // WP CLICK
   void waypointRightClick(QMouseEvent *e);
