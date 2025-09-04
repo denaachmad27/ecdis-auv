@@ -582,6 +582,23 @@ void MainWindow::createMenuBar(){
     toggleAllLabels->setChecked(true);
     connect(toggleAllLabels, &QAction::toggled, this, &MainWindow::onToggleAoiLabels);
 
+    // ========================= EBL/VRM MENU (Dev-only) =========================
+    if (AppConfig::isDevelopment()) {
+        QMenu *measureMenu = menuBar()->addMenu("&EBL / VRM");
+        QAction* actEBL = measureMenu->addAction("Electronic Bearing Line (EBL)");
+        actEBL->setCheckable(true);
+        actEBL->setChecked(false);
+        connect(actEBL, &QAction::toggled, this, &MainWindow::onToggleEBL);
+
+        QAction* actVRM = measureMenu->addAction("Variable Range Marker (VRM)");
+        actVRM->setCheckable(true);
+        actVRM->setChecked(false);
+        connect(actVRM, &QAction::toggled, this, &MainWindow::onToggleVRM);
+
+        QAction* actMeasure = measureMenu->addAction("Start Measure From Ownship");
+        connect(actMeasure, &QAction::triggered, this, &MainWindow::onStartMeasure);
+    }
+
     // ================================== MOOSDB MENU
     QMenu *moosMenu = menuBar()->addMenu("&Connection");
 
@@ -3012,6 +3029,25 @@ void MainWindow::onToggleAoiLabels(bool checked)
 {
     if (!ecchart) return;
     ecchart->setShowAoiLabels(checked);
+}
+
+void MainWindow::onToggleEBL(bool checked)
+{
+    if (!ecchart) return;
+    ecchart->setEblEnabled(checked);
+}
+
+void MainWindow::onToggleVRM(bool checked)
+{
+    if (!ecchart) return;
+    ecchart->setVrmEnabled(checked);
+}
+
+void MainWindow::onStartMeasure()
+{
+    if (!ecchart) return;
+    ecchart->setEblVrmMeasureMode(true);
+    statusBar()->showMessage(tr("Measure mode: move cursor to set EBL/VRM from ownship. Click menu again to disable via toggles."), 4000);
 }
 
 

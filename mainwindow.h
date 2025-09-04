@@ -201,6 +201,10 @@ protected slots:
     void onCreateAOIByClick();
   void onOpenAOIPanel();
   void onToggleAoiLabels(bool checked);
+  // EBL/VRM
+  void onToggleEBL(bool checked);
+  void onToggleVRM(bool checked);
+  void onStartMeasure();
 
     // Route Panel slots
     void onRouteSelected(int routeId);

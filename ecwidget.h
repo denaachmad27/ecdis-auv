@@ -131,6 +131,7 @@ class GuardZoneManager; // Forward declaration
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QElapsedTimer>
+#include "eblvrm.h"
 
 // forward declerations1
 class PickWindow;
@@ -928,6 +929,14 @@ protected:
   FILE          *errlog;
 
   OwnShipStruct ownShip;
+public:
+  // Ownship getters for helpers
+  inline EcCoordinate getOwnShipLat() const { return ownShip.lat; }
+  inline EcCoordinate getOwnShipLon() const { return ownShip.lon; }
+  // EBL/VRM
+  void setEblEnabled(bool on) { eblvrm.setEblEnabled(on); update(); }
+  void setVrmEnabled(bool on) { eblvrm.setVrmEnabled(on); update(); }
+  void setEblVrmMeasureMode(bool on) { eblvrm.setMeasureMode(on); update(); }
 
   // Red Dot Tracker variables
   bool redDotTrackerEnabled;
@@ -977,6 +986,9 @@ protected:
   // PICKWINDOW
 	PickWindow *pickWindow;
 	int         pickX, pickY;
+
+  // EBL/VRM manager
+  EblVrm eblvrm;
 
   // PROJECTION MODE AND TYPE 
   ProjectionMode   projectionMode;

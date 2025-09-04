@@ -70,6 +70,7 @@ HEADERS += mainwindow.h ecwidget.h pickwindow.h ais.h \
     aoi.h \
     aoipanel.h \
     routequickformdialog.h \
+    eblvrm.h \
 
 SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     AISSubscriber.cpp \
@@ -102,6 +103,7 @@ SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     routeformdialog.cpp \
     aoipanel.cpp \
     routequickformdialog.cpp \
+    eblvrm.cpp \
 
 RESOURCES += \
     resources.qrc

@@ -1219,6 +1219,8 @@ void EcWidget::paintEvent (QPaintEvent *e)
 
   // Draw AOIs always on top of chart
   drawAOIs(painter);
+  // Draw EBL/VRM overlays
+  eblvrm.draw(this, painter);
   // Draw AOI creation preview (including first-point ghost)
   if (creatingAOI && initialized && view) {
       painter.setRenderHint(QPainter::Antialiasing, true);
@@ -2326,6 +2328,13 @@ void EcWidget::resizeEvent (QResizeEvent *event)
 // Mouseevent lama
 void EcWidget::mousePressEvent(QMouseEvent *e)
 {
+    // Stop EBL/VRM measure on right-click
+    if (eblvrm.measureMode && e->button() == Qt::RightButton) {
+        eblvrm.setMeasureMode(false);
+        emit statusMessage(tr("Measure stopped"));
+        update();
+        // do not consume; allow other handlers if needed
+    }
   setFocus();
 
   if (e->button() == Qt::LeftButton)
@@ -2952,6 +2961,12 @@ void EcWidget::mouseMoveEvent(QMouseEvent *e)
     // Update AOI hover segment label state
     if (enableAoiSegmentLabels) {
         updateAoiHoverLabel(e->pos());
+    }
+
+    // EBL/VRM live measure from ownship
+    if (eblvrm.measureMode) {
+        eblvrm.onMouseMove(this, e->x(), e->y());
+        update();
     }
 }
 
@@ -8785,6 +8800,13 @@ void EcWidget::keyPressEvent(QKeyEvent *e)
 {
     // AOI edit/create ESC handling first
     if (e->key() == Qt::Key_Escape) {
+        // Stop EBL/VRM measure mode on ESC
+        if (eblvrm.measureMode) {
+            eblvrm.setMeasureMode(false);
+            emit statusMessage(tr("Measure stopped"));
+            update();
+            return;
+        }
         if (editingAOI) {
             finishEditAOI();
             return;
