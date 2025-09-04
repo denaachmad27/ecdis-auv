@@ -1635,6 +1635,10 @@ void EcWidget::setDisplayCategoryInternal(int category){
     displayCategory = category;
 }
 
+int EcWidget::getDisplayCategory(){
+    return displayCategory;
+}
+
 // Format latitude/longitude in degrees-minutes with hemisphere, e.g. 07° 12.345' S
 QString EcWidget::latLonToDegMin(double value, bool isLatitude)
 {
@@ -2856,33 +2860,33 @@ void EcWidget::mouseMoveEvent(QMouseEvent *e)
     // Cek apakah mouse masih di atas AIS target yang sama
     EcAISTargetInfo* targetInfo = findAISTargetInfoAtPosition(lastMousePos);
 
-        if (targetInfo) {
-            // Mouse di atas AIS target
-            if (!isAISTooltipVisible) {
-                // Start timer untuk delay tooltip
-                aisTooltipTimer->start();
-            } else {
-                // Update posisi tooltip jika sudah visible
-                QPoint tooltipPos = mapToGlobal(lastMousePos);
-                tooltipPos.setX(tooltipPos.x() + 10);
-                tooltipPos.setY(tooltipPos.y() + 10);
-                if (aisTooltip) {
-                    aisTooltip->move(tooltipPos);
-                }
-            }
+    if (targetInfo && displayCategory != EC_DISPLAYBASE) {
+        // Mouse di atas AIS target
+        if (!isAISTooltipVisible) {
+            // Start timer untuk delay tooltip
+            aisTooltipTimer->start();
         } else {
-            // Mouse tidak di atas AIS target
-            aisTooltipTimer->stop();
-            if (isAISTooltipVisible) {
-                hideAISTooltip();
-                isAISTooltipVisible = false;
+            // Update posisi tooltip jika sudah visible
+            QPoint tooltipPos = mapToGlobal(lastMousePos);
+            tooltipPos.setX(tooltipPos.x() + 10);
+            tooltipPos.setY(tooltipPos.y() + 10);
+            if (aisTooltip) {
+                aisTooltip->move(tooltipPos);
             }
         }
-
-        // Panggil handling yang sudah ada
-        if (guardZoneManager && guardZoneManager->handleMouseMove(e)) {
-            return;
+    } else {
+        // Mouse tidak di atas AIS target
+        aisTooltipTimer->stop();
+        if (isAISTooltipVisible) {
+            hideAISTooltip();
+            isAISTooltipVisible = false;
         }
+    }
+
+    // Panggil handling yang sudah ada
+    if (guardZoneManager && guardZoneManager->handleMouseMove(e)) {
+        return;
+    }
 
     // Handle edit guardzone via manager first
     if (guardZoneManager && guardZoneManager->isEditingGuardZone()) {

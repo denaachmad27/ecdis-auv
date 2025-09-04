@@ -1814,7 +1814,7 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
     EcAISTargetInfo* target = ecchart->findAISTargetInfoAtPosition(pos);
     QList<EcFeature> pickedFeatureList;
 
-    if (target) {
+    if (target && ecchart->getDisplayCategory() != EC_DISPLAYBASE) {
         QString mmsiStr = QString::number(target->mmsi);
         AISTargetData ais;
 
