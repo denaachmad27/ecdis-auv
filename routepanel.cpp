@@ -751,6 +751,8 @@ void RoutePanel::setupConnections()
         onToggleWaypointActive(); // Reuse button functionality
     });
     connect(deleteWaypointAction, &QAction::triggered, this, &RoutePanel::onDeleteWaypointFromContext);
+
+    connect(ecWidget, &EcWidget::updateEta, this, &RoutePanel::refreshRouteEta);
 }
 
 // Public wrappers for main menu actions (avoid private slot access issue)
@@ -867,6 +869,22 @@ void RoutePanel::refreshRouteList()
     updateButtonStates();
 }
 
+void RoutePanel::refreshRouteEta()
+{
+    if (!ecWidget) return;
+
+    // Preserve current selection
+    int previouslySelectedRouteId = selectedRouteId;
+
+    // Restore selection and update info display
+    if (previouslySelectedRouteId > 0) {
+        selectedRouteId = previouslySelectedRouteId;
+        RouteInfo info = calculateRouteInfo(selectedRouteId);
+        updateRouteInfoDisplay(info);
+    }
+}
+
+
 RouteInfo RoutePanel::calculateRouteInfo(int routeId)
 {
     RouteInfo info;
@@ -928,7 +946,12 @@ RouteInfo RoutePanel::calculateRouteInfo(int routeId)
         }
         
         info.totalDistance = totalDistance;
-        info.totalTime = totalDistance / 10.0; // Assume 10 knots speed
+        if (ecWidget->getSpeedAverage() != 0){
+            info.totalTime = totalDistance / ecWidget->getSpeedAverage();
+        }
+        else {
+            info.totalTime = 0;
+        }
     }
 
     return info;

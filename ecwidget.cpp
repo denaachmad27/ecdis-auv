@@ -3634,6 +3634,7 @@ void EcWidget::startAISConnection()
 
 
     connect(subscriber, &AISSubscriber::navDepthReceived, this, [=](double depth) { navShip.depth = depth;});
+
     connect(subscriber, &AISSubscriber::navHeadingReceived, this, [=](double hdg) {
         navShip.heading = hdg;
         if (mainWindow && SettingsManager::instance().data().orientationMode == NorthUp){
@@ -3641,8 +3642,16 @@ void EcWidget::startAISConnection()
         }
         updateAttachedGuardZoneFromNavShip();
     });
+
     connect(subscriber, &AISSubscriber::navHeadingOGReceived, this, [=](double cog) { navShip.heading_og = cog;});
-    connect(subscriber, &AISSubscriber::navSpeedReceived, this, [=](double sog) { navShip.speed_og = sog;});
+
+    connect(subscriber, &AISSubscriber::navSpeedOGReceived, this, [=](double sog) {
+        navShip.speed_og = sog;
+        QDateTime now = QDateTime::currentDateTime();
+        speedBuffer.append(qMakePair(now, sog));
+    });
+
+    connect(subscriber, &AISSubscriber::navSpeedReceived, this, [=](double spe) { navShip.speed = spe;});
     connect(subscriber, &AISSubscriber::navYawReceived, this, [=](double yaw) { navShip.yaw = yaw;});
     connect(subscriber, &AISSubscriber::navZReceived, this, [=](double z) { navShip.z = z;});
     connect(subscriber, &AISSubscriber::navStwReceived, this, [=](double stw) { navShip.stw = stw;});
@@ -3690,6 +3699,7 @@ void EcWidget::startAISConnection()
         }
     });
 
+    /*
     // DRAW TIMER START
     timer.setInterval(1000);
     timer.setSingleShot(true);
@@ -3713,6 +3723,44 @@ void EcWidget::startAISConnection()
         publishPerTime();
         canPublish = true; // setelah 1 detik boleh dipanggil lagi
     });
+    */
+
+    // FOR ALL FUNCTION START
+    allTimer.setInterval(1000);
+    allTimer.setSingleShot(true);
+
+    // DRAW TIMER START
+    connect(subscriber, &AISSubscriber::startDrawTimer, this, [this]() {
+        qDebug() << "TIMER STARTED!";
+        allTimer.start();
+    });
+
+    connect(&allTimer, &QTimer::timeout, this, [=](){
+        allFunctionPerTime();
+        canWork = true;
+    });
+
+    // SPEED AVERAGE TIMER
+    slidingAvgTimer.setInterval(1000); // update rata-rata tiap 5 detik
+    connect(&slidingAvgTimer, &QTimer::timeout, this, [=]() {
+        QDateTime cutoff = QDateTime::currentDateTime().addSecs(-60);
+
+        // Buang data yang lebih tua dari 1 menit
+        while (!speedBuffer.isEmpty() && speedBuffer.first().first < cutoff) {
+            speedBuffer.removeFirst();
+        }
+
+        // Hitung rata-rata dari sisa buffer
+        if (!speedBuffer.isEmpty()) {
+            double sum = 0;
+            for (auto &p : speedBuffer) sum += p.second;
+            avgSpeed1Min = sum / speedBuffer.size();
+            qDebug() << "Sliding avg speed (1 menit):" << avgSpeed1Min;
+        } else {
+            avgSpeed1Min = 0.0;
+        }
+    });
+    slidingAvgTimer.start();
 
     connect(subscriber, &AISSubscriber::errorOccurred, this, [](const QString &msg) { qWarning() << "Error:" << msg; });
     connect(subscriber, &AISSubscriber::disconnected, this, []() { qDebug() << "Disconnected from AIS source.";});
@@ -3815,7 +3863,7 @@ void EcWidget::processData(double lat, double lon, double cog, double sog, doubl
 
     // PUBLISH NAV INFO
     //publishNavInfo(lat, lon);
-    publishPerTime();
+    //publishPerTime();
 
     // INSERT TO DATABASE
     // PLEASE WAIT!!
@@ -3884,6 +3932,71 @@ void EcWidget::publishPerTime(){
     canPublish = false;
     timerPublish.start(); // mulai countdown 1 detik
 }
+
+void EcWidget::drawPerTime(){
+    if (!canRun) { return;}
+    if (subscriber){
+        if (!subscriber->hasData()){
+            qWarning() << "Automatic Drawing Stopped";
+            return;
+        }
+    }
+    else {
+        qCritical() << "Automatic Drawing Stopped";
+        return;
+    }
+
+    qWarning() << "Automatic Drawing (per second)";
+    draw(true);
+    slotUpdateAISTargets(true);
+
+    canRun = false;
+    timer.start(); // mulai countdown 1 detik
+
+}
+
+void EcWidget::allFunctionPerTime(){
+    if (!canWork) { return;}
+    if (subscriber){
+        if (subscriber->hasData()){
+            // DRAW PER TIME
+            qDebug() << "[DRAW] Autorun...";
+            draw(true);
+            slotUpdateAISTargets(true);
+
+            // PUBLISH PER TIME
+            if (navShip.lat != 0 && navShip.lon != 0){
+                qDebug() << "[PUBLISH] Autorun";
+                publishNavInfo(navShip.lat, navShip.lon);
+            }
+            else {
+                qWarning() << "[PUBLISH] Stopped: No LAT LON";
+            }
+
+            // UPDATE ETA
+            emit updateEta();
+
+            // start countdown
+            canWork = false;
+            allTimer.start();
+        }
+        else {
+            qWarning() << "[PUBLISH] Stopped";
+            qWarning() << "[DRAW] Stopped";
+            return;
+        }
+    }
+    else {
+        qCritical() << "[PUBLISH] Stopped";
+        qCritical() << "[DRAW] Stopped";
+        return;
+    }
+}
+
+double EcWidget::getSpeedAverage(){
+    return avgSpeed1Min;
+}
+
 
 void EcWidget::processDataQuickFix(double lat, double lon, double cog, double sog, double hdg, double spd, double dep, double yaw, double z){
     QString nmea = AIVDOEncoder::encodeAIVDO1(lat, lon, cog, sog/10, hdg, 0, 1);
@@ -4584,28 +4697,6 @@ void EcWidget::slotRefreshChartDisplayThread(double lat, double lon, double head
         //drawPerTime();
         //slotUpdateAISTargets(true);
     }
-}
-
-void EcWidget::drawPerTime(){
-    if (!canRun) { return;}
-    if (subscriber){
-        if (!subscriber->hasData()){
-            qWarning() << "Automatic Drawing Stopped";
-            return;
-        }
-    }
-    else {
-        qCritical() << "Automatic Drawing Stopped";
-        return;
-    }
-
-    qWarning() << "Automatic Drawing (per second)";
-    draw(true);
-    slotUpdateAISTargets(true);
-
-    canRun = false;
-    timer.start(); // mulai countdown 1 detik
-
 }
 
 void EcWidget::slotRefreshCenter( double lat, double lon )

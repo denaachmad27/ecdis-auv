@@ -806,6 +806,13 @@ public:
   QAction* pickInfoAction;
   QAction* warningInfoAction;
 
+  // SPEED AVG
+  QVector<QPair<QDateTime, double>> speedBuffer;
+  double avgSpeed1Min = 0.0;
+  QTimer slidingAvgTimer;
+
+  double getSpeedAverage();
+
 public slots:
   void updateAISTargetsList();
   void addOrUpdateAISTarget(const AISTargetData& target);
@@ -878,6 +885,9 @@ signals:
 
   // CONNECTION STATUS
   void aisSubCreated(AISSubscriber *subscriber);
+
+  // ROUTE
+  void updateEta();
 
 private slots:
   void slotUpdateAISTargets( Bool bSymbolize );
@@ -1374,6 +1384,11 @@ private:
   bool canPublish = true;
   QTimer timerPublish;
 
+  // ALL TIME
+  void allFunctionPerTime();
+  bool canWork = true;
+  QTimer allTimer;
+
   // RIGHT CLICK ICON
   QAction* editAction;
   QAction* moveAction;
@@ -1382,7 +1397,6 @@ private:
   QAction* publishAction;
 
   QAction* insertWaypointAction;
-
 }; // EcWidget
 
 #endif // _ec_widget_h_

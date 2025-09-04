@@ -76,6 +76,7 @@ public:
     ~RoutePanel();
 
     void refreshRouteList();
+    void refreshRouteEta();
     void updateRouteInfo(int routeId);
     void setAttachDetachButton(bool connection);
 
