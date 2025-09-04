@@ -7426,65 +7426,37 @@ void EcWidget::drawGuardZone(QPainter& painter)
 {
     // Safety guards to avoid crashes in early frames
     if (!initialized || !view) return;
-    qDebug() << "[DRAW-GUARDZONE-DEBUG] ========== STARTING DRAW GUARDZONE ==========";
     QElapsedTimer timer; timer.start();
 
     if (!painter.isActive()) return;
     painter.setRenderHint(QPainter::Antialiasing, true);
-    qDebug() << "[DRAW-GUARDZONE-DEBUG] Antialiasing set";
-
-    // TAMBAHAN: Early exit jika tidak ada guardzone
-    qDebug() << "[DRAW-GUARDZONE-DEBUG] Checking guardZones list, size:" << guardZones.size();
+    // Early exit jika tidak ada guardzone
     if (guardZones.isEmpty()) {
-        qDebug() << "[DRAW-GUARDZONE-DEBUG] No guardzones to draw";
-        if (creatingGuardZone) {
-            qDebug() << "[DRAW-GUARDZONE-DEBUG] Drawing creation preview...";
-            // Tetap gambar preview creation
-            drawGuardZoneCreationPreview(painter);
-        }
-        qDebug() << "[DRAW-GUARDZONE-DEBUG] Early return - no guardzones";
+        if (creatingGuardZone) drawGuardZoneCreationPreview(painter);
         return;
     }
-    qDebug() << "[DRAW-GUARDZONE-DEBUG] Found" << guardZones.size() << "guardzones to process";
-
-    int drawnCount = 0;
-    int skippedCount = 0;
-
-    // TAMBAHAN: Viewport culling untuk performance
-    qDebug() << "[DRAW-GUARDZONE-DEBUG] Getting viewport rect...";
+    int drawnCount = 0; int skippedCount = 0;
+    // Viewport culling untuk performance
     QRect viewport = rect();
-    qDebug() << "[DRAW-GUARDZONE-DEBUG] Viewport rect:" << viewport;
-
-    qDebug() << "[DRAW-GUARDZONE-DEBUG] === STARTING GUARDZONE ITERATION ===";
+    // Precompute pixels-per-NM once per frame for efficiency
+    double pixelsPerNMFactor = calculatePixelsFromNauticalMiles(1.0);
+    if (qIsNaN(pixelsPerNMFactor) || qIsInf(pixelsPerNMFactor) || pixelsPerNMFactor <= 0.0) {
+        pixelsPerNMFactor = 100.0;
+    }
 
     // Copy to avoid concurrent modification during draw
     const QList<GuardZone> gzCopy = guardZones;
     for (const GuardZone &gz : gzCopy) {
-        qDebug() << "[DRAW-GUARDZONE-DEBUG] ===== PROCESSING GUARDZONE" << gz.id << "=====";
-        qDebug() << "[DRAW-GUARDZONE-DEBUG] - Name:" << gz.name;
-        qDebug() << "[DRAW-GUARDZONE-DEBUG] - Active:" << gz.active;
-        qDebug() << "[DRAW-GUARDZONE-DEBUG] - AttachedToShip:" << gz.attachedToShip;
-        qDebug() << "[DRAW-GUARDZONE-DEBUG] - Shape:" << gz.shape;
-        qDebug() << "[DRAW-GUARDZONE-DEBUG] - Color:" << gz.color;
-        if (gz.shape == GUARD_ZONE_CIRCLE) {
-            qDebug() << "[DRAW-GUARDZONE-DEBUG] - Circle center:" << gz.centerLat << "," << gz.centerLon;
-            qDebug() << "[DRAW-GUARDZONE-DEBUG] - Circle radius:" << gz.radius;
-        }
-
         if (!gz.active && !creatingGuardZone) {
-            qDebug() << "[DRAW-DEBUG] Skipping inactive guardzone" << gz.id;
             skippedCount++;
             continue;
         }
 
         // TAMBAHAN: Viewport culling check - SKIP untuk attached guardzone
         if (!gz.attachedToShip && !isGuardZoneInViewport(gz, viewport)) {
-            qDebug() << "[DRAW-DEBUG] Skipping guardzone" << gz.id << "- outside viewport";
             skippedCount++;
             continue;
         }
-
-        qDebug() << "[DRAW-DEBUG] Drawing guardzone" << gz.id;
 
         bool isBeingEdited = (guardZoneManager && guardZoneManager->isEditingGuardZone() &&
                               gz.id == guardZoneManager->getEditingGuardZoneId());
@@ -7505,66 +7477,27 @@ void EcWidget::drawGuardZone(QPainter& painter)
         if (gz.shape == GUARD_ZONE_CIRCLE) {
             double lat = gz.centerLat;
             double lon = gz.centerLon;
-
+            // For attached guardzone, override with live ship position (no lag)
             if (gz.attachedToShip) {
-                qDebug() << "[DRAW-GUARDZONE-DEBUG] Processing attached guardzone" << gz.id;
-                // Prefer NAV ship position if available (live from MOOS/AIS)
-                if (navShip.lat != 0.0 && navShip.lon != 0.0) {
-                    lat = navShip.lat;
-                    lon = navShip.lon;
-                    qDebug() << "[DRAW-GUARDZONE] Using navShip position for attached guardzone";
-                }
-                // Else use redDot tracker if enabled
-                else if (redDotTrackerEnabled && redDotLat != 0.0 && redDotLon != 0.0) {
-                    lat = redDotLat;
-                    lon = redDotLon;
-                    qDebug() << "[DRAW-GUARDZONE] Using current redDot position for attached guardzone";
-                } else {
-                    lat = ownShip.lat;
-                    lon = ownShip.lon;
-                    qDebug() << "[DRAW-GUARDZONE] Using ownShip position for attached guardzone";
-                }
-
-                // PERBAIKAN: Pastikan posisi valid untuk attached guardzone
-                if (qIsNaN(lat) || qIsNaN(lon) || (lat == 0.0 && lon == 0.0)) {
-                    lat = gz.centerLat;  // Fallback ke stored position
-                    lon = gz.centerLon;
-                    qDebug() << "[DRAW-GUARDZONE] Using stored position instead of invalid position";
-                }
-
-                qDebug() << "[DRAW-GUARDZONE] Drawing attached guardzone" << gz.id
-                         << "at position:" << lat << "," << lon
-                         << "radius:" << gz.radius << "NM";
+                if (navShip.lat != 0.0 && navShip.lon != 0.0) { lat = navShip.lat; lon = navShip.lon; }
+                else if (redDotTrackerEnabled && redDotLat != 0.0 && redDotLon != 0.0) { lat = redDotLat; lon = redDotLon; }
+                else if (ownShip.lat != 0.0 && ownShip.lon != 0.0) { lat = ownShip.lat; lon = ownShip.lon; }
+                if (qIsNaN(lat) || qIsNaN(lon) || (lat == 0.0 && lon == 0.0)) { lat = gz.centerLat; lon = gz.centerLon; }
             }
-
-            qDebug() << "[DRAW-GUARDZONE-DEBUG] Converting coordinates lat:" << lat << "lon:" << lon;
             int centerX, centerY;
-            // PERBAIKAN CRITICAL: Enhanced coordinate validation untuk fullscreen
             bool conversionResult = LatLonToXy(lat, lon, centerX, centerY);
-            qDebug() << "[DRAW-GUARDZONE-DEBUG] Coordinate conversion result:" << conversionResult;
             if (conversionResult) {
-                qDebug() << "[DRAW-GUARDZONE-DEBUG] Screen coordinates: centerX=" << centerX << "centerY=" << centerY;
-                // CRITICAL: Validate converted coordinates untuk fullscreen safety
                 if (abs(centerX) > 20000 || abs(centerY) > 20000) {
-                    qDebug() << "[DRAW-GUARDZONE-ERROR] Invalid screen coordinates for guardzone" << gz.id
-                             << ":" << centerX << "," << centerY << "- skipping";
                     skippedCount++;
                     continue;
                 }
-
-                qDebug() << "[DRAW-GUARDZONE-DEBUG] Calculating radius in pixels...";
-                // PERBAIKAN: Untuk CIRCLE gunakan gz.radius, bukan outerRadius
                 double circleRadiusNM = (gz.shape == GUARD_ZONE_CIRCLE) ? gz.radius : gz.outerRadius;
                 double innerRadiusNM = (gz.shape == GUARD_ZONE_CIRCLE) ? 0.0 : gz.innerRadius; // Circle = solid
-                qDebug() << "[DRAW-GUARDZONE-DEBUG] circleRadius NM:" << circleRadiusNM << "innerRadius NM:" << innerRadiusNM;
-                double outerRadiusInPixels = calculatePixelsFromNauticalMiles(circleRadiusNM);
-                double innerRadiusInPixels = calculatePixelsFromNauticalMiles(innerRadiusNM);
-                qDebug() << "[DRAW-GUARDZONE-DEBUG] outerRadius pixels:" << outerRadiusInPixels << "innerRadius pixels:" << innerRadiusInPixels;
+                double outerRadiusInPixels = pixelsPerNMFactor * circleRadiusNM;
+                double innerRadiusInPixels = pixelsPerNMFactor * innerRadiusNM;
 
-                // PERBAIKAN CRITICAL: Validate radius calculations
                 if (qIsNaN(outerRadiusInPixels) || qIsInf(outerRadiusInPixels) ||
                     qIsNaN(innerRadiusInPixels) || qIsInf(innerRadiusInPixels)) {
-                    qDebug() << "[DRAW-GUARDZONE-ERROR] Invalid radius values for guardzone" << gz.id << "- skipping";
                     skippedCount++;
                     continue;
                 }
@@ -7574,26 +7507,30 @@ void EcWidget::drawGuardZone(QPainter& painter)
                 if (outerRadiusInPixels < 1) outerRadiusInPixels = 1;
                 if (innerRadiusInPixels < 0) innerRadiusInPixels = 0;
 
-                // Check if this is a semicircle shield (has angles)
-                // PERBAIKAN: AttachedToShip tetap semicircle, create circular guardzone jadi full circle
+                // AttachedToShip ⇒ always draw semicircle shield following heading
                 bool isSemicircleShield = (gz.attachedToShip) ||
-                                         (gz.shape != GUARD_ZONE_CIRCLE &&
-                                          gz.startAngle != gz.endAngle &&
-                                          gz.startAngle >= 0 && gz.endAngle >= 0);
+                                          (gz.shape != GUARD_ZONE_CIRCLE &&
+                                           gz.startAngle != gz.endAngle &&
+                                           gz.startAngle >= 0 && gz.endAngle >= 0);
 
-                qDebug() << "[DRAW-GUARDZONE-DEBUG] Starting QPainter operations for guardzone" << gz.id;
-                qDebug() << "[DRAW-GUARDZONE-DEBUG] isSemicircleShield:" << isSemicircleShield;
-
-                // PERBAIKAN CRITICAL: Wrap all QPainter operations in try-catch
+                // Wrap all QPainter operations in try-catch
                 try {
                     if (isSemicircleShield) {
-                        qDebug() << "[DRAW-GUARDZONE-DEBUG] Drawing semicircle shield...";
                         // Create semicircle shield using sector rendering
                         QPainterPath semicirclePath;
 
-                        // Convert angles from navigation (0=North, clockwise) to Qt (0=East, counterclockwise)
-                        double qtStartAngle = (90 - gz.startAngle + 360) * 16;    // Qt uses 16th of degree
-                        double qtEndAngle = (90 - gz.endAngle + 360) * 16;
+                        // Determine angles: follow navShip heading if attached
+                        double useHeading = (!qIsNaN(navShip.heading) && !qIsInf(navShip.heading) && navShip.heading != 0.0)
+                                            ? navShip.heading : ownShip.heading;
+                        double useStart = gz.startAngle;
+                        double useEnd   = gz.endAngle;
+                        if (gz.attachedToShip) {
+                            useStart = fmod(useHeading + 90.0, 360.0);
+                            useEnd   = fmod(useHeading + 270.0, 360.0);
+                        }
+                        // Convert angles from navigation (0=North, clockwise) to Qt (0=East, CCW)
+                        double qtStartAngle = (90 - useStart + 360) * 16;    // Qt uses 1/16 degrees
+                        double qtEndAngle   = (90 - useEnd   + 360) * 16;
                         double qtSpanAngle = (qtEndAngle - qtStartAngle);
 
                         // Normalize angles
@@ -7602,18 +7539,13 @@ void EcWidget::drawGuardZone(QPainter& painter)
                         if (qtSpanAngle > 360 * 16) qtSpanAngle -= 360 * 16;
 
                         double startAngleQt = qtStartAngle / 16.0;
-                        double spanAngleQt = qtSpanAngle / 16.0;
+                        double spanAngleQt  = qtSpanAngle  / 16.0;
 
-                        // CRITICAL: Validate rectangle coordinates
                         double rectX = centerX - outerRadiusInPixels;
                         double rectY = centerY - outerRadiusInPixels;
                         double rectSize = 2 * outerRadiusInPixels;
-
                         if (qIsNaN(rectX) || qIsInf(rectX) || qIsNaN(rectY) || qIsInf(rectY) ||
-                            qIsNaN(rectSize) || qIsInf(rectSize) || rectSize <= 0) {
-                            qDebug() << "[DRAW-GUARDZONE-ERROR] Invalid rectangle values - skipping semicircle";
-                            continue;
-                        }
+                            qIsNaN(rectSize) || qIsInf(rectSize) || rectSize <= 0) continue;
 
                         QRectF outerRect(rectX, rectY, rectSize, rectSize);
 
@@ -7628,50 +7560,30 @@ void EcWidget::drawGuardZone(QPainter& painter)
 
                         painter.drawPath(semicirclePath);
 
-                        qDebug() << "[DRAW-SUCCESS] Successfully drew semicircle shield guardzone" << gz.id;
                     } else {
-                        qDebug() << "[DRAW-GUARDZONE-DEBUG] Drawing circle/donut shape...";
                         // Create full circle or donut shape using QPainterPath
                         QPainterPath circlePath;
 
                         // CRITICAL: Validate ellipse parameters
                         QPointF centerPoint(centerX, centerY);
                         if (qIsNaN(centerPoint.x()) || qIsInf(centerPoint.x()) ||
-                            qIsNaN(centerPoint.y()) || qIsInf(centerPoint.y())) {
-                            qDebug() << "[DRAW-GUARDZONE-ERROR] Invalid center point - skipping circle";
-                            continue;
-                        }
+                            qIsNaN(centerPoint.y()) || qIsInf(centerPoint.y())) continue;
 
-                        qDebug() << "[DRAW-GUARDZONE-DEBUG] Adding outer ellipse - center:" << centerPoint << "radius:" << outerRadiusInPixels;
                         circlePath.addEllipse(centerPoint, outerRadiusInPixels, outerRadiusInPixels);
-                        qDebug() << "[DRAW-GUARDZONE-DEBUG] Outer ellipse added successfully";
 
                         if (innerRadiusInPixels > 0) {
-                            qDebug() << "[DRAW-GUARDZONE-DEBUG] Adding inner ellipse - radius:" << innerRadiusInPixels;
                             circlePath.addEllipse(centerPoint, innerRadiusInPixels, innerRadiusInPixels);
-                            qDebug() << "[DRAW-GUARDZONE-DEBUG] Inner ellipse added successfully";
                         }
-
-                        qDebug() << "[DRAW-GUARDZONE-DEBUG] Drawing path...";
                         painter.drawPath(circlePath);
-                        qDebug() << "[DRAW-GUARDZONE-DEBUG] Path drawn successfully";
-
-                        qDebug() << "[DRAW-SUCCESS] Successfully drew" << (innerRadiusInPixels > 0 ? "donut" : "circle") << "guardzone" << gz.id;
                     }
 
                     labelX = centerX;
                     labelY = centerY - static_cast<int>(outerRadiusInPixels) - 15;
                     drawnCount++;
-
-                    qDebug() << "[DRAW-SUCCESS] Successfully drew donut guardzone" << gz.id
-                             << "at screen coords:" << centerX << "," << centerY
-                             << "outer radius:" << outerRadiusInPixels << "inner radius:" << innerRadiusInPixels << "pixels";
                 } catch (const std::exception& e) {
-                    qDebug() << "[DRAW-GUARDZONE-ERROR] Exception drawing circle guardzone" << gz.id << ":" << e.what();
                     skippedCount++;
                     continue;
                 } catch (...) {
-                    qDebug() << "[DRAW-GUARDZONE-ERROR] Unknown exception drawing circle guardzone" << gz.id;
                     skippedCount++;
                     continue;
                 }

@@ -583,8 +583,8 @@ void MainWindow::createMenuBar(){
     connect(toggleAllLabels, &QAction::toggled, this, &MainWindow::onToggleAoiLabels);
 
 
-    // ========================= EBL/VRM MENU (Dev-only) =========================
-    if (AppConfig::isDevelopment()) {
+    // ========================= EBL/VRM MENU =========================
+    {
         QMenu *measureMenu = menuBar()->addMenu("&EBL / VRM");
         QAction* actEBL = measureMenu->addAction("Electronic Bearing Line (EBL)");
         actEBL->setCheckable(true);

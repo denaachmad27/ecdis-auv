@@ -19,7 +19,7 @@ void EblVrm::onMouseMove(EcWidget* w, int x, int y)
   // Compute distance and bearing from ownship to cursor
   double distNM = 0.0, bearing = 0.0;
   EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
-                                         w->getOwnShipLat(), w->getOwnShipLon(),
+                                         navShip.lat, navShip.lon,
                                          lat, lon,
                                          &distNM, &bearing);
   // Update parameters
@@ -32,7 +32,7 @@ void EblVrm::draw(EcWidget* w, QPainter& p)
   if (!w || !w->isReady()) return;
   // Project ownship
   int cx=0, cy=0;
-  if (!w->LatLonToXy(w->getOwnShipLat(), w->getOwnShipLon(), cx, cy)) return;
+  if (!w->LatLonToXy(navShip.lat, navShip.lon, cx, cy)) return;
 
   p.save();
   p.setRenderHint(QPainter::Antialiasing, true);
@@ -47,7 +47,7 @@ void EblVrm::draw(EcWidget* w, QPainter& p)
       // Compute endpoint from ownship using bearing and fixed 12 NM
       EcCoordinate lat2=0, lon2=0;
       EcCalculateRhumblinePosition(EC_GEO_DATUM_WGS84,
-                                   w->getOwnShipLat(), w->getOwnShipLon(),
+                                   navShip.lat, navShip.lon,
                                    12.0, eblBearingDeg,
                                    &lat2, &lon2);
       if (!w->LatLonToXy(lat2, lon2, ex, ey)) { ex = cx; ey = cy; }
@@ -63,8 +63,8 @@ void EblVrm::draw(EcWidget* w, QPainter& p)
     if (!(measureMode && liveHasCursor)) {
       EcCoordinate lat2=0, lon2=0;
       double dcalc=0.0, bcalc=0.0;
-      EcCalculateRhumblinePosition(EC_GEO_DATUM_WGS84, w->getOwnShipLat(), w->getOwnShipLon(), 12.0, eblBearingDeg, &lat2, &lon2);
-      EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84, w->getOwnShipLat(), w->getOwnShipLon(), lat2, lon2, &dcalc, &bcalc);
+      EcCalculateRhumblinePosition(EC_GEO_DATUM_WGS84, navShip.lat, navShip.lon, 12.0, eblBearingDeg, &lat2, &lon2);
+      EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84, navShip.lat, navShip.lon, lat2, lon2, &dcalc, &bcalc);
       distNM = dcalc; brg = bcalc;
     }
     QString degree = QString::fromUtf8("\u00B0");
@@ -98,7 +98,7 @@ void EblVrm::draw(EcWidget* w, QPainter& p)
       double brg = (360.0 * i) / segs;
       EcCoordinate lat2=0, lon2=0;
       EcCalculateRhumblinePosition(EC_GEO_DATUM_WGS84,
-                                   w->getOwnShipLat(), w->getOwnShipLon(),
+                                   navShip.lat, navShip.lon,
                                    vrmRadiusNM, brg,
                                    &lat2, &lon2);
       int px=0, py=0;
@@ -115,7 +115,7 @@ void EblVrm::draw(EcWidget* w, QPainter& p)
       // Add radius label near top of ring (bearing 0° from ownship)
       EcCoordinate latTop=0, lonTop=0;
       int tx=0, ty=0;
-      if (EcCalculateRhumblinePosition(EC_GEO_DATUM_WGS84, w->getOwnShipLat(), w->getOwnShipLon(), vrmRadiusNM, 0.0, &latTop, &lonTop),
+      if (EcCalculateRhumblinePosition(EC_GEO_DATUM_WGS84, navShip.lat, navShip.lon, vrmRadiusNM, 0.0, &latTop, &lonTop),
           w->LatLonToXy(latTop, lonTop, tx, ty)) {
         QString rtext = QString("R: %1 NM").arg(QString::number(vrmRadiusNM, 'f', 2));
         QFont rf("Arial", 9, QFont::Bold); p.setFont(rf); QFontMetrics rfm(rf);
