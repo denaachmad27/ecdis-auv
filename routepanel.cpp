@@ -541,9 +541,9 @@ void RoutePanel::setupUI()
     infoLayout->addWidget(waypointCountLabel, 1, 1);
     infoLayout->addWidget(new QLabel("Distance:"), 2, 0);
     infoLayout->addWidget(totalDistanceLabel, 2, 1);
-    // ETA information hidden - not needed currently
-    // infoLayout->addWidget(new QLabel("ETA:"), 3, 0);
-    // infoLayout->addWidget(totalTimeLabel, 3, 1);
+    // ETA information
+    infoLayout->addWidget(new QLabel("ETA:"), 3, 0);
+    infoLayout->addWidget(totalTimeLabel, 3, 1);
     
     // Add info layout to group
     infoGroupLayout->addLayout(infoLayout);
@@ -980,7 +980,21 @@ void RoutePanel::updateRouteInfoDisplay(const RouteInfo& info)
     routeNameLabel->setText(QString("📍 %1").arg(info.name));
     waypointCountLabel->setText(QString("📌 %1 waypoints").arg(info.waypointCount));
     totalDistanceLabel->setText(QString("📏 %1").arg(formatDistance(info.totalDistance)));
-    totalTimeLabel->setText("⏱️ -"); // ETA will be processed later
+    // Try to show ETA if available from EcWidget activeRoute or compute fallback
+    QString etaText = "-";
+    if (ecWidget) {
+        // Prefer ETA from AIS/MOOS activeRoute if available
+        if (!ecWidget->activeRoute.rteEta.isEmpty()) {
+            etaText = ecWidget->activeRoute.rteEta;
+        } else if (!ecWidget->activeRoute.rteTtg.isEmpty()) {
+            etaText = QString("TTG %1").arg(ecWidget->activeRoute.rteTtg);
+        } else if (info.totalTime > 0.0) {
+            etaText = formatTime(info.totalTime);
+        }
+    } else if (info.totalTime > 0.0) {
+        etaText = formatTime(info.totalTime);
+    }
+    totalTimeLabel->setText(QString("⏱️ %1").arg(etaText));
     
     qDebug() << "[ROUTE-PANEL] *** SETTING CHECKBOX TO:" << info.visible << "for route" << info.routeId;
     qDebug() << "[ROUTE-PANEL] *** selectedRouteId:" << selectedRouteId << "checkbox about to be set";
