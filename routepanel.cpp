@@ -663,6 +663,8 @@ void RoutePanel::setupConnections()
         if (selectedRouteId > 0 && ecWidget) {
             qDebug() << "[ROUTE-PANEL] Visibility checkbox toggled for route" << selectedRouteId << "to" << checked;
             ecWidget->setRouteVisibility(selectedRouteId, checked);
+            // Persist visibility change to routes.json
+            ecWidget->saveRoutes();
             ecWidget->Draw(); // Use Draw() like route selection fix
             emit routeVisibilityChanged(selectedRouteId, checked);
             emit statusMessage(QString("Route %1 %2").arg(selectedRouteId).arg(checked ? "shown" : "hidden"));
@@ -1697,6 +1699,8 @@ void RoutePanel::onToggleRouteVisibility()
     if (selectedRouteId > 0 && ecWidget) {
         bool currentVisibility = ecWidget->isRouteVisible(selectedRouteId);
         ecWidget->setRouteVisibility(selectedRouteId, !currentVisibility);
+        // Persist visibility change to routes.json
+        ecWidget->saveRoutes();
         visibilityCheckBox->setChecked(!currentVisibility);
         ecWidget->update(); // Use lighter update instead of forceRedraw
         emit routeVisibilityChanged(selectedRouteId, !currentVisibility);
@@ -2146,9 +2150,13 @@ void RoutePanel::showWaypointEditDialog(int routeId, int waypointIndex)
                     routeWaypoints[waypointIndex].remark = remark;
                     routeWaypoints[waypointIndex].active = active;
                     
-                    // Replace waypoints for route
+                    // Replace waypoints for route and force persist
                     ecWidget->replaceWaypointsForRoute(routeId, routeWaypoints);
+                    ecWidget->saveRoutes();
                     refreshRouteList();
+                    if (selectedRouteId == routeId) {
+                        updateRouteInfo(selectedRouteId);
+                    }
                     emit statusMessage(QString("Waypoint '%1' updated successfully").arg(label));
                 }
             } else {
@@ -2725,35 +2733,11 @@ void RoutePanel::onDeleteWaypointClicked()
         
     if (ret == QMessageBox::Yes) {
         if (ecWidget) {
-            // Get all waypoints for this route
-            QList<EcWidget::Waypoint> allWaypoints = ecWidget->getWaypoints();
-            QList<EcWidget::Waypoint> routeWaypoints;
-            
-            for (const auto& wp : allWaypoints) {
-                if (wp.routeId == waypoint.routeId) {
-                    routeWaypoints.append(wp);
-                }
-            }
-            // Prefer removing by index within the selected route to handle duplicates
+            // Remove by route-local index to avoid mismatch caused by duplicate labels/coords
             int indexInRoute = getWaypointIndex(waypointItem);
-            if (indexInRoute >= 0 && indexInRoute < routeWaypoints.size()) {
-                routeWaypoints.removeAt(indexInRoute);
-            } else {
-                // Fallback: match by full signature (routeId + label + coordinates)
-                for (int i = 0; i < routeWaypoints.size(); ++i) {
-                    const auto& cand = routeWaypoints[i];
-                    if (cand.routeId == waypoint.routeId &&
-                        cand.label == waypoint.label &&
-                        qAbs(cand.lat - waypoint.lat) < 0.000001 &&
-                        qAbs(cand.lon - waypoint.lon) < 0.000001) {
-                        routeWaypoints.removeAt(i);
-                        break;
-                    }
-                }
+            if (indexInRoute >= 0) {
+                ecWidget->deleteRouteWaypointAt(waypoint.routeId, indexInRoute);
             }
-            
-            // Replace waypoints for route
-            ecWidget->replaceWaypointsForRoute(waypoint.routeId, routeWaypoints);
             
             // CRITICAL FIX: Clear highlight when waypoint is deleted
             if (ecWidget) {
@@ -2762,6 +2746,10 @@ void RoutePanel::onDeleteWaypointClicked()
             }
             
             refreshRouteList();
+            // Ensure info panel shows updated counts/distances if this route is still selected
+            if (selectedRouteId == waypoint.routeId) {
+                updateRouteInfo(selectedRouteId);
+            }
             emit statusMessage(QString("Waypoint '%1' deleted successfully")
                 .arg(waypoint.label.isEmpty() ? "WP" : waypoint.label));
         }

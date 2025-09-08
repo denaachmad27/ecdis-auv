@@ -282,6 +282,7 @@ public:
   void clearWaypoints();
   void updateWaypointActiveStatus(int routeId, double lat, double lon, bool active);
   void replaceWaypointsForRoute(int routeId, const QList<Waypoint>& newWaypoints);
+  bool deleteRouteWaypointAt(int routeId, int indexInRoute);
   
   // Waypoint highlighting for route panel visualization
   void highlightWaypoint(int routeId, int waypointIndex);

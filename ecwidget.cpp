@@ -6280,6 +6280,7 @@ void EcWidget::removeWaypointAt(int x, int y)
             if (qAbs(x - wx) <= 10 && qAbs(y - wy) <= 10)
             {
                 Waypoint& wp = waypointList[i];
+                int routeIdForPersist = wp.routeId; // capture before modifications
                 QString waypointLabel = wp.label; // Simpan label sebelum dihapus
 
                 // 🎯 Cek validitas handle SevenCs dan gunakan yang sesuai
@@ -6298,8 +6299,18 @@ void EcWidget::removeWaypointAt(int x, int y)
 
                 // Hapus dari list lokal (untuk kedua kasus)
                 waypointList.removeAt(i);
+                // Persist single-waypoints file (route waypoints are skipped inside)
                 saveWaypoints();
+
+                // If this was a route waypoint, rebuild route entry and persist routes.json
+                if (routeIdForPersist > 0) {
+                    updateRouteList(routeIdForPersist);
+                    saveRoutes();
+                }
+
+                // Redraw and notify UI to refresh panels
                 Draw();
+                emit waypointCreated();
 
                 QMessageBox::information(this, tr("Waypoint Removed"),
                                          tr("Waypoint '%1' has been removed.").arg(waypointLabel));
@@ -6430,12 +6441,18 @@ void EcWidget::editWaypointAt(int x, int y)
 
                 if (dialog.exec() == QDialog::Accepted)
                 {
+                    int routeIdForPersist = waypointList[i].routeId;
                     waypointList[i].label = dialog.getLabel();
                     waypointList[i].remark = dialog.getRemark();
                     waypointList[i].turningRadius = dialog.getTurnRadius();
                     // waypointList[i].active = dialog.isActive(); // Keep original active state
 
+                    // Persist waypoints (singles) and update routes if needed
                     saveWaypoints();
+                    if (routeIdForPersist > 0) {
+                        updateRouteList(routeIdForPersist);
+                        saveRoutes();
+                    }
                     Draw();
                 }
                 activeFunction = PAN;
@@ -7034,8 +7051,15 @@ void EcWidget::updateWaypointActiveStatus(int routeId, double lat, double lon, b
             qDebug() << "[WAYPOINT-ACTIVE] Updated waypoint at" << lat << "," << lon
                      << "in route" << routeId << "from" << oldStatus << "to" << active;
 
-            // Save the updated waypoints
+            // Save the updated single-waypoints file (routes saved separately)
             saveWaypoints();
+
+            // Also update the corresponding route entry and persist to routes.json (only for route waypoints)
+            if (routeId > 0) {
+                // Rebuild or create the route entry from current waypointList and persist
+                updateRouteList(routeId);
+                saveRoutes();
+            }
 
             // Redraw to reflect changes
             Draw();
@@ -7055,6 +7079,19 @@ void EcWidget::replaceWaypointsForRoute(int routeId, const QList<Waypoint>& newW
 {
     qDebug() << "[WAYPOINT-REORDER] Replacing waypoints for route" << routeId << "with" << newWaypoints.size() << "waypoints";
 
+    // Build lookup from current waypoints to preserve custom labels/remarks if needed
+    QMap<QPair<int64_t,int64_t>, Waypoint> oldByCoord;
+    {
+        for (const auto &wp : waypointList) {
+            if (wp.routeId == routeId) {
+                // Quantize coordinates to avoid floating drift keys (micro-degree precision ~1e-6)
+                int64_t latKey = static_cast<int64_t>(std::round(wp.lat * 1e6));
+                int64_t lonKey = static_cast<int64_t>(std::round(wp.lon * 1e6));
+                oldByCoord.insert(QPair<int64_t,int64_t>(latKey, lonKey), wp);
+            }
+        }
+    }
+
     // Remove all existing waypoints for this route
     waypointList.erase(
         std::remove_if(waypointList.begin(), waypointList.end(),
@@ -7066,23 +7103,67 @@ void EcWidget::replaceWaypointsForRoute(int routeId, const QList<Waypoint>& newW
     // Add new waypoints in the specified order
     for (const auto& wp : newWaypoints) {
         if (wp.routeId == routeId) { // Only add waypoints for this route
-            waypointList.append(wp);
+            Waypoint toAdd = wp;
+            // If label is empty (possible from external callers), try preserve from previous data
+            if (toAdd.label.trimmed().isEmpty()) {
+                int64_t latKey = static_cast<int64_t>(std::round(toAdd.lat * 1e6));
+                int64_t lonKey = static_cast<int64_t>(std::round(toAdd.lon * 1e6));
+                auto key = QPair<int64_t,int64_t>(latKey, lonKey);
+                if (oldByCoord.contains(key)) {
+                    const Waypoint &oldWp = oldByCoord[key];
+                    if (!oldWp.label.trimmed().isEmpty()) toAdd.label = oldWp.label;
+                    if (!oldWp.remark.trimmed().isEmpty()) toAdd.remark = oldWp.remark;
+                }
+            }
+            waypointList.append(toAdd);
         }
     }
 
     qDebug() << "[WAYPOINT-REORDER] Total waypoints after reorder:" << waypointList.size();
 
-    // Save updated waypoints
+    // Save updated waypoints (singles file) and update routes to reflect new state
     saveWaypoints();
-
-    // Update routes to reflect new waypoint order
-    updateRouteFromWaypoint(routeId);
+    // Rebuild or create the route entry from current waypointList
+    updateRouteList(routeId);
+    saveRoutes();
 
     // Redraw to show new order
     Draw();
 
     // Emit signal to refresh UI components
     emit waypointCreated();
+}
+
+bool EcWidget::deleteRouteWaypointAt(int routeId, int indexInRoute)
+{
+    if (routeId <= 0 || indexInRoute < 0) return false;
+
+    // Find the absolute index in waypointList corresponding to the indexInRoute-th
+    // waypoint that belongs to this routeId
+    int routeCounter = 0;
+    int absoluteIndex = -1;
+    for (int i = 0; i < waypointList.size(); ++i) {
+        if (waypointList[i].routeId == routeId) {
+            if (routeCounter == indexInRoute) { absoluteIndex = i; break; }
+            routeCounter++;
+        }
+    }
+    if (absoluteIndex < 0 || absoluteIndex >= waypointList.size()) return false;
+
+    // Remove the waypoint
+    waypointList.removeAt(absoluteIndex);
+
+    // Persist single waypoints file (route waypoints are skipped there by design)
+    saveWaypoints();
+
+    // Rebuild and persist route entry
+    updateRouteList(routeId);
+    saveRoutes();
+
+    // Redraw and notify
+    Draw();
+    emit waypointCreated();
+    return true;
 }
 
 bool EcWidget::exportWaypointsToFile(const QString &filename)
