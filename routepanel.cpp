@@ -738,7 +738,27 @@ void RoutePanel::setupConnections()
         emit statusMessage("Export single route functionality not yet implemented");
     });
     connect(toggleVisibilityAction, &QAction::triggered, this, &RoutePanel::onToggleRouteVisibility);
-    connect(deleteRouteAction, &QAction::triggered, this, &RoutePanel::onDeleteRoute);
+    // Match delete confirmation with waypoint delete (Yes/No)
+    connect(deleteRouteAction, &QAction::triggered, this, [this]() {
+        if (selectedRouteId <= 0 || !ecWidget) return;
+        int ret = QMessageBox::question(
+            this,
+            "Delete Route",
+            QString("Are you sure you want to delete Route %1?").arg(selectedRouteId),
+            QMessageBox::Yes | QMessageBox::No
+        );
+        if (ret != QMessageBox::Yes) return;
+        bool success = ecWidget->deleteRoute(selectedRouteId);
+        if (success) {
+            refreshRouteList();
+            clearRouteInfoDisplay();
+            selectedRouteId = -1;
+            emit statusMessage("Route deleted successfully");
+        } else {
+            QMessageBox::critical(this, "Delete Error",
+                                  QString("Failed to delete Route %1").arg(selectedRouteId));
+        }
+    });
     connect(routePropertiesAction, &QAction::triggered, this, &RoutePanel::onRouteProperties);
     connect(changeColorAction, &QAction::triggered, this, &RoutePanel::onChangeRouteColor);
     
