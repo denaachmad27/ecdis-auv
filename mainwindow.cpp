@@ -577,7 +577,7 @@ void MainWindow::createMenuBar(){
     QMenu *aoiMenu = menuBar()->addMenu("&Area Tools");
     aoiMenu->addAction("Create by Click", this, SLOT(onCreateAOIByClick()));
     aoiMenu->addAction("Open Area Panel", this, SLOT(onOpenAOIPanel()));
-    QAction* toggleAllLabels = aoiMenu->addAction("Show AOI Labels");
+    QAction* toggleAllLabels = aoiMenu->addAction("Show Labels");
     toggleAllLabels->setCheckable(true);
     toggleAllLabels->setChecked(true);
     connect(toggleAllLabels, &QAction::toggled, this, &MainWindow::onToggleAoiLabels);
