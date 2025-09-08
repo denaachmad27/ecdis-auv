@@ -2436,9 +2436,8 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
     hideWaypointToolbox();
     setFocus();
 
-    // Clear waypoint highlight when clicking anywhere on the map
-    // This provides better UX by removing distracting highlights
-    clearWaypointHighlight();
+    // Keep waypoint highlight when clicking on the map; it will be changed
+    // only when another waypoint is explicitly selected.
     // AOI context menu on right-click (global, even outside edit mode)
     if (e->button() == Qt::RightButton) {
         int aoiId=-1, vIdx=-1;
@@ -5257,11 +5256,14 @@ void EcWidget::createSeparateRouteWaypoint(const Waypoint &waypoint)
 
     //qDebug() << "[ROUTE] Added waypoint" << wp.label << "to route" << wp.routeId;
 
-    // Save to JSON file (like GuardZone does)
+    // Persist to single-waypoints JSON (route waypoints skipped; keep for backwards compat of singles)
     saveWaypoints();
 
-    // Save route information
-    saveCurrentRoute();
+    // Rebuild and persist route from waypointList to ensure route JSON is accurate
+    if (wp.routeId > 0) {
+        updateRouteList(wp.routeId);
+        saveRoutes();
+    }
 
     // Redraw everything to show new waypoint and route lines
     Draw();
@@ -6128,11 +6130,10 @@ void EcWidget::showLeglineContextMenu(const QPoint& pos, int routeId, int segmen
         // Convert click position to lat/lon
         EcCoordinate lat, lon;
         if (XyToLatLon(pos.x(), pos.y(), lat, lon)) {
-            // Switch to insert waypoint mode
-            setActiveFunction(INSERT_WAYP);
-
-            // Store the insertion point for insertWaypointAt function
+            // Directly insert at computed position without switching modes
             insertWaypointAt(lat, lon);
+            // Ensure we stay/return to PAN mode so next click does not insert again
+            setActiveFunction(PAN);
 
             if (mainWindow) {
                 mainWindow->setWindowTitle(QString(APP_TITLE) + " - Waypoint Inserted");
@@ -14044,8 +14045,11 @@ void EcWidget::finalizeCurrentRoute()
     // Force redraw to ensure proper visualization
     saveWaypoints();
 
-    // Save current route to route list
-    saveCurrentRoute();
+    // Persist route only if it has waypoints; rebuild from waypointList
+    if (currentRouteId > 0 && waypointsInCurrentRoute > 0) {
+        updateRouteList(currentRouteId);
+        saveRoutes();
+    }
 
     update();
 }
@@ -14058,6 +14062,10 @@ void EcWidget::saveRoutes()
 
     for (const EcWidget::Route &route : routeList)
     {
+        // Skip routes without waypoints to avoid persisting empty routes
+        if (route.waypoints.isEmpty()) {
+            continue;
+        }
         QJsonObject routeObject;
         routeObject["routeId"] = route.routeId;
         routeObject["name"] = route.name;
@@ -14392,6 +14400,20 @@ void EcWidget::updateRouteList(int routeId)
 
     // Calculate route data
     calculateRouteData(*targetRoute);
+
+    // If after rebuild there are no waypoints, remove this route to avoid empty routes lingering
+    if (targetRoute->waypoints.isEmpty()) {
+        // Remove from routeList and ancillary maps
+        QList<Route> cleaned;
+        for (const auto &r : routeList) {
+            if (r.routeId != routeId) cleaned.append(r);
+        }
+        routeList = cleaned;
+        routeVisibility.remove(routeId);
+        routeCustomColors.remove(routeId);
+        qDebug() << "[INFO] Removed empty route" << routeId << "from routeList during updateRouteList";
+        return;
+    }
 
     qDebug() << "[INFO] Updated route" << routeId << "in routeList with" << targetRoute->waypoints.size() << "waypoints";
 }
@@ -14823,9 +14845,14 @@ void EcWidget::insertWaypointAt(EcCoordinate lat, EcCoordinate lon)
 
     qDebug() << "[INSERT] Inserted waypoint" << newWaypoint.label << "into route" << targetRouteId;
 
-    // Save and update
+    // Persist: single-waypoints file (route waypoints are skipped inside)
     saveWaypoints();
-    saveCurrentRoute();
+
+    // Rebuild and persist the affected route from waypointList (avoid saveCurrentRoute which can create empty routes)
+    updateRouteList(targetRouteId);
+    saveRoutes();
+
+    // Redraw and notify
     Draw();
     update();
 }
@@ -15274,11 +15301,10 @@ void EcWidget::createWaypointFromForm(double lat, double lon, const QString& lab
     // Save waypoints
     saveWaypoints();
 
-    // Update current route if needed
+    // Update current route if needed (persist from waypointList to routes.json)
     if (routeId > 0) {
-        // Ensure saveCurrentRoute targets the correct route ID
-        currentRouteId = routeId;
-        saveCurrentRoute();
+        updateRouteList(routeId);
+        saveRoutes();
     }
 
     // Redraw
