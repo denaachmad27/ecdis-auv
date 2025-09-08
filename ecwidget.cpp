@@ -48,6 +48,21 @@
 #include <QtMath>
 #include <cmath>
 
+// Helper: format decimal degrees to Deg-Min representation with hemisphere
+static QString formatDegMinCoord(double value, bool isLat)
+{
+    double absVal = std::abs(value);
+    int deg = static_cast<int>(std::floor(absVal));
+    double minutes = (absVal - deg) * 60.0;
+    QChar hemi;
+    if (isLat) hemi = (value >= 0.0) ? 'N' : 'S';
+    else hemi = (value >= 0.0) ? 'E' : 'W';
+    return QString("%1\u00B0 %2' %3")
+        .arg(deg)
+        .arg(minutes, 0, 'f', 3)
+        .arg(hemi);
+}
+
 int EcWidget::minScale = 100;
 int EcWidget::maxScale = 50000000;
 
@@ -5495,10 +5510,17 @@ void EcWidget::drawGhostWaypoint(QPainter& painter, double lat, double lon, cons
     painter.drawEllipse(QPoint(x, y), 8, 8);
 
     // Gambar ghost label dengan info tambahan
-    painter.setPen(QColor(0, 0, 0, 150)); // Black semi-transparent
-    painter.setFont(QFont("Arial", 8, QFont::Bold));
+    QFont ghostFont("Segoe UI", 9, QFont::DemiBold);
+    painter.setFont(ghostFont);
 
-    QString displayText = label;
+    // Build display text: Name on first line, lat/lon on second line
+    QString latDM = formatDegMinCoord(lat, true);
+    QString lonDM = formatDegMinCoord(lon, false);
+    QString displayText = label + "\n" + latDM + ", " + lonDM;
+    // AOI-style lines to be drawn in a boxed label
+    QString nameLine = label;
+    QString coordLine = latDM + ", " + lonDM;
+    QString bearingLine = QString("Brg: -");
 
     // Tambahkan informasi jarak dan bearing jika ada waypoint referensi
     if (ghostWaypoint.routeId > 0) {
@@ -5551,6 +5573,11 @@ void EcWidget::drawGhostWaypoint(QPainter& painter, double lat, double lon, cons
 
             // Konversi bearing ke 0-360 derajat
             if (bearing < 0) bearing += 360;
+            // Prepare bearing line for AOI-style box
+            {
+                QString deg = QString::fromUtf8("\u00B0");
+                bearingLine = QString("Brg: %1%2").arg(bearing, 0, 'f', 1).arg(deg);
+            }
 
             displayText += QString("\nDist: %1 NM\nBrg: %2°")
                           .arg(distance_nm, 0, 'f', 2)
@@ -5558,7 +5585,41 @@ void EcWidget::drawGhostWaypoint(QPainter& painter, double lat, double lon, cons
         }
     }
 
-    painter.drawText(x + 12, y - 15, displayText);
+    // Build AOI-like label box with 3 lines: name, coord, bearing
+    // Compute bearing line text if not already set above
+    // Note: nameLine, coordLine, bearingLine prepared earlier
+    QFont titleFont("Segoe UI", 9, QFont::DemiBold);
+    QFont textFont("Segoe UI", 9, QFont::Normal);
+    QFontMetrics fmTitle(titleFont);
+    QFontMetrics fmText(textFont);
+
+    int line1H = fmTitle.height();
+    int line2H = fmText.height();
+    int line3H = fmText.height();
+    int textW = 0;
+    textW = qMax(textW, fmTitle.horizontalAdvance(nameLine));
+    textW = qMax(textW, fmText.horizontalAdvance(coordLine));
+    textW = qMax(textW, fmText.horizontalAdvance(bearingLine));
+    int spacing = 2;
+    int textH = line1H + spacing + line2H + spacing + line3H;
+    int padX = 8, padY = 6;
+
+    QRect boxRect(x + 12, y - 15 - textH - padY*2, textW + padX*2, textH + padY*2);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(0,0,0,160));
+    painter.drawRoundedRect(boxRect, 5, 5);
+
+    // Draw text lines
+    painter.setPen(QColor(255,255,255,235));
+    int tx = boxRect.x() + padX;
+    int ty = boxRect.y() + padY + (line1H - fmTitle.descent());
+    painter.setFont(titleFont);
+    painter.drawText(tx, ty, nameLine);
+    painter.setFont(textFont);
+    ty += spacing + line2H - fmText.descent();
+    painter.drawText(tx, ty, coordLine);
+    ty += spacing + line3H - fmText.descent();
+    painter.drawText(tx, ty, bearingLine);
 }
 
 void EcWidget::drawHighlightedWaypoint(QPainter& painter, double lat, double lon, const QString& label)
