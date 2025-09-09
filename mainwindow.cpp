@@ -392,8 +392,124 @@ void MainWindow::createMenuBar(){
 
     dencActionGroup->setEnabled(!dencPath.isEmpty());
 
+    // ================================== NAVIGATION MENU
+    QMenu *navMenu = menuBar()->addMenu("&Navigation");
+
+    // ================================== CONTROL MENU
+    QMenu *drawMenu = navMenu->addMenu("&Control");
+
+    drawMenu->addAction("Zoom In", this, SLOT(onZoomIn()))->setShortcut(tr("PgUp", "Draw|Zoom In"));
+    drawMenu->addAction("Zoom Out", this, SLOT(onZoomOut()))->setShortcut(tr("PgDown", "Draw|Zoom out"));
+
+    drawMenu->addSeparator();
+
+    drawMenu->addAction("Shift Left", this, SLOT(onLeft()))->setShortcut(tr("Left", "Draw|Left"));
+    drawMenu->addAction("Shift Right", this, SLOT(onRight()))->setShortcut(tr("Right", "Draw|Right"));
+    drawMenu->addAction("Shift Up", this, SLOT(onUp()))->setShortcut(tr("Up", "Draw|Up"));
+    drawMenu->addAction("Shift Down", this, SLOT(onDown()))->setShortcut(tr("Down", "Draw|Down"));
+
+    drawMenu->addSeparator();
+
+    drawMenu->addAction("Rotate Clockwise", this, SLOT(onRotateCW()))->setShortcut(tr("+", "Draw|Rotate Clockwise"));
+    drawMenu->addAction("Rotate AntiClockwise", this, SLOT(onRotateCCW()))->setShortcut(tr("-", "Draw|Rotate Anticlockwise"));
+
+    drawMenu->addSeparator();
+
+    QActionGroup *pActionGroup = new QActionGroup(this);
+    autoProjectionAction = pActionGroup->addAction("Automatic");
+    mercatorAction       = pActionGroup->addAction("Mercator");
+    gnomonicAction       = pActionGroup->addAction("Gnomonic");
+    stereographicAction  = pActionGroup->addAction("Stereographic");
+    autoProjectionAction->setCheckable(true);
+    mercatorAction->setCheckable(true);
+    gnomonicAction->setCheckable(true);
+    stereographicAction->setCheckable(true);
+    mercatorAction->setChecked(true);
+    connect(pActionGroup, SIGNAL(triggered(QAction *)), this, SLOT(onProjection(QAction *)));
+
+    // drawMenu->addAction(autoProjectionAction);
+    // drawMenu->addAction(mercatorAction);
+    // drawMenu->addAction(gnomonicAction);
+    // drawMenu->addAction(stereographicAction);
+
+    // ================================== ROUTE MENU
+    setupRoutePanel();
+
+    // Route - Comprehensive navigation planning
+    QMenu *routeMenu = navMenu->addMenu("&Routes");
+
+    if (AppConfig::isDevelopment()){
+        routeMenu->addAction("Create New Route", this, SLOT(onCreateRoute()));
+        routeMenu->addAction("Create Route by Form...", this, SLOT(onCreateRouteByForm()));
+        routeMenu->addSeparator();
+        routeMenu->addAction("Edit Route Points", this, SLOT(onEditRoute()));
+        routeMenu->addAction("Insert Waypoint", this, SLOT(onInsertWaypoint()));
+        routeMenu->addAction("Move Waypoint", this, SLOT(onMoveWaypoint()));
+        routeMenu->addAction("Delete Waypoint", this, SLOT(onDeleteWaypoint()));
+        routeMenu->addAction("Delete Route", this, SLOT(onDeleteRoute()));
+        routeMenu->addSeparator();
+        routeMenu->addAction("Import Route...", this, SLOT(onImportRoute()));
+        routeMenu->addAction("Export Route...", this, SLOT(onExportRoute()));
+        routeMenu->addAction("Export All Routes...", this, SLOT(onExportAllRoutes()));
+        routeMenu->addAction("Clear All Routes", this, SLOT(onClearRoutes()));
+    }
+    else {
+        routeMenu->addAction("Create New Route", this, SLOT(onCreateRoute()));
+        routeMenu->addAction("Clear All Routes", this, SLOT(onClearRoutes()));
+        routeMenu->addSeparator();
+        routeMenu->addAction("Route Management", this, SLOT(openRouteManager()));
+    }
+
+    // Import/Export moved from panel to main menu Route
+    if (routePanel) {
+        routeMenu->addSeparator();
+        QAction* importRoutesAct = routeMenu->addAction("Import Routes...");
+        QAction* exportRoutesAct = routeMenu->addAction("Export Routes...");
+        connect(importRoutesAct, &QAction::triggered, routePanel, &RoutePanel::handleImportRoutesFromMenu);
+        connect(exportRoutesAct, &QAction::triggered, routePanel, &RoutePanel::handleExportRoutesFromMenu);
+    }
+
+    // Delay refresh route panel untuk memastikan data sudah fully loaded
+    QTimer::singleShot(100, [this]() {
+        if (routePanel) {
+            routePanel->refreshRouteList();
+            qDebug() << "[MAINWINDOW] Route panel refreshed after data load";
+        }
+    });
+
+    // ================================== AOI MENU
+    QMenu *aoiMenu = navMenu->addMenu("&Area Tools");
+    aoiMenu->addAction("Create by Click", this, SLOT(onCreateAOIByClick()));
+    aoiMenu->addAction("Open Area Panel", this, SLOT(onOpenAOIPanel()));
+    QAction* toggleAllLabels = aoiMenu->addAction("Show Labels");
+    toggleAllLabels->setCheckable(true);
+    toggleAllLabels->setChecked(true);
+    connect(toggleAllLabels, &QAction::toggled, this, &MainWindow::onToggleAoiLabels);
+
+
+    // ========================= MEASUREMENT MENU =========================
+    {
+        QMenu *measureMenu = navMenu->addMenu("&Measurements");
+        QAction* actEBL = measureMenu->addAction("Electronic Bearing Line (EBL)");
+        actEBL->setCheckable(true);
+        actEBL->setChecked(false);
+        connect(actEBL, &QAction::toggled, this, &MainWindow::onToggleEBL);
+
+        QAction* actVRM = measureMenu->addAction("Variable Range Marker (VRM)");
+        actVRM->setCheckable(true);
+        actVRM->setChecked(false);
+        connect(actVRM, &QAction::toggled, this, &MainWindow::onToggleVRM);
+
+        QAction* actMeasure = measureMenu->addAction("Start Measure From Ownship");
+        connect(actMeasure, &QAction::triggered, this, &MainWindow::onStartMeasure);
+    }
+
+
+    // ================================== VIEW MENU
+    QMenu *viewTopMenu = menuBar()->addMenu("&View");
+
     // ================================== LAYERS MENU
-    QMenu *viewMenu = menuBar()->addMenu("&Layers");
+    QMenu *viewMenu = viewTopMenu->addMenu("&Chart Display");
 
     QActionGroup *lActionGroup = new QActionGroup(this);
     simplifiedAction  = lActionGroup->addAction("Simplified");
@@ -457,7 +573,7 @@ void MainWindow::createMenuBar(){
     viewMenu->addSeparator();
 
     //QAction *aisAction = viewMenu->addAction("AIS targets");
-    QAction *aisAction = viewMenu->addAction("Own ship");
+    QAction *aisAction = viewMenu->addAction("AIS Objects");
     aisAction->setCheckable(true);
     aisAction->setChecked(showAIS);
     connect(aisAction, SIGNAL(toggled(bool)), this, SLOT(onAIS(bool)));
@@ -481,146 +597,8 @@ void MainWindow::createMenuBar(){
         viewMenu->addSeparator();
     }
 
-    // ================================== DISPLAY MENU
-    QMenu *colorMenu = menuBar()->addMenu("&Display");
-
-    QActionGroup *cActionGroup = new QActionGroup(this);
-    dayAction    = cActionGroup->addAction("Day");
-    duskAction = cActionGroup->addAction("Dusk");
-    nightAction = cActionGroup->addAction("Night");
-    dayAction->setCheckable(true);
-    duskAction->setCheckable(true);
-    nightAction->setCheckable(true);
-    dayAction->setChecked(true);
-    connect(cActionGroup, SIGNAL(triggered(QAction *)), this, SLOT(onColorScheme(QAction *)));
-
-    colorMenu->addAction(dayAction);
-    colorMenu->addAction(duskAction);
-    colorMenu->addAction(nightAction);
-
-    colorMenu->addSeparator();
-
-    QAction *greyAction = colorMenu->addAction("Grey Mode");
-    greyAction->setCheckable(true);
-    connect(greyAction, SIGNAL(toggled(bool)), this, SLOT(onGreyMode(bool)));
-
-    // QAction *searchAction = viewMenu->addAction("Search");
-    // connect(searchAction, &QAction::triggered, this, &MainWindow::onSearch);
-
-    // ================================== CONTROL MENU
-    QMenu *drawMenu = menuBar()->addMenu("&Control");
-
-    drawMenu->addAction("Zoom In", this, SLOT(onZoomIn()))->setShortcut(tr("PgUp", "Draw|Zoom In"));
-    drawMenu->addAction("Zoom Out", this, SLOT(onZoomOut()))->setShortcut(tr("PgDown", "Draw|Zoom out"));
-
-    drawMenu->addSeparator();
-
-    drawMenu->addAction("Shift Left", this, SLOT(onLeft()))->setShortcut(tr("Left", "Draw|Left"));
-    drawMenu->addAction("Shift Right", this, SLOT(onRight()))->setShortcut(tr("Right", "Draw|Right"));
-    drawMenu->addAction("Shift Up", this, SLOT(onUp()))->setShortcut(tr("Up", "Draw|Up"));
-    drawMenu->addAction("Shift Down", this, SLOT(onDown()))->setShortcut(tr("Down", "Draw|Down"));
-
-    drawMenu->addSeparator();
-
-    drawMenu->addAction("Rotate Clockwise", this, SLOT(onRotateCW()))->setShortcut(tr("+", "Draw|Rotate Clockwise"));
-    drawMenu->addAction("Rotate AntiClockwise", this, SLOT(onRotateCCW()))->setShortcut(tr("-", "Draw|Rotate Anticlockwise"));
-
-    drawMenu->addSeparator();
-
-    QActionGroup *pActionGroup = new QActionGroup(this);
-    autoProjectionAction = pActionGroup->addAction("Automatic");
-    mercatorAction       = pActionGroup->addAction("Mercator");
-    gnomonicAction       = pActionGroup->addAction("Gnomonic");
-    stereographicAction  = pActionGroup->addAction("Stereographic");
-    autoProjectionAction->setCheckable(true);
-    mercatorAction->setCheckable(true);
-    gnomonicAction->setCheckable(true);
-    stereographicAction->setCheckable(true);
-    mercatorAction->setChecked(true);
-    connect(pActionGroup, SIGNAL(triggered(QAction *)), this, SLOT(onProjection(QAction *)));
-
-    // drawMenu->addAction(autoProjectionAction);
-    // drawMenu->addAction(mercatorAction);
-    // drawMenu->addAction(gnomonicAction);
-    // drawMenu->addAction(stereographicAction);
-
-
-    // ================================== ROUTE MENU
-    setupRoutePanel();
-
-    // Route - Comprehensive navigation planning
-    QMenu *routeMenu = menuBar()->addMenu("&Route");
-
-    if (AppConfig::isDevelopment()){
-        routeMenu->addAction("Create New Route", this, SLOT(onCreateRoute()));
-        routeMenu->addAction("Create Route by Form...", this, SLOT(onCreateRouteByForm()));
-        routeMenu->addSeparator();
-        routeMenu->addAction("Edit Route Points", this, SLOT(onEditRoute()));
-        routeMenu->addAction("Insert Waypoint", this, SLOT(onInsertWaypoint()));
-        routeMenu->addAction("Move Waypoint", this, SLOT(onMoveWaypoint()));
-        routeMenu->addAction("Delete Waypoint", this, SLOT(onDeleteWaypoint()));
-        routeMenu->addAction("Delete Route", this, SLOT(onDeleteRoute()));
-        routeMenu->addSeparator();
-        routeMenu->addAction("Import Route...", this, SLOT(onImportRoute()));
-        routeMenu->addAction("Export Route...", this, SLOT(onExportRoute()));
-        routeMenu->addAction("Export All Routes...", this, SLOT(onExportAllRoutes()));
-        routeMenu->addAction("Clear All Routes", this, SLOT(onClearRoutes()));
-    }
-    else {
-        routeMenu->addAction("Create New Route", this, SLOT(onCreateRoute()));
-        routeMenu->addAction("Clear All Routes", this, SLOT(onClearRoutes()));
-        routeMenu->addSeparator();
-        routeMenu->addAction("Route Management", this, SLOT(openRouteManager()));
-    }
-
-    // ================================== AOI MENU
-    QMenu *aoiMenu = menuBar()->addMenu("&Area Tools");
-    aoiMenu->addAction("Create by Click", this, SLOT(onCreateAOIByClick()));
-    aoiMenu->addAction("Open Area Panel", this, SLOT(onOpenAOIPanel()));
-    QAction* toggleAllLabels = aoiMenu->addAction("Show Labels");
-    toggleAllLabels->setCheckable(true);
-    toggleAllLabels->setChecked(true);
-    connect(toggleAllLabels, &QAction::toggled, this, &MainWindow::onToggleAoiLabels);
-
-
-    // ========================= EBL/VRM MENU =========================
-    {
-        QMenu *measureMenu = menuBar()->addMenu("&EBL / VRM");
-        QAction* actEBL = measureMenu->addAction("Electronic Bearing Line (EBL)");
-        actEBL->setCheckable(true);
-        actEBL->setChecked(false);
-        connect(actEBL, &QAction::toggled, this, &MainWindow::onToggleEBL);
-
-        QAction* actVRM = measureMenu->addAction("Variable Range Marker (VRM)");
-        actVRM->setCheckable(true);
-        actVRM->setChecked(false);
-        connect(actVRM, &QAction::toggled, this, &MainWindow::onToggleVRM);
-
-        QAction* actMeasure = measureMenu->addAction("Start Measure From Ownship");
-        connect(actMeasure, &QAction::triggered, this, &MainWindow::onStartMeasure);
-    }
-
-    // ================================== MOOSDB MENU
-    QMenu *moosMenu = menuBar()->addMenu("&Connection");
-
-    restartAction = moosMenu->addAction("Start Connection", this, SLOT(subscribeMOOSDB()));
-    stopAction = moosMenu->addAction("Stop Connection", this, SLOT(stopSubscribeMOOSDB()));
-
-    restartAction->setEnabled(true);
-    stopAction->setEnabled(false);
-
-    // ================================== AIS
-    if (AppConfig::isDevelopment()) {
-        QMenu *aisMenu = menuBar()->addMenu("&AIS");
-        aisMenu->addAction( tr( "Run AIS" ), this, SLOT( runAis() ) );
-        aisMenu->addAction( tr( "Load AIS Logfile" ), this, SLOT( slotLoadAisFile() ) );
-        aisMenu->addAction( tr( "Load AIS Variable" ), this, SLOT( slotLoadAisVariable() ) );
-        aisMenu->addAction( tr( "Stop Load AIS Variable" ), this, SLOT( slotStopLoadAisVariable() ) );
-        // aisMenu->addAction( tr( "Connect to AIS Server" ), this, SLOT( slotConnectToAisServer() ) );
-    }
-
-    // ================================== SIDEBAR MENU
-    viewMenu = menuBar()->addMenu(tr("&Sidebar"));
+    // ================================== UI Panles
+    viewMenu = viewTopMenu->addMenu(tr("&UI Panels"));
     QDockWidget *dock = new QDockWidget(tr("Ownship Navigation"), this);
 
     dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::TopDockWidgetArea | Qt::BottomDockWidgetArea);
@@ -666,7 +644,7 @@ void MainWindow::createMenuBar(){
     if (m_cpatcpaPanel) {
         ecchart->setCPAPanelToAIS(m_cpatcpaPanel);
     }
-    
+
     // Setup GuardZone and AIS Target panels for tabify integration
     if (AppConfig::isDevelopment()){
         setupGuardZonePanel();
@@ -702,8 +680,36 @@ void MainWindow::createMenuBar(){
         dock->hide();
     }
 
+    // ================================== DISPLAY MENU
+    QMenu *appearanceMenu = menuBar()->addMenu("&Appearance");
+
+    QMenu *colorMenu = appearanceMenu->addMenu("&Display Mode");
+
+    QActionGroup *cActionGroup = new QActionGroup(this);
+    dayAction    = cActionGroup->addAction("Day");
+    duskAction = cActionGroup->addAction("Dusk");
+    nightAction = cActionGroup->addAction("Night");
+    dayAction->setCheckable(true);
+    duskAction->setCheckable(true);
+    nightAction->setCheckable(true);
+    dayAction->setChecked(true);
+    connect(cActionGroup, SIGNAL(triggered(QAction *)), this, SLOT(onColorScheme(QAction *)));
+
+    colorMenu->addAction(dayAction);
+    colorMenu->addAction(duskAction);
+    colorMenu->addAction(nightAction);
+
+    colorMenu->addSeparator();
+
+    QAction *greyAction = colorMenu->addAction("Grey Mode");
+    greyAction->setCheckable(true);
+    connect(greyAction, SIGNAL(toggled(bool)), this, SLOT(onGreyMode(bool)));
+
+    // QAction *searchAction = viewMenu->addAction("Search");
+    // connect(searchAction, &QAction::triggered, this, &MainWindow::onSearch);
+
     // ================================== THEME MENU
-    QMenu *themeMenu = menuBar()->addMenu("&Theme");
+    QMenu *themeMenu = appearanceMenu->addMenu("&Theme");
 
     QActionGroup *themeGroup = new QActionGroup(this);
     themeGroup->setExclusive(true);
@@ -726,17 +732,30 @@ void MainWindow::createMenuBar(){
     connect(darkAction, &QAction::triggered, this, &MainWindow::setDarkMode);
     connect(lightAction, &QAction::triggered, this, &MainWindow::setLightMode);
 
-    // ================================== SETTINGS MANAGER MENU
-    QMenu *settingMenu = menuBar()->addMenu("&Settings");
-    settingMenu->addAction("Setting Manager", this, SLOT(openSettingsDialog()) );
+    // ================================== AIS
+    if (AppConfig::isDevelopment()) {
+        QMenu *aisMenu = menuBar()->addMenu("&AIS");
+        aisMenu->addAction( tr( "Run AIS" ), this, SLOT( runAis() ) );
+        aisMenu->addAction( tr( "Load AIS Logfile" ), this, SLOT( slotLoadAisFile() ) );
+        aisMenu->addAction( tr( "Load AIS Variable" ), this, SLOT( slotLoadAisVariable() ) );
+        aisMenu->addAction( tr( "Stop Load AIS Variable" ), this, SLOT( slotStopLoadAisVariable() ) );
+        // aisMenu->addAction( tr( "Connect to AIS Server" ), this, SLOT( slotConnectToAisServer() ) );
+    }
 
-    // Delay refresh route panel untuk memastikan data sudah fully loaded
-    QTimer::singleShot(100, [this]() {
-        if (routePanel) {
-            routePanel->refreshRouteList();
-            qDebug() << "[MAINWINDOW] Route panel refreshed after data load";
-        }
-    });
+    // ================================== SYSTEM
+    QMenu *systemMenu = menuBar()->addMenu("&System");
+
+    // ================================== MOOSDB MENU
+    QMenu *moosMenu = systemMenu->addMenu("&Connection");
+
+    restartAction = moosMenu->addAction("Start Connection", this, SLOT(subscribeMOOSDB()));
+    stopAction = moosMenu->addAction("Stop Connection", this, SLOT(stopSubscribeMOOSDB()));
+
+    restartAction->setEnabled(true);
+    stopAction->setEnabled(false);
+
+    // ================================== SETTINGS MANAGER MENU
+    systemMenu->addAction("Settings Manager", this, SLOT(openSettingsDialog()) );
 
     createActions();
 
@@ -781,7 +800,7 @@ void MainWindow::createMenuBar(){
     // ===================================================
 
     // ================================== GUARDZONE MENU (Production-visible)
-    {
+    if(AppConfig::isDevelopment()){
         QMenu *guardZoneMenu = menuBar()->addMenu("&GuardZone");
 
         QAction *enableGuardZoneAction = guardZoneMenu->addAction("Enable GuardZone");
@@ -956,15 +975,6 @@ void MainWindow::createMenuBar(){
         connect(manualAction, SIGNAL(triggered(bool)), this, SLOT(onManual(bool)));
     }
 
-
-    // Import/Export moved from panel to main menu Route
-    if (routePanel) {
-        routeMenu->addSeparator();
-        QAction* importRoutesAct = routeMenu->addAction("Import Routes...");
-        QAction* exportRoutesAct = routeMenu->addAction("Export Routes...");
-        connect(importRoutesAct, &QAction::triggered, routePanel, &RoutePanel::handleImportRoutesFromMenu);
-        connect(exportRoutesAct, &QAction::triggered, routePanel, &RoutePanel::handleExportRoutesFromMenu);
-    }
 
     // ================================== ABOUT MENU
     QMenu *aboutMenu = menuBar()->addMenu("&About");
@@ -3006,16 +3016,18 @@ void MainWindow::onOpenAOIPanel()
         // Kalau semua gak ada, AOI tetap standalone di kanan.
 
         // Add to Sidebar menu if available
-        QMenu* sidebarMenu = nullptr;
-        QList<QMenu*> menus = menuBar()->findChildren<QMenu*>();
-        for (QMenu* menu : menus) {
-            if (menu->title().contains("Sidebar") || menu->title().contains("&Sidebar")) {
-                sidebarMenu = menu;
-                break;
-            }
-        }
-        if (sidebarMenu) {
-            sidebarMenu->addAction(aoiDock->toggleViewAction());
+        {
+            // QMenu* sidebarMenu = nullptr;
+            // QList<QMenu*> menus = menuBar()->findChildren<QMenu*>();
+            // for (QMenu* menu : menus) {
+            //     if (menu->title().contains("Sidebar") || menu->title().contains("&Sidebar")) {
+            //         sidebarMenu = menu;
+            //         break;
+            //     }
+            // }
+            // if (sidebarMenu) {
+            //     sidebarMenu->addAction(aoiDock->toggleViewAction());
+            // }
         }
     }
 

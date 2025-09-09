@@ -1555,7 +1555,7 @@ void EcWidget::paintEvent (QPaintEvent *e)
   // ========== DRAW TEST GUARDZONE ==========
 
   // DRAW AIS TARGET DANGEROUS BOX
-  if (displayCategory != EC_DISPLAYBASE){
+  if (displayCategory != EC_DISPLAYBASE && showAIS){
       drawTestGuardSquare(painter);
   }
 
@@ -2341,7 +2341,9 @@ void EcWidget::resizeEvent (QResizeEvent *event)
 #endif
 
   Draw();
-  if(showAIS)
+
+  bool hasRoutes = !waypointList.isEmpty();
+  if(showAIS || hasRoutes)
     drawAISCell();
 }
 
@@ -4262,7 +4264,8 @@ void EcWidget::StopReadAISVariable()
 ////////////////////////////////////////////
 void EcWidget::slotUpdateAISTargets( Bool bSymbolize )
 {
-  if(showAIS)
+    bool hasRoutes = !waypointList.isEmpty();
+  if(showAIS || hasRoutes)
     drawAISCell();
   qApp->processEvents( QEventLoop::ExcludeSocketNotifiers );
 
@@ -4335,7 +4338,7 @@ void EcWidget::drawAISCell()
 // OWNSHIP DRAW
 void EcWidget::ownShipDraw(){
     // DRAWING OWNSHIP CUSTOM
-    if (showCustomOwnShip) {
+    if (showCustomOwnShip && showAIS) {
         AISTargetData ownShipData = Ais::instance()->getOwnShipVar();
 
         // Untuk simulasi, gunakan data simulasi
@@ -4470,6 +4473,7 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon, double head )
   }
   */
 
+     bool hasRoutes = !waypointList.isEmpty();
     if (showAIS)
     {
         if ((lat != 0 && lon != 0) && trackTarget.isEmpty())
@@ -4555,6 +4559,10 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon, double head )
         draw(true);
         slotUpdateAISTargets(true);
     }
+    else if (hasRoutes){
+        draw(true);
+        slotUpdateAISTargets(true);
+    }
 
   // ========== TAMBAHAN UNTUK RED DOT TRACKER ==========
   // Update red dot position if attached to ship
@@ -4619,97 +4627,99 @@ void EcWidget::slotRefreshChartDisplayThread(double lat, double lon, double head
     }
 
     // ===== STEP 2: THROTTLE UPDATE =====
-    if (!aisGuiTimer.isValid() || aisGuiTimer.elapsed() >= 100) // max 10 Hz
-    {
-        aisGuiTimer.restart();
-
-        AISSnapshot snapshot;
+    if (showAIS){
+        if (!aisGuiTimer.isValid() || aisGuiTimer.elapsed() >= 100) // max 10 Hz
         {
-            QMutexLocker locker(&aisDataMutex);
-            snapshot = lastSnapshot; // ambil snapshot aman
-        }
+            aisGuiTimer.restart();
 
-        // ===== STEP 3: UPDATE GUI =====
-        if (!showAIS) return;
-
-        // Pastikan data valid
-        if (qIsNaN(snapshot.lat) || qIsNaN(snapshot.lon)) return;
-
-        // Centering
-        if (snapshot.lat != 0 && snapshot.lon != 0 && trackTarget.isEmpty())
-        {
-            OSCenteringMode mode = SettingsManager::instance().data().centeringMode;
-
-            if (mode == LookAhead)
+            AISSnapshot snapshot;
             {
-                double offsetNM = GetRange(currentScale) * 0.5;
-                double headingRad = snapshot.heading * M_PI / 180.0;
-                double offsetLat = offsetNM * cos(headingRad) / 60.0;
-                double offsetLon = offsetNM * sin(headingRad) / (60.0 * cos(snapshot.lat * M_PI / 180.0));
-                SetCenter(snapshot.lat + offsetLat, snapshot.lon + offsetLon);
+                QMutexLocker locker(&aisDataMutex);
+                snapshot = lastSnapshot; // ambil snapshot aman
             }
-            else if (mode == Centered)
+
+            // ===== STEP 3: UPDATE GUI =====
+            if (!showAIS) return;
+
+            // Pastikan data valid
+            if (qIsNaN(snapshot.lat) || qIsNaN(snapshot.lon)) return;
+
+            // Centering
+            if (snapshot.lat != 0 && snapshot.lon != 0 && trackTarget.isEmpty())
             {
-                SetCenter(snapshot.lat, snapshot.lon);
-            }
-            else if (mode == AutoRecenter)
-            {
-                int x, y;
-                if (LatLonToXy(snapshot.lat, snapshot.lon, x, y))
+                OSCenteringMode mode = SettingsManager::instance().data().centeringMode;
+
+                if (mode == LookAhead)
                 {
-                    QRect visibleRect = GetVisibleMapRect();
-                    int marginX = visibleRect.width() * 0.1;
-                    int marginY = visibleRect.height() * 0.1;
-                    QRect safeRect(
-                        visibleRect.left() + marginX,
-                        visibleRect.top() + marginY,
-                        visibleRect.width() - 2 * marginX,
-                        visibleRect.height() - 2 * marginY
-                    );
-                    if (!safeRect.contains(x, y))
-                        SetCenter(snapshot.lat, snapshot.lon);
+                    double offsetNM = GetRange(currentScale) * 0.5;
+                    double headingRad = snapshot.heading * M_PI / 180.0;
+                    double offsetLat = offsetNM * cos(headingRad) / 60.0;
+                    double offsetLon = offsetNM * sin(headingRad) / (60.0 * cos(snapshot.lat * M_PI / 180.0));
+                    SetCenter(snapshot.lat + offsetLat, snapshot.lon + offsetLon);
+                }
+                else if (mode == Centered)
+                {
+                    SetCenter(snapshot.lat, snapshot.lon);
+                }
+                else if (mode == AutoRecenter)
+                {
+                    int x, y;
+                    if (LatLonToXy(snapshot.lat, snapshot.lon, x, y))
+                    {
+                        QRect visibleRect = GetVisibleMapRect();
+                        int marginX = visibleRect.width() * 0.1;
+                        int marginY = visibleRect.height() * 0.1;
+                        QRect safeRect(
+                            visibleRect.left() + marginX,
+                            visibleRect.top() + marginY,
+                            visibleRect.width() - 2 * marginX,
+                            visibleRect.height() - 2 * marginY
+                        );
+                        if (!safeRect.contains(x, y))
+                            SetCenter(snapshot.lat, snapshot.lon);
+                    }
                 }
             }
-        }
 
-        // Heading
-        DisplayOrientationMode orientation = SettingsManager::instance().data().orientationMode;
-        if (orientation == HeadUp)
-        {
-            SetHeading(snapshot.heading);
-            if (mainWindow)
+            // Heading
+            DisplayOrientationMode orientation = SettingsManager::instance().data().orientationMode;
+            if (orientation == HeadUp)
             {
-                mainWindow->oriEditSetText(snapshot.heading);
-                mainWindow->setCompassHeading(0);
-                mainWindow->setCompassRotation(snapshot.heading);
+                SetHeading(snapshot.heading);
+                if (mainWindow)
+                {
+                    mainWindow->oriEditSetText(snapshot.heading);
+                    mainWindow->setCompassHeading(0);
+                    mainWindow->setCompassRotation(snapshot.heading);
+                }
             }
-        }
-        else if (orientation == CourseUp)
-        {
-            int course = SettingsManager::instance().data().courseUpHeading;
-            SetHeading(course);
+            else if (orientation == CourseUp)
+            {
+                int course = SettingsManager::instance().data().courseUpHeading;
+                SetHeading(course);
 
-            if (mainWindow)
-            {
-                mainWindow->oriEditSetText(course);
-                mainWindow->setCompassHeading(snapshot.heading - course);
-                mainWindow->setCompassRotation(course);
+                if (mainWindow)
+                {
+                    mainWindow->oriEditSetText(course);
+                    mainWindow->setCompassHeading(snapshot.heading - course);
+                    mainWindow->setCompassRotation(course);
+                }
             }
-        }
-        else
-        {
-            SetHeading(0);
-            if (mainWindow)
+            else
             {
-                mainWindow->oriEditSetText(0);
-                mainWindow->setCompassRotation(0);
+                SetHeading(0);
+                if (mainWindow)
+                {
+                    mainWindow->oriEditSetText(0);
+                    mainWindow->setCompassRotation(0);
+                }
             }
-        }
 
-        // Draw chart dan update AIS targets
-        //draw(true);
-        //drawPerTime();
-        //slotUpdateAISTargets(true);
+            // Draw chart dan update AIS targets
+            //draw(true);
+            //drawPerTime();
+            //slotUpdateAISTargets(true);
+        }
     }
 }
 
