@@ -361,6 +361,9 @@ public:
   DisplayOrientationMode displayOrientation = NorthUp;
   OSCenteringMode osCentering = Centered;
 
+  DisplayOrientationMode orientation;
+  OSCenteringMode centering;
+
   // End Waypoint
   //////////////////////////////////////////////////////////////////////
 
@@ -946,6 +949,11 @@ public:
   inline EcCoordinate getOwnShipLat() const { return ownShip.lat; }
   inline EcCoordinate getOwnShipLon() const { return ownShip.lon; }
   inline bool isReady() const { return initialized && (view != nullptr); }
+  inline int getTrackLine() const {return trackLine;}
+  inline int getTrackDistance() const {return trackDistance;}
+  inline int getTrackMinute() const {return trackMinute;}
+  inline ShipStruct getNavShip() const {return navShip;}
+
   // EBL/VRM
   void setEblEnabled(bool on) { eblvrm.setEblEnabled(on); update(); }
   void setVrmEnabled(bool on) { eblvrm.setVrmEnabled(on); update(); }
@@ -1398,6 +1406,14 @@ private:
   QAction* publishAction;
 
   QAction* insertWaypointAction;
+
+  // DEFAULTSETTINGS
+  void defaultSettingsStartUp();
+  int courseUpHeading;
+  int trackLine;
+  double trackDistance;
+  double trackMinute;
+
 }; // EcWidget
 
 #endif // _ec_widget_h_

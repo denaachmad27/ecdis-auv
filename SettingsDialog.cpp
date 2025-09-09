@@ -60,27 +60,35 @@ void SettingsDialog::setupUI() {
     centeringCombo->addItem("Centered", "Centered");
     centeringCombo->addItem("Look Ahead", "LookAhead");
     centeringCombo->addItem("Manual Offset", "Manual");
-    ownShipLayout->addRow("Centering Mode:", centeringCombo);
+    ownShipLayout->addRow("Default Centering:", centeringCombo);
 
     orientationCombo = new QComboBox;
     orientationCombo->addItem("North Up", "NorthUp");
     orientationCombo->addItem("Head Up", "HeadUp");
     orientationCombo->addItem("Course Up", "CourseUp");
-    ownShipLayout->addRow("Orientation Mode:", orientationCombo);
+    ownShipLayout->addRow("Default Orientation:", orientationCombo);
 
+    // SEPARATOR
+    QFrame *line = new QFrame(this);
+    line->setFrameShape(QFrame::HLine);
+    line->setFrameShadow(QFrame::Sunken);
+
+    ownShipLayout->addRow(line);
+
+    // NON DEFAULT DATA
     headingLabel = new QLabel("Course-Up Heading:");
     headingSpin = new QSpinBox;
     headingSpin->setRange(0, 359);
     headingSpin->setSuffix("°");
-    headingLabel->setVisible(false);
-    headingSpin->setVisible(false);
+    // headingLabel->setVisible(false);
+    // headingSpin->setVisible(false);
     ownShipLayout->addRow(headingLabel, headingSpin);
 
-    connect(orientationCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int) {
-        bool isCourseUp = (orientationCombo->currentData().toString() == "CourseUp");
-        headingLabel->setVisible(isCourseUp);
-        headingSpin->setVisible(isCourseUp);
-    });
+    // connect(orientationCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int) {
+    //     bool isCourseUp = (orientationCombo->currentData().toString() == "CourseUp");
+    //     headingLabel->setVisible(isCourseUp);
+    //     headingSpin->setVisible(isCourseUp);
+    // });
 
     if (AppConfig::isDevelopment()){
         // --- Navigation Safety Tab ---
@@ -454,9 +462,9 @@ void SettingsDialog::loadSettings() {
     else trailCombo->setCurrentIndex(0);
 
     headingSpin->setValue(heading);
-    bool isCourseUp = (ori == "CourseUp");
-    headingLabel->setVisible(isCourseUp);
-    headingSpin->setVisible(isCourseUp);
+    // bool isCourseUp = (ori == "CourseUp");
+    // headingLabel->setVisible(isCourseUp);
+    // headingSpin->setVisible(isCourseUp);
 
     trailSpin->setValue(trailMinute);
     bool isTime = (trailMode == 1);
@@ -532,11 +540,12 @@ void SettingsDialog::saveSettings() {
     settings.setValue("OwnShip/orientation", orientationCombo->currentData().toString());
     settings.setValue("OwnShip/centering", centeringCombo->currentData().toString());
 
-    if (orientationCombo->currentData().toString() == "CourseUp") {
-        settings.setValue("OwnShip/course_heading", headingSpin->value());
-    } else {
-        settings.remove("OwnShip/course_heading"); // bersihkan jika tidak relevan
-    }
+    settings.setValue("OwnShip/course_heading", headingSpin->value());
+    // if (orientationCombo->currentData().toString() == "CourseUp") {
+    //     settings.setValue("OwnShip/course_heading", headingSpin->value());
+    // } else {
+    //     settings.remove("OwnShip/course_heading"); // bersihkan jika tidak relevan
+    // }
 
     settings.setValue("OwnShip/mode", trailCombo->currentData().toString());
     settings.setValue("OwnShip/interval", trailSpin->value());
@@ -638,7 +647,8 @@ void SettingsDialog::accept() {
     // Own Ship settings
     data.orientationMode = orientation(orientationCombo->currentData().toString());
     data.centeringMode = centering(centeringCombo->currentData().toString());
-    data.courseUpHeading = (data.orientationMode == EcWidget::CourseUp) ? headingSpin->value() : -1;
+    //data.courseUpHeading = (data.orientationMode == EcWidget::CourseUp) ? headingSpin->value() : -1;
+    data.courseUpHeading = headingSpin->value();
     data.trailMode = trailCombo->currentData().toInt();
     data.trailMinute = trailSpin->value();
     data.trailDistance = trailSpinDistance->value();

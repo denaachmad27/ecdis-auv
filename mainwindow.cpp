@@ -432,6 +432,72 @@ void MainWindow::createMenuBar(){
     // drawMenu->addAction(gnomonicAction);
     // drawMenu->addAction(stereographicAction);
 
+    // ================================== OWNSHIP
+    QMenu *ownShipMenu = navMenu->addMenu("&Ownship");
+
+    // DISPLAY ORIENTATION
+    QMenu *displayOrientationMenu = ownShipMenu->addMenu("&Orientation Mode");
+
+    // Buat grup eksklusif
+    QActionGroup *orientationGroup = new QActionGroup(this);
+    orientationGroup->setExclusive(true); // Hanya satu yang bisa aktif
+
+    // NORTH UP
+    QAction *northUpAction = displayOrientationMenu->addAction("North Up");
+    northUpAction->setCheckable(true);
+    northUpAction->setChecked(ecchart->orientation == EcWidget::NorthUp);
+    orientationGroup->addAction(northUpAction);
+    connect(northUpAction, SIGNAL(triggered(bool)), this, SLOT(onNorthUp(bool)));
+
+    // HEAD UP
+    QAction *headUpAction = displayOrientationMenu->addAction("Head Up");
+    headUpAction->setCheckable(true);
+    headUpAction->setChecked(ecchart->orientation == EcWidget::HeadUp);
+    orientationGroup->addAction(headUpAction);
+    connect(headUpAction, SIGNAL(triggered(bool)), this, SLOT(onHeadUp(bool)));
+
+    // COURSE UP
+    QAction *courseUpAction = displayOrientationMenu->addAction("Course Up");
+    courseUpAction->setCheckable(true);
+    courseUpAction->setChecked(ecchart->orientation == EcWidget::CourseUp);
+    orientationGroup->addAction(courseUpAction);
+    connect(courseUpAction, SIGNAL(triggered(bool)), this, SLOT(onCourseUp(bool)));
+
+    // ONWSHIP CENTERING
+    QMenu *osCenteringMenu = ownShipMenu->addMenu("&Centering Mode");
+
+    // Buat grup eksklusif
+    QActionGroup *centeringGroup = new QActionGroup(this);
+    centeringGroup->setExclusive(true); // Hanya satu yang bisa aktif
+
+    // AUTO RECENTER
+    QAction *autoRecenterAction = osCenteringMenu->addAction("Auto Recenter");
+    autoRecenterAction->setCheckable(true);
+    autoRecenterAction->setChecked(ecchart->centering == EcWidget::AutoRecenter);
+    centeringGroup->addAction(autoRecenterAction);
+    connect(autoRecenterAction, SIGNAL(triggered(bool)), this, SLOT(onAutoRecenter(bool)));
+
+    // CENTERING
+    QAction *centeringAction = osCenteringMenu->addAction("Centered");
+    centeringAction->setCheckable(true);
+    centeringAction->setChecked(ecchart->centering == EcWidget::Centered);
+    centeringGroup->addAction(centeringAction);
+    connect(centeringAction, SIGNAL(triggered(bool)), this, SLOT(onCentered(bool)));
+
+    // LOOK AHEAD
+    QAction *lookAheadAction = osCenteringMenu->addAction("Look-Ahead");
+    lookAheadAction->setCheckable(true);
+    lookAheadAction->setChecked(ecchart->centering == EcWidget::LookAhead);
+    centeringGroup->addAction(lookAheadAction);
+    connect(lookAheadAction, SIGNAL(triggered(bool)), this, SLOT(onLookAhead(bool)));
+
+    // MANUAL OFFSET
+    QAction *manualAction = osCenteringMenu->addAction("Manual Offset");
+    manualAction->setCheckable(true);
+    manualAction->setChecked(ecchart->centering == EcWidget::Manual);
+    centeringGroup->addAction(manualAction);
+    connect(manualAction, SIGNAL(triggered(bool)), this, SLOT(onManual(bool)));
+
     // ================================== ROUTE MENU
     setupRoutePanel();
 
@@ -917,64 +983,6 @@ void MainWindow::createMenuBar(){
         }
     }
 
-    // ================================== DISPLAY ORIENTATION MENU
-    if (AppConfig::isDevelopment()) {
-        QMenu *displayOrientationMenu = menuBar()->addMenu("&Chart Orientation");
-
-        // Buat grup eksklusif
-        QActionGroup *orientationGroup = new QActionGroup(this);
-        orientationGroup->setExclusive(true); // Hanya satu yang bisa aktif
-
-        // NORTH UP
-        QAction *northUpAction = displayOrientationMenu->addAction("North-Up Mode");
-        northUpAction->setCheckable(true);
-        northUpAction->setChecked(true);
-        orientationGroup->addAction(northUpAction);
-        connect(northUpAction, SIGNAL(triggered(bool)), this, SLOT(onNorthUp(bool)));
-
-        // HEAD UP
-        QAction *headUpAction = displayOrientationMenu->addAction("Head-Up Mode");
-        headUpAction->setCheckable(true);
-        headUpAction->setChecked(false);
-        orientationGroup->addAction(headUpAction);
-        connect(headUpAction, SIGNAL(triggered(bool)), this, SLOT(onHeadUp(bool)));
-
-        // COURSE UP
-        QAction *courseUpAction = displayOrientationMenu->addAction("Course-Up Mode");
-        courseUpAction->setCheckable(true);
-        courseUpAction->setChecked(false);
-        orientationGroup->addAction(courseUpAction);
-        connect(courseUpAction, SIGNAL(triggered(bool)), this, SLOT(onCourseUp(bool)));
-
-        // DISPLAY ORIENTATION
-        QMenu *osCenteringMenu = menuBar()->addMenu("&Ownship Centering");
-
-        // Buat grup eksklusif
-        QActionGroup *centeringGroup = new QActionGroup(this);
-        centeringGroup->setExclusive(true); // Hanya satu yang bisa aktif
-
-        // HEAD UP
-        QAction *centeringAction = osCenteringMenu->addAction("Centering Mode");
-        centeringAction->setCheckable(true);
-        centeringAction->setChecked(true);
-        centeringGroup->addAction(centeringAction);
-        connect(centeringAction, SIGNAL(triggered(bool)), this, SLOT(onCentered(bool)));
-
-        // NORTH UP
-        QAction *lookAheadAction = osCenteringMenu->addAction("Look-Ahead Mode");
-        lookAheadAction->setCheckable(true);
-        lookAheadAction->setChecked(false);
-        centeringGroup->addAction(lookAheadAction);
-        connect(lookAheadAction, SIGNAL(triggered(bool)), this, SLOT(onLookAhead(bool)));
-
-        // COURSE UP
-        QAction *manualAction = osCenteringMenu->addAction("Manual Offset Mode");
-        manualAction->setCheckable(true);
-        manualAction->setChecked(false);
-        centeringGroup->addAction(manualAction);
-        connect(manualAction, SIGNAL(triggered(bool)), this, SLOT(onManual(bool)));
-    }
-
 
     // ================================== ABOUT MENU
     QMenu *aboutMenu = menuBar()->addMenu("&About");
@@ -1093,6 +1101,22 @@ void MainWindow::openReleaseNotesDialog() {
     QTextEdit *textEdit = new QTextEdit(&dialog);
     textEdit->setReadOnly(true);
     textEdit->setHtml(R"(
+        <h3><b>ECDIS v1.3 Changelog</b></h3>
+
+        <h3>New Features</h3>
+        <div style="font-size: 14px; margin-left: 0;">• Area Tools</div>
+        <div style="font-size: 14px; margin-left: 0;">• Measurements</div>
+
+        <h3>Enhancements</h3>
+        <div style="font-size: 14px; margin-left: 0;">• Bug Fixing</div>
+        <div style="font-size: 14px; margin-left: 0;">• UI Refinements</div>
+        <div style="font-size: 14px; margin-left: 0;">• Routes Management</div>
+        <div style="font-size: 14px; margin-left: 0;">• Menu Bar</div>
+        <div style="font-size: 14px; margin-left: 0;">• MOOSDB Connection</div>
+        <div style="font-size: 14px; margin-left: 0;">• Auto Draw and Publish</div>
+
+        <hr>
+
         <h3><b>ECDIS v1.2 Changelog</b></h3>
 
         <h3>New Features</h3>
@@ -4117,40 +4141,49 @@ void MainWindow::onCPATCPAAlarms(bool enabled)
 // ORIENTATION DISPLAY MODE
 void MainWindow::onNorthUp(bool checked) {
     if (checked) {
-        ecchart->displayOrientation = EcWidget::NorthUp;
+        ecchart->orientation = EcWidget::NorthUp;
 
-        QSettings settings("config.ini", QSettings::IniFormat);
-        settings.setValue("OwnShip/orientation", EcWidget::NorthUp);
+        ecchart->SetHeading(0);
+        oriEditSetText(0);
+
+        setCompassRotation(0);
 
         update();
-        DrawChart();
         DrawChart();
     }
 }
 
 void MainWindow::onHeadUp(bool checked) {
     if (checked) {
-        ecchart->displayOrientation = EcWidget::HeadUp;
 
-        QSettings settings("config.ini", QSettings::IniFormat);
-        settings.setValue("OwnShip/orientation", EcWidget::HeadUp);
+        ecchart->orientation = EcWidget::HeadUp;
+        if (ecchart->getNavShip().heading != 0){
+            int head = ecchart->getNavShip().heading;
+            ecchart->SetHeading(head);
+            oriEditSetText(head);
+
+            setCompassHeading(0);
+            setCompassRotation(head);
+        }
 
         update();
-        DrawChart();
         DrawChart();
     }
 }
 
 void MainWindow::onCourseUp(bool checked) {
     if (checked) {
-        ecchart->displayOrientation = EcWidget::CourseUp;
+        ecchart->orientation = EcWidget::CourseUp;
 
-        QSettings settings("config.ini", QSettings::IniFormat);
-        settings.setValue("OwnShip/orientation", EcWidget::CourseUp);
-        settings.setValue("OwnShip/course_heading", 0);
+        int course = SettingsManager::instance().data().courseUpHeading;
+
+        ecchart->SetHeading(course);
+        oriEditSetText(course);
+
+        setCompassRotation(course);
+        setCompassHeadRot(course);
 
         update();
-        DrawChart();
         DrawChart();
     }
 }
@@ -4158,10 +4191,17 @@ void MainWindow::onCourseUp(bool checked) {
 // OWNSHIP CENTERING MODE
 void MainWindow::onCentered(bool checked) {
     if (checked) {
-        ecchart->osCentering = EcWidget::Centered;
+        ecchart->centering = EcWidget::Centered;
 
-        QSettings settings("config.ini", QSettings::IniFormat);
-        settings.setValue("OwnShip/centering", EcWidget::Centered);
+        update();
+        DrawChart();
+        DrawChart();
+    }
+}
+
+void MainWindow::onAutoRecenter(bool checked) {
+    if (checked) {
+        ecchart->centering = EcWidget::AutoRecenter;
 
         update();
         DrawChart();
@@ -4171,10 +4211,7 @@ void MainWindow::onCentered(bool checked) {
 
 void MainWindow::onLookAhead(bool checked) {
     if (checked) {
-        ecchart->osCentering = EcWidget::LookAhead;
-
-        QSettings settings("config.ini", QSettings::IniFormat);
-        settings.setValue("OwnShip/centering", EcWidget::LookAhead);
+        ecchart->centering = EcWidget::LookAhead;
 
         update();
         DrawChart();
@@ -4184,10 +4221,7 @@ void MainWindow::onLookAhead(bool checked) {
 
 void MainWindow::onManual(bool checked) {
     if (checked) {
-        ecchart->osCentering = EcWidget::Manual;
-
-        QSettings settings("config.ini", QSettings::IniFormat);
-        settings.setValue("OwnShip/centering", EcWidget::Manual);
+        ecchart->centering = EcWidget::Manual;
 
         update();
         DrawChart();

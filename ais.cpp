@@ -457,7 +457,7 @@ void Ais::handleOwnShipUpdate(EcAISTargetInfo *ti)
 
         // EKOR OWNSHIP
         if (ownShipLat != 0 && ownShipLon != 0 && _wParent->getOwnShipTrail()) {
-            int setting = SettingsManager::instance().data().trailMode;
+            int setting = _wParent->getTrackLine();
             if (setting == 1){
                 int minute = SettingsManager::instance().data().trailMinute;
                 QDateTime now = QDateTime::currentDateTime();
