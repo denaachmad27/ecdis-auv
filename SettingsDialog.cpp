@@ -68,6 +68,14 @@ void SettingsDialog::setupUI() {
     orientationCombo->addItem("Course Up", "CourseUp");
     ownShipLayout->addRow("Default Orientation:", orientationCombo);
 
+    // SEPARATOR
+    QFrame *line = new QFrame(this);
+    line->setFrameShape(QFrame::HLine);
+    line->setFrameShadow(QFrame::Sunken);
+
+    ownShipLayout->addRow(line);
+
+    // NON DEFAULT DATA
     headingLabel = new QLabel("Course-Up Heading:");
     headingSpin = new QSpinBox;
     headingSpin->setRange(0, 359);
