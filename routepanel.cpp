@@ -250,6 +250,7 @@ QString RoutePanel::getThemeAwareStyleSheet()
     qDebug() << "  - Tree indentation: 16px (was 20px)";
     qDebug() << "  - Checkbox size: 14x14px (was 16x16px)";
     
+    // Simplified stylesheet to avoid potential crashes on some platforms/styles
     return QString(
         "QTreeWidget {"
         "    background-color: %1;"
@@ -279,34 +280,6 @@ QString RoutePanel::getThemeAwareStyleSheet()
         "QTreeWidget::item:selected:hover {"
         "    background-color: %4;"
         "    color: %5;"
-        "    border-radius: 3px;"
-        "}"
-        "QTreeWidget::indicator {"
-        "    width: 14px;"
-        "    height: 14px;"
-        "    border: 2px solid %9;"
-        "    border-radius: 2px;"
-        "    background-color: transparent;"
-        "}"
-        "QTreeWidget::indicator:unchecked {"
-        "    border: 2px solid %9;"
-        "    background-color: transparent;"
-        "}"
-        "QTreeWidget::indicator:checked {"
-        "    border: 2px solid %9;"
-        "    background-color: #4CAF50;"
-        "}"
-        "QTreeWidget::indicator:unchecked:hover {"
-        "    border: 2px solid %9;"
-        "    background-color: rgba(76, 175, 80, 0.3);"
-        "}"
-        "QTreeWidget::indicator:checked:hover {"
-        "    border: 2px solid %9;"
-        "    background-color: #66BB6A;"
-        "}"
-        "QTreeWidget::indicator:disabled {"
-        "    border: 2px solid #888888;"
-        "    background-color: #cccccc;"
         "}"
     ).arg(bgColor).arg(borderColor).arg(textColor).arg(selectedBgColor)
      .arg(selectedTextColor).arg(hoverBgColor).arg(hoverTextColor).arg(alternateRowColor)

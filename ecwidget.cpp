@@ -2453,6 +2453,29 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
     hideWaypointToolbox();
     setFocus();
 
+    // EBL/VRM Measure interactions
+    if (eblvrm.measureMode) {
+        if (e->button() == Qt::RightButton) {
+            // Fix the first placed point as EBL target before closing
+            eblvrm.commitFirstPointAsFixedTarget();
+            eblvrm.setMeasureMode(false);
+            eblvrm.clearMeasureSession();
+            emit statusMessage(tr("Measure stopped"));
+            update();
+            return; // consume
+        }
+        if (e->button() == Qt::LeftButton) {
+            EcCoordinate lat, lon;
+            if (XyToLatLon(e->x(), e->y(), lat, lon)) {
+                // On first click, implicitly start a session
+                if (!eblvrm.measuringActive) { eblvrm.clearFixedPoint(); eblvrm.startMeasureSession(); }
+                eblvrm.addMeasurePoint(lat, lon);
+                update();
+                return; // consume
+            }
+        }
+    }
+
     // Keep waypoint highlight when clicking on the map; it will be changed
     // only when another waypoint is explicitly selected.
     // AOI context menu on right-click (global, even outside edit mode)
@@ -8974,7 +8997,10 @@ void EcWidget::keyPressEvent(QKeyEvent *e)
     if (e->key() == Qt::Key_Escape) {
         // Stop EBL/VRM measure mode on ESC
         if (eblvrm.measureMode) {
+            // Fix the first placed point as EBL target before closing
+            eblvrm.commitFirstPointAsFixedTarget();
             eblvrm.setMeasureMode(false);
+            eblvrm.clearMeasureSession();
             emit statusMessage(tr("Measure stopped"));
             update();
             return;

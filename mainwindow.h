@@ -249,6 +249,9 @@ protected:
     QAction* startAisRecAction;
     QAction* stopAisRecAction;
     QAction* attachToShipAction;
+    // Measurement actions to sync check state
+    QAction* eblAction = nullptr;
+    QAction* vrmAction = nullptr;
 
     IAisDvrPlugin* aisDvr;
     AISSubscriber  *aisSub;

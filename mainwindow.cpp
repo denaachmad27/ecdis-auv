@@ -490,15 +490,15 @@ void MainWindow::createMenuBar(){
     // ========================= MEASUREMENT MENU =========================
     {
         QMenu *measureMenu = navMenu->addMenu("&Measurements");
-        QAction* actEBL = measureMenu->addAction("Electronic Bearing Line (EBL)");
-        actEBL->setCheckable(true);
-        actEBL->setChecked(false);
-        connect(actEBL, &QAction::toggled, this, &MainWindow::onToggleEBL);
+        eblAction = measureMenu->addAction("Electronic Bearing Line (EBL)");
+        eblAction->setCheckable(true);
+        eblAction->setChecked(false);
+        connect(eblAction, &QAction::toggled, this, &MainWindow::onToggleEBL);
 
-        QAction* actVRM = measureMenu->addAction("Variable Range Marker (VRM)");
-        actVRM->setCheckable(true);
-        actVRM->setChecked(false);
-        connect(actVRM, &QAction::toggled, this, &MainWindow::onToggleVRM);
+        vrmAction = measureMenu->addAction("Variable Range Marker (VRM)");
+        vrmAction->setCheckable(true);
+        vrmAction->setChecked(false);
+        connect(vrmAction, &QAction::toggled, this, &MainWindow::onToggleVRM);
 
         QAction* actMeasure = measureMenu->addAction("Start Measure From Ownship");
         connect(actMeasure, &QAction::triggered, this, &MainWindow::onStartMeasure);
@@ -3060,6 +3060,9 @@ void MainWindow::onToggleVRM(bool checked)
 void MainWindow::onStartMeasure()
 {
     if (!ecchart) return;
+    // Sync menu check state so hide/show works intuitively
+    if (eblAction && !eblAction->isChecked()) eblAction->setChecked(true);
+    if (vrmAction && !vrmAction->isChecked()) vrmAction->setChecked(true);
     ecchart->setEblVrmMeasureMode(true);
     statusBar()->showMessage(tr("Measure mode: move cursor to set EBL/VRM from ownship. Click menu again to disable via toggles."), 4000);
 }
