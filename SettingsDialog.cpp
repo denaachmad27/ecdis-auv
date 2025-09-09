@@ -73,6 +73,13 @@ void SettingsDialog::setupUI() {
     line->setFrameShape(QFrame::HLine);
     line->setFrameShadow(QFrame::Sunken);
 
+    if (AppConfig::isLight()){
+        line->setStyleSheet("color: gray;");
+    }
+    else {
+        line->setStyleSheet("color: #444444;");
+    }
+
     ownShipLayout->addRow(line);
 
     // NON DEFAULT DATA
