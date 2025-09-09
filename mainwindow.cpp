@@ -1101,6 +1101,22 @@ void MainWindow::openReleaseNotesDialog() {
     QTextEdit *textEdit = new QTextEdit(&dialog);
     textEdit->setReadOnly(true);
     textEdit->setHtml(R"(
+        <h3><b>ECDIS v1.3 Changelog</b></h3>
+
+        <h3>New Features</h3>
+        <div style="font-size: 14px; margin-left: 0;">• Area Tools</div>
+        <div style="font-size: 14px; margin-left: 0;">• Measurements</div>
+
+        <h3>Enhancements</h3>
+        <div style="font-size: 14px; margin-left: 0;">• Bug Fixing</div>
+        <div style="font-size: 14px; margin-left: 0;">• UI Refinements</div>
+        <div style="font-size: 14px; margin-left: 0;">• Routes Management</div>
+        <div style="font-size: 14px; margin-left: 0;">• Menu Bar</div>
+        <div style="font-size: 14px; margin-left: 0;">• MOOSDB Connection</div>
+        <div style="font-size: 14px; margin-left: 0;">• Auto Draw and Publish</div>
+
+        <hr>
+
         <h3><b>ECDIS v1.2 Changelog</b></h3>
 
         <h3>New Features</h3>
