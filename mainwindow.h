@@ -266,6 +266,7 @@ private slots:
     void onCourseUp(bool);
 
     // OS CENTERING MODE
+    void onAutoRecenter(bool);
     void onCentered(bool);
     void onLookAhead(bool);
     void onManual(bool);

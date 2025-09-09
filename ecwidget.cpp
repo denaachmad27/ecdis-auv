@@ -440,6 +440,9 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   createRouteAction = new QAction(QIcon(":/icon/create_route_white.svg"), tr("Create Route"), this);
   pickInfoAction = new QAction(QIcon(":/icon/info_white.svg"), tr("Map Information"), this);
   warningInfoAction = new QAction(QIcon(":/icon/warning_white.svg"), tr("Caution and Restricted Info"), this);
+
+  // SETTINGS STARTUP
+  defaultSettingsStartUp();
 }
 
 /*---------------------------------------------------------------------------*/
@@ -3653,7 +3656,7 @@ void EcWidget::startAISConnection()
 
     connect(subscriber, &AISSubscriber::navHeadingReceived, this, [=](double hdg) {
         navShip.heading = hdg;
-        if (mainWindow && SettingsManager::instance().data().orientationMode == NorthUp){
+        if (mainWindow && orientation == NorthUp){
             mainWindow->setCompassHeading(hdg);
         }
         updateAttachedGuardZoneFromNavShip();
@@ -4478,9 +4481,7 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon, double head )
     {
         if ((lat != 0 && lon != 0) && trackTarget.isEmpty())
         {
-            OSCenteringMode mode = SettingsManager::instance().data().centeringMode;
-
-            if (mode == LookAhead) // ⭐ Look-Ahead mode
+            if (centering == LookAhead) // ⭐ Look-Ahead mode
             {
                 double offsetNM = GetRange(currentScale) * 0.5;
                 double headingRad = head * M_PI / 180.0;
@@ -4492,11 +4493,11 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon, double head )
 
                 SetCenter(centerLat, centerLon);
             }
-            else if (mode == Centered)
+            else if (centering == Centered)
             {
                 SetCenter(lat, lon);
             }
-            else if (mode == AutoRecenter)
+            else if (centering == AutoRecenter)
             {
                 int x, y;
                 if (LatLonToXy(lat, lon, x, y))
@@ -4523,8 +4524,6 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon, double head )
                     }
                 }
             }
-
-            DisplayOrientationMode orientation = SettingsManager::instance().data().orientationMode;
 
             if (orientation == HeadUp){
                 SetHeading(head);
@@ -4647,9 +4646,7 @@ void EcWidget::slotRefreshChartDisplayThread(double lat, double lon, double head
             // Centering
             if (snapshot.lat != 0 && snapshot.lon != 0 && trackTarget.isEmpty())
             {
-                OSCenteringMode mode = SettingsManager::instance().data().centeringMode;
-
-                if (mode == LookAhead)
+                if (centering == LookAhead)
                 {
                     double offsetNM = GetRange(currentScale) * 0.5;
                     double headingRad = snapshot.heading * M_PI / 180.0;
@@ -4657,11 +4654,11 @@ void EcWidget::slotRefreshChartDisplayThread(double lat, double lon, double head
                     double offsetLon = offsetNM * sin(headingRad) / (60.0 * cos(snapshot.lat * M_PI / 180.0));
                     SetCenter(snapshot.lat + offsetLat, snapshot.lon + offsetLon);
                 }
-                else if (mode == Centered)
+                else if (centering == Centered)
                 {
                     SetCenter(snapshot.lat, snapshot.lon);
                 }
-                else if (mode == AutoRecenter)
+                else if (centering == AutoRecenter)
                 {
                     int x, y;
                     if (LatLonToXy(snapshot.lat, snapshot.lon, x, y))
@@ -4682,7 +4679,6 @@ void EcWidget::slotRefreshChartDisplayThread(double lat, double lon, double head
             }
 
             // Heading
-            DisplayOrientationMode orientation = SettingsManager::instance().data().orientationMode;
             if (orientation == HeadUp)
             {
                 SetHeading(snapshot.heading);
@@ -15554,4 +15550,13 @@ void EcWidget::updateAttachedGuardZoneFromNavShip()
         emit guardZoneModified();
         update();
     }
+}
+
+void EcWidget::defaultSettingsStartUp(){
+    orientation = SettingsManager::instance().data().orientationMode;
+    centering = SettingsManager::instance().data().centeringMode;
+    trackLine = SettingsManager::instance().data().trailMode;
+
+    trackDistance = SettingsManager::instance().data().trailDistance;
+    trackMinute = SettingsManager::instance().data().trailMinute;
 }

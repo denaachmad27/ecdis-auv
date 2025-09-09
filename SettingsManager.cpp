@@ -78,10 +78,11 @@ void SettingsManager::save(const SettingsData& data) {
     settings.setValue("OwnShip/orientation", data.orientationMode);
     settings.setValue("OwnShip/centering", data.centeringMode);
 
-    if (data.orientationMode == EcWidget::CourseUp) {
-        settings.setValue("OwnShip/course_heading", data.courseUpHeading);
-    }
+    // if (data.orientationMode == EcWidget::CourseUp) {
+    //     settings.setValue("OwnShip/course_heading", data.courseUpHeading);
+    // }
 
+    settings.setValue("OwnShip/course_heading", data.courseUpHeading);
     settings.setValue("OwnShip/mode", data.trailMode);
     settings.setValue("OwnShip/interval", data.trailMinute);
     settings.setValue("OwnShip/distance", data.trailDistance);
