@@ -2470,9 +2470,15 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
         if (e->button() == Qt::LeftButton) {
             EcCoordinate lat, lon;
             if (XyToLatLon(e->x(), e->y(), lat, lon)) {
-                // On first click, implicitly start a session
-                if (!eblvrm.measuringActive) { eblvrm.clearFixedPoint(); eblvrm.startMeasureSession(); }
+                // For now, end measurement after first point placement:
+                // set fixed EBL/VRM target to this point and exit measure mode.
+                eblvrm.clearFixedPoint();
+                eblvrm.startMeasureSession();
                 eblvrm.addMeasurePoint(lat, lon);
+                eblvrm.commitFirstPointAsFixedTarget();
+                eblvrm.setMeasureMode(false);
+                eblvrm.clearMeasureSession();
+                emit statusMessage(tr("Measure set to first point"));
                 update();
                 return; // consume
             }
