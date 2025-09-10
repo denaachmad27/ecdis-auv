@@ -3088,7 +3088,7 @@ void MainWindow::onStartMeasure()
     if (eblAction && !eblAction->isChecked()) eblAction->setChecked(true);
     if (vrmAction && !vrmAction->isChecked()) vrmAction->setChecked(true);
     ecchart->setEblVrmMeasureMode(true);
-    statusBar()->showMessage(tr("Measure mode: move cursor to set EBL/VRM from ownship. Click menu again to disable via toggles."), 4000);
+    statusBar()->showMessage(tr("Measure mode: move cursor, right-click to set EBL/VRM from ownship. Left-click pans. Click menu again to disable via toggles."), 4000);
 }
 
 

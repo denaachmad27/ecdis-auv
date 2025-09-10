@@ -2459,19 +2459,9 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
     // EBL/VRM Measure interactions
     if (eblvrm.measureMode) {
         if (e->button() == Qt::RightButton) {
-            // Fix the first placed point as EBL target before closing
-            eblvrm.commitFirstPointAsFixedTarget();
-            eblvrm.setMeasureMode(false);
-            eblvrm.clearMeasureSession();
-            emit statusMessage(tr("Measure stopped"));
-            update();
-            return; // consume
-        }
-        if (e->button() == Qt::LeftButton) {
+            // Place point with right-click and finalize measurement
             EcCoordinate lat, lon;
             if (XyToLatLon(e->x(), e->y(), lat, lon)) {
-                // For now, end measurement after first point placement:
-                // set fixed EBL/VRM target to this point and exit measure mode.
                 eblvrm.clearFixedPoint();
                 eblvrm.startMeasureSession();
                 eblvrm.addMeasurePoint(lat, lon);
@@ -2480,9 +2470,10 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
                 eblvrm.clearMeasureSession();
                 emit statusMessage(tr("Measure set to first point"));
                 update();
-                return; // consume
+                return; // consume to avoid other right-click handlers
             }
         }
+        // Do not consume left-click in measure mode; allow pan/other defaults
     }
 
     // Keep waypoint highlight when clicking on the map; it will be changed
