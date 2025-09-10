@@ -809,6 +809,7 @@ public:
   QAction* createRouteAction;
   QAction* pickInfoAction;
   QAction* warningInfoAction;
+  QAction* measureEblVrmAction;
 
   // SPEED AVG
   QVector<QPair<QDateTime, double>> speedBuffer;
@@ -816,6 +817,9 @@ public:
   QTimer slidingAvgTimer;
 
   double getSpeedAverage();
+
+  // EBL/VRM helpers
+  void setEblVrmFixedTarget(double lat, double lon);
 
 public slots:
   void updateAISTargetsList();

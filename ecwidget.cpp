@@ -440,9 +440,23 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   createRouteAction = new QAction(QIcon(":/icon/create_route_white.svg"), tr("Create Route"), this);
   pickInfoAction = new QAction(QIcon(":/icon/info_white.svg"), tr("Map Information"), this);
   warningInfoAction = new QAction(QIcon(":/icon/warning_white.svg"), tr("Caution and Restricted Info"), this);
+  measureEblVrmAction = new QAction(tr("Measure (EBL && VRM)"), this);
 
   // SETTINGS STARTUP
   defaultSettingsStartUp();
+}
+
+void EcWidget::setEblVrmFixedTarget(double lat, double lon)
+{
+    // Set fixed EBL/VRM target to a specific position
+    eblvrm.eblHasFixedPoint = true;
+    eblvrm.eblFixedLat = lat;
+    eblvrm.eblFixedLon = lon;
+    eblvrm.setMeasureMode(false);
+    eblvrm.setEblEnabled(true);
+    eblvrm.setVrmEnabled(true);
+    emit statusMessage(tr("EBL/VRM set from ownship to clicked point"));
+    update();
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2456,6 +2470,107 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
     hideWaypointToolbox();
     setFocus();
 
+    // EBL/VRM delete menu on right-click near line or ring (works also during measure)
+    if (e->button() == Qt::RightButton) {
+        bool hitEbl = false, hitVrm = false;
+        const int hitTolPx = 8;
+        
+        // --- EBL hit test ---
+        if (eblvrm.eblEnabled || eblvrm.eblHasFixedPoint) {
+            int cx=0, cy=0, ex=0, ey=0; EcCoordinate lat2=0, lon2=0;
+            if (LatLonToXy(navShip.lat, navShip.lon, cx, cy)) {
+                bool haveEndpoint=false;
+                if (eblvrm.eblHasFixedPoint) {
+                    lat2 = eblvrm.eblFixedLat; lon2 = eblvrm.eblFixedLon; haveEndpoint = LatLonToXy(lat2, lon2, ex, ey);
+                } else {
+                    EcCalculateRhumblinePosition(EC_GEO_DATUM_WGS84, navShip.lat, navShip.lon, 12.0, eblvrm.eblBearingDeg, &lat2, &lon2);
+                    haveEndpoint = LatLonToXy(lat2, lon2, ex, ey);
+                }
+                if (haveEndpoint) {
+                    auto sqr = [](double v){ return v*v; };
+                    auto distPtSeg = [&](double px, double py, double x1, double y1, double x2, double y2){
+                        double vx=x2-x1, vy=y2-y1; double wx=px-x1, wy=py-y1; double c1=vx*wx+vy*wy; if (c1<=0) return std::sqrt(sqr(px-x1)+sqr(py-y1));
+                        double c2=vx*vx+vy*vy; if (c2<=0) return std::sqrt(sqr(px-x1)+sqr(py-y1)); double t=c1/c2; if (t>=1) return std::sqrt(sqr(px-x2)+sqr(py-y2));
+                        double projx=x1+t*vx, projy=y1+t*vy; return std::sqrt(sqr(px-projx)+sqr(py-projy)); };
+                    double d = distPtSeg(e->x(), e->y(), cx, cy, ex, ey);
+                    if (d <= hitTolPx) hitEbl = true;
+                }
+            }
+        }
+        
+        // helper to compute min distance to a polyline
+        auto segDist = [](const QPoint& p, const QPoint& a, const QPoint& b){
+            auto sqr = [](double v){ return v*v; };
+            double px=p.x(), py=p.y(), x1=a.x(), y1=a.y(), x2=b.x(), y2=b.y();
+            double vx=x2-x1, vy=y2-y1; double wx=px-x1, wy=py-y1; double c1=vx*wx+vy*wy; if (c1<=0) return std::sqrt(sqr(px-x1)+sqr(py-y1));
+            double c2=vx*vx+vy*vy; if (c2<=0) return std::sqrt(sqr(px-x1)+sqr(py-y1)); double t=c1/c2; if (t>=1) return std::sqrt(sqr(px-x2)+sqr(py-y2));
+            double projx=x1+t*vx, projy=y1+t*vy; return std::sqrt(sqr(px-projx)+sqr(py-projy)); };
+        
+        // --- VRM hit test (normal ring around ownship) ---
+        if (eblvrm.vrmEnabled) {
+            int cx=0, cy=0; if (LatLonToXy(navShip.lat, navShip.lon, cx, cy)) {
+                double vr = eblvrm.vrmRadiusNM;
+                if (eblvrm.eblHasFixedPoint) {
+                    double dnm=0.0, btmp=0.0;
+                    EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84, navShip.lat, navShip.lon, eblvrm.eblFixedLat, eblvrm.eblFixedLon, &dnm, &btmp);
+                    vr = dnm;
+                }
+                const int segs = 72;
+                QPoint prev; bool hasPrev=false;
+                for (int i=0;i<segs;++i){
+                    double brg = (360.0 * i) / segs;
+                    EcCoordinate lat2=0, lon2=0;
+                    EcCalculateRhumblinePosition(EC_GEO_DATUM_WGS84, navShip.lat, navShip.lon, vr, brg, &lat2, &lon2);
+                    int px=0, py=0; if (!LatLonToXy(lat2, lon2, px, py)) continue;
+                    QPoint cur(px,py);
+                    if (hasPrev){
+                        double d = segDist(e->pos(), prev, cur);
+                        if (d <= hitTolPx) { hitVrm = true; break; }
+                    }
+                    prev = cur; hasPrev=true;
+                }
+            }
+        }
+
+        // --- Temporary measuring ring (green) around last point ---
+        if (!hitVrm && eblvrm.measureMode && eblvrm.measuringActive && eblvrm.liveHasCursor && eblvrm.measurePoints.size() >= 1) {
+            double cLat = eblvrm.measurePoints.back().x();
+            double cLon = eblvrm.measurePoints.back().y();
+            double dnm=0.0, btmp=0.0;
+            EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84, cLat, cLon, eblvrm.liveCursorLat, eblvrm.liveCursorLon, &dnm, &btmp);
+            const int segs = 72; QPoint prev; bool hasPrev=false; int cx=0, cy=0; bool centerOk = LatLonToXy(cLat, cLon, cx, cy);
+            if (centerOk) {
+                for (int i=0;i<segs;++i){
+                    double brg = (360.0 * i) / segs;
+                    EcCoordinate lat2=0, lon2=0;
+                    EcCalculateRhumblinePosition(EC_GEO_DATUM_WGS84, cLat, cLon, dnm, brg, &lat2, &lon2);
+                    int px=0, py=0; if (!LatLonToXy(lat2, lon2, px, py)) continue;
+                    QPoint cur(px,py);
+                    if (hasPrev){
+                        double d = segDist(e->pos(), prev, cur);
+                        if (d <= hitTolPx) { hitVrm = true; break; }
+                    }
+                    prev = cur; hasPrev=true;
+                }
+            }
+        }
+
+        if (hitEbl || hitVrm) {
+            QMenu menu(this);
+            QAction* del = menu.addAction(tr("Delete EBL && VRM"));
+            QAction* chosen = menu.exec(mapToGlobal(e->pos()));
+            if (chosen == del) {
+                eblvrm.clearFixedPoint();
+                eblvrm.setEblEnabled(false);
+                eblvrm.setVrmEnabled(false);
+                eblvrm.setMeasureMode(false);
+                eblvrm.clearMeasureSession();
+                emit statusMessage(tr("EBL/VRM deleted"));
+                update();
+                return; // handled
+            }
+        }
+    }
     // EBL/VRM Measure interactions
     if (eblvrm.measureMode) {
         if (e->button() == Qt::RightButton) {
@@ -6266,6 +6381,9 @@ void EcWidget::showMapContextMenu(const QPoint& pos)
     contextMenu.addAction(createRouteAction);
     contextMenu.addSeparator();
     contextMenu.addAction(pickInfoAction);
+    contextMenu.addAction(warningInfoAction);
+    contextMenu.addSeparator();
+    contextMenu.addAction(measureEblVrmAction);
 
     // Execute menu
     QAction* selectedAction = contextMenu.exec(mapToGlobal(pos));
@@ -6288,6 +6406,20 @@ void EcWidget::showMapContextMenu(const QPoint& pos)
 
         pickWindow->fill(pickedFeatureList);
         pickWindow->show();
+    }
+    else if (selectedAction == warningInfoAction) {
+        QList<EcFeature> pickedFeatureList;
+        EcCoordinate lat, lon;
+        XyToLatLon(pos.x(), pos.y(), lat, lon);
+        GetPickedFeatures(pickedFeatureList);
+        pickWindow->fillWarningOnly(pickedFeatureList, lat, lon);
+        pickWindow->show();
+    }
+    else if (selectedAction == measureEblVrmAction) {
+        EcCoordinate lat, lon;
+        if (XyToLatLon(pos.x(), pos.y(), lat, lon)) {
+            setEblVrmFixedTarget(lat, lon);
+        }
     }
 }
 

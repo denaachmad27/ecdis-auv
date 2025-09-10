@@ -1900,6 +1900,8 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
         contextMenu.addSeparator();
         contextMenu.addAction(ecchart->pickInfoAction);
         contextMenu.addAction(ecchart->warningInfoAction);
+        contextMenu.addSeparator();
+        contextMenu.addAction(ecchart->measureEblVrmAction);
 
         // Execute menu
         QAction* selectedAction = contextMenu.exec(ecchart->mapToGlobal(pos));
@@ -1929,6 +1931,12 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
 
             pickWindow->fillWarningOnly(pickedFeatureList, lat, lon);
             pickWindow->show();
+        }
+        else if (selectedAction == ecchart->measureEblVrmAction) {
+            EcCoordinate lat, lon;
+            if (ecchart->XyToLatLon(pos.x(), pos.y(), lat, lon)) {
+                ecchart->setEblVrmFixedTarget(lat, lon);
+            }
         }
     }
 
