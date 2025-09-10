@@ -3896,7 +3896,7 @@ void EcWidget::startAISConnection()
     });
 
     // SPEED AVERAGE TIMER
-    slidingAvgTimer.setInterval(1000); // update rata-rata tiap 5 detik
+    slidingAvgTimer.setInterval(5000); // update rata-rata tiap 5 detik
     connect(&slidingAvgTimer, &QTimer::timeout, this, [=]() {
         QDateTime cutoff = QDateTime::currentDateTime().addSecs(-60);
 
