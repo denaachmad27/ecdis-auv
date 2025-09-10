@@ -45,5 +45,7 @@
         <file>icon/warning_white.svg</file>
         <file>icon/info.svg</file>
         <file>icon/warning.svg</file>
+        <file>icon/measure.svg</file>
+        <file>icon/measure_white.svg</file>
     </qresource>
 </RCC>

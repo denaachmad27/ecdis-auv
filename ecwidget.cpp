@@ -440,7 +440,7 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   createRouteAction = new QAction(QIcon(":/icon/create_route_white.svg"), tr("Create Route"), this);
   pickInfoAction = new QAction(QIcon(":/icon/info_white.svg"), tr("Map Information"), this);
   warningInfoAction = new QAction(QIcon(":/icon/warning_white.svg"), tr("Caution and Restricted Info"), this);
-  measureEblVrmAction = new QAction(tr("Measure (EBL && VRM)"), this);
+  measureEblVrmAction = new QAction(QIcon(":/icon/measure_white.svg"), tr("Measure Here"), this);
 
   // SETTINGS STARTUP
   defaultSettingsStartUp();
@@ -2470,11 +2470,31 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
     hideWaypointToolbox();
     setFocus();
 
+    // EBL/VRM Measure interactions
+    if (eblvrm.measureMode) {
+        if (e->button() == Qt::RightButton) {
+            // Place point with right-click and finalize measurement
+            EcCoordinate lat, lon;
+            if (XyToLatLon(e->x(), e->y(), lat, lon)) {
+                eblvrm.clearFixedPoint();
+                eblvrm.startMeasureSession();
+                eblvrm.addMeasurePoint(lat, lon);
+                eblvrm.commitFirstPointAsFixedTarget();
+                eblvrm.setMeasureMode(false);
+                eblvrm.clearMeasureSession();
+                emit statusMessage(tr("Measure set to first point"));
+                update();
+                return; // consume to avoid other right-click handlers
+            }
+        }
+        // Do not consume left-click in measure mode; allow pan/other defaults
+    }
+
     // EBL/VRM delete menu on right-click near line or ring (works also during measure)
-    if (e->button() == Qt::RightButton) {
+    else if (e->button() == Qt::RightButton) {
         bool hitEbl = false, hitVrm = false;
         const int hitTolPx = 8;
-        
+
         // --- EBL hit test ---
         if (eblvrm.eblEnabled || eblvrm.eblHasFixedPoint) {
             int cx=0, cy=0, ex=0, ey=0; EcCoordinate lat2=0, lon2=0;
@@ -2497,7 +2517,7 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
                 }
             }
         }
-        
+
         // helper to compute min distance to a polyline
         auto segDist = [](const QPoint& p, const QPoint& a, const QPoint& b){
             auto sqr = [](double v){ return v*v; };
@@ -2505,7 +2525,7 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
             double vx=x2-x1, vy=y2-y1; double wx=px-x1, wy=py-y1; double c1=vx*wx+vy*wy; if (c1<=0) return std::sqrt(sqr(px-x1)+sqr(py-y1));
             double c2=vx*vx+vy*vy; if (c2<=0) return std::sqrt(sqr(px-x1)+sqr(py-y1)); double t=c1/c2; if (t>=1) return std::sqrt(sqr(px-x2)+sqr(py-y2));
             double projx=x1+t*vx, projy=y1+t*vy; return std::sqrt(sqr(px-projx)+sqr(py-projy)); };
-        
+
         // --- VRM hit test (normal ring around ownship) ---
         if (eblvrm.vrmEnabled) {
             int cx=0, cy=0; if (LatLonToXy(navShip.lat, navShip.lon, cx, cy)) {
@@ -2570,25 +2590,6 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
                 return; // handled
             }
         }
-    }
-    // EBL/VRM Measure interactions
-    if (eblvrm.measureMode) {
-        if (e->button() == Qt::RightButton) {
-            // Place point with right-click and finalize measurement
-            EcCoordinate lat, lon;
-            if (XyToLatLon(e->x(), e->y(), lat, lon)) {
-                eblvrm.clearFixedPoint();
-                eblvrm.startMeasureSession();
-                eblvrm.addMeasurePoint(lat, lon);
-                eblvrm.commitFirstPointAsFixedTarget();
-                eblvrm.setMeasureMode(false);
-                eblvrm.clearMeasureSession();
-                emit statusMessage(tr("Measure set to first point"));
-                update();
-                return; // consume to avoid other right-click handlers
-            }
-        }
-        // Do not consume left-click in measure mode; allow pan/other defaults
     }
 
     // Keep waypoint highlight when clicking on the map; it will be changed
@@ -6800,6 +6801,7 @@ void EcWidget::iconUpdate(bool dark){
         createRouteAction->setIcon(QIcon(":/icon/create_route_white.svg"));
         pickInfoAction->setIcon(QIcon(":/icon/info_white.svg"));
         warningInfoAction->setIcon(QIcon(":/icon/warning_white.svg"));
+        measureEblVrmAction->setIcon(QIcon(":/icon/measure_white.svg"));
     }
     else {
         editAction->setIcon(QIcon(":/icon/edit.svg"));
@@ -6811,6 +6813,7 @@ void EcWidget::iconUpdate(bool dark){
         createRouteAction->setIcon(QIcon(":/icon/create_route.svg"));
         pickInfoAction->setIcon(QIcon(":/icon/info.svg"));
         warningInfoAction->setIcon(QIcon(":/icon/warning.svg"));
+        measureEblVrmAction->setIcon(QIcon(":/icon/measure.svg"));
     }
 }
 
