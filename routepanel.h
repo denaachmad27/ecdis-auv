@@ -73,6 +73,11 @@ class RoutePanel : public QWidget
 
 public:
     explicit RoutePanel(EcWidget* ecWidget, QWidget *parent = nullptr);
+
+    // GETTER SETTER
+    inline void setTtgText(QString val){ttgText = val;}
+    inline void setEtaText(QString val){etaText = val;}
+
     ~RoutePanel();
 
     void refreshRouteList();
@@ -179,12 +184,16 @@ private:
     QLabel* routeNameLabel;
     QLabel* waypointCountLabel;
     QLabel* totalDistanceLabel;
+    QLabel* timeToGoLabel;
     QLabel* totalTimeLabel;
     QCheckBox* visibilityCheckBox;
     QPushButton* addToShipButton;
     QPushButton* detachFromShipButton;
     
-    
+    // FROM MOOSDB
+    QString ttgText;
+    QString etaText;
+
     // Helper methods
     void setupUI();
     void setupConnections();

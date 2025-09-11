@@ -432,11 +432,9 @@ void MainWindow::createMenuBar(){
     // drawMenu->addAction(gnomonicAction);
     // drawMenu->addAction(stereographicAction);
 
-    // ================================== OWNSHIP
-    QMenu *ownShipMenu = navMenu->addMenu("&Ownship");
-
+    // ================================== DISPLAY
     // DISPLAY ORIENTATION
-    QMenu *displayOrientationMenu = ownShipMenu->addMenu("&Orientation Mode");
+    QMenu *displayOrientationMenu = navMenu->addMenu("&Ownship Orientation");
 
     // Buat grup eksklusif
     QActionGroup *orientationGroup = new QActionGroup(this);
@@ -464,7 +462,7 @@ void MainWindow::createMenuBar(){
     connect(courseUpAction, SIGNAL(triggered(bool)), this, SLOT(onCourseUp(bool)));
 
     // ONWSHIP CENTERING
-    QMenu *osCenteringMenu = ownShipMenu->addMenu("&Centering Mode");
+    QMenu *osCenteringMenu = navMenu->addMenu("&Ownship Centering");
 
     // Buat grup eksklusif
     QActionGroup *centeringGroup = new QActionGroup(this);

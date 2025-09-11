@@ -3895,10 +3895,11 @@ void EcWidget::startAISConnection()
         canWork = true;
     });
 
+    /*
     // SPEED AVERAGE TIMER
     slidingAvgTimer.setInterval(5000); // update rata-rata tiap 5 detik
     connect(&slidingAvgTimer, &QTimer::timeout, this, [=]() {
-        QDateTime cutoff = QDateTime::currentDateTime().addSecs(-60);
+        QDateTime cutoff = QDateTime::currentDateTime().addSecs(-10);
 
         // Buang data yang lebih tua dari 1 menit
         while (!speedBuffer.isEmpty() && speedBuffer.first().first < cutoff) {
@@ -3916,6 +3917,7 @@ void EcWidget::startAISConnection()
         }
     });
     slidingAvgTimer.start();
+    */
 
     connect(subscriber, &AISSubscriber::errorOccurred, this, [](const QString &msg) { qWarning() << "Error:" << msg; });
     connect(subscriber, &AISSubscriber::disconnected, this, []() { qDebug() << "Disconnected from AIS source.";});

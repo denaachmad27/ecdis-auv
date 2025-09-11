@@ -506,7 +506,8 @@ void RoutePanel::setupUI()
     routeNameLabel = new QLabel("-");
     waypointCountLabel = new QLabel("-");
     totalDistanceLabel = new QLabel("-");
-    totalTimeLabel = new QLabel("-");
+    totalTimeLabel = new QLabel("--:--:--");
+    timeToGoLabel = new QLabel("-- -- ---- --:--:--");
     
     infoLayout->addWidget(new QLabel("Route:"), 0, 0);
     infoLayout->addWidget(routeNameLabel, 0, 1);
@@ -514,9 +515,14 @@ void RoutePanel::setupUI()
     infoLayout->addWidget(waypointCountLabel, 1, 1);
     infoLayout->addWidget(new QLabel("Distance:"), 2, 0);
     infoLayout->addWidget(totalDistanceLabel, 2, 1);
+
+    // TTG information
+    infoLayout->addWidget(new QLabel("Time To Go:"), 3, 0);
+    infoLayout->addWidget(timeToGoLabel, 3, 1);
+
     // ETA information
-    infoLayout->addWidget(new QLabel("ETA:"), 3, 0);
-    infoLayout->addWidget(totalTimeLabel, 3, 1);
+    infoLayout->addWidget(new QLabel("ETA:"), 4, 0);
+    infoLayout->addWidget(totalTimeLabel, 4, 1);
     
     // Add info layout to group
     infoGroupLayout->addLayout(infoLayout);
@@ -747,7 +753,21 @@ void RoutePanel::setupConnections()
     });
     connect(deleteWaypointAction, &QAction::triggered, this, &RoutePanel::onDeleteWaypointFromContext);
 
-    connect(ecWidget, &EcWidget::updateEta, this, &RoutePanel::refreshRouteEta);
+    connect(ecWidget, &EcWidget::updateEta, [this](){
+        bool attached = ecWidget->isRouteAttachedToShip(selectedRouteId);
+
+        if (attached){
+            if (!activeRoute.rteEta.isEmpty()){etaText = activeRoute.rteEta;}
+            if (!activeRoute.rteTtg.isEmpty()){ttgText = activeRoute.rteTtg;}
+
+            timeToGoLabel->setText(QString("⌛ %1").arg(ttgText));
+            totalTimeLabel->setText(QString("📆 %1").arg(etaText));
+        }
+        else {
+            timeToGoLabel->setText(QString("⌛ --:--:--").arg(ttgText));
+            totalTimeLabel->setText(QString("📆 --- -- ---- --:--:--").arg(etaText));
+        }
+    });
 }
 
 // Public wrappers for main menu actions (avoid private slot access issue)
@@ -999,16 +1019,20 @@ void RoutePanel::updateRouteInfoDisplay(const RouteInfo& info)
     waypointCountLabel->setText(QString("📌 %1 waypoints").arg(info.waypointCount));
     totalDistanceLabel->setText(QString("📏 %1").arg(formatDistance(info.totalDistance)));
     // Try to show ETA if available from EcWidget activeRoute or compute fallback
-    QString etaText = "-";
+    ttgText = "--:--:--";
+    etaText = "--- -- ---- --:--:--";
+
     // Prefer ETA/TTG from global activeRoute if available (updated by AIS/MOOS)
-    if (!activeRoute.rteEta.isEmpty()) {
-        etaText = activeRoute.rteEta;
-    } else if (!activeRoute.rteTtg.isEmpty()) {
-        etaText = QString("TTG %1").arg(activeRoute.rteTtg);
-    } else if (info.totalTime > 0.0) {
-        etaText = formatTime(info.totalTime);
-    }
-    totalTimeLabel->setText(QString("⏱️ %1").arg(etaText));
+    // if (!activeRoute.rteEta.isEmpty()) {
+    //     etaText = activeRoute.rteEta;
+    // } else if (!activeRoute.rteTtg.isEmpty()) {
+    //     etaText = QString("TTG %1").arg(activeRoute.rteTtg);
+    // } else if (info.totalTime > 0.0) {
+    //     etaText = formatTime(info.totalTime);
+    // }
+
+    timeToGoLabel->setText(QString("⌛ %1").arg(ttgText));
+    totalTimeLabel->setText(QString("📆 %1").arg(etaText));
     
     qDebug() << "[ROUTE-PANEL] *** SETTING CHECKBOX TO:" << info.visible << "for route" << info.routeId;
     qDebug() << "[ROUTE-PANEL] *** selectedRouteId:" << selectedRouteId << "checkbox about to be set";
@@ -1025,6 +1049,7 @@ void RoutePanel::updateRouteInfoDisplay(const RouteInfo& info)
         addToShipButton->setEnabled(false);
         detachFromShipButton->setEnabled(true);
     } else {
+
         addToShipButton->setEnabled(true);
         detachFromShipButton->setEnabled(false);
     }
