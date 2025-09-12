@@ -1068,6 +1068,17 @@ public:
   double aoiGhostLon = 0.0;
   // AOI attach state
   int attachedAoiId = -1;
+  // AOI screen cache for performance
+  QPolygon attachedAoiScreenCache;        // Cached screen-space polygon of attached AOI
+  int attachedAoiScreenCacheForId = -1;   // AOI id for which cache is valid
+  quint64 attachedAoiScreenCacheViewVersion = 0; // View version when cache was built
+  quint64 viewChangeCounter = 0;          // Incremented when view (center/scale/heading) changes
+  QRect attachedAoiScreenCacheBounds;     // Cached bounding rect for quick reject
+  // Throttled containment check state
+  bool cachedOwnshipOutsideAoi = false;   // Result cache of last check
+  QPoint lastOwnshipScreenForAoiCheck = QPoint(0,0);
+  QElapsedTimer aoiContainmentTimer;      // Timer to throttle containment checks
+  qint64 lastAoiContainmentCheckMs = -1;  // Last check timestamp in ms
   // AOI render options
   bool enableAoiSegmentLabels = false; // safety default: off
   bool showAoiLabels = true;           // master toggle for AOI labels

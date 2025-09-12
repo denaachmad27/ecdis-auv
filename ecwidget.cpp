@@ -605,6 +605,8 @@ void EcWidget::SetCenter (EcCoordinate lat, EcCoordinate lon)
 {
   currentLat = lat;
   currentLon = lon;
+  // Invalidate AOI screen cache due to view change
+  viewChangeCounter++;
   if (currentScale > maxScale) currentScale = maxScale; // in case the world overview has been shown before
   // Check projection because it depends on viewport
   SetProjection(projectionMode);
@@ -617,6 +619,8 @@ void EcWidget::SetScale (int newScale)
   currentScale = newScale;
   if (currentScale < minScale) currentScale = minScale;
   if (currentScale > maxScale) currentScale = maxScale;
+  // Invalidate AOI screen cache due to view change
+  viewChangeCounter++;
   // Check projection because it depends on viewport
   SetProjection(projectionMode);
 }
@@ -631,6 +635,9 @@ void EcWidget::SetHeading (double newHeading)
 
   currentHeading = newHeading;
   if (currentScale > maxScale) currentScale = maxScale; // in case the world overview has been shown before
+
+  // Invalidate AOI screen cache due to view change
+  viewChangeCounter++;
 
   // Flush SevenCs drawing cache when heading changes to prevent double route display
   if (headingChanged && view && initialized) {
@@ -4514,6 +4521,83 @@ void EcWidget::ownShipDraw(){
 
                 // ⭐ PANGGIL DENGAN PARAMETER BARU: COG, Heading, SOG
                 drawOwnShipIcon(painter, x, y, cog, heading, ownShipData.sog);
+
+                // AOI EXIT PULSE: If ownship attached to an AOI and outside its area, draw pulsing red ring
+                if (attachedAoiId >= 0) {
+                    const AOI* attached = nullptr;
+                    for (const auto& a : aoiList) {
+                        if (a.id == attachedAoiId) { attached = &a; break; }
+                    }
+
+                    if (attached && attached->vertices.size() >= 3) {
+                        // Rebuild screen polygon only when needed (view or AOI changed)
+                        bool needRebuild = (attachedAoiScreenCacheForId != attachedAoiId) ||
+                                           (attachedAoiScreenCacheViewVersion != viewChangeCounter) ||
+                                           (attachedAoiScreenCache.size() != attached->vertices.size());
+                        if (needRebuild) {
+                            attachedAoiScreenCache.clear();
+                            for (const QPointF& ll : attached->vertices) {
+                                int vx = 0, vy = 0;
+                                if (LatLonToXy(ll.x(), ll.y(), vx, vy)) {
+                                    attachedAoiScreenCache << QPoint(vx, vy);
+                                }
+                            }
+                            attachedAoiScreenCacheForId = attachedAoiId;
+                            attachedAoiScreenCacheViewVersion = viewChangeCounter;
+                            attachedAoiScreenCacheBounds = attachedAoiScreenCache.boundingRect();
+                        }
+
+                        if (attachedAoiScreenCache.size() >= 3) {
+                            // Throttle containment checks to reduce per-frame cost
+                            if (!aoiContainmentTimer.isValid()) aoiContainmentTimer.start();
+                            qint64 nowMs = aoiContainmentTimer.elapsed();
+                            int dx = x - lastOwnshipScreenForAoiCheck.x();
+                            int dy = y - lastOwnshipScreenForAoiCheck.y();
+                            bool movedEnough = (dx*dx + dy*dy) > (2*2); // >2 px movement
+                            bool timeElapsed = (lastAoiContainmentCheckMs < 0) || (nowMs - lastAoiContainmentCheckMs > 100);
+
+                            if (movedEnough || timeElapsed || needRebuild) {
+                                // Quick bounding-box reject before polygon test
+                                if (!attachedAoiScreenCacheBounds.adjusted(-2,-2,2,2).contains(x, y)) {
+                                    cachedOwnshipOutsideAoi = true;
+                                } else {
+                                    bool insideNow = attachedAoiScreenCache.containsPoint(QPoint(x, y), Qt::OddEvenFill);
+                                    cachedOwnshipOutsideAoi = !insideNow;
+                                }
+                                lastOwnshipScreenForAoiCheck = QPoint(x, y);
+                                lastAoiContainmentCheckMs = nowMs;
+                            }
+
+                            if (cachedOwnshipOutsideAoi) {
+                                // Draw pulsing red circle at ownship position (similar to waypoint pulse)
+                                static QElapsedTimer aoiExitPulseTimer;
+                                if (!aoiExitPulseTimer.isValid()) {
+                                    aoiExitPulseTimer.start();
+                                }
+                                qint64 elapsedMs = aoiExitPulseTimer.elapsed();
+                                double t = elapsedMs / 1000.0;
+
+                                int pulseRadius = 12 + (int)(4 * std::sin(t * 2.0 * M_PI / 1.5));
+                                int opacity = 170 + (int)(60 * std::sin(t * 2.0 * M_PI / 2.0));
+
+                                // Outer glow
+                                QPen glowPen(QColor(255, 0, 0, opacity / 3));
+                                glowPen.setWidth(3);
+                                painter.setPen(glowPen);
+                                painter.setBrush(Qt::NoBrush);
+                                painter.drawEllipse(QPoint(x, y), pulseRadius + 5, pulseRadius + 5);
+
+                                // Main red ring + soft fill
+                                QPen ringPen(QColor(255, 0, 0, opacity));
+                                ringPen.setWidth(4);
+                                painter.setPen(ringPen);
+                                QBrush ringBrush(QColor(255, 0, 0, opacity / 6));
+                                painter.setBrush(ringBrush);
+                                painter.drawEllipse(QPoint(x, y), pulseRadius, pulseRadius);
+                            }
+                        }
+                    }
+                }
 
                 painter.end();
             }
