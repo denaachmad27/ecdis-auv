@@ -4577,7 +4577,10 @@ void EcWidget::ownShipDraw(){
                                 qint64 elapsedMs = aoiExitPulseTimer.elapsed();
                                 double t = elapsedMs / 1000.0;
 
-                                int pulseRadius = 12 + (int)(4 * std::sin(t * 2.0 * M_PI / 1.5));
+                                // Scale pulse size with zoom: ensure larger than ownship when zoomed in
+                                double rangeNM_forPulse = GetRange(currentScale);
+                                int baseMinRadius = (rangeNM_forPulse < 2.0) ? 32 : 12;
+                                int pulseRadius = baseMinRadius + (int)(4 * std::sin(t * 2.0 * M_PI / 1.5));
                                 int opacity = 170 + (int)(60 * std::sin(t * 2.0 * M_PI / 2.0));
 
                                 // Outer glow
