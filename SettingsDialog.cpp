@@ -256,6 +256,11 @@ void SettingsDialog::setupUI() {
     displayLayout->addRow("Display Mode:", displayModeCombo);
     displayTab->setLayout(displayLayout);
 
+    themeModeCombo = new QComboBox;
+    themeModeCombo->addItems({"Light", "Dim", "Dark"});
+    displayLayout->addRow("Default Theme:", themeModeCombo);
+    displayTab->setLayout(displayLayout);
+
     // GuardZone tab
     QWidget *guardzoneTab = new QWidget;
     QVBoxLayout *guardzoneLayout = new QVBoxLayout;
@@ -434,6 +439,14 @@ void SettingsDialog::loadSettings() {
         displayModeCombo->setCurrentIndex(0); // fallback default
     }
 
+    QString themeMode = settings.value("Display/theme", "Dark").toString();
+    int themeIndex = themeModeCombo->findText(themeMode);
+    if (themeIndex >= 0) {
+        themeModeCombo->setCurrentIndex(themeIndex);
+    } else {
+        themeModeCombo->setCurrentIndex(0); // fallback default
+    }
+
     // GuardZone
     int defaultShipType = settings.value("GuardZone/default_ship_type", 0).toInt();
     if (shipTypeButtonGroup->button(defaultShipType)) {
@@ -540,6 +553,7 @@ void SettingsDialog::saveSettings() {
 
     // Display
     settings.setValue("Display/mode", displayModeCombo->currentText());
+    settings.setValue("Display/theme", themeModeCombo->currentText());
 
     // GuardZone
     settings.setValue("GuardZone/default_ship_type", shipTypeButtonGroup->checkedId());
@@ -605,8 +619,11 @@ SettingsData SettingsDialog::loadSettingsFromFile(const QString &filePath) {
         data.aisLogFile = settings.value("AIS/log_file", "").toString();
     }
 
-    // Guardzone
+    // Display
     data.displayMode = settings.value("Display/mode", "Day").toString();
+    data.themeMode = theme(settings.value("Display/theme", "Dark").toString());
+
+    // Guardzone
     data.defaultShipTypeFilter = settings.value("GuardZone/default_ship_type", 0).toInt();
     data.defaultAlertDirection = settings.value("GuardZone/default_alert_direction", 0).toInt();
 
@@ -649,6 +666,7 @@ void SettingsDialog::accept() {
 
     // Display
     data.displayMode = displayModeCombo->currentText();
+    data.themeMode = theme(themeModeCombo->currentData().toString());
 
     // Guardzone
     data.defaultShipTypeFilter = shipTypeButtonGroup->checkedId();
@@ -706,6 +724,12 @@ EcWidget::OSCenteringMode SettingsDialog::centering(const QString &str) {
     if (str == "LookAhead") return EcWidget::LookAhead;
     if (str == "AutoRecenter") return EcWidget::AutoRecenter;
     return EcWidget::Manual;
+}
+
+AppConfig::AppTheme SettingsDialog::theme(const QString &str){
+    if (str == "Dark") return AppConfig::AppTheme::Dark;
+    if (str == "Dim") return AppConfig::AppTheme::Dim;
+    return AppConfig::AppTheme::Light;
 }
 
 void SettingsDialog::onConnectionStatusChanged(const bool &connection){

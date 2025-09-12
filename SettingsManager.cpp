@@ -25,15 +25,17 @@ void SettingsManager::load() {
         m_data.aisLogFile = settings.value("AIS/log_file", "").toString();
     }
 
+    SettingsDialog *dialogObj = new SettingsDialog();
+
     // DISPLAY
     m_data.displayMode = settings.value("Display/mode", "Day").toString();
+    m_data.themeMode = dialogObj->theme(settings.value("Display/theme", "Day").toString());
     
     // GUARDZON
     m_data.defaultShipTypeFilter = settings.value("GuardZone/default_ship_type", 0).toInt();
     m_data.defaultAlertDirection = settings.value("GuardZone/default_alert_direction", 0).toInt();
 
     // OWN SHIP
-    SettingsDialog *dialogObj = new SettingsDialog();
 
     m_data.orientationMode = dialogObj->orientation(settings.value("OwnShip/orientation", "NorthUp").toString());
     m_data.centeringMode = dialogObj->centering(settings.value("OwnShip/centering", "AutoRecenter").toString());
@@ -71,6 +73,7 @@ void SettingsManager::save(const SettingsData& data) {
 
     // DISPLAY
     settings.setValue("Display/mode", data.displayMode);
+    settings.setValue("Display/theme", static_cast<int>(data.themeMode));
 
     // GUARDZONE
     settings.setValue("GuardZone/default_ship_type", data.defaultShipTypeFilter);

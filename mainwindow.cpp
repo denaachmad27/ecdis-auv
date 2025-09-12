@@ -789,7 +789,6 @@ void MainWindow::createMenuBar(){
 
     QAction *darkAction = themeMenu->addAction("Dark");
     darkAction->setCheckable(true);
-    darkAction->setChecked(true);
     themeGroup->addAction(darkAction);
 
     connect(dimAction, &QAction::triggered, this, &MainWindow::setDimMode);
@@ -1367,6 +1366,7 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL){
   createStatusBar();
 
   // MENU BAR
+  AppConfig::setTheme(SettingsManager::instance().data().themeMode);
   createMenuBar();
 
   // DOCK
@@ -1405,6 +1405,8 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL){
           qDebug() << "AISSubs init error";
       }
   }
+
+
 }
 
 /*---------------------------------------------------------------------------*/

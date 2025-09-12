@@ -5,6 +5,7 @@
 #include <QSpinBox>
 #include <QDebug>
 #include "SettingsData.h"
+#include "appconfig.h"
 
 class QLineEdit;
 class QComboBox;
@@ -26,6 +27,7 @@ public:
 
     EcWidget::DisplayOrientationMode orientation(const QString &str);
     EcWidget::OSCenteringMode centering(const QString &str);
+    AppConfig::AppTheme theme(const QString &str);
 
 signals:
     void dialogOpened();
@@ -59,6 +61,7 @@ private:
 
     // Display
     QComboBox *displayModeCombo;
+    QComboBox *themeModeCombo;
 
     // GuardZone
     QButtonGroup *shipTypeButtonGroup;

@@ -2,6 +2,7 @@
 #define SETTINGSDATA_H
 
 #include <QString>
+#include "appconfig.h"
 #include "ecwidget.h"
 
 struct SettingsData {
@@ -16,6 +17,7 @@ struct SettingsData {
 
     // DISPLAY
     QString displayMode;
+    AppConfig::AppTheme themeMode;
 
     // GUARDZONE
     int defaultShipTypeFilter;

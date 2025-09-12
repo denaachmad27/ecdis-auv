@@ -1,6 +1,8 @@
 // AppConfig.h
 #pragma once
 
+class SettingsManager;
+
 class AppConfig
 {
 public:

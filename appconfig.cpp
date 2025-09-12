@@ -20,7 +20,7 @@ bool AppConfig::isProduction() {
 }
 
 
-AppConfig::AppTheme AppConfig::_theme = AppConfig::AppTheme::Dark;
+AppConfig::AppTheme AppConfig::_theme = AppTheme::Dark;
 
 void AppConfig::setTheme(AppTheme theme) {
     _theme = theme;
