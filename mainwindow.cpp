@@ -756,7 +756,7 @@ void MainWindow::createMenuBar(){
     dayAction->setCheckable(true);
     duskAction->setCheckable(true);
     nightAction->setCheckable(true);
-    dayAction->setChecked(true);
+
     connect(cActionGroup, SIGNAL(triggered(QAction *)), this, SLOT(onColorScheme(QAction *)));
 
     colorMenu->addAction(dayAction);
@@ -1078,7 +1078,7 @@ void MainWindow::openSettingsDialog() {
 
     if (dlg.exec() == QDialog::Accepted) {
         dlg.saveSettings();
-        setDisplay();
+        //setDisplay();
         
         // Apply default guardzone filters to existing guardzones
         if (ecchart && ecchart->getGuardZoneManager()) {
@@ -1179,10 +1179,18 @@ void MainWindow::openReleaseNotesDialog() {
 
 void MainWindow::setDisplay(){
     int cs = EC_DAY_BRIGHT;
-    if (SettingsManager::instance().data().displayMode == "Dusk")
+
+    if (displayCategory == EC_DUSK){
         cs = EC_DUSK;
-    if (SettingsManager::instance().data().displayMode == "Night")
+        duskAction->setChecked(true);
+    }
+    else if (displayCategory == EC_NIGHT){
         cs = EC_NIGHT;
+        nightAction->setChecked(true);
+    }
+    else {
+        dayAction->setChecked(true);
+    }
 
     bool gm = ecchart->GetGreyMode();
     int  br = ecchart->GetBrightness();
@@ -1327,7 +1335,18 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL){
 
   // Initialize the chart display settings which can be set by the user
   lookupTable = EC_LOOKUP_TRADITIONAL;
-  displayCategory = EC_STANDARD;
+
+  // displayCategory = EC_STANDARD;
+  if (SettingsManager::instance().data().displayMode == "Night"){
+      displayCategory = EC_NIGHT;
+  }
+  else if (SettingsManager::instance().data().displayMode == "Dusk"){
+      displayCategory = EC_DUSK;
+  }
+  else {
+      displayCategory = EC_STANDARD;
+  }
+
   showLights = false;
   showText = true;
   showNationalText = false;
@@ -1345,7 +1364,6 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL){
   ecchart->ShowAIS(showAIS);
   ecchart->TrackShip(trackShip);
   ecchart->ShowDangerTarget(showDangerTarget);
-  setDisplay();
 
   // Create the window for the pick report
   pickWindow = new PickWindow(this, dict, ecchart->GetDENC());
@@ -1368,6 +1386,7 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL){
   // MENU BAR
   AppConfig::setTheme(SettingsManager::instance().data().themeMode);
   createMenuBar();
+  setDisplay();
 
   // DOCK
   //createDockWindows();

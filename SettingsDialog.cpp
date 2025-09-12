@@ -253,7 +253,7 @@ void SettingsDialog::setupUI() {
     QFormLayout *displayLayout = new QFormLayout;
     displayModeCombo = new QComboBox;
     displayModeCombo->addItems({"Day", "Dusk", "Night"});
-    displayLayout->addRow("Display Mode:", displayModeCombo);
+    displayLayout->addRow("Default Display:", displayModeCombo);
     displayTab->setLayout(displayLayout);
 
     themeModeCombo = new QComboBox;
