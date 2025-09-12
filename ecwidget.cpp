@@ -11608,11 +11608,8 @@ void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, doub
         if (rangeNM < 1){
             scaleFactor = 1.0;
         }
-        else if (rangeNM == 1){
-            scaleFactor = 0.8;
-        }
         else {
-            scaleFactor = 0.7;
+            scaleFactor = 0.8;
         }
 
 

@@ -400,7 +400,8 @@ void SettingsDialog::setupUI() {
 }
 
 void SettingsDialog::loadSettings() {
-    QString configPath = QCoreApplication::applicationDirPath() + "/config.ini";
+    //QString configPath = QCoreApplication::applicationDirPath() + "/config.ini";
+    QString configPath = QString(EcKernelGetEnv("APPDATA")) + "/SevenCs/EC2007/DENC" + "/config.ini";
     QSettings settings(configPath, QSettings::IniFormat);
 
     // MOOSDB
@@ -522,7 +523,8 @@ void SettingsDialog::loadSettings() {
 }
 
 void SettingsDialog::saveSettings() {
-    QString configPath = QCoreApplication::applicationDirPath() + "/config.ini";
+    //QString configPath = QCoreApplication::applicationDirPath() + "/config.ini";
+    QString configPath = QString(EcKernelGetEnv("APPDATA")) + "/SevenCs/EC2007/DENC" + "/config.ini";
     QSettings settings(configPath, QSettings::IniFormat);
 
     // MOOSDB
@@ -587,7 +589,8 @@ void SettingsDialog::updateAisWidgetsVisibility(const QString &text) {
 SettingsData SettingsDialog::loadSettingsFromFile(const QString &filePath) {
     SettingsData data;
 
-    QString configPath = QCoreApplication::applicationDirPath() + filePath;
+    //QString configPath = QCoreApplication::applicationDirPath() + filePath;
+    QString configPath = QString(EcKernelGetEnv("APPDATA")) + "/SevenCs/EC2007/DENC" + filePath;
     QSettings settings(configPath, QSettings::IniFormat);
 
 
