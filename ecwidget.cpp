@@ -11602,65 +11602,77 @@ void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, doub
         return;  // jangan lanjut gambar kapal
     }
 
-    // Skala ikon kapal berdasarkan range
-    double scaleFactor = 1.0;
+    else {
+        // Skala ikon kapal berdasarkan range
+        double scaleFactor = 0;
+        if (rangeNM < 1){
+            scaleFactor = 1.0;
+        }
+        else if (rangeNM == 1){
+            scaleFactor = 0.8;
+        }
+        else {
+            scaleFactor = 0.7;
+        }
 
-    painter.save();
 
-    painter.translate(x, y);
-    painter.rotate(heading);  // Rotasi kapal sesuai heading
+        painter.save();
 
-    int shipLength = int(45 * scaleFactor);
-    int shipWidth  = int(15 * scaleFactor);
+        painter.translate(x, y);
+        painter.rotate(heading);  // Rotasi kapal sesuai heading
 
-    QPainterPath shipPath;
-    shipPath.moveTo(0, -shipLength / 2);  // ujung hidung
+        int shipLength = int(45 * scaleFactor);
+        int shipWidth  = int(15 * scaleFactor);
 
-    // Sisi kanan
-    QPointF control1(shipWidth / 3, -shipLength / 2 + 3);
-    QPointF point1(shipWidth / 2, -shipLength / 4);
-    shipPath.quadTo(control1, point1);
+        QPainterPath shipPath;
+        shipPath.moveTo(0, -shipLength / 2);  // ujung hidung
 
-    QPointF point2(shipWidth / 2, shipLength / 4);
-    shipPath.lineTo(point2);
+        // Sisi kanan
+        QPointF control1(shipWidth / 3, -shipLength / 2 + 3);
+        QPointF point1(shipWidth / 2, -shipLength / 4);
+        shipPath.quadTo(control1, point1);
 
-    QPointF control2(shipWidth / 2, shipLength / 2 - 2);
-    QPointF point3(shipWidth / 3, shipLength / 2);
-    shipPath.quadTo(control2, point3);
+        QPointF point2(shipWidth / 2, shipLength / 4);
+        shipPath.lineTo(point2);
 
-    // Buritan datar
-    shipPath.lineTo(-shipWidth / 3, shipLength / 2);
+        QPointF control2(shipWidth / 2, shipLength / 2 - 2);
+        QPointF point3(shipWidth / 3, shipLength / 2);
+        shipPath.quadTo(control2, point3);
 
-    // Sisi kiri (mirror)
-    QPointF control3(-shipWidth / 2, shipLength / 2 - 2);
-    QPointF point4(-shipWidth / 2, shipLength / 4);
-    shipPath.quadTo(control3, point4);
+        // Buritan datar
+        shipPath.lineTo(-shipWidth / 3, shipLength / 2);
 
-    QPointF point5(-shipWidth / 2, -shipLength / 4);
-    shipPath.lineTo(point5);
+        // Sisi kiri (mirror)
+        QPointF control3(-shipWidth / 2, shipLength / 2 - 2);
+        QPointF point4(-shipWidth / 2, shipLength / 4);
+        shipPath.quadTo(control3, point4);
 
-    QPointF control4(-shipWidth / 3, -shipLength / 2 + 3);
-    QPointF point6(0, -shipLength / 2);
-    shipPath.quadTo(control4, point6);
+        QPointF point5(-shipWidth / 2, -shipLength / 4);
+        shipPath.lineTo(point5);
 
-    // Gambar kapal
-    painter.setBrush(QBrush(QColor(120, 120, 120)));   // Abu-abu
-    painter.setPen(QPen(Qt::black, 1));
-    painter.drawPath(shipPath);
+        QPointF control4(-shipWidth / 3, -shipLength / 2 + 3);
+        QPointF point6(0, -shipLength / 2);
+        shipPath.quadTo(control4, point6);
 
-    // Titik pusat kapal
-    painter.setBrush(QBrush(Qt::black));
-    painter.setPen(QPen(Qt::black, 1));
-    painter.drawEllipse(-1, -1, 2, 2);
+        // Gambar kapal
+        painter.setBrush(QBrush(QColor(120, 120, 120)));   // Abu-abu
+        painter.setPen(QPen(Qt::black, 1));
+        painter.drawPath(shipPath);
 
-    // Garis heading
-    painter.setPen(QPen(Qt::black, 2));
-    painter.drawLine(0, 0, 0, -shipLength / 2 - int(10 * scaleFactor));
+        // Titik pusat kapal
+        painter.setBrush(QBrush(Qt::black));
+        painter.setPen(QPen(Qt::black, 1));
+        painter.drawEllipse(-1, -1, 2, 2);
 
-    painter.restore();
+        // Garis heading
+        painter.setPen(QPen(Qt::black, 2));
+        painter.drawLine(0, 0, 0, -shipLength / 2 - int(10 * scaleFactor));
 
-    // Gambar vektor COG/SOG di luar rotasi
-    drawOwnShipVectors(painter, x, y, cog, heading, sog);
+        painter.restore();
+
+        // Gambar vektor COG/SOG di luar rotasi
+        drawOwnShipVectors(painter, x, y, cog, heading, sog);
+    }
 }
 
 void EcWidget::drawOwnShipVectors(QPainter& painter, int x, int y, double cog, double heading, double sog)
