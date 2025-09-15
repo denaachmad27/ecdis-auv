@@ -62,34 +62,37 @@ struct AISTargetData {
 
 // Struktur untuk menyimpan data kapal
 struct ShipStruct {
-    double lat;           // Latitude
-    double lon;          // Longitude
-    double x;           // Pixel X
-    double y;          // Pixel Y
-    double heading;      // Heading dalam derajat
-    double heading_og;   // Heading over ground
-    double speed;        // Kecepatan dalam knot
-    double speed_og;   // Kecepatan over ground
-    double yaw;        // Sudut yaw kapal
-    double depth;        // Kedalaman
-    double z;        // Vertikal kapal
-    double stw;     // Speed through water
-    double drift;   // Drift in knots
-    double drift_angle;  // Drift angle
-    double set;     // current set
-    double rot;     // Rate of Turn
-    double depth_below_keel; // distance from transducer to seabed'
+    double lat = std::numeric_limits<double>::quiet_NaN();           // Latitude
+    double lon = std::numeric_limits<double>::quiet_NaN();          // Longitude
+    double x = std::numeric_limits<double>::quiet_NaN();           // Pixel X
+    double y = std::numeric_limits<double>::quiet_NaN();          // Pixel Y
+    double heading = std::numeric_limits<double>::quiet_NaN();      // Heading dalam derajat
+    double heading_og = std::numeric_limits<double>::quiet_NaN();   // Heading over ground
+    double speed = std::numeric_limits<double>::quiet_NaN();        // Kecepatan dalam knot
+    double speed_og = std::numeric_limits<double>::quiet_NaN();   // Kecepatan over ground
+    double course_og = std::numeric_limits<double>::quiet_NaN();
+    double yaw = std::numeric_limits<double>::quiet_NaN();        // Sudut yaw kapal
+    double depth = std::numeric_limits<double>::quiet_NaN();        // Kedalaman
+    double z = std::numeric_limits<double>::quiet_NaN();        // Vertikal kapal
+    double stw = std::numeric_limits<double>::quiet_NaN();     // Speed through water
+    double drift = std::numeric_limits<double>::quiet_NaN();   // Drift in knots
+    double drift_angle = std::numeric_limits<double>::quiet_NaN();  // Drift angle
+    double set = std::numeric_limits<double>::quiet_NaN();     // current set
+    double rot = std::numeric_limits<double>::quiet_NaN();     // Rate of Turn
+    double depth_below_keel = std::numeric_limits<double>::quiet_NaN(); // distance from transducer to seabed'
     QString slat; // String Lat
     QString slon; // String Lon
+    QString lat_dms;
+    QString lon_dms;
 };
 
 struct ActiveRouteStruct {
-    QString rteWpBrg;    // Bearing ke waypoint
+    double rteWpBrg = std::numeric_limits<double>::quiet_NaN();    // Bearing ke waypoint
     QString rteXtd;      // Cross track distance
-    QString rteCrs;      // Course ke waypoint
-    QString rteCtm;      // Current time to waypoint
-    QString rteDtg;      // Distance to go
-    QString rteDtgM;     // Distance to go (manual)
+    double rteCrs = std::numeric_limits<double>::quiet_NaN();      // Course ke waypoint
+    double rteCtm = std::numeric_limits<double>::quiet_NaN();      // Current time to waypoint
+    double rteDtg = std::numeric_limits<double>::quiet_NaN();      // Distance to go
+    double rteDtgM = std::numeric_limits<double>::quiet_NaN();     // Distance to go (manual)
     QString rteTtg;      // Time to go
     QString rteEta;      // Estimated time of arrival
 };

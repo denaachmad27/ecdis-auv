@@ -161,22 +161,26 @@ void AISSubscriber::onReadyRead() {
         auto extractDouble = [&](const QString &key, std::function<void(double)> emitter) {
             if (obj.contains(key)) {
                 QJsonValue val = obj[key];
-                double d = val.isDouble() ? val.toDouble() : val.toString().toDouble();
-                emitter(d);
+                if(!val.isNull()){
+                    double d = val.isDouble() ? val.toDouble() : val.toString().toDouble();
+                    emitter(d);
+                }
             }
         };
 
         auto extractString = [&](const QString &key, std::function<void(QString)> emitter) {
             if (obj.contains(key)) {
                 QJsonValue val = obj[key];
-                QString s = val.toString();
-                emitter(s);
+                if(!val.isNull()){
+                    QString s = val.toString();
+                    emitter(s);
+                }
             }
         };
 
         bool hasLat = false, hasLon = false;
         bool hasAis = false;
-        double lat = 0.0, lon = 0.0, cog = 0.0, sog = 0.0, hdg = 0.0, dep = 0.0, spd = 0.0, yaw = 0.0, z = 0.0;
+        double lat = 0.0, lon = 0.0, hog = 0.0, cog = 0.0, sog = 0.0, hdg = 0.0, dep = 0.0, spd = 0.0, yaw = 0.0, z = 0.0;
         QString ais;
 
         extractDouble("NAV_LAT", [&](double v){
@@ -209,13 +213,18 @@ void AISSubscriber::onReadyRead() {
         });
 
         extractDouble("NAV_HEADING_OVER_GROUND", [&](double v){
-            cog = v;
+            hog = v;
             emit navHeadingOGReceived(v);
         });
 
         extractDouble("NAV_SPEED_OVER_GROUND", [&](double v){
             sog = v;
             emit navSpeedOGReceived(v);
+        });
+
+        extractDouble("NAV_COG", [&](double v){
+            cog = v;
+            emit navCourseOGReceived(v);
         });
 
         extractDouble("NAV_DEPTH", [=](double v){ emit navDepthReceived(v);});
@@ -235,12 +244,12 @@ void AISSubscriber::onReadyRead() {
         if (hasAis){ emit processingAis(ais);}
 
         // ROUTES INFORMATION
-        extractString("RTE_WP_BRG", [=](QString v){ emit rteWpBrgReceived(v); });
+        extractDouble("RTE_WP_BRG", [=](double v){ emit rteWpBrgReceived(v); });
         extractString("RTE_XTD", [=](QString v){ emit rteXtdReceived(v); });
-        extractString("RTE_CRS", [=](QString v){ emit rteCrsReceived(v); });
-        extractString("RTE_CTM", [=](QString v){ emit rteCtmReceived(v); });
-        extractString("RTE_DTG", [=](QString v){ emit rteDtgReceived(v); });
-        extractString("RTE_DTG_M", [=](QString v){ emit rteDtgMReceived(v); });
+        extractDouble("RTE_CRS", [=](double v){ emit rteCrsReceived(v); });
+        extractDouble("RTE_CTM", [=](double v){ emit rteCtmReceived(v); });
+        extractDouble("RTE_DTG", [=](double v){ emit rteDtgReceived(v); });
+        extractDouble("RTE_DTG_M", [=](double v){ emit rteDtgMReceived(v); });
         extractString("RTE_TTG", [=](QString v){ emit rteTtgReceived(v); });
         extractString("RTE_ETA", [=](QString v){ emit rteEtaReceived(v); });
     }

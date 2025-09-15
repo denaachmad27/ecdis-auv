@@ -26,6 +26,7 @@ signals:
     void navDepthReceived(const double depth);
     void navHeadingReceived(const double heading);
     void navHeadingOGReceived(const double headingOg);
+    void navCourseOGReceived(const double courseOg);
     void navSpeedReceived(const double speed);
     void navSpeedOGReceived(const double speedOg);
     void navYawReceived(const double yaw);
@@ -41,12 +42,12 @@ signals:
     void waisNmeaReceived(QString nmea);
 
     // ROUTES INFORMATION
-    void rteWpBrgReceived(const QString &value);
+    void rteWpBrgReceived(const double &value);
     void rteXtdReceived(const QString &value);
-    void rteCrsReceived(const QString &value);
-    void rteCtmReceived(const QString &value);
-    void rteDtgReceived(const QString &value);
-    void rteDtgMReceived(const QString &value);
+    void rteCrsReceived(const double &value);
+    void rteCtmReceived(const double &value);
+    void rteDtgReceived(const double &value);
+    void rteDtgMReceived(const double &value);
     void rteTtgReceived(const QString &value);
     void rteEtaReceived(const QString &value);
 

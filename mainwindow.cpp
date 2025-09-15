@@ -1425,7 +1425,7 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL){
       }
   }
 
-
+  ownShipText->setText(pickWindow->ownShipAutoFill());
 }
 
 /*---------------------------------------------------------------------------*/

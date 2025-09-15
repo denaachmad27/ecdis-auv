@@ -610,6 +610,8 @@ void EcWidget::SetCenter (EcCoordinate lat, EcCoordinate lon)
   if (currentScale > maxScale) currentScale = maxScale; // in case the world overview has been shown before
   // Check projection because it depends on viewport
   SetProjection(projectionMode);
+
+  qCritical() << lat;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -3805,7 +3807,11 @@ void EcWidget::startAISConnection()
         updateAttachedGuardZoneFromNavShip();
     });
 
-    connect(subscriber, &AISSubscriber::navHeadingOGReceived, this, [=](double cog) { navShip.heading_og = cog;});
+    connect(subscriber, &AISSubscriber::navHeadingOGReceived, this, [=](double hog) { navShip.heading_og = hog;});
+
+    connect(subscriber, &AISSubscriber::navCourseOGReceived, this, [=](double cog) {
+        navShip.course_og = cog;
+    });
 
     connect(subscriber, &AISSubscriber::navSpeedOGReceived, this, [=](double sog) {
         navShip.speed_og = sog;
@@ -3828,12 +3834,12 @@ void EcWidget::startAISConnection()
     connect(subscriber, &AISSubscriber::processingData, this, &EcWidget::processData);
 
     // ROUTE INFORMATION
-    connect(subscriber, &AISSubscriber::rteWpBrgReceived, this, [=](const QString &v) { activeRoute.rteWpBrg = v;});
+    connect(subscriber, &AISSubscriber::rteWpBrgReceived, this, [=](const double &v) { activeRoute.rteWpBrg = v;});
     connect(subscriber, &AISSubscriber::rteXtdReceived, this, [=](const QString &v) { activeRoute.rteXtd = v;});
-    connect(subscriber, &AISSubscriber::rteCrsReceived, this, [=](const QString &v) { activeRoute.rteCrs = v;});
-    connect(subscriber, &AISSubscriber::rteCtmReceived, this, [=](const QString &v) { activeRoute.rteCtm = v;});
-    connect(subscriber, &AISSubscriber::rteDtgReceived, this, [=](const QString &v) { activeRoute.rteDtg = v;});
-    connect(subscriber, &AISSubscriber::rteDtgMReceived, this, [=](const QString &v) { activeRoute.rteDtgM = v;});
+    connect(subscriber, &AISSubscriber::rteCrsReceived, this, [=](const double &v) { activeRoute.rteCrs = v;});
+    connect(subscriber, &AISSubscriber::rteCtmReceived, this, [=](const double &v) { activeRoute.rteCtm = v;});
+    connect(subscriber, &AISSubscriber::rteDtgReceived, this, [=](const double &v) { activeRoute.rteDtg = v;});
+    connect(subscriber, &AISSubscriber::rteDtgMReceived, this, [=](const double &v) { activeRoute.rteDtgM = v;});
     connect(subscriber, &AISSubscriber::rteTtgReceived, this, [=](const QString &v) { activeRoute.rteTtg = v;});
     connect(subscriber, &AISSubscriber::rteEtaReceived, this, [=](const QString &v) { activeRoute.rteEta = v;});
 
@@ -4212,7 +4218,7 @@ void EcWidget::processMapInfoReq(QString req){
     double lat = map.value("latitude").toDouble();
     double lon = map.value("longitude").toDouble();
 
-    if (mapInfo.lat != lat || mapInfo.lon != lon){
+    if ((mapInfo.lat != lat || mapInfo.lon != lon) && (lat != 0.0 && lon != 0.0)){
         mapInfo.lat = lat;
         mapInfo.lon = lon;
 

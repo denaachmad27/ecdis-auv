@@ -30,6 +30,8 @@
 
 #define LINEMAX 1024
 #define OBJ_CLEAN_TIME      (10*60)
+#define DEFAULT_LAT     -7.18551
+#define DEFAULT_LON     112.78012
 
 class Ais;
 

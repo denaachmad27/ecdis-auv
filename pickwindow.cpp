@@ -707,135 +707,262 @@ QString PickWindow::ownShipAutoFill()
     // row = QString("<br><b>OWNSHIP</b><br>");
     // text.append(row);
 
+    QString sizing = QString(
+                    "<tr>"
+                    "<td style='vertical-align:middle; color:transparent; font-size:1px;'>-</td>"
+                    "<td style='text-align:right;'>"
+                    "<span style='font-size:1px; color:#71C9FF; font-weight:bold; color:transparent;'>"
+                    "--------------------------------------------------------------"
+                    "--------------------------------------------------------------"
+                    "-------------------------------"
+                    "</span>"
+                    "</td>"
+                    "<td style='vertical-align:middle; padding-left:7px; text-align:left; color:transparent; font-size:1px;'>-</td>"
+                    "</tr>"
+                    "</table>");
+
+    auto toStringOrEmpty = [](double value) -> QString {
+        if (std::isnan(value)) {
+            return "N/A";
+        }
+        return QString::number(value);
+    };
+
+    auto isEmpty = [](QString value) -> QString {
+        if (value.isEmpty()) {
+            return "N/A";
+        }
+        return value;
+    };
+
     ownship.append(row);
+
+    // TABLE 1
     ownship.append("<table width='100%' cellspacing='0' cellpadding='2'>");
 
-    if (navShip.lat != 0){
-        row = QString(
-                  "<tr>"
-                  "<td style='vertical-align:middle;'>LAT</td>"
-                  "<td style='text-align:right;'>"
-                  "<span style='font-size:12px; color:#71C9FF; font-weight:bold;'>%1</span>"
-                  "</td>"
-                  "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>°</td>"
-                  "</tr>")
-                  .arg(navShip.lat);
-        text.append(row);
-        ownship.append(row);
-    }
+    // HDG
+    row = QString(
+              "<tr>"
+              "<td style='vertical-align:middle;'>HDG</td>"
+              "<td style='text-align:right;'>"
+              "<span style='font-size:20px; color:#71C9FF; font-weight:bold;'>%1</span>"
+              "</td>"
+              "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>°T</td>"
+              "</tr>")
+              .arg(toStringOrEmpty(navShip.heading));
+    text.append(row);
+    ownship.append(row);
 
-    if (navShip.lon != 0){
-        row = QString(
-                  "<tr>"
-                  "<td style='vertical-align:middle;'>LON</td>"
-                  "<td style='text-align:right;'>"
-                  "<span style='font-size:12px; color:#71C9FF; font-weight:bold;'>%1</span>"
-                  "</td>"
-                  "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>°</td>"
-                  "</tr>")
-                  .arg(navShip.lon);
-        text.append(row);
-        ownship.append(row);
-    }
+    // COG
+    row = QString(
+              "<tr>"
+              "<td style='vertical-align:middle;'>COG</td>"
+              "<td style='text-align:right;'>"
+              "<span style='font-size:20px; color:#71C9FF; font-weight:bold;'>%1</span>"
+              "</td>"
+              "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>°T</td>"
+              "</tr>")
+              .arg(toStringOrEmpty(navShip.course_og));
+    text.append(row);
+    ownship.append(row);
 
-    if (navShip.heading != 0) {
-        row = QString(
-                  "<tr>"
-                  "<td style='vertical-align:middle;'>HDG</td>"
-                  "<td style='text-align:right;'>"
-                  "<span style='font-size:20px; color:#71C9FF; font-weight:bold;'>%1</span>"
-                  "</td>"
-                  "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>°T</td>"
-                  "</tr>")
-                  .arg(navShip.heading);
-        text.append(row);
-        ownship.append(row);
-    }
+    // SOG
+    row = QString(
+              "<tr>"
+              "<td style='vertical-align:middle;'>SOG</td>"
+              "<td style='text-align:right;'>"
+              "<span style='font-size:20px; color:#71C9FF; font-weight:bold;'>%1</span>"
+              "</td>"
+              "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>kn</td>"
+              "</tr>"
+              )
+              .arg(toStringOrEmpty(navShip.speed_og));
+    text.append(row);
+    ownship.append(row);
 
-    if (navShip.rot != 0){
-        row = QString(
-                  "<tr>"
-                  "<td style='vertical-align:middle;'>ROT</td>"
-                  "<td style='text-align:right;'>"
-                  "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
-                  "</td>"
-                  "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>°/min</td>"
-                  "</tr>")
-                  .arg(navShip.rot);
-        text.append(row);
-        ownship.append(row);
-    }
+    ownship.append(sizing);
+    ownship.append("<hr style='border:1px solid #ccc; margin:4px 0;'>");
 
-    if (navShip.heading_og != 0){
-        row = QString(
-                  "<tr>"
-                  "<td style='vertical-align:middle;'>COG</td>"
-                  "<td style='text-align:right;'>"
-                  "<span style='font-size:18px; color:#71C9FF; font-weight:bold;'>%1</span>"
-                  "</td>"
-                  "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>°</td>"
-                  "</tr>")
-                  .arg(navShip.heading_og);
-        text.append(row);
-        ownship.append(row);
-    }
+    // TABLE 2
+    ownship.append("<table width='100%' cellspacing='0' cellpadding='2'>");
 
-    if (navShip.speed_og != 0){
-        row = QString(
-                  "<tr>"
-                  "<td style='vertical-align:middle;'>SOG</td>"
-                  "<td style='text-align:right;'>"
-                  "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
-                  "</td>"
-                  "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>knots</td>"
-                  "</tr>")
-                  .arg(navShip.speed_og);
-        text.append(row);
-        ownship.append(row);
-    }
+    // LAT
+    row = QString(
+              "<tr>"
+              "<td style='vertical-align:middle;'>LAT</td>"
+              "<td style='text-align:right;'>"
+              "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
+              "</td>"
+              "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>°</td>"
+              "</tr>")
+              .arg(toStringOrEmpty(navShip.lat));
+    text.append(row);
+    ownship.append(row);
 
-    if (navShip.depth_below_keel != 0){
-        row = QString(
-                  "<tr>"
-                  "<td style='vertical-align:middle;'>DEP</td>"
-                  "<td style='text-align:right;'>"
-                  "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
-                  "</td>"
-                  "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>m</td>"
-                  "</tr>")
-                  .arg(navShip.depth_below_keel);
-        text.append(row);
-        ownship.append(row);
-    }
+    // LON
+    row = QString(
+              "<tr>"
+              "<td style='vertical-align:middle;'>LON</td>"
+              "<td style='text-align:right;'>"
+              "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
+              "</td>"
+              "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>°</td>"
+              "</tr>")
+              .arg(toStringOrEmpty(navShip.lon));
+    text.append(row);
+    ownship.append(row);
 
-    if (navShip.speed != 0){
-        row = QString(
-                  "<tr>"
-                  "<td style='vertical-align:middle;'>SPD</td>"
-                  "<td style='text-align:right;'>"
-                  "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
-                  "</td>"
-                  "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>knots</td>"
-                  "</tr>")
-                  .arg(navShip.speed);
-        text.append(row);
-        ownship.append(row);
-    }
+    // STW
+    row = QString(
+              "<tr>"
+              "<td style='vertical-align:middle;'>LOG</td>"
+              "<td style='text-align:right;'>"
+              "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
+              "</td>"
+              "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>kn</td>"
+              "</tr>")
+              .arg(toStringOrEmpty(navShip.stw));
+    text.append(row);
+    ownship.append(row);
 
-    if (navShip.z != 0){
-        row = QString(
-                  "<tr>"
-                  "<td style='vertical-align:middle;'>Z</td>"
-                  "<td style='text-align:right;'>"
-                  "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
-                  "</td>"
-                  "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>m</td>"
-                  "</tr>")
-                  .arg(navShip.z);
-        text.append(row);
-        ownship.append(row);
-    }
+    // DEPTH
+    row = QString(
+              "<tr>"
+              "<td style='vertical-align:middle;'>DEPTH</td>"
+              "<td style='text-align:right;'>"
+              "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
+              "</td>"
+              "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>m</td>"
+              "</tr>")
+              .arg(toStringOrEmpty(navShip.depth_below_keel));
+    text.append(row);
+    ownship.append(row);
 
+    // DRIFT
+    row = QString(
+              "<tr>"
+              "<td style='vertical-align:middle;'>DRIFT</td>"
+              "<td style='text-align:right;'>"
+              "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
+              "</td>"
+              "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>kn</td>"
+              "</tr>")
+              .arg(toStringOrEmpty(navShip.drift));
+    text.append(row);
+    ownship.append(row);
+
+    // SET
+    row = QString(
+              "<tr>"
+              "<td style='vertical-align:middle;'>SET</td>"
+              "<td style='text-align:right;'>"
+              "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
+              "</td>"
+              "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>°T</td>"
+              "</tr>")
+              .arg(toStringOrEmpty(navShip.set));
+    text.append(row);
+    ownship.append(row);
+
+    // ROT
+    row = QString(
+              "<tr>"
+              "<td style='vertical-align:middle;'>RoT</td>"
+              "<td style='text-align:right;'>"
+              "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
+              "</td>"
+              "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>°/min</td>"
+              "</tr>")
+              .arg(toStringOrEmpty(navShip.rot));
+    text.append(row);
+    ownship.append(row);
+
+    ownship.append(sizing);
+    ownship.append("<hr style='border:1px solid #ccc; margin:4px 0;'>");
+
+    // TABLE 3
+    ownship.append("<table width='100%' cellspacing='0' cellpadding='2'>");
+
+    // WP Brg
+    row = QString(
+              "<tr>"
+              "<td style='vertical-align:middle;'>WP BRG</td>"
+              "<td style='text-align:right;'>"
+              "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
+              "</td>"
+              "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>°T</td>"
+              "</tr>")
+              .arg(toStringOrEmpty(activeRoute.rteWpBrg));
+    text.append(row);
+    ownship.append(row);
+
+    // XTD
+    row = QString(
+              "<tr>"
+              "<td style='vertical-align:middle;'>XTD</td>"
+              "<td style='text-align:right;'>"
+              "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
+              "</td>"
+              "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>NM</td>"
+              "</tr>")
+              .arg(isEmpty(activeRoute.rteXtd));
+    text.append(row);
+    ownship.append(row);
+
+    // CRS/CTM
+    row = QString(
+              "<tr>"
+              "<td style='vertical-align:middle;'>CRS/CTM</td>"
+              "<td style='text-align:right;'>"
+              "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1 / %2</span>"
+              "</td>"
+              "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>°T</td>"
+              "</tr>")
+              .arg(toStringOrEmpty(activeRoute.rteCrs))
+              .arg(toStringOrEmpty(activeRoute.rteCtm));
+    text.append(row);
+    ownship.append(row);
+
+    // DTG
+    row = QString(
+              "<tr>"
+              "<td style='vertical-align:middle;'>DTG</td>"
+              "<td style='text-align:right;'>"
+              "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
+              "</td>"
+              "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>NM</td>"
+              "</tr>")
+              .arg(toStringOrEmpty(activeRoute.rteDtg));
+    text.append(row);
+    ownship.append(row);
+
+    // TTG
+    row = QString(
+              "<tr>"
+              "<td style='vertical-align:middle;'>TTG</td>"
+              "<td style='text-align:right;'>"
+              "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
+              "</td>"
+              "<td style='vertical-align:middle; padding-left:7px; text-align:left;'></td>"
+              "</tr>")
+              .arg(isEmpty(activeRoute.rteTtg));
+    text.append(row);
+    ownship.append(row);
+
+    // DEST ETA
+    row = QString(
+              "<tr>"
+              "<td style='vertical-align:middle;'>DEST ETA</td>"
+              "<td style='text-align:right;'>"
+              "<span style='font-size:12px; color:#71C9FF; font-weight:bold;'>%1</span>"
+              "</td>"
+              "<td style='vertical-align:middle; padding-left:7px; text-align:left;'></td>"
+              "</tr>")
+              .arg(isEmpty(activeRoute.rteEta));
+    text.append(row);
+    ownship.append(row);
+
+    ownship.append(sizing);
 
     return ownship;
 }
