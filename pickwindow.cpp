@@ -795,7 +795,7 @@ QString PickWindow::ownShipAutoFill()
               "</td>"
               "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>°</td>"
               "</tr>")
-              .arg(toStringOrEmpty(navShip.lat));
+              .arg(isEmpty(navShip.lat_dms));
     text.append(row);
     ownship.append(row);
 
@@ -808,7 +808,7 @@ QString PickWindow::ownShipAutoFill()
               "</td>"
               "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>°</td>"
               "</tr>")
-              .arg(toStringOrEmpty(navShip.lon));
+              .arg(isEmpty(navShip.lon_dms));
     text.append(row);
     ownship.append(row);
 

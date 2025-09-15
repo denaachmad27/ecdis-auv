@@ -3819,6 +3819,9 @@ void EcWidget::startAISConnection()
         speedBuffer.append(qMakePair(now, sog));
     });
 
+    connect(subscriber, &AISSubscriber::navLatDmsReceived, this, [=](const QString &v) { navShip.lat_dms = v;});
+    connect(subscriber, &AISSubscriber::navLongDmsReceived, this, [=](const QString &v) { navShip.lon_dms = v;});
+
     connect(subscriber, &AISSubscriber::navSpeedReceived, this, [=](double spe) { navShip.speed = spe;});
     connect(subscriber, &AISSubscriber::navYawReceived, this, [=](double yaw) { navShip.yaw = yaw;});
     connect(subscriber, &AISSubscriber::navZReceived, this, [=](double z) { navShip.z = z;});
@@ -4024,6 +4027,7 @@ void EcWidget::stopAllThread()
 
 void EcWidget::processData(double lat, double lon, double cog, double sog, double hdg, double spd, double dep, double yaw, double z){
     QString nmea = AIVDOEncoder::encodeAIVDO1(lat, lon, cog, sog/10, hdg, 0, 1);
+
     _aisObj->readAISVariableThread({nmea});
 
     IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
@@ -4494,15 +4498,6 @@ void EcWidget::ownShipDraw(){
     // DRAWING OWNSHIP CUSTOM
     if (showCustomOwnShip && showAIS) {
         AISTargetData ownShipData = Ais::instance()->getOwnShipVar();
-
-        // Untuk simulasi, gunakan data simulasi
-        if (simulationActive && ownShipInSimulation) {
-            ownShipData.lat = ownShip.lat;
-            ownShipData.lon = ownShip.lon;
-            ownShipData.cog = ownShip.cog;          // ⭐ Gunakan COG dari simulasi
-            ownShipData.heading = ownShip.heading;  // ⭐ Gunakan heading dari simulasi
-            ownShipData.sog = ownShip.sog;
-        }
 
         if (ownShipData.lat != 0.0 && ownShipData.lon != 0.0) {
             int x, y;

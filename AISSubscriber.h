@@ -23,6 +23,8 @@ signals:
     // OWNSHIP
     void navLatReceived(const double lat);
     void navLongReceived(const double lon);
+    void navLatDmsReceived(const QString latDms);
+    void navLongDmsReceived(const QString lonDms);
     void navDepthReceived(const double depth);
     void navHeadingReceived(const double heading);
     void navHeadingOGReceived(const double headingOg);
