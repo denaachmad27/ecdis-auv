@@ -4074,9 +4074,9 @@ void EcWidget::publishNavInfo(double lat, double lon){
     // Kirim data ke server Ubuntu (port 5001)
     QTcpSocket* sendSocket = new QTcpSocket();
     sendSocket->connectToHost(SettingsManager::instance().data().moosIp, 5001);
-    if (sendSocket->waitForConnected(3000)) {
+    if (sendSocket->waitForConnected(1000)) {
         sendSocket->write(sendData);
-        sendSocket->waitForBytesWritten(3000);
+        sendSocket->waitForBytesWritten(1000);
         sendSocket->disconnectFromHost();
     }
     else {
