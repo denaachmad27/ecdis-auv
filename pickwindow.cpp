@@ -888,7 +888,7 @@ QString PickWindow::ownShipAutoFill()
               "<tr>"
               "<td style='vertical-align:middle;'>WP BRG</td>"
               "<td style='text-align:right;'>"
-              "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
+              "<span style='font-size:12px; color:#71C9FF; font-weight:bold;'>%1</span>"
               "</td>"
               "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>°T</td>"
               "</tr>")
@@ -901,7 +901,7 @@ QString PickWindow::ownShipAutoFill()
               "<tr>"
               "<td style='vertical-align:middle;'>XTD</td>"
               "<td style='text-align:right;'>"
-              "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
+              "<span style='font-size:12px; color:#71C9FF; font-weight:bold;'>%1</span>"
               "</td>"
               "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>NM</td>"
               "</tr>")
@@ -914,7 +914,7 @@ QString PickWindow::ownShipAutoFill()
               "<tr>"
               "<td style='vertical-align:middle;'>CRS/CTM</td>"
               "<td style='text-align:right;'>"
-              "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1 / %2</span>"
+              "<span style='font-size:12px; color:#71C9FF; font-weight:bold;'>%1 / %2</span>"
               "</td>"
               "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>°T</td>"
               "</tr>")
@@ -928,7 +928,7 @@ QString PickWindow::ownShipAutoFill()
               "<tr>"
               "<td style='vertical-align:middle;'>DTG</td>"
               "<td style='text-align:right;'>"
-              "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
+              "<span style='font-size:12px; color:#71C9FF; font-weight:bold;'>%1</span>"
               "</td>"
               "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>NM</td>"
               "</tr>")
@@ -941,7 +941,7 @@ QString PickWindow::ownShipAutoFill()
               "<tr>"
               "<td style='vertical-align:middle;'>TTG</td>"
               "<td style='text-align:right;'>"
-              "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
+              "<span style='font-size:12px; color:#71C9FF; font-weight:bold;'>%1</span>"
               "</td>"
               "<td style='vertical-align:middle; padding-left:7px; text-align:left;'></td>"
               "</tr>")
