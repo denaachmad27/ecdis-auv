@@ -1918,16 +1918,19 @@ void RoutePanel::showWaypointEditDialog(int routeId, int waypointIndex)
 
     // Unit selection for coordinate input
     QGroupBox* unitGroup = new QGroupBox("Coordinate Units");
-    QHBoxLayout* unitLayout = new QHBoxLayout(unitGroup);
+    QGridLayout* unitLayout = new QGridLayout(unitGroup);
     unitLayout->setContentsMargins(0, 0, 0, 0);
-    unitLayout->setSpacing(6);
+    unitLayout->setHorizontalSpacing(12);
+    unitLayout->setVerticalSpacing(4);
     QRadioButton* decDegBtn = new QRadioButton("Decimal Degrees");
     QRadioButton* degMinBtn = new QRadioButton("Deg-Min");
+    QRadioButton* degMinSecBtn = new QRadioButton("Deg-Min-Sec");
     QRadioButton* metersBtn = new QRadioButton("Meters (N/E)");
     decDegBtn->setChecked(true);
-    unitLayout->addWidget(decDegBtn);
-    unitLayout->addWidget(degMinBtn);
-    unitLayout->addWidget(metersBtn);
+    unitLayout->addWidget(decDegBtn, 0, 0);
+    unitLayout->addWidget(degMinBtn, 0, 1);
+    unitLayout->addWidget(degMinSecBtn, 1, 0);
+    unitLayout->addWidget(metersBtn, 1, 1);
     
     // Validators will be set based on unit selection
     auto setValidatorsForUnit = [&]() {
@@ -2010,6 +2013,37 @@ void RoutePanel::showWaypointEditDialog(int routeId, int waypointIndex)
     degMinLayout->addWidget(new QLabel("E/W"), 1, 4);
     degMinLayout->addWidget(lonHem, 1, 5);
 
+    QGroupBox* degMinSecGroup = new QGroupBox("Deg-Min-Sec Coordinates");
+    QGridLayout* degMinSecLayout = new QGridLayout(degMinSecGroup);
+    degMinSecLayout->setContentsMargins(0, 0, 0, 0);
+    degMinSecLayout->setHorizontalSpacing(6);
+    degMinSecLayout->setVerticalSpacing(4);
+    degMinSecGroup->setFlat(true);
+    QLineEdit* latDegDmsEdit = new QLineEdit(); latDegDmsEdit->setValidator(new QIntValidator(0, 90, &dialog)); latDegDmsEdit->setMaximumWidth(70);
+    QLineEdit* latMinDmsEdit = new QLineEdit(); latMinDmsEdit->setValidator(new QIntValidator(0, 59, &dialog)); latMinDmsEdit->setMaximumWidth(70);
+    QLineEdit* latSecDmsEdit = new QLineEdit(); latSecDmsEdit->setValidator(new QDoubleValidator(0.0, 60.0, 3, &dialog)); latSecDmsEdit->setMaximumWidth(90);
+    QComboBox* latHemDms = new QComboBox(); latHemDms->addItems({"N", "S"}); latHemDms->setMaximumWidth(60);
+    QLineEdit* lonDegDmsEdit = new QLineEdit(); lonDegDmsEdit->setValidator(new QIntValidator(0, 180, &dialog)); lonDegDmsEdit->setMaximumWidth(70);
+    QLineEdit* lonMinDmsEdit = new QLineEdit(); lonMinDmsEdit->setValidator(new QIntValidator(0, 59, &dialog)); lonMinDmsEdit->setMaximumWidth(70);
+    QLineEdit* lonSecDmsEdit = new QLineEdit(); lonSecDmsEdit->setValidator(new QDoubleValidator(0.0, 60.0, 3, &dialog)); lonSecDmsEdit->setMaximumWidth(90);
+    QComboBox* lonHemDms = new QComboBox(); lonHemDms->addItems({"E", "W"}); lonHemDms->setMaximumWidth(60);
+    degMinSecLayout->addWidget(new QLabel("Lat Deg"), 0, 0);
+    degMinSecLayout->addWidget(latDegDmsEdit, 0, 1);
+    degMinSecLayout->addWidget(new QLabel("Lat Min"), 0, 2);
+    degMinSecLayout->addWidget(latMinDmsEdit, 0, 3);
+    degMinSecLayout->addWidget(new QLabel("Lat Sec"), 0, 4);
+    degMinSecLayout->addWidget(latSecDmsEdit, 0, 5);
+    degMinSecLayout->addWidget(new QLabel("N/S"), 0, 6);
+    degMinSecLayout->addWidget(latHemDms, 0, 7);
+    degMinSecLayout->addWidget(new QLabel("Lon Deg"), 1, 0);
+    degMinSecLayout->addWidget(lonDegDmsEdit, 1, 1);
+    degMinSecLayout->addWidget(new QLabel("Lon Min"), 1, 2);
+    degMinSecLayout->addWidget(lonMinDmsEdit, 1, 3);
+    degMinSecLayout->addWidget(new QLabel("Lon Sec"), 1, 4);
+    degMinSecLayout->addWidget(lonSecDmsEdit, 1, 5);
+    degMinSecLayout->addWidget(new QLabel("E/W"), 1, 6);
+    degMinSecLayout->addWidget(lonHemDms, 1, 7);
+
     // Pre-fill deg-min widgets from decimal degree fields (if available)
     {
         bool ok1=false, ok2=false;
@@ -2022,11 +2056,23 @@ void RoutePanel::showWaypointEditDialog(int routeId, int waypointIndex)
         latDegEdit->setText(QString::number(dlat));
         latMinEdit->setText(QString::number(mlat, 'f', 3));
         latHem->setCurrentText(alat >= 0 ? "N" : "S");
+        int latMinWhole = static_cast<int>(qFloor(mlat));
+        double latSeconds = (mlat - latMinWhole) * 60.0;
+        latDegDmsEdit->setText(QString::number(dlat));
+        latMinDmsEdit->setText(QString::number(latMinWhole));
+        latSecDmsEdit->setText(QString::number(latSeconds, 'f', 2));
+        latHemDms->setCurrentText(alat >= 0 ? "N" : "S");
         int dlon = static_cast<int>(qFloor(qAbs(alon)));
         double mlon = (qAbs(alon) - dlon) * 60.0;
         lonDegEdit->setText(QString::number(dlon));
         lonMinEdit->setText(QString::number(mlon, 'f', 3));
         lonHem->setCurrentText(alon >= 0 ? "E" : "W");
+        int lonMinWhole = static_cast<int>(qFloor(mlon));
+        double lonSeconds = (mlon - lonMinWhole) * 60.0;
+        lonDegDmsEdit->setText(QString::number(dlon));
+        lonMinDmsEdit->setText(QString::number(lonMinWhole));
+        lonSecDmsEdit->setText(QString::number(lonSeconds, 'f', 2));
+        lonHemDms->setCurrentText(alon >= 0 ? "E" : "W");
     }
 
     // Toggle visibility when switching units
@@ -2036,34 +2082,41 @@ void RoutePanel::showWaypointEditDialog(int routeId, int waypointIndex)
             lonLabel->setText("East (m):");
             latEdit->setPlaceholderText("e.g., 25.0");
             lonEdit->setPlaceholderText("e.g., 50.0");
-            
+
             decMetersGroup->setVisible(true);
             degMinGroup->setVisible(false);
+            degMinSecGroup->setVisible(false);
         } else if (degMinBtn->isChecked()) {
-            
             decMetersGroup->setVisible(false);
             degMinGroup->setVisible(true);
+            degMinSecGroup->setVisible(false);
+        } else if (degMinSecBtn->isChecked()) {
+            decMetersGroup->setVisible(false);
+            degMinGroup->setVisible(false);
+            degMinSecGroup->setVisible(true);
         } else {
             latLabel->setText("Latitude:");
             lonLabel->setText("Longitude:");
             latEdit->setPlaceholderText("e.g., -7.508333");
             lonEdit->setPlaceholderText("e.g., 112.754167");
-            
+
             decMetersGroup->setVisible(true);
             degMinGroup->setVisible(false);
+            degMinSecGroup->setVisible(false);
         }
         setValidatorsForUnit();
         dialog.adjustSize();
     };
     QObject::connect(decDegBtn, &QRadioButton::toggled, &dialog, updateCoordinateLabels);
     QObject::connect(degMinBtn, &QRadioButton::toggled, &dialog, updateCoordinateLabels);
+    QObject::connect(degMinSecBtn, &QRadioButton::toggled, &dialog, updateCoordinateLabels);
     QObject::connect(metersBtn, &QRadioButton::toggled, &dialog, updateCoordinateLabels);
     updateCoordinateLabels();
-
     layout->addRow("Label:", labelEdit);
     layout->addRow(unitGroup);
     layout->addRow(decMetersGroup);
     layout->addRow(degMinGroup);
+    layout->addRow(degMinSecGroup);
     // No examples row for Deg-Min per request
     layout->addRow("Remark:", remarkEdit);
     layout->addRow("Active:", activeCheck);
@@ -2100,6 +2153,24 @@ void RoutePanel::showWaypointEditDialog(int routeId, int waypointIndex)
         return val;
     };
 
+    auto toDecimalFromDegMinSec = [&](QLineEdit* degEdit, QLineEdit* minEdit, QLineEdit* secEdit, QComboBox* hem, bool isLat, bool& ok) -> double {
+        ok = false;
+        bool okd=false, okm=false, oks=false;
+        int deg = degEdit->text().toInt(&okd);
+        int minu = minEdit->text().toInt(&okm);
+        double secs = secEdit->text().toDouble(&oks);
+        if (!okd || !okm || !oks) return 0.0;
+        if (isLat && (deg < 0 || deg > 90)) return 0.0;
+        if (!isLat && (deg < 0 || deg > 180)) return 0.0;
+        if (minu < 0 || minu >= 60) return 0.0;
+        if (secs < 0.0 || secs >= 60.0) return 0.0;
+        double val = deg + (static_cast<double>(minu) / 60.0) + (secs / 3600.0);
+        QString h = hem->currentText().toUpper();
+        if ((isLat && h == "S") || (!isLat && h == "W")) val = -val;
+        ok = true;
+        return val;
+    };
+
     dialog.adjustSize();
     if (dialog.exec() == QDialog::Accepted) {
         bool okLat = true, okLon = true;
@@ -2110,6 +2181,9 @@ void RoutePanel::showWaypointEditDialog(int routeId, int waypointIndex)
         } else if (degMinBtn->isChecked()) {
             lat = toDecimalFromDegMin(latDegEdit, latMinEdit, latHem, true, okLat);
             lon = toDecimalFromDegMin(lonDegEdit, lonMinEdit, lonHem, false, okLon);
+        } else if (degMinSecBtn->isChecked()) {
+            lat = toDecimalFromDegMinSec(latDegDmsEdit, latMinDmsEdit, latSecDmsEdit, latHemDms, true, okLat);
+            lon = toDecimalFromDegMinSec(lonDegDmsEdit, lonMinDmsEdit, lonSecDmsEdit, lonHemDms, false, okLon);
         } else if (metersBtn->isChecked()) {
             double north = latEdit->text().toDouble(&okLat);
             double east = lonEdit->text().toDouble(&okLon);

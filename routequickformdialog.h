@@ -40,6 +40,8 @@ private:
     void setupUI();
     void updateTable();
     bool parseDegMinNumeric(int deg, double minutes, bool isLat, int sign, double& out);
+
+    bool parseDegMinSecNumeric(int deg, int minutes, double seconds, bool isLat, int sign, double& out);
     void metersToLatLon(double north, double east, double& outLat, double& outLon);
     int generateNextRouteId() const; // for displaying route name in title
     QString formatDegMin(double value, bool isLat) const;
@@ -51,6 +53,7 @@ private:
     QGroupBox* unitGroup;
     QRadioButton* decDegBtn;
     QRadioButton* degMinBtn;
+    QRadioButton* degMinSecBtn;
     QRadioButton* metersBtn;
     QLabel* latLabel;
     QLabel* lonLabel;
@@ -66,6 +69,15 @@ private:
     QLineEdit* lonDegEdit;
     QLineEdit* lonMinEdit;
     QComboBox* lonHemCombo;
+    QGroupBox* degMinSecGroup;
+    QLineEdit* latDegDmsEdit;
+    QLineEdit* latMinDmsEdit;
+    QLineEdit* latSecDmsEdit;
+    QComboBox* latHemDmsCombo;
+    QLineEdit* lonDegDmsEdit;
+    QLineEdit* lonMinDmsEdit;
+    QLineEdit* lonSecDmsEdit;
+    QComboBox* lonHemDmsCombo;
     QLineEdit* remarkEdit;
     QCheckBox* activeCheck;
 
@@ -88,3 +100,4 @@ private:
 };
 
 #endif // ROUTEQUICKFORMDIALOG_H
+
