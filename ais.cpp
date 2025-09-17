@@ -569,6 +569,8 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
                 Ais::instance()->_aisTargetInfoMap[ti->mmsi] = *ti;
             }
 
+            // EMIT KE CPA/TCPA PANEL
+
             // MASUK KE DATABASE
             // PLEASE WAIT!!
             // AisDatabaseManager::instance().insertOrUpdateAisTarget(*ti); // EcAISTargetInfo

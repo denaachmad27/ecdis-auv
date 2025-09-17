@@ -24,7 +24,7 @@ CPATCPAPanel::CPATCPAPanel(QWidget *parent)
     CPATCPASettings& settings = CPATCPASettings::instance();
     //refreshTimer->start(settings.getAlarmUpdateInterval() * 1000);
 
-    refreshTimer->start(10 * 1000);
+    refreshTimer->start(1000);
 
     if (AppConfig::isDevelopment()){
         // Add tooltips

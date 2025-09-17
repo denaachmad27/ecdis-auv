@@ -4446,7 +4446,7 @@ void MainWindow::setupCPATCPAPanel()
     QMenu* sidebarMenu = nullptr;
     QList<QMenu*> menus = menuBar()->findChildren<QMenu*>();
     for (QMenu* menu : menus) {
-        if (menu->title().contains("Sidebar") || menu->title().contains("&Sidebar")) {
+        if (menu->title().contains("UI Panels") || menu->title().contains("&UI Panels")) {
             sidebarMenu = menu;
             break;
         }
