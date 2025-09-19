@@ -260,6 +260,7 @@ private slots:
     // CPA/TCPA slots
     void onCPASettings();
     void onShowCPATargets(bool enabled);
+    void onShowDangerTargets(bool enabled);
     void onShowTCPAInfo(bool enabled);
     void onCPATCPAAlarms(bool enabled);
 

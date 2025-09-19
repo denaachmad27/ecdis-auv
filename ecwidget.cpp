@@ -4580,7 +4580,18 @@ void EcWidget::ownShipDraw(){
 
                                 // Scale pulse size with zoom: ensure larger than ownship when zoomed in
                                 double rangeNM_forPulse = GetRange(currentScale);
-                                int baseMinRadius = (rangeNM_forPulse < 2.0) ? 32 : 12;
+                                int baseMinRadius;
+
+                                if (rangeNM_forPulse >= 2){
+                                    baseMinRadius = 12;
+                                }
+                                else if (rangeNM_forPulse >= 1){
+                                    baseMinRadius = 22;
+                                }
+                                else {
+                                    baseMinRadius = 32;
+                                }
+
                                 int pulseRadius = baseMinRadius + (int)(4 * std::sin(t * 2.0 * M_PI / 1.5));
                                 int opacity = 170 + (int)(60 * std::sin(t * 2.0 * M_PI / 2.0));
 

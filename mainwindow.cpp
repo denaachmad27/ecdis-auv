@@ -642,6 +642,11 @@ void MainWindow::createMenuBar(){
     aisAction->setChecked(showAIS);
     connect(aisAction, SIGNAL(toggled(bool)), this, SLOT(onAIS(bool)));
 
+    QAction *aisDangerAction = viewMenu->addAction("AIS Dangerous Box");
+    aisDangerAction->setCheckable(true);
+    aisDangerAction->setChecked(showDangerTarget);
+    connect(aisDangerAction, SIGNAL(toggled(bool)), this, SLOT(onShowCPATargets(bool)));
+
     if (AppConfig::isDevelopment()) {
         QAction *trackAction = viewMenu->addAction("Track Ship");
         trackAction->setCheckable(true);
@@ -4135,6 +4140,11 @@ void MainWindow::onShowCPATargets(bool enabled)
     } else {
         addTextToBar("CPA Target display disabled");
     }
+}
+
+void MainWindow::onShowDangerTargets(bool enabled)
+{
+    ecchart->ShowDangerTarget(enabled);
 }
 
 void MainWindow::onShowTCPAInfo(bool enabled)
