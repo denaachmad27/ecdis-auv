@@ -645,7 +645,7 @@ void MainWindow::createMenuBar(){
     QAction *aisDangerAction = viewMenu->addAction("AIS Dangerous Box");
     aisDangerAction->setCheckable(true);
     aisDangerAction->setChecked(showDangerTarget);
-    connect(aisDangerAction, SIGNAL(toggled(bool)), this, SLOT(onShowCPATargets(bool)));
+    connect(aisDangerAction, SIGNAL(toggled(bool)), this, SLOT(onShowDangerTargets(bool)));
 
     if (AppConfig::isDevelopment()) {
         QAction *trackAction = viewMenu->addAction("Track Ship");
