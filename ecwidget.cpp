@@ -4585,17 +4585,33 @@ void EcWidget::ownShipDraw(){
                                 int opacity = 170 + (int)(60 * std::sin(t * 2.0 * M_PI / 2.0));
 
                                 // Outer glow
+                                // QPen glowPen(QColor(255, 0, 0, opacity / 3));
+                                // glowPen.setWidth(3);
+                                // painter.setPen(glowPen);
+                                // painter.setBrush(Qt::NoBrush);
+                                // painter.drawEllipse(QPoint(x, y), pulseRadius + 5, pulseRadius + 5);
+
+                                // // Main red ring + soft fill
+                                // QPen ringPen(QColor(255, 0, 0, opacity));
+                                // ringPen.setWidth(4);
+                                // painter.setPen(ringPen);
+                                // QBrush ringBrush(QColor(255, 0, 0, opacity / 6));
+                                // painter.setBrush(ringBrush);
+                                // painter.drawEllipse(QPoint(x, y), pulseRadius, pulseRadius);
+
+                                // ADJUSTMENT
+                                // Outer glow
                                 QPen glowPen(QColor(255, 0, 0, opacity / 3));
-                                glowPen.setWidth(3);
+                                glowPen.setWidth(1);
                                 painter.setPen(glowPen);
                                 painter.setBrush(Qt::NoBrush);
                                 painter.drawEllipse(QPoint(x, y), pulseRadius + 5, pulseRadius + 5);
 
                                 // Main red ring + soft fill
                                 QPen ringPen(QColor(255, 0, 0, opacity));
-                                ringPen.setWidth(4);
+                                ringPen.setWidth(2);
                                 painter.setPen(ringPen);
-                                QBrush ringBrush(QColor(255, 0, 0, opacity / 6));
+                                QBrush ringBrush(QColor(255, 0, 0, 0 / 6));
                                 painter.setBrush(ringBrush);
                                 painter.drawEllipse(QPoint(x, y), pulseRadius, pulseRadius);
                             }
