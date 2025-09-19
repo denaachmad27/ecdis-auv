@@ -3649,8 +3649,8 @@ void EcWidget::InitAIS( EcDictInfo *dict)
   // CPATCPASettings& settings = CPATCPASettings::instance();
   // double dWarnDist = settings.getCPAThreshold();
 
-  double dWarnCPA = 0.2;
-  int iWarnTCPA = 1;
+  double dWarnCPA = SettingsManager::instance().data().cpaThreshold;
+  int iWarnTCPA = SettingsManager::instance().data().cpaThreshold;
 
   int iTimeOut = 1;
   Bool bInternalGPS = False;

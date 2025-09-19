@@ -253,12 +253,12 @@ void SettingsDialog::setupUI() {
     QFormLayout *displayLayout = new QFormLayout;
     displayModeCombo = new QComboBox;
     displayModeCombo->addItems({"Day", "Dusk", "Night"});
-    displayLayout->addRow("Default Display:", displayModeCombo);
+    displayLayout->addRow("Default Chart Theme:", displayModeCombo);
     displayTab->setLayout(displayLayout);
 
     themeModeCombo = new QComboBox;
     themeModeCombo->addItems({"Light", "Dim", "Dark"});
-    displayLayout->addRow("Default Theme:", themeModeCombo);
+    displayLayout->addRow("Default UI Theme:", themeModeCombo);
     displayTab->setLayout(displayLayout);
 
     // GuardZone tab
@@ -386,9 +386,36 @@ void SettingsDialog::setupUI() {
     alertLayout->addStretch();
     alertTab->setLayout(alertLayout);
 
+    // CPA/TCPA
+    QWidget *cpatcpaTab = new QWidget;
+    QFormLayout *cpatcpaLayout = new QFormLayout;
+
+    cpaSpin = new QDoubleSpinBox;
+    cpaSpin->setRange(0.1, 5.0);
+    cpaSpin->setSuffix(" NM");
+    cpaSpin->setDecimals(1);
+    cpaSpin->setSingleStep(0.1);
+    cpaSpin->setSuffix(" NM");
+
+    cpatcpaLayout->addRow("CPA Threshold:", cpaSpin);
+    cpatcpaTab->setLayout(cpatcpaLayout);
+
+
+    tcpaSpin = new QDoubleSpinBox;
+    tcpaSpin->setRange(1, 20);
+    tcpaSpin->setSuffix(" NM");
+    tcpaSpin->setDecimals(0);
+    tcpaSpin->setSingleStep(1);
+    tcpaSpin->setSuffix(" min");
+
+    cpatcpaLayout->addRow("TCPA Threshold:", tcpaSpin);
+    cpatcpaTab->setLayout(cpatcpaLayout);
+
+
     tabWidget->addTab(moosTab, "MOOSDB");
     tabWidget->addTab(ownShipTab, "Own Ship");
     tabWidget->addTab(displayTab, "Display");
+    tabWidget->addTab(cpatcpaTab, "CPA/TCPA");
 
     if (AppConfig::isDevelopment()){
         tabWidget->addTab(guardzoneTab, "GuardZone");
@@ -533,6 +560,10 @@ void SettingsDialog::loadSettings() {
             ukcWarningSpin->setMinimum(danger);
         }
     }
+
+    // CPA/TCPA
+    cpaSpin->setValue(settings.value("CPA-TCPA/cpa_threshold", 0.2).toDouble());
+    tcpaSpin->setValue(settings.value("CPA-TCPA/tcpa_threshold", 1).toDouble());
 }
 
 void SettingsDialog::saveSettings() {
@@ -586,6 +617,10 @@ void SettingsDialog::saveSettings() {
     settings.setValue("Alert/sound_enabled", soundAlarmEnabledCheckBox->isChecked());
     settings.setValue("Alert/sound_file", soundAlarmCombo->currentText());
     settings.setValue("Alert/sound_volume", soundVolumeSlider->value());
+
+    // CPA/TCPA
+    settings.setValue("CPA-TCPA/cpa_threshold", cpaSpin->value());
+    settings.setValue("CPA-TCPA/tcpa_threshold", tcpaSpin->value());
 }
 
 void SettingsDialog::updateAisWidgetsVisibility(const QString &text) {
@@ -647,6 +682,10 @@ SettingsData SettingsDialog::loadSettingsFromFile(const QString &filePath) {
     data.soundAlarmFile = settings.value("Alert/sound_file", "critical-alarm.wav").toString();
     data.soundAlarmVolume = settings.value("Alert/sound_volume", 80).toInt();
 
+    // CPA/TCPA
+    data.cpaThreshold = settings.value("CPA-TCPA/cpa_threshold", 0.2).toDouble();
+    data.tcpaThreshold = settings.value("CPA-TCPA/tcpa_threshold", 1).toDouble();
+
     return data;
 }
 
@@ -698,6 +737,10 @@ void SettingsDialog::accept() {
     data.soundAlarmEnabled = soundAlarmEnabledCheckBox->isChecked();
     data.soundAlarmFile = soundAlarmCombo->currentText();
     data.soundAlarmVolume = soundVolumeSlider->value();
+
+    // CPA/TCPA
+    data.cpaThreshold = cpaSpin->value();
+    data.tcpaThreshold = tcpaSpin->value();
 
     SettingsManager::instance().save(data);
 

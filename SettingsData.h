@@ -43,6 +43,10 @@ struct SettingsData {
     double shipDraftMeters; // Vessel draft used for depth-based hazard checks
     double ukcDangerMeters; // Under Keel Clearance threshold for DANGEROUS
     double ukcWarningMeters; // Under Keel Clearance threshold for CAUTION
+
+    // CPA/TCPA
+    double cpaThreshold;
+    double tcpaThreshold;
 };
 
 #endif // SETTINGSDATA_H

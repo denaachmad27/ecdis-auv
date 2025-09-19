@@ -5,6 +5,7 @@
 #include "cpatcpasettingsdialog.h"
 #include "ais.h"
 #include "appconfig.h"
+#include "SettingsManager.h"
 
 CPATCPAPanel::CPATCPAPanel(QWidget *parent)
     : QWidget(parent)
@@ -255,8 +256,8 @@ void CPATCPAPanel::refreshData()
 //         // Count dangerous targets
 //         CPATCPASettings& settings = CPATCPASettings::instance();
 //         if (result.isValid &&
-//             ((settings.isCPAAlarmEnabled() && result.cpa < settings.getCPAThreshold()) ||
-//              (settings.isTCPAAlarmEnabled() && result.tcpa > 0 && result.tcpa < settings.getTCPAThreshold()))) {
+//             ((settings.isCPAAlarmEnabled() && result.cpa < SettingsManager::instance().data().cpaThreshold) ||
+//              (settings.isTCPAAlarmEnabled() && result.tcpa > 0 && result.tcpa < SettingsManager::instance().data().tcpaThreshold))) {
 //             dangerousCount++;
 //         }
 //     }
@@ -340,8 +341,8 @@ void CPATCPAPanel::updateTargetsDisplay()
         EcAISTrackingStatus aisTrkStatusManual;
 
         if (result.isValid && result.currentRange < 0.5 &&
-            ((settings.isCPAAlarmEnabled() && result.cpa < settings.getCPAThreshold()) ||
-             (settings.isTCPAAlarmEnabled() && result.tcpa > 0 && result.tcpa < settings.getTCPAThreshold()))) {
+            ((settings.isCPAAlarmEnabled() && result.cpa < SettingsManager::instance().data().cpaThreshold ) ||
+             (settings.isTCPAAlarmEnabled() && result.tcpa > 0 && result.tcpa < SettingsManager::instance().data().tcpaThreshold))) {
             isDangerous = true;
             dangerousCount++;
             aisTrkStatusManual = aisIntruder;
@@ -415,13 +416,13 @@ void CPATCPAPanel::updateTargetRow(int row, const AISTargetData& target, const C
     bool isDangerous = false;
 
     // if (result.isValid) {
-    //     if (settings.isCPAAlarmEnabled() && result.cpa < settings.getCPAThreshold()) isDangerous = true;
-    //     if (settings.isTCPAAlarmEnabled() && result.tcpa > 0 && result.tcpa < settings.getTCPAThreshold()) isDangerous = true;
+    //     if (settings.isCPAAlarmEnabled() && result.cpa < SettingsManager::instance().data().cpaThreshold) isDangerous = true;
+    //     if (settings.isTCPAAlarmEnabled() && result.tcpa > 0 && result.tcpa < SettingsManager::instance().data().tcpaThreshold) isDangerous = true;
     // }
 
     if (result.isValid && result.currentRange < 0.5) {
-        if (settings.isCPAAlarmEnabled() && result.cpa < settings.getCPAThreshold()) isDangerous = true;
-        if (settings.isTCPAAlarmEnabled() && result.tcpa > 0 && result.tcpa < settings.getTCPAThreshold()) isDangerous = true;
+        if (settings.isCPAAlarmEnabled() && result.cpa < SettingsManager::instance().data().cpaThreshold) isDangerous = true;
+        if (settings.isTCPAAlarmEnabled() && result.tcpa > 0 && result.tcpa < SettingsManager::instance().data().tcpaThreshold) isDangerous = true;
     }
 
     QStringList values;
@@ -440,13 +441,13 @@ void CPATCPAPanel::updateTargetRow(int row, const AISTargetData& target, const C
         }
 
         // Highlight khusus CPA
-        if (col == 1 && result.isValid && settings.isCPAAlarmEnabled() && result.cpa < settings.getCPAThreshold()) {
+        if (col == 1 && result.isValid && settings.isCPAAlarmEnabled() && result.cpa < SettingsManager::instance().data().cpaThreshold) {
             item->setBackgroundColor(QColor(255, 150, 150));
             item->setFont(QFont("Arial", 8, QFont::Bold));
         }
 
         // Highlight khusus TCPA
-        if (col == 2 && result.isValid && settings.isTCPAAlarmEnabled() && result.tcpa > 0 && result.tcpa < settings.getTCPAThreshold()) {
+        if (col == 2 && result.isValid && settings.isTCPAAlarmEnabled() && result.tcpa > 0 && result.tcpa < SettingsManager::instance().data().tcpaThreshold) {
             item->setBackgroundColor(QColor(255, 150, 150));
             item->setFont(QFont("Arial", 8, QFont::Bold));
         }
@@ -518,8 +519,8 @@ void CPATCPAPanel::onSettingsClicked()
 
     // Load current settings
     CPATCPASettings& settings = CPATCPASettings::instance();
-    dialog->setCPAThreshold(settings.getCPAThreshold());
-    dialog->setTCPAThreshold(settings.getTCPAThreshold());
+    dialog->setCPAThreshold(SettingsManager::instance().data().cpaThreshold);
+    dialog->setTCPAThreshold(SettingsManager::instance().data().tcpaThreshold);
     dialog->setCPAAlarmEnabled(settings.isCPAAlarmEnabled());
     dialog->setTCPAAlarmEnabled(settings.isTCPAAlarmEnabled());
     dialog->setVisualAlarmEnabled(settings.isVisualAlarmEnabled());

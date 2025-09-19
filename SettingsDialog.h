@@ -95,6 +95,12 @@ private:
     // Safety notice UI
     QLabel *ukcNoticeLabel;
     QTimer *ukcNoticeTimer;
+
+    // CPA/TCPA
+    QLabel *cpaLabel;
+    QLabel *tcpaLabel;
+    QDoubleSpinBox *cpaSpin;
+    QDoubleSpinBox *tcpaSpin;
 };
 
 #endif // SETTINGSDIALOG_H

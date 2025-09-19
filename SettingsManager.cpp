@@ -29,7 +29,7 @@ void SettingsManager::load() {
 
     // DISPLAY
     m_data.displayMode = settings.value("Display/mode", "Day").toString();
-    m_data.themeMode = dialogObj->theme(settings.value("Display/theme", "Day").toString());
+    m_data.themeMode = dialogObj->theme(settings.value("Display/theme", "Dark").toString());
     
     // GUARDZON
     m_data.defaultShipTypeFilter = settings.value("GuardZone/default_ship_type", 0).toInt();
@@ -51,6 +51,10 @@ void SettingsManager::load() {
         m_data.ukcDangerMeters = settings.value("OwnShip/ukc_danger", 0.5).toDouble();
         m_data.ukcWarningMeters = settings.value("OwnShip/ukc_warning", 2.0).toDouble();
     }
+
+    // CPA/TCPA
+    m_data.cpaThreshold = settings.value("CPA-TCPA/cpa_threshold", 0.2).toDouble();
+    m_data.tcpaThreshold = settings.value("CPA-TCPA/tcpa_threshold", 1).toDouble();
 }
 
 void SettingsManager::save(const SettingsData& data) {
@@ -98,6 +102,10 @@ void SettingsManager::save(const SettingsData& data) {
         settings.setValue("OwnShip/ukc_danger", data.ukcDangerMeters);
         settings.setValue("OwnShip/ukc_warning", data.ukcWarningMeters);
     }
+
+    // CPA/TCPA
+    settings.value("CPA-TCPA/cpa_threshold", data.cpaThreshold);
+    settings.value("CPA-TCPA/tcpa_threshold", data.tcpaThreshold);
 }
 
 const SettingsData& SettingsManager::data() const {

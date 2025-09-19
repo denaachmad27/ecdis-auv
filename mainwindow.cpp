@@ -747,7 +747,7 @@ void MainWindow::createMenuBar(){
     // ================================== DISPLAY MENU
     QMenu *appearanceMenu = menuBar()->addMenu("&Appearance");
 
-    QMenu *colorMenu = appearanceMenu->addMenu("&Display Mode");
+    QMenu *colorMenu = appearanceMenu->addMenu("&Chart Theme");
 
     QActionGroup *cActionGroup = new QActionGroup(this);
     dayAction    = cActionGroup->addAction("Day");
@@ -773,7 +773,7 @@ void MainWindow::createMenuBar(){
     // connect(searchAction, &QAction::triggered, this, &MainWindow::onSearch);
 
     // ================================== THEME MENU
-    QMenu *themeMenu = appearanceMenu->addMenu("&Theme");
+    QMenu *themeMenu = appearanceMenu->addMenu("&UI Theme");
 
     QActionGroup *themeGroup = new QActionGroup(this);
     themeGroup->setExclusive(true);
