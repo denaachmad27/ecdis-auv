@@ -1008,14 +1008,13 @@ void MainWindow::createMenuBar(){
 // S-63 USER PERMIT GENERATE
 void MainWindow::userPermitGenerate(){
     char *userpermit = nullptr;
-    unsigned char* hwid = (unsigned char*)"95C7-DAC8-182A-403D-257C-C";
-    //unsigned char* hwid = (unsigned char*)"6B4A-4473-2387-B940-5A7C-A";
-    unsigned char* mid = (unsigned char*)"BF";
-    unsigned char* mkey = (unsigned char*)"82115";
+    unsigned char* hwid = (unsigned char*)HWID;
+    unsigned char* mid = (unsigned char*)MID;
+    unsigned char* mkey = (unsigned char*)M_KEY;
 
     EcS63CreateUserPermit(hwid, mkey, mid, &userpermit);
 
-    qDebug() << userpermit;
+    qCritical() << userpermit;
 }
 
 // DVR PLUGIN
@@ -1431,6 +1430,8 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL){
   }
 
   ownShipText->setText(pickWindow->ownShipAutoFill());
+
+  userPermitGenerate();
 }
 
 /*---------------------------------------------------------------------------*/

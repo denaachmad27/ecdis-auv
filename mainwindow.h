@@ -32,10 +32,11 @@ class AISSubscriber;
 
 // Defines for S-63 Chart Import
 // user permit (must have 28 characters)
-#define USERPERMIT "66B5CBFDF7E4139D5B6086C23130"
+//#define USERPERMIT "66B5CBFDF7E4139D5B6086C23130"
 // manufacturer key (M_KEY must have either 5 or 10 characters)
-#define M_KEY "10121"
+//#define M_KEY "10121"
 // data server id
+
 #define DSID "0"
 #define APP_TITLE "ECDIS AUV v1.31"
 

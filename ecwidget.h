@@ -121,10 +121,22 @@ class GuardZoneManager; // Forward declaration
 // Defines for S-63 Chart Import
 // The Manufacturer is in charge of generating unique user permits for each installation of his application
 // S-63 Uuser permit (must have 28 characters)
-#define USERPERMIT "66B5CBFDF7E4139D5B6086C23130"
+//#define USERPERMIT "66B5CBFDF7E4139D5B6086C23130"
+
+// DEVELOPMENT
+#define USERPERMIT "FA0B04B4D8C1175A18D44DE44246"
+#define HWID "8BA3-E363-1982-4EDB-257C-C"
+
+// PRODUCTION
+//#define USERPERMIT "E12FF5B1C9BC7AFAC30030B64246"
+//#define HWID "95C7DAC8182A403D257CC"
+
 // The Manufacturer key is supplied by the IHO on request (application required)
 // S-63 Manufacturer key (M_KEY must have either 5 or 10 characters)
-#define M_KEY "10121"
+//#define M_KEY "10121"
+
+#define M_KEY "82115"
+#define MID "BF"
 
 // Waypoint
 #define PICKRADIUS  (0.03 * GetRange);
@@ -1424,6 +1436,15 @@ private:
   QAction* publishAction;
 
   QAction* insertWaypointAction;
+
+
+  QIcon editIcon;
+  QIcon moveIcon;
+  QIcon deleteWaypointIcon;
+  QIcon deleteRouteIcon;
+  QIcon publishIcon;
+
+  QIcon insertWaypointIcon;
 
   // DEFAULTSETTINGS
   void defaultSettingsStartUp();
