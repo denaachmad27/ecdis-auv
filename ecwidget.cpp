@@ -16240,3 +16240,30 @@ void EcWidget::defaultSettingsStartUp(){
     trackDistance = SettingsManager::instance().data().trailDistance;
     trackMinute = SettingsManager::instance().data().trailMinute;
 }
+
+void EcWidget::applyShipDimensions()
+{
+    const SettingsData& settings = SettingsManager::instance().data();
+
+    EcShipDimension dim;
+    dim.length = settings.shipLength;
+    dim.breadth = settings.shipBeam;
+    dim.draught = settings.shipDraftMeters;
+    dim.airDraught = settings.shipHeight; // Menggunakan Tinggi Total untuk airDraught
+
+    if (view) {
+        // TODO: Ganti "EcChartSetOwnshipDim" dengan nama fungsi kernel yang benar dari dokumentasi Anda.
+        // EcChartSetOwnshipDim(view, &dim);
+    }
+
+    // Logika untuk menerapkan offset GPS utama
+    if (settings.primaryGpsIndex >= 0 && settings.primaryGpsIndex < settings.gpsPositions.size()) {
+        const GpsPosition& primaryGps = settings.gpsPositions.at(settings.primaryGpsIndex);
+        // Asumsi ada fungsi untuk mengatur offset referensi
+        // Fungsi ini mungkin memerlukan nama lain atau tidak ada sama sekali, perlu verifikasi dari dokumentasi kernel
+        // EcDrawSetReferencePointOffset(view, primaryGps.offsetX, primaryGps.offsetY);
+    }
+
+    // Memaksa penggambaran ulang untuk menerapkan perubahan visual
+    forceRedraw();
+}

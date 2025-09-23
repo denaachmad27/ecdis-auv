@@ -634,6 +634,8 @@ public:
   void TrackShip(bool on);
   void ShowDangerTarget(bool on);
 
+  void applyShipDimensions();
+
   // Ship Guardian Circle variables (upgrade dari red dot)
   bool shipGuardianEnabled;           // NEW: Enable Guardian Circle
   double guardianRadius;              // NEW: Guardian circle radius (nautical miles)
