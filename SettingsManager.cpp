@@ -55,6 +55,43 @@ void SettingsManager::load() {
     // CPA/TCPA
     m_data.cpaThreshold = settings.value("CPA-TCPA/cpa_threshold", 0.2).toDouble();
     m_data.tcpaThreshold = settings.value("CPA-TCPA/tcpa_threshold", 1).toDouble();
+
+    // Ship Dimensions
+    m_data.shipLength = settings.value("ShipDimensions/length", 170.0).toDouble();
+    m_data.shipBeam = settings.value("ShipDimensions/beam", 13.0).toDouble();
+    m_data.shipHeight = settings.value("ShipDimensions/height", 25.0).toDouble();
+    m_data.primaryGpsIndex = settings.value("ShipDimensions/primaryGpsIndex", 0).toInt();
+
+    // GPS Positions
+    m_data.gpsPositions.clear();
+    int gpsCount = settings.beginReadArray("GPSPositions");
+    for (int i = 0; i < gpsCount; ++i) {
+        settings.setArrayIndex(i);
+        GpsPosition pos;
+        pos.name = settings.value("name", QString("GPS %1").arg(i + 1)).toString();
+        pos.offsetX = settings.value("offsetX", 0.0).toDouble();
+        pos.offsetY = settings.value("offsetY", 0.0).toDouble();
+        m_data.gpsPositions.append(pos);
+    }
+    settings.endArray();
+
+    // Ship Dimensions
+    m_data.shipLength = settings.value("ShipDimensions/length", 170.0).toDouble();
+    m_data.shipBeam = settings.value("ShipDimensions/beam", 13.0).toDouble();
+    m_data.shipHeight = settings.value("ShipDimensions/height", 15.0).toDouble();
+    m_data.primaryGpsIndex = settings.value("ShipDimensions/primaryGpsIndex", 0).toInt();
+
+    // GPS Positions
+    m_data.gpsPositions.clear();
+    for (int i = 0; i < gpsCount; ++i) {
+        settings.setArrayIndex(i);
+        GpsPosition pos;
+        pos.name = settings.value("name", QString("GPS %1").arg(i + 1)).toString();
+        pos.offsetX = settings.value("offsetX", 0.0).toDouble();
+        pos.offsetY = settings.value("offsetY", 0.0).toDouble();
+        m_data.gpsPositions.append(pos);
+    }
+    settings.endArray();
 }
 
 void SettingsManager::save(const SettingsData& data) {
@@ -104,8 +141,24 @@ void SettingsManager::save(const SettingsData& data) {
     }
 
     // CPA/TCPA
-    settings.value("CPA-TCPA/cpa_threshold", data.cpaThreshold);
-    settings.value("CPA-TCPA/tcpa_threshold", data.tcpaThreshold);
+    settings.setValue("CPA-TCPA/cpa_threshold", data.cpaThreshold);
+    settings.setValue("CPA-TCPA/tcpa_threshold", data.tcpaThreshold);
+
+    // Ship Dimensions
+    settings.setValue("ShipDimensions/length", data.shipLength);
+    settings.setValue("ShipDimensions/beam", data.shipBeam);
+    settings.setValue("ShipDimensions/height", data.shipHeight);
+    settings.setValue("ShipDimensions/primaryGpsIndex", data.primaryGpsIndex);
+
+    // GPS Positions
+    settings.beginWriteArray("GPSPositions");
+    for (int i = 0; i < data.gpsPositions.size(); ++i) {
+        settings.setArrayIndex(i);
+        settings.setValue("name", data.gpsPositions.at(i).name);
+        settings.setValue("offsetX", data.gpsPositions.at(i).offsetX);
+        settings.setValue("offsetY", data.gpsPositions.at(i).offsetY);
+    }
+    settings.endArray();
 }
 
 const SettingsData& SettingsManager::data() const {

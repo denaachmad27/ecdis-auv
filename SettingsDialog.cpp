@@ -1,6 +1,7 @@
 #include "SettingsDialog.h"
 #include "SettingsManager.h"
 #include "appconfig.h"
+#include "mainwindow.h"
 
 #include <QLineEdit>
 #include <QComboBox>
@@ -23,6 +24,8 @@
 #include <QDir>
 #include <QCoreApplication>
 #include <QTimer>
+#include <QTableWidget>
+#include <QHeaderView>
 
 SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
     setupUI();
@@ -54,6 +57,51 @@ void SettingsDialog::setupUI() {
     // --- Own Ship Tab ---
     QWidget *ownShipTab = new QWidget;
     QFormLayout *ownShipLayout = new QFormLayout;
+
+
+
+
+    // --- Ship Dimensions Tab ---
+    QWidget *shipDimensionsTab = new QWidget;
+    QVBoxLayout *shipDimensionsLayout = new QVBoxLayout(shipDimensionsTab);
+
+    // Ship Dimensions Group
+    QGroupBox *dimensionsGroup = new QGroupBox(tr("Vessel Dimensions"));
+    QFormLayout *dimensionsForm = new QFormLayout(dimensionsGroup);
+    shipLengthSpin = new QDoubleSpinBox;
+    shipLengthSpin->setRange(1.0, 2000.0); shipLengthSpin->setSuffix(" m");
+    shipBeamSpin = new QDoubleSpinBox;
+    shipBeamSpin->setRange(1.0, 200.0); shipBeamSpin->setSuffix(" m");
+    shipHeightSpin = new QDoubleSpinBox;
+    shipHeightSpin->setRange(1.0, 200.0); shipHeightSpin->setSuffix(" m");
+    dimensionsForm->addRow(tr("Overall Length (meters):"), shipLengthSpin);
+    dimensionsForm->addRow(tr("Beam (meters):"), shipBeamSpin);
+    dimensionsForm->addRow(tr("Overall Height (meters):"), shipHeightSpin);
+
+    // GPS Configuration Group
+    QGroupBox *gpsGroup = new QGroupBox(tr("GPS Antenna Positions"));
+    QVBoxLayout *gpsLayout = new QVBoxLayout(gpsGroup);
+    gpsTableWidget = new QTableWidget;
+    gpsTableWidget->setColumnCount(3);
+    gpsTableWidget->setHorizontalHeaderLabels({"Name", "Offset X (Centerline)", "Offset Y (Bow)"});
+    gpsTableWidget->horizontalHeader()->setStretchLastSection(true);
+    QHBoxLayout *gpsButtons = new QHBoxLayout;
+    QPushButton *addGpsButton = new QPushButton(tr("Add GPS"));
+    QPushButton *removeGpsButton = new QPushButton(tr("Remove Selected"));
+    gpsButtons->addStretch();
+    gpsButtons->addWidget(addGpsButton);
+    gpsButtons->addWidget(removeGpsButton);
+    
+    QFormLayout* primaryGpsForm = new QFormLayout;
+    primaryGpsCombo = new QComboBox;
+    primaryGpsForm->addRow(tr("Primary Reference (CCRP):"), primaryGpsCombo);
+
+    gpsLayout->addLayout(primaryGpsForm);
+    gpsLayout->addWidget(gpsTableWidget);
+    gpsLayout->addLayout(gpsButtons);
+
+    shipDimensionsLayout->addWidget(dimensionsGroup);
+    shipDimensionsLayout->addWidget(gpsGroup);
 
     centeringCombo = new QComboBox;
     centeringCombo->addItem("Auto Recenter", "AutoRecenter");
@@ -414,6 +462,7 @@ void SettingsDialog::setupUI() {
 
     tabWidget->addTab(moosTab, "MOOSDB");
     tabWidget->addTab(ownShipTab, "Own Ship");
+    tabWidget->addTab(shipDimensionsTab, "Ship Dimensions");
     tabWidget->addTab(displayTab, "Display");
     tabWidget->addTab(cpatcpaTab, "CPA/TCPA");
 
@@ -429,6 +478,11 @@ void SettingsDialog::setupUI() {
 
     connect(buttonBox, &QDialogButtonBox::accepted, this, &SettingsDialog::accept);
     connect(buttonBox, &QDialogButtonBox::rejected, this, &SettingsDialog::reject);
+
+    // GPS UI Connections
+    connect(addGpsButton, &QPushButton::clicked, this, &SettingsDialog::onAddGpsRow);
+    connect(removeGpsButton, &QPushButton::clicked, this, &SettingsDialog::onRemoveGpsRow);
+    connect(gpsTableWidget, &QTableWidget::itemChanged, this, &SettingsDialog::updatePrimaryGpsCombo);
 }
 
 void SettingsDialog::loadSettings() {
@@ -564,6 +618,35 @@ void SettingsDialog::loadSettings() {
     // CPA/TCPA
     cpaSpin->setValue(settings.value("CPA-TCPA/cpa_threshold", 0.2).toDouble());
     tcpaSpin->setValue(settings.value("CPA-TCPA/tcpa_threshold", 1).toDouble());
+
+    // Ship Dimensions
+    shipLengthSpin->setValue(settings.value("ShipDimensions/length", 170.0).toDouble());
+    shipBeamSpin->setValue(settings.value("ShipDimensions/beam", 13.0).toDouble());
+    shipHeightSpin->setValue(settings.value("ShipDimensions/height", 25.0).toDouble());
+
+    // GPS Positions
+    gpsTableWidget->setRowCount(0); // Clear table before loading
+    int gpsCount = settings.beginReadArray("GPSPositions");
+    for (int i = 0; i < gpsCount; ++i) {
+        settings.setArrayIndex(i);
+        onAddGpsRow(); // Add a new row to the table
+        QTableWidgetItem *nameItem = gpsTableWidget->item(i, 0);
+        QTableWidgetItem *xItem = gpsTableWidget->item(i, 1);
+        QTableWidgetItem *yItem = gpsTableWidget->item(i, 2);
+
+        if(nameItem) nameItem->setText(settings.value("name").toString());
+        if(xItem) xItem->setText(settings.value("offsetX").toString());
+        if(yItem) yItem->setText(settings.value("offsetY").toString());
+    }
+    settings.endArray();
+
+    updatePrimaryGpsCombo();
+    int primaryIndex = settings.value("ShipDimensions/primaryGpsIndex", 0).toInt();
+    if (primaryIndex < primaryGpsCombo->count()) {
+        primaryGpsCombo->setCurrentIndex(primaryIndex);
+    }
+
+
 }
 
 void SettingsDialog::saveSettings() {
@@ -742,7 +825,50 @@ void SettingsDialog::accept() {
     data.cpaThreshold = cpaSpin->value();
     data.tcpaThreshold = tcpaSpin->value();
 
+    // Ship Dimensions
+    data.shipLength = shipLengthSpin->value();
+    data.shipBeam = shipBeamSpin->value();
+    data.shipHeight = shipHeightSpin->value();
+
+    // GPS Positions
+    data.gpsPositions.clear();
+    for (int i = 0; i < gpsTableWidget->rowCount(); ++i) {
+        GpsPosition pos;
+        pos.name = gpsTableWidget->item(i, 0) ? gpsTableWidget->item(i, 0)->text() : "";
+        pos.offsetX = gpsTableWidget->item(i, 1) ? gpsTableWidget->item(i, 1)->text().toDouble() : 0.0;
+        pos.offsetY = gpsTableWidget->item(i, 2) ? gpsTableWidget->item(i, 2)->text().toDouble() : 0.0;
+        data.gpsPositions.append(pos);
+    }
+    data.primaryGpsIndex = primaryGpsCombo->currentIndex();
+
+    // Ship Dimensions
+    data.shipLength = shipLengthSpin->value();
+    data.shipBeam = shipBeamSpin->value();
+    data.shipHeight = shipHeightSpin->value();
+
+    // GPS Positions
+    data.gpsPositions.clear();
+    for (int i = 0; i < gpsTableWidget->rowCount(); ++i) {
+        GpsPosition pos;
+        pos.name = gpsTableWidget->item(i, 0) ? gpsTableWidget->item(i, 0)->text() : "";
+        pos.offsetX = gpsTableWidget->item(i, 1) ? gpsTableWidget->item(i, 1)->text().toDouble() : 0.0;
+        pos.offsetY = gpsTableWidget->item(i, 2) ? gpsTableWidget->item(i, 2)->text().toDouble() : 0.0;
+        data.gpsPositions.append(pos);
+    }
+    data.primaryGpsIndex = primaryGpsCombo->currentIndex();
+
     SettingsManager::instance().save(data);
+
+    // Find the EcWidget instance and apply the new dimensions
+    if (parentWidget()) {
+        MainWindow* mainWindow = qobject_cast<MainWindow*>(parentWidget());
+        if (mainWindow) {
+            EcWidget* ecWidget = mainWindow->findChild<EcWidget*>();
+            if (ecWidget) {
+                ecWidget->applyShipDimensions();
+            }
+        }
+    }
 
     QDialog::accept();
 
@@ -791,4 +917,51 @@ void SettingsDialog::closeEvent(QCloseEvent *event) {
     QDialog::closeEvent(event);
     emit dialogClosed();
     qDebug() << "SettingsDialog closed";
+}
+
+void SettingsDialog::onAddGpsRow()
+{
+    int row = gpsTableWidget->rowCount();
+    gpsTableWidget->insertRow(row);
+
+    // Create and set a default name item
+    QTableWidgetItem *nameItem = new QTableWidgetItem(QString("GPS %1").arg(row + 1));
+    gpsTableWidget->setItem(row, 0, nameItem);
+
+    // Create and set default offset items
+    QTableWidgetItem *offsetXItem = new QTableWidgetItem("0.0");
+    offsetXItem->setTextAlignment(Qt::AlignCenter);
+    gpsTableWidget->setItem(row, 1, offsetXItem);
+
+    QTableWidgetItem *offsetYItem = new QTableWidgetItem("0.0");
+    offsetYItem->setTextAlignment(Qt::AlignCenter);
+    gpsTableWidget->setItem(row, 2, offsetYItem);
+
+    updatePrimaryGpsCombo();
+}
+
+void SettingsDialog::onRemoveGpsRow()
+{
+    int currentRow = gpsTableWidget->currentRow();
+    if (currentRow >= 0) {
+        gpsTableWidget->removeRow(currentRow);
+        updatePrimaryGpsCombo();
+    }
+}
+
+void SettingsDialog::updatePrimaryGpsCombo()
+{
+    QString currentSelection = primaryGpsCombo->currentText();
+    primaryGpsCombo->clear();
+    for (int i = 0; i < gpsTableWidget->rowCount(); ++i) {
+        QTableWidgetItem *item = gpsTableWidget->item(i, 0);
+        if (item) {
+            primaryGpsCombo->addItem(item->text(), i);
+        }
+    }
+
+    int index = primaryGpsCombo->findText(currentSelection);
+    if (index != -1) {
+        primaryGpsCombo->setCurrentIndex(index);
+    }
 }

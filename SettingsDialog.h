@@ -14,6 +14,7 @@ class QButtonGroup;
 class QCheckBox;
 class QSlider;
 class QDoubleSpinBox;
+class QTableWidget;
 class QTimer;
 
 class SettingsDialog : public QDialog {
@@ -42,6 +43,9 @@ public slots:
 
 private slots:
     void updateAisWidgetsVisibility(const QString &text);
+    void onAddGpsRow();
+    void onRemoveGpsRow();
+    void updatePrimaryGpsCombo();
 
 private:
     void setupUI();
@@ -88,9 +92,17 @@ private:
     QDoubleSpinBox *trailSpinDistance;
 
     // NAVIGATION SAFETY
+    QDoubleSpinBox *shipLengthSpin;
+    QDoubleSpinBox *shipBeamSpin;
+    QDoubleSpinBox *shipHeightSpin;
     QDoubleSpinBox *shipDraftSpin;
     QDoubleSpinBox *ukcDangerSpin;
     QDoubleSpinBox *ukcWarningSpin;
+
+    // GPS Configuration
+    QTableWidget *gpsTableWidget;
+    QComboBox *primaryGpsCombo;
+
 
     // Safety notice UI
     QLabel *ukcNoticeLabel;
