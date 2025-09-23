@@ -431,96 +431,8 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
 
   qDebug() << "[ECWIDGET] Route/Waypoint system initialized";
 
-  // ICON-ICON
-  editAction = new QAction(QIcon(":/icon/edit_white.svg"), tr("Edit Route Point"), this);
-  moveAction = new QAction(QIcon(":/icon/move_white.svg"), tr("Move Waypoint"), this);
-  deleteWaypointAction = new QAction(QIcon(":/icon/delete_wp_white.svg"), tr("Delete Waypoint"), this);
-  deleteRouteAction = new QAction(QIcon(":/icon/delete_route_white.svg"), tr("Delete Route"), this);
-  publishAction = new QAction(QIcon(":/icon/publish_white.svg"), tr("Publish Waypoint"), this);
-  insertWaypointAction = new QAction(QIcon(":/icon/create_wp_white.svg"), tr("Insert Waypoint"), this);
-  createRouteAction = new QAction(QIcon(":/icon/create_route_white.svg"), tr("Create Route"), this);
-  pickInfoAction = new QAction(QIcon(":/icon/info_white.svg"), tr("Map Information"), this);
-  warningInfoAction = new QAction(QIcon(":/icon/warning_white.svg"), tr("Caution and Restricted Info"), this);
-  measureEblVrmAction = new QAction(QIcon(":/icon/measure_white.svg"), tr("Measure Here"), this);
-
-  btn1 = new QToolButton();
-  btn1->setIcon(QIcon(":/icon/edit_o.svg"));
-
-  btn2 = new QToolButton();
-  btn2->setIcon(QIcon(":/icon/move_o.svg"));
-
-  btn3 = new QToolButton();
-  btn3->setIcon(QIcon(":/icon/publish_o.svg"));
-
-  btn4 = new QToolButton();
-  btn4->setIcon(QIcon(":/icon/delete_wp_o.svg"));
-
-  btn  = new QToolButton();
-  btn->setIcon(QIcon(":/icon/create_o.svg"));
-
-  // connect tombol
-  connect(btn1, &QToolButton::clicked, this, [this](){
-      toolbox->close();
-      editWaypointAt(lastClick.x(), lastClick.y());
-  });
-
-  connect(btn2, &QToolButton::clicked, this, [this](){
-      toolbox->close();
-      // Switch to move waypoint mode
-      setActiveFunction(MOVE_WAYP);
-      moveSelectedIndex = lastWaypointIndex;
-
-      // Setup ghost waypoint for immediate preview
-      ghostWaypoint.visible = true;
-      ghostWaypoint.lat = lastWaypoint.lat;
-      ghostWaypoint.lon = lastWaypoint.lon;
-      ghostWaypoint.label = lastWaypoint.label;
-      ghostWaypoint.routeId = lastWaypoint.routeId;
-      ghostWaypoint.waypointIndex = lastWaypointIndex;
-  });
-  connect(btn3, &QToolButton::clicked, this, [this](){
-      toolbox->close();
-      double lat, lon;
-      XyToLatLon(lastClick.x(), lastClick.y(), lat, lon);
-
-      QString result = QString("%1, %2")
-                          .arg(lat, 0, 'f', 6) // 6 angka di belakang koma
-                          .arg(lon, 0, 'f', 6);
-
-      if (subscriber){
-          publishToMOOS("WAYPT_NEXT", result);
-      }
-  });
-  connect(btn4, &QToolButton::clicked, this, [this](){
-      toolbox->close();
-      // Delete individual waypoint
-
-      // Confirm deletion
-      QMessageBox::StandardButton reply = QMessageBox::question(this,
-          tr("Confirm Delete Waypoint"),
-          tr("Are you sure you want to delete this waypoint?\n\nThis action cannot be undone."),
-          QMessageBox::Yes | QMessageBox::No);
-
-      if (reply == QMessageBox::Yes) {
-          removeWaypointAt(lastClick.x(), lastClick.y());
-      }
-  });
-
-
-  // connect tombol
-  connect(btn, &QToolButton::clicked, this, [this](){
-      qCritical("MASUK");
-      toolboxLL->close();
-
-      // Convert click position to lat/lon
-      EcCoordinate lat, lon;
-      if (XyToLatLon(lastClick.x(), lastClick.y(), lat, lon)) {
-          // Directly insert at computed position without switching modes
-          insertWaypointAt(lat, lon);
-          // Ensure we stay/return to PAN mode so next click does not insert again
-          setActiveFunction(PAN);
-      }
-  });
+  buttonInit();
+  iconUpdate(AppConfig::isDark());
 
   // SETTINGS STARTUP
   defaultSettingsStartUp();
@@ -1259,8 +1171,8 @@ void EcWidget::Draw()
     // ======================================================
 
     // UPDATE WP TOOLBAR
-    hideWaypointToolbox();
-    hideLeglineToolbox();
+    hideToolbox();
+
     update();
 }
 
@@ -2327,6 +2239,32 @@ void EcWidget::showAoiVertexContextMenu(const QPoint& pos, int aoiId, int vertex
         break;
     }
 }
+
+void EcWidget::showAoiToolbox(const QPoint& pos, int aoiId, int vertexIndex){
+    hideToolbox();
+
+    // Posisi toolbox relatif cursor
+    toolboxAoi->adjustSize();
+    QPoint posT = QCursor::pos();
+    posT.setY(posT.y() - toolboxAoi->height() - 5);
+    posT.setX(posT.x() - toolboxAoi->width() / 2);
+    toolboxAoi->move(posT);
+
+    // Find AOI reference
+    for (int ai = 0; ai < aoiList.size(); ++ai) if (aoiList[ai].id == aoiId) {
+        auto& a = aoiList[ai];
+
+        lastAoiId = aoiId;
+        lastAoiList = &a;
+
+        break;
+    }
+
+    lastVertexIndex = vertexIndex;
+
+    toolboxAoi->show();
+}
+
 void EcWidget::drawOwnShipTrail(QPainter &painter)
 {
     if (ownShipTrailPoints.size() < 2)
@@ -2679,10 +2617,11 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
     // Keep waypoint highlight when clicking on the map; it will be changed
     // only when another waypoint is explicitly selected.
     // AOI context menu on right-click (global, even outside edit mode)
-    if (e->button() == Qt::RightButton) {
+    if (e->button() == Qt::RightButton && !editingAOI) {
         int aoiId=-1, vIdx=-1;
         if (getAoiVertexAtPosition(e->x(), e->y(), aoiId, vIdx)) {
-            showAoiVertexContextMenu(e->pos(), aoiId, vIdx);
+            showAoiToolbox(e->pos(), aoiId, vIdx);
+            // showAoiVertexContextMenu(e->pos(), aoiId, vIdx);
             return; // handled
         }
 
@@ -2715,24 +2654,48 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
 
         if (bestAoiId >= 0 && bestSeg >= 0 && bestDist <= edgeProximityPx) {
             // Confirm via context menu
-            QMenu contextMenu(this);
-            QAction* addPointAct = contextMenu.addAction(tr("Add Point"));
-            QAction* chosen = contextMenu.exec(mapToGlobal(e->pos()));
-            if (chosen == addPointAct) {
-                // Insert at clicked position (convert click to lat/lon)
-                EcCoordinate lat, lon;
-                if (XyToLatLon(e->x(), e->y(), lat, lon)) {
-                    for (int ai = 0; ai < aoiList.size(); ++ai) {
-                        if (aoiList[ai].id == bestAoiId) {
-                            aoiList[ai].vertices.insert(bestSeg + 1, QPointF(lat, lon));
-                            emit aoiListChanged();
-                            saveAOIs();
-                            update();
-                            break;
-                        }
+            // QMenu contextMenu(this);
+            // QAction* addPointAct = contextMenu.addAction(tr("Add Point"));
+            // QAction* chosen = contextMenu.exec(mapToGlobal(e->pos()));
+
+            hideToolbox();
+
+            // Posisi toolbox relatif cursor
+            toolboxAoiCreate->adjustSize();
+            QPoint posT = QCursor::pos();
+            posT.setY(posT.y() - toolboxAoiCreate->height() - 5);
+            posT.setX(posT.x() - toolboxAoiCreate->width() / 2);
+            toolboxAoiCreate->move(posT);
+
+            EcCoordinate lat, lon;
+            if (XyToLatLon(e->x(), e->y(), lat, lon)) {
+                for (int ai = 0; ai < aoiList.size(); ++ai) {
+                    if (aoiList[ai].id == bestAoiId) {
+                        lastAoiList = &aoiList[ai];
+                        lastLat = lat;
+                        lastLon = lon;
+                        lastBestSeg = bestSeg;
                     }
                 }
             }
+
+            toolboxAoiCreate->show();
+
+            // if (chosen == addPointAct) {
+            //     // Insert at clicked position (convert click to lat/lon)
+            //     EcCoordinate lat, lon;
+            //     if (XyToLatLon(e->x(), e->y(), lat, lon)) {
+            //         for (int ai = 0; ai < aoiList.size(); ++ai) {
+            //             if (aoiList[ai].id == bestAoiId) {
+            //                 aoiList[ai].vertices.insert(bestSeg + 1, QPointF(lat, lon));
+            //                 emit aoiListChanged();
+            //                 saveAOIs();
+            //                 update();
+            //                 break;
+            //             }
+            //         }
+            //     }
+            // }
             return; // handled
         }
     }
@@ -2789,9 +2752,15 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
                     break;
                 }
             }
-        } else if (e->button() == Qt::RightButton) {
+        }
+        else if (e->button() == Qt::RightButton) {
+
+            finishEditAOI();
+            return;
+
             // Right click: on vertex shows Move/Delete; else add on nearest edge
-            for (int ai=0;ai<aoiList.size();++ai) if (aoiList[ai].id == editingAoiId) {
+            /*
+            for (int ai = 0;ai < aoiList.size(); ++ai) if (aoiList[ai].id == editingAoiId) {
                 auto& a = aoiList[ai];
                 // check remove
                 int hit=-1; for (int i=0;i<a.vertices.size();++i) {
@@ -2804,6 +2773,7 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
                     QAction* moveAct = contextMenu.addAction(tr("Move"));
                     QAction* delAct  = contextMenu.addAction(tr("Delete"));
                     QAction* chosen = contextMenu.exec(mapToGlobal(e->pos()));
+
                     if (chosen == moveAct) {
                         draggedAoiVertex = hit; // start click-move mode
                         emit statusMessage(tr("Moving AOI vertex: move cursor, click to drop"));
@@ -2854,7 +2824,7 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
                     }
                 }
                 return;
-            }
+            }*/
         }
         return; // consume
     }
@@ -5238,6 +5208,280 @@ void EcWidget::drawOverlayCell()
 }
 
 // waypoint
+void EcWidget::buttonInit(){
+    // ICON-ICON
+    editAction = new QAction(tr("Edit Route Point"), this);
+    moveAction = new QAction(tr("Move Waypoint"), this);
+    deleteWaypointAction = new QAction(tr("Delete Waypoint"), this);
+    deleteRouteAction = new QAction(tr("Delete Route"), this);
+    publishAction = new QAction(tr("Publish Waypoint"), this);
+    insertWaypointAction = new QAction(tr("Insert Waypoint"), this);
+    createRouteAction = new QAction(tr("Create Route"), this);
+    pickInfoAction = new QAction(tr("Map Information"), this);
+    warningInfoAction = new QAction(tr("Caution and Restricted Info"), this);
+    measureEblVrmAction = new QAction(tr("Measure Here"), this);
+
+    btn1 = new QToolButton();
+    btn2 = new QToolButton();
+    btn3 = new QToolButton();
+    btn4 = new QToolButton();
+    btn  = new QToolButton();
+
+    btnCreate = new QToolButton();
+    btnDelete = new QToolButton();
+    btnMove = new QToolButton();
+
+    // ==============================================================
+    // Buat dialog toolbox
+    toolbox = new QDialog(nullptr, Qt::Tool | Qt::FramelessWindowHint);
+    toolbox->setAttribute(Qt::WA_TranslucentBackground); // transparan hanya utk dialog luar
+    toolbox->setWindowTitle("Toolbox");
+
+    // Frame dalam utk kotak rounded
+    frame = new QFrame(toolbox);
+    frame->setObjectName("toolboxFrame");
+
+    QHBoxLayout *outerLayout = new QHBoxLayout(toolbox);
+    outerLayout->setContentsMargins(0, 0, 0, 0);  // biar frame nempel ke dialog
+    outerLayout->addWidget(frame);
+
+    // Layout isi tombol
+    QHBoxLayout *layout = new QHBoxLayout(frame);
+    layout->setContentsMargins(2, 2, 2, 2);
+    layout->setSpacing(0);
+
+    // Tambahkan tombol2
+    btn1->setIconSize(QSize(20, 20));
+    btn1->setToolTip("Edit Waypoint");
+    btn1->setAutoRaise(true);
+    btn1->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    btn1->setStyleSheet("QToolButton { margin: 1px; padding: 1px; border: none; }");
+    layout->addWidget(btn1);
+
+    btn2->setIconSize(QSize(20, 20));
+    btn2->setToolTip("Move Waypoint");
+    btn2->setAutoRaise(true);
+    btn2->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    btn2->setStyleSheet("QToolButton { margin: 1px; padding: 1px; border: none; }");
+    layout->addWidget(btn2);
+
+    btn3->setIconSize(QSize(20, 20));
+    btn3->setToolTip("Publish Waypoint");
+    btn3->setAutoRaise(true);
+    btn3->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    btn3->setStyleSheet("QToolButton { margin: 1px; padding: 1px; border: none; }");
+    layout->addWidget(btn3);
+
+    btn4->setIconSize(QSize(20, 20));
+    btn4->setToolTip("Delete Waypoint");
+    btn4->setAutoRaise(true);
+    btn4->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    btn4->setStyleSheet("QToolButton { margin: 1px; padding: 1px; border: none; }");
+    layout->addWidget(btn4);
+
+    toolbox->setAttribute(Qt::WA_AlwaysShowToolTips, true);
+    // ==============================================================
+
+    // ==============================================================
+    // Buat dialog toolbox
+    toolboxLL = new QDialog(nullptr, Qt::Tool | Qt::FramelessWindowHint);
+    toolboxLL->setAttribute(Qt::WA_TranslucentBackground); // transparan hanya utk dialog luar
+    toolboxLL->setWindowTitle("Toolbox");
+
+    // Frame dalam utk kotak rounded
+    frameLL = new QFrame(toolboxLL);
+    frameLL->setObjectName("toolboxFrameLL");
+
+    QHBoxLayout *outerLayoutLL = new QHBoxLayout(toolboxLL);
+    outerLayoutLL->setContentsMargins(0, 0, 0, 0);  // biar frame nempel ke dialog
+    outerLayoutLL->addWidget(frameLL);
+
+    // Layout isi tombol
+    QHBoxLayout *layoutLL = new QHBoxLayout(frameLL);
+    layoutLL->setContentsMargins(2, 2, 2, 2);
+    layoutLL->setSpacing(0);
+
+    // Tambahkan tombol2
+    btn->setIconSize(QSize(20, 20));
+    btn->setToolTip("Add Waypoint");
+    btn->setAutoRaise(true);
+    btn->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    btn->setStyleSheet("QToolButton { margin: 1px; padding: 1px; border: none; }");
+    layoutLL->addWidget(btn);
+    toolboxLL->setAttribute(Qt::WA_AlwaysShowToolTips, true);
+    // ==============================================================
+
+
+    // ==============================================================
+    // Buat dialog toolbox
+    toolboxAoi = new QDialog(nullptr, Qt::Tool | Qt::FramelessWindowHint);
+    toolboxAoi->setAttribute(Qt::WA_TranslucentBackground); // transparan hanya utk dialog luar
+    toolboxAoi->setWindowTitle("Toolbox");
+
+    // Frame dalam utk kotak rounded
+    frameAoi = new QFrame(toolboxAoi);
+    frameAoi->setObjectName("toolboxFrameAoi");
+
+    QHBoxLayout *outerLayoutAoi = new QHBoxLayout(toolboxAoi);
+    outerLayoutAoi->setContentsMargins(0, 0, 0, 0);  // biar frame nempel ke dialog
+    outerLayoutAoi->addWidget(frameAoi);
+
+    // Layout isi tombol
+    QHBoxLayout *layoutAoi = new QHBoxLayout(frameAoi);
+    layoutAoi->setContentsMargins(2, 2, 2, 2);
+    layoutAoi->setSpacing(0);
+
+    btnMove->setIconSize(QSize(20, 20));
+    btnMove->setToolTip("Move Point");
+    btnMove->setAutoRaise(true);
+    btnMove->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    btnMove->setStyleSheet("QToolButton { margin: 1px; padding: 1px; border: none; }");
+    layoutAoi->addWidget(btnMove);
+
+    btnDelete->setIconSize(QSize(20, 20));
+    btnDelete->setToolTip("Delete Point");
+    btnDelete->setAutoRaise(true);
+    btnDelete->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    btnDelete->setStyleSheet("QToolButton { margin: 1px; padding: 1px; border: none; }");
+    layoutAoi->addWidget(btnDelete);
+
+    toolboxAoi->setAttribute(Qt::WA_AlwaysShowToolTips, true);
+    // ==============================================================
+
+    // ==============================================================
+    // Buat dialog toolbox
+    toolboxAoiCreate = new QDialog(nullptr, Qt::Tool | Qt::FramelessWindowHint);
+    toolboxAoiCreate->setAttribute(Qt::WA_TranslucentBackground); // transparan hanya utk dialog luar
+    toolboxAoiCreate->setWindowTitle("Toolbox");
+
+    // Frame dalam utk kotak rounded
+    frameAoiCreate = new QFrame(toolboxAoiCreate);
+    frameAoiCreate->setObjectName("toolboxFrameAoiCreate");
+
+    QHBoxLayout *outerLayoutAoiCreate = new QHBoxLayout(toolboxAoiCreate);
+    outerLayoutAoiCreate->setContentsMargins(0, 0, 0, 0);  // biar frame nempel ke dialog
+    outerLayoutAoiCreate->addWidget(frameAoiCreate);
+
+    // Layout isi tombol
+    QHBoxLayout *layoutAoiCreate = new QHBoxLayout(frameAoiCreate);
+    layoutAoiCreate->setContentsMargins(2, 2, 2, 2);
+    layoutAoiCreate->setSpacing(0);
+
+    btnCreate->setIconSize(QSize(20, 20));
+    btnCreate->setToolTip("Add Point");
+    btnCreate->setAutoRaise(true);
+    btnCreate->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    btnCreate->setStyleSheet("QToolButton { margin: 1px; padding: 1px; border: none; }");
+    layoutAoiCreate->addWidget(btnCreate);
+
+    toolboxAoiCreate->setAttribute(Qt::WA_AlwaysShowToolTips, true);
+    // ==============================================================
+
+
+
+    connect(btn1, &QToolButton::clicked, this, [this](){
+        toolbox->close();
+        editWaypointAt(lastClick.x(), lastClick.y());
+    });
+
+    connect(btn2, &QToolButton::clicked, this, [this](){
+        toolbox->close();
+        // Switch to move waypoint mode
+        setActiveFunction(MOVE_WAYP);
+        moveSelectedIndex = lastWaypointIndex;
+
+        // Setup ghost waypoint for immediate preview
+        ghostWaypoint.visible = true;
+        ghostWaypoint.lat = lastWaypoint.lat;
+        ghostWaypoint.lon = lastWaypoint.lon;
+        ghostWaypoint.label = lastWaypoint.label;
+        ghostWaypoint.routeId = lastWaypoint.routeId;
+        ghostWaypoint.waypointIndex = lastWaypointIndex;
+    });
+    connect(btn3, &QToolButton::clicked, this, [this](){
+        toolbox->close();
+        double lat, lon;
+        XyToLatLon(lastClick.x(), lastClick.y(), lat, lon);
+
+        QString result = QString("%1, %2")
+                            .arg(lat, 0, 'f', 6) // 6 angka di belakang koma
+                            .arg(lon, 0, 'f', 6);
+
+        if (subscriber){
+            publishToMOOS("WAYPT_NEXT", result);
+        }
+    });
+    connect(btn4, &QToolButton::clicked, this, [this](){
+        toolbox->close();
+        // Delete individual waypoint
+
+        // Confirm deletion
+        QMessageBox::StandardButton reply = QMessageBox::question(this,
+            tr("Confirm Delete Waypoint"),
+            tr("Are you sure you want to delete this waypoint?\n\nThis action cannot be undone."),
+            QMessageBox::Yes | QMessageBox::No);
+
+        if (reply == QMessageBox::Yes) {
+            removeWaypointAt(lastClick.x(), lastClick.y());
+        }
+    });
+
+    connect(btn, &QToolButton::clicked, this, [this](){
+        toolboxLL->close();
+
+        // Convert click position to lat/lon
+        EcCoordinate lat, lon;
+        if (XyToLatLon(lastClick.x(), lastClick.y(), lat, lon)) {
+            // Directly insert at computed position without switching modes
+            insertWaypointAt(lat, lon);
+            // Ensure we stay/return to PAN mode so next click does not insert again
+            setActiveFunction(PAN);
+        }
+    });
+
+    connect(btnMove, &QToolButton::clicked, this, [this](){
+        toolboxAoi->close();
+
+        editingAOI = true;
+        editingAoiId = lastAoiId;
+        draggedAoiVertex = lastVertexIndex;
+
+        update();
+    });
+
+    connect(btnDelete, &QToolButton::clicked, this, [this](){
+        toolboxAoi->close();
+
+        if (lastAoiList->vertices.size() > 3) {
+
+            // Confirm deletion
+            QMessageBox::StandardButton reply = QMessageBox::question(this,
+                tr("Confirm Delete Point"),
+                tr("Are you sure you want to delete this point?\n\nThis action cannot be undone."),
+                QMessageBox::Yes | QMessageBox::No);
+
+            if (reply == QMessageBox::Yes) {
+                lastAoiList->vertices.remove(lastVertexIndex);
+
+                emit aoiListChanged();
+                update();
+            }
+
+        }
+        else {
+            QMessageBox::information(this, "Error", tr("Cannot remove vertex: polygon must have at least 3 vertices"));
+        }
+    });
+
+    connect(btnCreate, &QToolButton::clicked, this, [this](){
+        toolboxAoiCreate->close();
+
+        lastAoiList->vertices.insert(lastBestSeg + 1, QPointF(lastLat, lastLon));
+        emit aoiListChanged();
+        saveAOIs();
+        update();
+    });
+}
 
 void EcWidget::createWaypointAt(EcCoordinate lat, EcCoordinate lon)
 {
@@ -6474,8 +6718,7 @@ void EcWidget::showWaypointContextMenu(const QPoint& pos, int waypointIndex)
 
 void EcWidget::createWaypointToolbox(const QPoint& pos, int waypointIndex)
 {
-    hideWaypointToolbox();
-    hideLeglineToolbox();
+    hideToolbox();
 
     if (waypointIndex < 0 || waypointIndex >= waypointList.size()) return;
     const Waypoint& waypoint = waypointList[waypointIndex];
@@ -6483,92 +6726,29 @@ void EcWidget::createWaypointToolbox(const QPoint& pos, int waypointIndex)
     lastWaypointIndex = waypointIndex;
     lastWaypoint = waypoint;
 
-    // Buat dialog toolbox
-    toolbox = new QDialog(nullptr, Qt::Tool | Qt::FramelessWindowHint);
-    toolbox->setAttribute(Qt::WA_TranslucentBackground); // transparan hanya utk dialog luar
-    toolbox->setWindowTitle("Toolbox");
-
-    // Frame dalam utk kotak rounded
-    QFrame *frame = new QFrame(toolbox);
-    frame->setObjectName("toolboxFrame");
-
-    // Style utk frame (bukan QDialog)
-    frame->setStyleSheet(
-        "#toolboxFrame { "
-        "background-color: rgba(50, 50, 50, 220); "
-        "border-radius: 6px; "
-        "} "
-        "QToolButton { "
-        "background: transparent; "
-        "border: none; "
-        "margin: 4px; "
-        "} "
-        "QToolButton:hover { "
-        "background: rgba(255, 255, 255, 40); "
-        "border-radius: 6px; "
-        "} "
-    );
-
-    QHBoxLayout *outerLayout = new QHBoxLayout(toolbox);
-    outerLayout->setContentsMargins(0, 0, 0, 0);  // biar frame nempel ke dialog
-    outerLayout->addWidget(frame);
-
-    // Layout isi tombol
-    QHBoxLayout *layout = new QHBoxLayout(frame);
-    layout->setContentsMargins(2, 2, 2, 2);
-    layout->setSpacing(0);
-
-    // Tambahkan tombol2
-    btn1->setIconSize(QSize(20, 20));
-    btn1->setToolTip("Edit Waypoint");
-    btn1->setAutoRaise(true);
-    btn1->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    btn1->setStyleSheet("QToolButton { margin: 1px; padding: 1px; border: none; }");
-    layout->addWidget(btn1);
-
-    btn2->setIconSize(QSize(20, 20));
-    btn2->setToolTip("Move Waypoint");
-    btn2->setAutoRaise(true);
-    btn2->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    btn2->setStyleSheet("QToolButton { margin: 1px; padding: 1px; border: none; }");
-    layout->addWidget(btn2);
-
-    btn3->setIconSize(QSize(20, 20));
-    btn3->setToolTip("Publish Waypoint");
-    btn3->setAutoRaise(true);
-    btn3->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    btn3->setStyleSheet("QToolButton { margin: 1px; padding: 1px; border: none; }");
-    layout->addWidget(btn3);
-
-    btn4->setIconSize(QSize(20, 20));
-    btn4->setToolTip("Delete Waypoint");
-    btn4->setAutoRaise(true);
-    btn4->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    btn4->setStyleSheet("QToolButton { margin: 1px; padding: 1px; border: none; }");
-    layout->addWidget(btn4);
-
     // Posisi toolbox relatif cursor
     toolbox->adjustSize();
     QPoint posT = QCursor::pos();
     posT.setY(posT.y() - toolbox->height() - 5);
     posT.setX(posT.x() - toolbox->width() / 2);
     toolbox->move(posT);
-    toolbox->setAttribute(Qt::WA_AlwaysShowToolTips, true);
 
     toolbox->show();
 }
 
-void EcWidget::hideWaypointToolbox()
+void EcWidget::hideToolbox()
 {
     if (toolbox){
         toolbox->close();
     }
-}
-
-void EcWidget::hideLeglineToolbox()
-{
     if (toolboxLL){
         toolboxLL->close();
+    }
+    if (toolboxAoi){
+        toolboxAoi->close();
+    }
+    if (toolboxAoiCreate){
+        toolboxAoiCreate->close();
     }
 }
 
@@ -6635,54 +6815,10 @@ void EcWidget::showLeglineContextMenu(const QPoint& pos, int routeId, int segmen
 
 void EcWidget::createLeglineToolbox(const QPoint& pos, int routeId, int segmentIndex)
 {
-    hideWaypointToolbox();
-    hideLeglineToolbox();
+    hideToolbox();
 
     if (routeId <= 0) return;
     lastClick = pos;
-
-    // Buat dialog toolbox
-    toolboxLL = new QDialog(nullptr, Qt::Tool | Qt::FramelessWindowHint);
-    toolboxLL->setAttribute(Qt::WA_TranslucentBackground); // transparan hanya utk dialog luar
-    toolboxLL->setWindowTitle("Toolbox");
-
-    // Frame dalam utk kotak rounded
-    QFrame *frame = new QFrame(toolboxLL);
-    frame->setObjectName("toolboxFrame");
-
-    QHBoxLayout *outerLayout = new QHBoxLayout(toolboxLL);
-    outerLayout->setContentsMargins(0, 0, 0, 0);  // biar frame nempel ke dialog
-    outerLayout->addWidget(frame);
-
-    // Style utk frame (bukan QDialog)
-    frame->setStyleSheet(
-        "#toolboxFrame { "
-        "background-color: rgba(50, 50, 50, 220); "
-        "border-radius: 6px; "
-        "} "
-        "QToolButton { "
-        "background: transparent; "
-        "border: none; "
-        "margin: 4px; "
-        "} "
-        "QToolButton:hover { "
-        "background: rgba(255, 255, 255, 40); "
-        "border-radius: 6px; "
-        "} "
-    );
-
-    // Layout isi tombol
-    QHBoxLayout *layout = new QHBoxLayout(frame);
-    layout->setContentsMargins(2, 2, 2, 2);
-    layout->setSpacing(0);
-
-    // Tambahkan tombol2
-    btn->setIconSize(QSize(20, 20));
-    btn->setToolTip("Add Waypoint");
-    btn->setAutoRaise(true);
-    btn->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    btn->setStyleSheet("QToolButton { margin: 1px; padding: 1px; border: none; }");
-    layout->addWidget(btn);
 
     // Posisi toolbox relatif cursor
     toolboxLL->adjustSize();
@@ -6690,7 +6826,6 @@ void EcWidget::createLeglineToolbox(const QPoint& pos, int routeId, int segmentI
     posT.setY(posT.y() - toolboxLL->height() - 5);
     posT.setX(posT.x() - toolboxLL->width() / 2);
     toolboxLL->move(posT);
-    toolboxLL->setAttribute(Qt::WA_AlwaysShowToolTips, true);
 
     toolboxLL->show();
 }
@@ -6854,8 +6989,9 @@ void EcWidget::removeWaypointAt(int x, int y)
                 Draw();
                 emit waypointCreated();
 
-                QMessageBox::information(this, tr("Waypoint Removed"),
-                                         tr("Waypoint '%1' has been removed.").arg(waypointLabel));
+                // QMessageBox::information(this, tr("Waypoint Removed"),
+                //                          tr("Waypoint '%1' has been removed.").arg(waypointLabel));
+
                 return;
             }
         }
@@ -7129,6 +7265,27 @@ void EcWidget::iconUpdate(bool dark){
         btn3->setIcon(QIcon(":/icon/publish_o.svg"));
         btn4->setIcon(QIcon(":/icon/delete_wp_o.svg"));
         btn->setIcon(QIcon(":/icon/create_o.svg"));
+
+        btnCreate->setIcon(QIcon(":/icon/create_o.svg"));
+        btnMove->setIcon(QIcon(":/icon/move_o.svg"));
+        btnDelete->setIcon(QIcon(":/icon/delete_wp_o.svg"));
+
+        QString dark =  "background-color: rgba(50, 50, 50, 220); "
+                        "border-radius: 6px; "
+                        "} "
+                        "QToolButton { "
+                        "background: transparent; "
+                        "border: none; "
+                        "margin: 4px; "
+                        "} "
+                        "QToolButton:hover { "
+                        "background: rgba(255, 255, 255, 40); "
+                        "border-radius: 6px; "
+                        "} ";
+        frame->setStyleSheet("#toolboxFrame { " +dark);
+        frameLL->setStyleSheet("#toolboxFrameLL { " +dark);
+        frameAoi->setStyleSheet("#toolboxFrameAoi { " +dark);
+        frameAoiCreate->setStyleSheet("#toolboxFrameAoiCreate { " +dark);
     }
     else {
         editAction->setIcon(QIcon(":/icon/edit.svg"));
@@ -7147,6 +7304,27 @@ void EcWidget::iconUpdate(bool dark){
         btn3->setIcon(QIcon(":/icon/publish_o_light.svg"));
         btn4->setIcon(QIcon(":/icon/delete_wp_o_light.svg"));
         btn->setIcon(QIcon(":/icon/create_o_light.svg"));
+
+        btnCreate->setIcon(QIcon(":/icon/create_o_light.svg"));
+        btnMove->setIcon(QIcon(":/icon/move_o_light.svg"));
+        btnDelete->setIcon(QIcon(":/icon/delete_wp_o_light.svg"));
+
+        QString light = "background-color: rgba(255, 255, 255, 230); "
+                        "border-radius: 6px; "
+                        "} "
+                        "QToolButton { "
+                        "background: transparent; "
+                        "border: none; "
+                        "margin: 4px; "
+                        "} "
+                        "QToolButton:hover { "
+                        "background: rgba(0, 0, 0, 40); "
+                        "border-radius: 6px; "
+                        "} ";
+        frame->setStyleSheet("#toolboxFrame { " +light);
+        frameLL->setStyleSheet("#toolboxFrameLL { " +light);
+        frameAoi->setStyleSheet("#toolboxFrameAoi { " +light);
+        frameAoiCreate->setStyleSheet("#toolboxFrameAoiCreate { " +light);
     }
 }
 
