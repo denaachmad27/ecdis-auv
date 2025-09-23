@@ -764,8 +764,8 @@ void RoutePanel::setupConnections()
             totalTimeLabel->setText(QString("📆 %1").arg(etaText));
         }
         else {
-            timeToGoLabel->setText(QString("⌛ --:--:--").arg(ttgText));
-            totalTimeLabel->setText(QString("📆 --- -- ---- --:--:--").arg(etaText));
+            timeToGoLabel->setText(QString("⌛ --:--:--"));
+            totalTimeLabel->setText(QString("📆 --- -- ---- --:--:--"));
         }
     });
 }

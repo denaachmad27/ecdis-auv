@@ -442,6 +442,85 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   warningInfoAction = new QAction(QIcon(":/icon/warning_white.svg"), tr("Caution and Restricted Info"), this);
   measureEblVrmAction = new QAction(QIcon(":/icon/measure_white.svg"), tr("Measure Here"), this);
 
+  btn1 = new QToolButton();
+  btn1->setIcon(QIcon(":/icon/edit_o.svg"));
+
+  btn2 = new QToolButton();
+  btn2->setIcon(QIcon(":/icon/move_o.svg"));
+
+  btn3 = new QToolButton();
+  btn3->setIcon(QIcon(":/icon/publish_o.svg"));
+
+  btn4 = new QToolButton();
+  btn4->setIcon(QIcon(":/icon/delete_wp_o.svg"));
+
+  btn  = new QToolButton();
+  btn->setIcon(QIcon(":/icon/create_o.svg"));
+
+  // connect tombol
+  connect(btn1, &QToolButton::clicked, this, [this](){
+      toolbox->close();
+      editWaypointAt(lastClick.x(), lastClick.y());
+  });
+
+  connect(btn2, &QToolButton::clicked, this, [this](){
+      toolbox->close();
+      // Switch to move waypoint mode
+      setActiveFunction(MOVE_WAYP);
+      moveSelectedIndex = lastWaypointIndex;
+
+      // Setup ghost waypoint for immediate preview
+      ghostWaypoint.visible = true;
+      ghostWaypoint.lat = lastWaypoint.lat;
+      ghostWaypoint.lon = lastWaypoint.lon;
+      ghostWaypoint.label = lastWaypoint.label;
+      ghostWaypoint.routeId = lastWaypoint.routeId;
+      ghostWaypoint.waypointIndex = lastWaypointIndex;
+  });
+  connect(btn3, &QToolButton::clicked, this, [this](){
+      toolbox->close();
+      double lat, lon;
+      XyToLatLon(lastClick.x(), lastClick.y(), lat, lon);
+
+      QString result = QString("%1, %2")
+                          .arg(lat, 0, 'f', 6) // 6 angka di belakang koma
+                          .arg(lon, 0, 'f', 6);
+
+      if (subscriber){
+          publishToMOOS("WAYPT_NEXT", result);
+      }
+  });
+  connect(btn4, &QToolButton::clicked, this, [this](){
+      toolbox->close();
+      // Delete individual waypoint
+
+      // Confirm deletion
+      QMessageBox::StandardButton reply = QMessageBox::question(this,
+          tr("Confirm Delete Waypoint"),
+          tr("Are you sure you want to delete this waypoint?\n\nThis action cannot be undone."),
+          QMessageBox::Yes | QMessageBox::No);
+
+      if (reply == QMessageBox::Yes) {
+          removeWaypointAt(lastClick.x(), lastClick.y());
+      }
+  });
+
+
+  // connect tombol
+  connect(btn, &QToolButton::clicked, this, [this](){
+      qCritical("MASUK");
+      toolboxLL->close();
+
+      // Convert click position to lat/lon
+      EcCoordinate lat, lon;
+      if (XyToLatLon(lastClick.x(), lastClick.y(), lat, lon)) {
+          // Directly insert at computed position without switching modes
+          insertWaypointAt(lat, lon);
+          // Ensure we stay/return to PAN mode so next click does not insert again
+          setActiveFunction(PAN);
+      }
+  });
+
   // SETTINGS STARTUP
   defaultSettingsStartUp();
 }
@@ -610,8 +689,6 @@ void EcWidget::SetCenter (EcCoordinate lat, EcCoordinate lon)
   if (currentScale > maxScale) currentScale = maxScale; // in case the world overview has been shown before
   // Check projection because it depends on viewport
   SetProjection(projectionMode);
-
-  qCritical() << lat;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1158,7 +1235,7 @@ void EcWidget::draw(bool upd)
 /*---------------------------------------------------------------------------*/
 
 void EcWidget::Draw()
-{
+{    
     draw(true);
 
     // ROUTE FIX: Enhanced conditional drawAISCell() for route stability
@@ -1181,7 +1258,8 @@ void EcWidget::Draw()
     // ======================================================
 
     // UPDATE WP TOOLBAR
-    //hideWaypointToolbox();
+    hideWaypointToolbox();
+    hideLeglineToolbox();
     update();
 }
 
@@ -2476,7 +2554,6 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
 
 void EcWidget::mousePressEvent(QMouseEvent *e)
 {
-    hideWaypointToolbox();
     setFocus();
 
     // EBL/VRM Measure interactions
@@ -2867,6 +2944,15 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
 
 void EcWidget::waypointRightClick(QMouseEvent *e){
     if (e->button() == Qt::RightButton && !creatingGuardZone) {
+        if (activeFunction == MOVE_WAYP && moveSelectedIndex != -1) {
+           // Cancel move operation
+           ghostWaypoint.visible = false;
+           moveSelectedIndex = -1;
+           activeFunction = PAN;
+           update();
+           return;
+        }
+
 
         // Check if in route mode - right-click to end route
         if (activeFunction == CREATE_ROUTE) {
@@ -2886,8 +2972,8 @@ void EcWidget::waypointRightClick(QMouseEvent *e){
         // Check if right-clicked on a waypoint first
         int clickedWaypointIndex = findWaypointAt(e->x(), e->y());
         if (clickedWaypointIndex != -1) {
-            //createWaypointToolbox(pos, clickedWaypointIndex);
-            showWaypointContextMenu(e->pos(), clickedWaypointIndex);
+            createWaypointToolbox(e->pos(), clickedWaypointIndex);
+            // showWaypointContextMenu(e->pos(), clickedWaypointIndex);
             return; // Return early - jangan lanjut ke normal right click
         }
 
@@ -2896,7 +2982,8 @@ void EcWidget::waypointRightClick(QMouseEvent *e){
         int leglineDistance = findLeglineAt(e->x(), e->y(), leglineRouteId, leglineSegmentIndex);
 
         if (leglineDistance != -1) {
-            showLeglineContextMenu(e->pos(), leglineRouteId, leglineSegmentIndex);
+            createLeglineToolbox(e->pos(), leglineRouteId, leglineSegmentIndex);
+            // showLeglineContextMenu(e->pos(), leglineRouteId, leglineSegmentIndex);
             return; // Return early - jangan lanjut ke normal right click
         }
 
@@ -3347,8 +3434,8 @@ void EcWidget::InitS63()
         QMessageBox::information(this, "Initialize S-63", "Invalid Manufacturer key");
 
     // decrypt the user permit
-    unsigned char *mId = NULL;
-    s63HwId = NULL;
+    unsigned char *mId = (unsigned char *)MID;
+    s63HwId = (unsigned char *)HWID;
     if (!EcS63DecryptUserPermit(USERPERMIT, mKey, &s63HwId, &mId))
         QMessageBox::information(this, "Initialize S-63", "Invalid User Permit");
     // mId is not used
@@ -4134,13 +4221,13 @@ void EcWidget::allFunctionPerTime(){
     if (subscriber){
         if (subscriber->hasData()){
             // DRAW PER TIME
-            qDebug() << "[DRAW] Autorun...";
+            //qDebug() << "[DRAW] Autorun...";
             draw(true);
             slotUpdateAISTargets(true);
 
             // PUBLISH PER TIME
             if (navShip.lat != 0 && navShip.lon != 0){
-                qDebug() << "[PUBLISH] Autorun";
+                //qDebug() << "[PUBLISH] Autorun";
                 publishNavInfo(navShip.lat, navShip.lon);
             }
             else {
@@ -4288,7 +4375,7 @@ void EcWidget::processAISJson(const QByteArray& rawData){
 
 // REAL FUNCTION
 void EcWidget::publishToMOOSDB(QString varName, QString data){
-    qDebug() << data;
+    bool success = false;
 
     QJsonObject jsonDataOut {{varName, data}};
     QJsonDocument jsonDocOut(jsonDataOut);
@@ -4302,6 +4389,8 @@ void EcWidget::publishToMOOSDB(QString varName, QString data){
         sendSocket->write(sendData);
         sendSocket->waitForBytesWritten(3000);
         sendSocket->disconnectFromHost();
+
+        success = true;
     }
     else {
         qCritical() << "Could not connect to data server.";
@@ -4309,7 +4398,20 @@ void EcWidget::publishToMOOSDB(QString varName, QString data){
 
     sendSocket->deleteLater();
 
-    qDebug() << sendData;
+
+    QString message;
+    if (varName == "WAYPT_NEXT"){message = "Waypoint";}
+    if (varName == "WAYPT_NAV"){message = "Route";}
+    if (varName == "AREA_NAV"){message = "Area";}
+
+    if (success && !data.isEmpty()){
+        QMessageBox::information(this, tr("%1 Published").arg(message),
+                                 tr("%1 has been published at %2 variable.").arg(message).arg(varName));
+    }
+    else if (!success){
+        QMessageBox::information(this, tr("%1 is NOT Published").arg(message),
+                                 tr("There is something wrong with the MOOSDB connection."));
+    }
 }
 
 // FOR EMIT PUPROSE
@@ -6374,52 +6476,87 @@ void EcWidget::showWaypointContextMenu(const QPoint& pos, int waypointIndex)
 
 void EcWidget::createWaypointToolbox(const QPoint& pos, int waypointIndex)
 {
-    // Kalau sudah ada toolbox, hapus dulu
-    if (toolbox) {
-        toolbox->close();
-        delete toolbox;
-        toolbox = nullptr;
-    }
+    hideWaypointToolbox();
+    hideLeglineToolbox();
+
+    if (waypointIndex < 0 || waypointIndex >= waypointList.size()) return;
+    const Waypoint& waypoint = waypointList[waypointIndex];
+    lastClick = pos;
+    lastWaypointIndex = waypointIndex;
+    lastWaypoint = waypoint;
 
     // Buat dialog toolbox
     toolbox = new QDialog(nullptr, Qt::Tool | Qt::FramelessWindowHint);
+    toolbox->setAttribute(Qt::WA_TranslucentBackground); // transparan hanya utk dialog luar
     toolbox->setWindowTitle("Toolbox");
 
-    QHBoxLayout *layout = new QHBoxLayout(toolbox);
-    layout->setContentsMargins(5, 5, 5, 5);
-    layout->setSpacing(5);
+    // Frame dalam utk kotak rounded
+    QFrame *frame = new QFrame(toolbox);
+    frame->setObjectName("toolboxFrame");
 
-    // Tambahkan beberapa tombol
-    QToolButton *btn1 = new QToolButton();
-    btn1->setIcon(QIcon(":/images/connect.png"));
-    btn1->setIconSize(QSize(24, 24));
-    btn1->setToolTip("Route Management");
+    // Style utk frame (bukan QDialog)
+    frame->setStyleSheet(
+        "#toolboxFrame { "
+        "background-color: rgba(50, 50, 50, 220); "
+        "border-radius: 6px; "
+        "} "
+        "QToolButton { "
+        "background: transparent; "
+        "border: none; "
+        "margin: 4px; "
+        "} "
+        "QToolButton:hover { "
+        "background: rgba(255, 255, 255, 40); "
+        "border-radius: 6px; "
+        "} "
+    );
+
+    QHBoxLayout *outerLayout = new QHBoxLayout(toolbox);
+    outerLayout->setContentsMargins(0, 0, 0, 0);  // biar frame nempel ke dialog
+    outerLayout->addWidget(frame);
+
+    // Layout isi tombol
+    QHBoxLayout *layout = new QHBoxLayout(frame);
+    layout->setContentsMargins(2, 2, 2, 2);
+    layout->setSpacing(0);
+
+    // Tambahkan tombol2
+    btn1->setIconSize(QSize(20, 20));
+    btn1->setToolTip("Edit Waypoint");
+    btn1->setAutoRaise(true);
+    btn1->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    btn1->setStyleSheet("QToolButton { margin: 1px; padding: 1px; border: none; }");
     layout->addWidget(btn1);
 
-    QToolButton *btn2 = new QToolButton();
-    btn2->setIcon(QIcon(":/images/disconnect.png"));
-    btn2->setIconSize(QSize(24, 24));
-    btn2->setToolTip("Add Waypoint");
+    btn2->setIconSize(QSize(20, 20));
+    btn2->setToolTip("Move Waypoint");
+    btn2->setAutoRaise(true);
+    btn2->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    btn2->setStyleSheet("QToolButton { margin: 1px; padding: 1px; border: none; }");
     layout->addWidget(btn2);
 
-    QToolButton *btn3 = new QToolButton();
-    btn3->setIcon(QIcon(":/images/ais.png"));
-    btn3->setIconSize(QSize(24, 24));
-    btn3->setToolTip("AIS Targets");
+    btn3->setIconSize(QSize(20, 20));
+    btn3->setToolTip("Publish Waypoint");
+    btn3->setAutoRaise(true);
+    btn3->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    btn3->setStyleSheet("QToolButton { margin: 1px; padding: 1px; border: none; }");
     layout->addWidget(btn3);
 
-    // Tentukan posisi toolbox
+    btn4->setIconSize(QSize(20, 20));
+    btn4->setToolTip("Delete Waypoint");
+    btn4->setAutoRaise(true);
+    btn4->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    btn4->setStyleSheet("QToolButton { margin: 1px; padding: 1px; border: none; }");
+    layout->addWidget(btn4);
+
+    // Posisi toolbox relatif cursor
+    toolbox->adjustSize();
     QPoint posT = QCursor::pos();
-    XyToLatLon(pos.x(), pos.y(), toolboxLat, toolboxLon);
-
-    toolbox->adjustSize(); // hitung ukuran dialog setelah layout diisi
-    int toolboxHeight = toolbox->height();
-
-    // Geser agar toolbox berada tepat di atas kursor
-    posT.setY(posT.y() - toolboxHeight - 5); // -5 untuk jarak kecil dari kursor
-    posT.setX(posT.x() - toolbox->width() / 2); // supaya toolbox center di atas pointer
-
+    posT.setY(posT.y() - toolbox->height() - 5);
+    posT.setX(posT.x() - toolbox->width() / 2);
     toolbox->move(posT);
+    toolbox->setAttribute(Qt::WA_AlwaysShowToolTips, true);
+
     toolbox->show();
 }
 
@@ -6427,6 +6564,13 @@ void EcWidget::hideWaypointToolbox()
 {
     if (toolbox){
         toolbox->close();
+    }
+}
+
+void EcWidget::hideLeglineToolbox()
+{
+    if (toolboxLL){
+        toolboxLL->close();
     }
 }
 
@@ -6489,6 +6633,68 @@ void EcWidget::showLeglineContextMenu(const QPoint& pos, int routeId, int segmen
             }
         }
     }
+}
+
+void EcWidget::createLeglineToolbox(const QPoint& pos, int routeId, int segmentIndex)
+{
+    hideWaypointToolbox();
+    hideLeglineToolbox();
+
+    if (routeId <= 0) return;
+    lastClick = pos;
+
+    // Buat dialog toolbox
+    toolboxLL = new QDialog(nullptr, Qt::Tool | Qt::FramelessWindowHint);
+    toolboxLL->setAttribute(Qt::WA_TranslucentBackground); // transparan hanya utk dialog luar
+    toolboxLL->setWindowTitle("Toolbox");
+
+    // Frame dalam utk kotak rounded
+    QFrame *frame = new QFrame(toolboxLL);
+    frame->setObjectName("toolboxFrame");
+
+    QHBoxLayout *outerLayout = new QHBoxLayout(toolboxLL);
+    outerLayout->setContentsMargins(0, 0, 0, 0);  // biar frame nempel ke dialog
+    outerLayout->addWidget(frame);
+
+    // Style utk frame (bukan QDialog)
+    frame->setStyleSheet(
+        "#toolboxFrame { "
+        "background-color: rgba(50, 50, 50, 220); "
+        "border-radius: 6px; "
+        "} "
+        "QToolButton { "
+        "background: transparent; "
+        "border: none; "
+        "margin: 4px; "
+        "} "
+        "QToolButton:hover { "
+        "background: rgba(255, 255, 255, 40); "
+        "border-radius: 6px; "
+        "} "
+    );
+
+    // Layout isi tombol
+    QHBoxLayout *layout = new QHBoxLayout(frame);
+    layout->setContentsMargins(2, 2, 2, 2);
+    layout->setSpacing(0);
+
+    // Tambahkan tombol2
+    btn->setIconSize(QSize(20, 20));
+    btn->setToolTip("Add Waypoint");
+    btn->setAutoRaise(true);
+    btn->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    btn->setStyleSheet("QToolButton { margin: 1px; padding: 1px; border: none; }");
+    layout->addWidget(btn);
+
+    // Posisi toolbox relatif cursor
+    toolboxLL->adjustSize();
+    QPoint posT = QCursor::pos();
+    posT.setY(posT.y() - toolboxLL->height() - 5);
+    posT.setX(posT.x() - toolboxLL->width() / 2);
+    toolboxLL->move(posT);
+    toolboxLL->setAttribute(Qt::WA_AlwaysShowToolTips, true);
+
+    toolboxLL->show();
 }
 
 void EcWidget::showMapContextMenu(const QPoint& pos)
@@ -6919,6 +7125,12 @@ void EcWidget::iconUpdate(bool dark){
         pickInfoAction->setIcon(QIcon(":/icon/info_white.svg"));
         warningInfoAction->setIcon(QIcon(":/icon/warning_white.svg"));
         measureEblVrmAction->setIcon(QIcon(":/icon/measure_white.svg"));
+
+        btn1->setIcon(QIcon(":/icon/edit_o.svg"));
+        btn2->setIcon(QIcon(":/icon/move_o.svg"));
+        btn3->setIcon(QIcon(":/icon/publish_o.svg"));
+        btn4->setIcon(QIcon(":/icon/delete_wp_o.svg"));
+        btn->setIcon(QIcon(":/icon/create_o.svg"));
     }
     else {
         editAction->setIcon(QIcon(":/icon/edit.svg"));
@@ -6931,6 +7143,12 @@ void EcWidget::iconUpdate(bool dark){
         pickInfoAction->setIcon(QIcon(":/icon/info.svg"));
         warningInfoAction->setIcon(QIcon(":/icon/warning.svg"));
         measureEblVrmAction->setIcon(QIcon(":/icon/measure.svg"));
+
+        btn1->setIcon(QIcon(":/icon/edit_o_light.svg"));
+        btn2->setIcon(QIcon(":/icon/move_o_light.svg"));
+        btn3->setIcon(QIcon(":/icon/publish_o_light.svg"));
+        btn4->setIcon(QIcon(":/icon/delete_wp_o_light.svg"));
+        btn->setIcon(QIcon(":/icon/create_o_light.svg"));
     }
 }
 
