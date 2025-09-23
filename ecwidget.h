@@ -20,6 +20,7 @@
 #pragma pack(push, 4)
 #include <eckernel.h>
 #include <ecs63.h>
+#include <qtoolbutton.h>
 #pragma pack (pop)
 #else
 #include <stdio.h>
@@ -1396,9 +1397,12 @@ private:
   int currentWaypointIndex = -1;
 
   void createWaypointToolbox(const QPoint& pos, int waypointIndex);
+  void createLeglineToolbox(const QPoint& pos, int routeId, int segmentIndex);
   void hideWaypointToolbox();
+  void hideLeglineToolbox();
 
   QDialog *toolbox = nullptr;
+  QDialog *toolboxLL = nullptr;
   EcCoordinate toolboxLat, toolboxLon;
 
   QMutex aisDataMutex;
@@ -1437,6 +1441,11 @@ private:
 
   QAction* insertWaypointAction;
 
+  QToolButton *btn;
+  QToolButton *btn1;
+  QToolButton *btn2;
+  QToolButton *btn3;
+  QToolButton *btn4;
 
   QIcon editIcon;
   QIcon moveIcon;
@@ -1445,6 +1454,13 @@ private:
   QIcon publishIcon;
 
   QIcon insertWaypointIcon;
+
+  // QFrame *frame;
+  // QFrame *frameLL;
+
+  QPoint lastClick;
+  EcWidget::Waypoint lastWaypoint;
+  int lastWaypointIndex;
 
   // DEFAULTSETTINGS
   void defaultSettingsStartUp();

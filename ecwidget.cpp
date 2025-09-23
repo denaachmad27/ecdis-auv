@@ -442,7 +442,84 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   warningInfoAction = new QAction(QIcon(":/icon/warning_white.svg"), tr("Caution and Restricted Info"), this);
   measureEblVrmAction = new QAction(QIcon(":/icon/measure_white.svg"), tr("Measure Here"), this);
 
-  editIcon = QIcon(":/icon/edit_white.svg");
+  btn1 = new QToolButton();
+  btn1->setIcon(QIcon(":/icon/edit_o.svg"));
+
+  btn2 = new QToolButton();
+  btn2->setIcon(QIcon(":/icon/move_o.svg"));
+
+  btn3 = new QToolButton();
+  btn3->setIcon(QIcon(":/icon/publish_o.svg"));
+
+  btn4 = new QToolButton();
+  btn4->setIcon(QIcon(":/icon/delete_wp_o.svg"));
+
+  btn  = new QToolButton();
+  btn->setIcon(QIcon(":/icon/create_o.svg"));
+
+  // connect tombol
+  connect(btn1, &QToolButton::clicked, this, [this](){
+      toolbox->close();
+      editWaypointAt(lastClick.x(), lastClick.y());
+  });
+
+  connect(btn2, &QToolButton::clicked, this, [this](){
+      toolbox->close();
+      // Switch to move waypoint mode
+      setActiveFunction(MOVE_WAYP);
+      moveSelectedIndex = lastWaypointIndex;
+
+      // Setup ghost waypoint for immediate preview
+      ghostWaypoint.visible = true;
+      ghostWaypoint.lat = lastWaypoint.lat;
+      ghostWaypoint.lon = lastWaypoint.lon;
+      ghostWaypoint.label = lastWaypoint.label;
+      ghostWaypoint.routeId = lastWaypoint.routeId;
+      ghostWaypoint.waypointIndex = lastWaypointIndex;
+  });
+  connect(btn3, &QToolButton::clicked, this, [this](){
+      toolbox->close();
+      double lat, lon;
+      XyToLatLon(lastClick.x(), lastClick.y(), lat, lon);
+
+      QString result = QString("%1, %2")
+                          .arg(lat, 0, 'f', 6) // 6 angka di belakang koma
+                          .arg(lon, 0, 'f', 6);
+
+      if (subscriber){
+          publishToMOOS("WAYPT_NEXT", result);
+      }
+  });
+  connect(btn4, &QToolButton::clicked, this, [this](){
+      toolbox->close();
+      // Delete individual waypoint
+
+      // Confirm deletion
+      QMessageBox::StandardButton reply = QMessageBox::question(this,
+          tr("Confirm Delete Waypoint"),
+          tr("Are you sure you want to delete this waypoint?\n\nThis action cannot be undone."),
+          QMessageBox::Yes | QMessageBox::No);
+
+      if (reply == QMessageBox::Yes) {
+          removeWaypointAt(lastClick.x(), lastClick.y());
+      }
+  });
+
+
+  // connect tombol
+  connect(btn, &QToolButton::clicked, this, [this](){
+      qCritical("MASUK");
+      toolboxLL->close();
+
+      // Convert click position to lat/lon
+      EcCoordinate lat, lon;
+      if (XyToLatLon(lastClick.x(), lastClick.y(), lat, lon)) {
+          // Directly insert at computed position without switching modes
+          insertWaypointAt(lat, lon);
+          // Ensure we stay/return to PAN mode so next click does not insert again
+          setActiveFunction(PAN);
+      }
+  });
 
   // SETTINGS STARTUP
   defaultSettingsStartUp();
@@ -1182,6 +1259,7 @@ void EcWidget::Draw()
 
     // UPDATE WP TOOLBAR
     hideWaypointToolbox();
+    hideLeglineToolbox();
     update();
 }
 
@@ -2873,7 +2951,7 @@ void EcWidget::waypointRightClick(QMouseEvent *e){
            activeFunction = PAN;
            update();
            return;
-       }
+        }
 
 
         // Check if in route mode - right-click to end route
@@ -2904,7 +2982,8 @@ void EcWidget::waypointRightClick(QMouseEvent *e){
         int leglineDistance = findLeglineAt(e->x(), e->y(), leglineRouteId, leglineSegmentIndex);
 
         if (leglineDistance != -1) {
-            showLeglineContextMenu(e->pos(), leglineRouteId, leglineSegmentIndex);
+            createLeglineToolbox(e->pos(), leglineRouteId, leglineSegmentIndex);
+            // showLeglineContextMenu(e->pos(), leglineRouteId, leglineSegmentIndex);
             return; // Return early - jangan lanjut ke normal right click
         }
 
@@ -6398,9 +6477,13 @@ void EcWidget::showWaypointContextMenu(const QPoint& pos, int waypointIndex)
 void EcWidget::createWaypointToolbox(const QPoint& pos, int waypointIndex)
 {
     hideWaypointToolbox();
+    hideLeglineToolbox();
 
     if (waypointIndex < 0 || waypointIndex >= waypointList.size()) return;
     const Waypoint& waypoint = waypointList[waypointIndex];
+    lastClick = pos;
+    lastWaypointIndex = waypointIndex;
+    lastWaypoint = waypoint;
 
     // Buat dialog toolbox
     toolbox = new QDialog(nullptr, Qt::Tool | Qt::FramelessWindowHint);
@@ -6410,10 +6493,6 @@ void EcWidget::createWaypointToolbox(const QPoint& pos, int waypointIndex)
     // Frame dalam utk kotak rounded
     QFrame *frame = new QFrame(toolbox);
     frame->setObjectName("toolboxFrame");
-
-    QHBoxLayout *outerLayout = new QHBoxLayout(toolbox);
-    outerLayout->setContentsMargins(0, 0, 0, 0);  // biar frame nempel ke dialog
-    outerLayout->addWidget(frame);
 
     // Style utk frame (bukan QDialog)
     frame->setStyleSheet(
@@ -6432,14 +6511,16 @@ void EcWidget::createWaypointToolbox(const QPoint& pos, int waypointIndex)
         "} "
     );
 
+    QHBoxLayout *outerLayout = new QHBoxLayout(toolbox);
+    outerLayout->setContentsMargins(0, 0, 0, 0);  // biar frame nempel ke dialog
+    outerLayout->addWidget(frame);
+
     // Layout isi tombol
     QHBoxLayout *layout = new QHBoxLayout(frame);
     layout->setContentsMargins(2, 2, 2, 2);
     layout->setSpacing(0);
 
     // Tambahkan tombol2
-    QToolButton *btn1 = new QToolButton();
-    btn1->setIcon(QIcon(":/icon/edit_o.svg"));
     btn1->setIconSize(QSize(20, 20));
     btn1->setToolTip("Edit Waypoint");
     btn1->setAutoRaise(true);
@@ -6447,8 +6528,6 @@ void EcWidget::createWaypointToolbox(const QPoint& pos, int waypointIndex)
     btn1->setStyleSheet("QToolButton { margin: 1px; padding: 1px; border: none; }");
     layout->addWidget(btn1);
 
-    QToolButton *btn2 = new QToolButton();
-    btn2->setIcon(QIcon(":/icon/move_o.svg"));
     btn2->setIconSize(QSize(20, 20));
     btn2->setToolTip("Move Waypoint");
     btn2->setAutoRaise(true);
@@ -6456,8 +6535,6 @@ void EcWidget::createWaypointToolbox(const QPoint& pos, int waypointIndex)
     btn2->setStyleSheet("QToolButton { margin: 1px; padding: 1px; border: none; }");
     layout->addWidget(btn2);
 
-    QToolButton *btn3 = new QToolButton();
-    btn3->setIcon(QIcon(":/icon/publish_o.svg"));
     btn3->setIconSize(QSize(20, 20));
     btn3->setToolTip("Publish Waypoint");
     btn3->setAutoRaise(true);
@@ -6465,8 +6542,6 @@ void EcWidget::createWaypointToolbox(const QPoint& pos, int waypointIndex)
     btn3->setStyleSheet("QToolButton { margin: 1px; padding: 1px; border: none; }");
     layout->addWidget(btn3);
 
-    QToolButton *btn4 = new QToolButton();
-    btn4->setIcon(QIcon(":/icon/delete_wp_o.svg"));
     btn4->setIconSize(QSize(20, 20));
     btn4->setToolTip("Delete Waypoint");
     btn4->setAutoRaise(true);
@@ -6482,62 +6557,6 @@ void EcWidget::createWaypointToolbox(const QPoint& pos, int waypointIndex)
     toolbox->move(posT);
     toolbox->setAttribute(Qt::WA_AlwaysShowToolTips, true);
 
-    // connect tombol
-    connect(btn1, &QToolButton::clicked, this, [this, pos](){
-        toolbox->close();
-        editWaypointAt(pos.x(), pos.y());
-    });
-
-    connect(btn2, &QToolButton::clicked, this, [this, waypointIndex, waypoint](){
-        toolbox->close();
-        // Switch to move waypoint mode
-        setActiveFunction(MOVE_WAYP);
-        moveSelectedIndex = waypointIndex;
-
-        // Setup ghost waypoint for immediate preview
-        ghostWaypoint.visible = true;
-        ghostWaypoint.lat = waypoint.lat;
-        ghostWaypoint.lon = waypoint.lon;
-        ghostWaypoint.label = waypoint.label;
-        ghostWaypoint.routeId = waypoint.routeId;
-        ghostWaypoint.waypointIndex = waypointIndex;
-
-        if (mainWindow) {
-            mainWindow->setWindowTitle(QString(APP_TITLE) + " - Move Waypoint Mode");
-            //mainWindow->statusBar()->showMessage("Move the waypoint to a new position and click to confirm");
-            mainWindow->routesStatusText->setText(tr("Move the waypoint to a new position and click to confirm"));
-        }
-
-        qDebug() << "[CONTEXT-MENU] Waypoint" << waypointIndex << "selected for moving";
-    });
-    connect(btn3, &QToolButton::clicked, this, [this, pos](){
-        toolbox->close();
-        double lat, lon;
-        XyToLatLon(pos.x(), pos.y(), lat, lon);
-
-        QString result = QString("%1, %2")
-                            .arg(lat, 0, 'f', 6) // 6 angka di belakang koma
-                            .arg(lon, 0, 'f', 6);
-
-        if (subscriber){
-            publishToMOOS("WAYPT_NEXT", result);
-        }
-    });
-    connect(btn4, &QToolButton::clicked, this, [this, pos](){
-        toolbox->close();
-        // Delete individual waypoint
-
-        // Confirm deletion
-        QMessageBox::StandardButton reply = QMessageBox::question(this,
-            tr("Confirm Delete Waypoint"),
-            tr("Are you sure you want to delete this waypoint?\n\nThis action cannot be undone."),
-            QMessageBox::Yes | QMessageBox::No);
-
-        if (reply == QMessageBox::Yes) {
-            removeWaypointAt(pos.x(), pos.y());
-        }
-    });
-
     toolbox->show();
 }
 
@@ -6545,6 +6564,13 @@ void EcWidget::hideWaypointToolbox()
 {
     if (toolbox){
         toolbox->close();
+    }
+}
+
+void EcWidget::hideLeglineToolbox()
+{
+    if (toolboxLL){
+        toolboxLL->close();
     }
 }
 
@@ -6607,6 +6633,68 @@ void EcWidget::showLeglineContextMenu(const QPoint& pos, int routeId, int segmen
             }
         }
     }
+}
+
+void EcWidget::createLeglineToolbox(const QPoint& pos, int routeId, int segmentIndex)
+{
+    hideWaypointToolbox();
+    hideLeglineToolbox();
+
+    if (routeId <= 0) return;
+    lastClick = pos;
+
+    // Buat dialog toolbox
+    toolboxLL = new QDialog(nullptr, Qt::Tool | Qt::FramelessWindowHint);
+    toolboxLL->setAttribute(Qt::WA_TranslucentBackground); // transparan hanya utk dialog luar
+    toolboxLL->setWindowTitle("Toolbox");
+
+    // Frame dalam utk kotak rounded
+    QFrame *frame = new QFrame(toolboxLL);
+    frame->setObjectName("toolboxFrame");
+
+    QHBoxLayout *outerLayout = new QHBoxLayout(toolboxLL);
+    outerLayout->setContentsMargins(0, 0, 0, 0);  // biar frame nempel ke dialog
+    outerLayout->addWidget(frame);
+
+    // Style utk frame (bukan QDialog)
+    frame->setStyleSheet(
+        "#toolboxFrame { "
+        "background-color: rgba(50, 50, 50, 220); "
+        "border-radius: 6px; "
+        "} "
+        "QToolButton { "
+        "background: transparent; "
+        "border: none; "
+        "margin: 4px; "
+        "} "
+        "QToolButton:hover { "
+        "background: rgba(255, 255, 255, 40); "
+        "border-radius: 6px; "
+        "} "
+    );
+
+    // Layout isi tombol
+    QHBoxLayout *layout = new QHBoxLayout(frame);
+    layout->setContentsMargins(2, 2, 2, 2);
+    layout->setSpacing(0);
+
+    // Tambahkan tombol2
+    btn->setIconSize(QSize(20, 20));
+    btn->setToolTip("Add Waypoint");
+    btn->setAutoRaise(true);
+    btn->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    btn->setStyleSheet("QToolButton { margin: 1px; padding: 1px; border: none; }");
+    layout->addWidget(btn);
+
+    // Posisi toolbox relatif cursor
+    toolboxLL->adjustSize();
+    QPoint posT = QCursor::pos();
+    posT.setY(posT.y() - toolboxLL->height() - 5);
+    posT.setX(posT.x() - toolboxLL->width() / 2);
+    toolboxLL->move(posT);
+    toolboxLL->setAttribute(Qt::WA_AlwaysShowToolTips, true);
+
+    toolboxLL->show();
 }
 
 void EcWidget::showMapContextMenu(const QPoint& pos)
@@ -7037,6 +7125,12 @@ void EcWidget::iconUpdate(bool dark){
         pickInfoAction->setIcon(QIcon(":/icon/info_white.svg"));
         warningInfoAction->setIcon(QIcon(":/icon/warning_white.svg"));
         measureEblVrmAction->setIcon(QIcon(":/icon/measure_white.svg"));
+
+        btn1->setIcon(QIcon(":/icon/edit_o.svg"));
+        btn2->setIcon(QIcon(":/icon/move_o.svg"));
+        btn3->setIcon(QIcon(":/icon/publish_o.svg"));
+        btn4->setIcon(QIcon(":/icon/delete_wp_o.svg"));
+        btn->setIcon(QIcon(":/icon/create_o.svg"));
     }
     else {
         editAction->setIcon(QIcon(":/icon/edit.svg"));
@@ -7049,6 +7143,12 @@ void EcWidget::iconUpdate(bool dark){
         pickInfoAction->setIcon(QIcon(":/icon/info.svg"));
         warningInfoAction->setIcon(QIcon(":/icon/warning.svg"));
         measureEblVrmAction->setIcon(QIcon(":/icon/measure.svg"));
+
+        btn1->setIcon(QIcon(":/icon/edit_o_light.svg"));
+        btn2->setIcon(QIcon(":/icon/move_o_light.svg"));
+        btn3->setIcon(QIcon(":/icon/publish_o_light.svg"));
+        btn4->setIcon(QIcon(":/icon/delete_wp_o_light.svg"));
+        btn->setIcon(QIcon(":/icon/create_o_light.svg"));
     }
 }
 

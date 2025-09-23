@@ -53,5 +53,10 @@
         <file>icon/move_o.svg</file>
         <file>icon/publish_o.svg</file>
         <file>icon/delete_wp_o.svg</file>
+        <file>icon/delete_wp_o_light.svg</file>
+        <file>icon/publish_o_light.svg</file>
+        <file>icon/move_o_light.svg</file>
+        <file>icon/edit_o_light.svg</file>
+        <file>icon/create_o_light.svg</file>
     </qresource>
 </RCC>
