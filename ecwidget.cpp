@@ -414,8 +414,9 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   guardZoneActive = true;                   // PERBAIKAN: Default aktif sesuai menu checkbox
   guardZoneAttachedToShip = false;          // Default tidak terikat ke kapal
 
-  attachedGuardZoneId = -1;
   attachedGuardZoneName = "";
+
+  attachedAoiId = -1;
 
   // ====== INITIALIZE ROUTE/WAYPOINT SYSTEM ======
   // Initialize route variables
@@ -2256,12 +2257,9 @@ void EcWidget::loadAOIs()
     }
     nextAoiId = qMax(maxId + 1, nextAoiId);
     // restore attached AOI id if present and valid
-    int loadedAttachedId = rootObj.contains("attachedAoiId") ? rootObj.value("attachedAoiId").toInt(-1) : -1;
-    bool exists = false;
-    if (loadedAttachedId >= 0) {
-        for (const auto& a : aoiList) { if (a.id == loadedAttachedId) { exists = true; break; } }
-    }
-    attachedAoiId = exists ? loadedAttachedId : -1;
+    // attachedAoiId is not restored from file to prevent automatic re-attachment on startup.
+    // User must explicitly attach an AOI if desired.
+    attachedAoiId = -1;
     emit aoiListChanged();
     qDebug() << "[INFO] Loaded" << aoiList.size() << "AOIs from" << filePath;
 }
