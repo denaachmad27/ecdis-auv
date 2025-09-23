@@ -1075,8 +1075,12 @@ public:
   AOIType pendingAOIType = AOIType::AOI;
   QVector<QPointF> aoiVerticesLatLon; // lat,lon pairs during creation
   bool editingAOI = false;
-  int editingAoiId = -1;
+  int editingAoiId = -1;  
   int draggedAoiVertex = -1;
+
+  int lastAoiId;
+  int lastVertexIndex;
+
   double handleDetectRadiusPx = 10.0;
   // AOI vertex drag ghost preview
   bool aoiVertexDragging = false;
@@ -1098,6 +1102,11 @@ public:
   // AOI render options
   bool enableAoiSegmentLabels = false; // safety default: off
   bool showAoiLabels = true;           // master toggle for AOI labels
+
+  AOI *lastAoiList;
+  int lastBestSeg;
+  EcCoordinate lastLat, lastLon;
+
 public:
   void setEnableAoiSegmentLabels(bool on) { enableAoiSegmentLabels = on; update(); }
   void setShowAoiLabels(bool on) { showAoiLabels = on; update(); }
@@ -1110,6 +1119,7 @@ public:
 
   // AOI context helpers
   void showAoiVertexContextMenu(const QPoint& pos, int aoiId, int vertexIndex);
+  void showAoiToolbox(const QPoint& pos, int aoiId, int vertexIndex);
   bool getAoiVertexAtPosition(int x, int y, int& outAoiId, int& outVertexIndex);
 
   //popup
@@ -1398,11 +1408,12 @@ private:
 
   void createWaypointToolbox(const QPoint& pos, int waypointIndex);
   void createLeglineToolbox(const QPoint& pos, int routeId, int segmentIndex);
-  void hideWaypointToolbox();
-  void hideLeglineToolbox();
+  void hideToolbox();
 
   QDialog *toolbox = nullptr;
   QDialog *toolboxLL = nullptr;
+  QDialog *toolboxAoi = nullptr;
+  QDialog *toolboxAoiCreate = nullptr;
   EcCoordinate toolboxLat, toolboxLon;
 
   QMutex aisDataMutex;
@@ -1447,6 +1458,10 @@ private:
   QToolButton *btn3;
   QToolButton *btn4;
 
+  QToolButton *btnCreate;
+  QToolButton *btnDelete;
+  QToolButton *btnMove;
+
   QIcon editIcon;
   QIcon moveIcon;
   QIcon deleteWaypointIcon;
@@ -1455,12 +1470,16 @@ private:
 
   QIcon insertWaypointIcon;
 
-  // QFrame *frame;
-  // QFrame *frameLL;
+  QFrame *frame;
+  QFrame *frameLL;
+  QFrame *frameAoi;
+  QFrame *frameAoiCreate;
 
   QPoint lastClick;
   EcWidget::Waypoint lastWaypoint;
   int lastWaypointIndex;
+
+  void buttonInit();
 
   // DEFAULTSETTINGS
   void defaultSettingsStartUp();
