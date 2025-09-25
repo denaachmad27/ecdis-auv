@@ -2,6 +2,8 @@
 #include <QtWidgets>
 #include <QtWin>
 #include <QTimer>
+#include <QToolTip>
+#include <QVector>
 #include <limits>
 #include <cmath>
 #ifndef _WIN32
@@ -12,6 +14,7 @@
 #include "waypointdialog.h"
 #include "routeformdialog.h"
 #include "routequickformdialog.h"
+#include "routesafetyfeature.h"
 #include "alertsystem.h"
 #include "ais.h"
 #include "pickwindow.h"
@@ -149,6 +152,7 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   newGuardZoneShape = GUARD_ZONE_CIRCLE;
 
   guardZoneManager = new GuardZoneManager(this);
+  routeSafetyFeature = new RouteSafetyFeature(this, this);
   connect(guardZoneManager, &GuardZoneManager::editModeChanged,
           [this](bool isEditing) {
               qDebug() << "GuardZone edit mode changed:" << isEditing;
@@ -3102,6 +3106,15 @@ void EcWidget::mouseMoveEvent(QMouseEvent *e)
         }
     }
 
+    if (routeSafetyFeature) {
+        QString hazardTip = routeSafetyFeature->tooltipForPosition(lastMousePos);
+        if (!hazardTip.isEmpty()) {
+            QToolTip::showText(e->globalPos(), hazardTip, this);
+        } else if (!QToolTip::text().isEmpty()) {
+            QToolTip::hideText();
+        }
+    }
+
     // Panggil handling yang sudah ada
     if (guardZoneManager && guardZoneManager->handleMouseMove(e)) {
         return;
@@ -5603,6 +5616,10 @@ void EcWidget::setRouteCustomColor(int routeId, const QColor& color)
 
 bool EcWidget::deleteRoute(int routeId)
 {
+    if (routeSafetyFeature) {
+        routeSafetyFeature->invalidateRoute(routeId);
+    }
+
     qDebug() << "[DEBUG] Deleting route" << routeId;
 
     if (routeId <= 0) {
@@ -7341,6 +7358,10 @@ void EcWidget::drawRouteLinesOverlay(QPainter& painter)
     try {
         painter.setRenderHint(QPainter::Antialiasing, true);
 
+        if (routeSafetyFeature) {
+            routeSafetyFeature->startFrame();
+        }
+
     // Group waypoints by route ID first
     QMap<int, QList<int>> routeWaypoints; // routeId -> list of waypoint indices
 
@@ -7395,6 +7416,22 @@ void EcWidget::drawRouteLinesOverlay(QPainter& painter)
             }
         }
 
+        if (routeSafetyFeature && !activeIndices.isEmpty()) {
+            QVector<RouteSafetyFeature::RouteWaypointSample> safetyPoints;
+            safetyPoints.reserve(activeIndices.size());
+            for (int idx : activeIndices) {
+                RouteSafetyFeature::RouteWaypointSample sample;
+                const Waypoint& wp = waypointList[idx];
+                sample.lat = wp.lat;
+                sample.lon = wp.lon;
+                sample.active = wp.active;
+                safetyPoints.append(sample);
+            }
+            if (safetyPoints.size() >= 2) {
+                routeSafetyFeature->prepareForRoute(routeId, safetyPoints);
+            }
+        }
+
         // Draw lines between consecutive ACTIVE waypoints only
         for (int i = 0; i < activeIndices.size() - 1; ++i) {
             int idx1 = activeIndices[i];
@@ -7437,6 +7474,11 @@ void EcWidget::drawRouteLinesOverlay(QPainter& painter)
         }
     }
 
+        if (routeSafetyFeature) {
+            routeSafetyFeature->render(painter);
+            routeSafetyFeature->finishFrame();
+        }
+
     } catch (const std::exception& e) {
         qDebug() << "[ROUTE-OVERLAY-ERROR] Exception in drawRouteLinesOverlay:" << e.what();
     } catch (...) {
@@ -7457,6 +7499,10 @@ void EcWidget::drawRouteLines()
             return;
         }
         painter.setRenderHint(QPainter::Antialiasing, true);
+
+        if (routeSafetyFeature) {
+            routeSafetyFeature->startFrame();
+        }
 
         // ROUTE FIX: Validate coordinate transformation is ready
         if (!view || !initialized) {
@@ -7523,6 +7569,22 @@ void EcWidget::drawRouteLines()
             }
         }
 
+        if (routeSafetyFeature && !activeIndices.isEmpty()) {
+            QVector<RouteSafetyFeature::RouteWaypointSample> safetyPoints;
+            safetyPoints.reserve(activeIndices.size());
+            for (int idx : activeIndices) {
+                RouteSafetyFeature::RouteWaypointSample sample;
+                const Waypoint& wp = waypointList[idx];
+                sample.lat = wp.lat;
+                sample.lon = wp.lon;
+                sample.active = wp.active;
+                safetyPoints.append(sample);
+            }
+            if (safetyPoints.size() >= 2) {
+                routeSafetyFeature->prepareForRoute(routeId, safetyPoints);
+            }
+        }
+
         // Draw lines between consecutive ACTIVE waypoints only
         for (int i = 0; i < activeIndices.size() - 1; ++i) {
             int idx1 = activeIndices[i];
@@ -7566,6 +7628,11 @@ void EcWidget::drawRouteLines()
                          //<< "in route" << routeId << "style:" << (originalStyle == Qt::SolidLine ? "solid" : "dash");
             }
         }
+    }
+
+    if (routeSafetyFeature) {
+        routeSafetyFeature->render(painter);
+        routeSafetyFeature->finishFrame();
     }
 
     painter.end();
@@ -7750,6 +7817,10 @@ void EcWidget::clearWaypoints()
     waypointList.clear();
     routeList.clear();
     routeVisibility.clear();
+
+    if (routeSafetyFeature) {
+        routeSafetyFeature->invalidateAll();
+    }
 
     // Reset route variables
     currentRouteId = 1;
@@ -16265,3 +16336,4 @@ void EcWidget::applyShipDimensions()
     // Memaksa penggambaran ulang untuk menerapkan perubahan visual
     forceRedraw();
 }
+

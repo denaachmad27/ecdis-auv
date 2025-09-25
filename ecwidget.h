@@ -39,6 +39,7 @@
 #include <QHBoxLayout>
 
 class CPATCPAPanel;
+class RouteSafetyFeature;
 
 struct AISTargetData {
     QString mmsi;
@@ -975,6 +976,7 @@ public:
   inline int getTrackDistance() const {return trackDistance;}
   inline int getTrackMinute() const {return trackMinute;}
   inline ShipStruct getNavShip() const {return navShip;}
+  inline EcDictInfo* getDictionaryInfo() const { return dictInfo; }
 
   // EBL/VRM
   void setEblEnabled(bool on) { eblvrm.setEblEnabled(on); update(); }
@@ -1144,6 +1146,7 @@ private:
 
   QList<Waypoint> waypointList;
   QList<Route> routeList;
+  RouteSafetyFeature* routeSafetyFeature = nullptr;
   QMap<int, bool> routeVisibility; // Track visibility per route
   int selectedRouteId = -1; // Currently selected route for visual feedback
   int moveSelectedIndex = -1; // -1 artinya belum ada waypoint dipilih
