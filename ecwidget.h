@@ -776,6 +776,7 @@ public:
 
   QString convertJsonData(const QString &jsonString);
   void publishRoutesToMOOSDB(const QString data);
+  void updateOwnshipCache(bool cache);
 
   // Method untuk akses AIS data dari luar
   bool hasAISData() const;
@@ -915,6 +916,8 @@ signals:
 
   // ROUTE
   void updateEta();
+
+  void ownshipCache(bool cache);
 
 private slots:
   void slotUpdateAISTargets( Bool bSymbolize );
@@ -1100,6 +1103,7 @@ public:
   QRect attachedAoiScreenCacheBounds;     // Cached bounding rect for quick reject
   // Throttled containment check state
   bool cachedOwnshipOutsideAoi = false;   // Result cache of last check
+  bool cachedOwnshipOutsideAoiCopy = false;   // Result cache of last check
   QPoint lastOwnshipScreenForAoiCheck = QPoint(0,0);
   QElapsedTimer aoiContainmentTimer;      // Timer to throttle containment checks
   qint64 lastAoiContainmentCheckMs = -1;  // Last check timestamp in ms
