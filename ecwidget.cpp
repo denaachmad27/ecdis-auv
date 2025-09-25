@@ -3966,6 +3966,8 @@ void EcWidget::startAISConnection()
         canWork = true;
     });
 
+    //connect(this, &EcWidget::ownshipCache, this, &EcWidget::updateOwnshipCache);
+
     /*
     // SPEED AVERAGE TIMER
     slidingAvgTimer.setInterval(5000); // update rata-rata tiap 5 detik
@@ -4369,10 +4371,10 @@ void EcWidget::publishToMOOSDB(QString varName, QString data){
 
     QString message;
     if (varName == "WAYPT_NEXT"){message = "Waypoint";}
-    if (varName == "WAYPT_NAV"){message = "Route";}
-    if (varName == "AREA_NAV"){message = "Area";}
+    else if (varName == "WAYPT_NAV"){message = "Route";}
+    else if (varName == "AREA_NAV"){message = "Area";}
 
-    if (success && !data.isEmpty()){
+    if (success && !data.isEmpty() && varName != "OWNSHIP_OOB"){
         QMessageBox::information(this, tr("%1 Published").arg(message),
                                  tr("%1 has been published at %2 variable.").arg(message).arg(varName));
     }
@@ -4417,6 +4419,10 @@ void EcWidget::publishRoutesToMOOSDB(const QString data){
     QString publishData = convertJsonData(data);
 
     publishToMOOS("WAYPT_NAV", publishData);
+}
+
+void EcWidget::updateOwnshipCache(bool cache){
+    publishToMOOS("OWNSHIP_OOB", cache ? "true" : "false");
 }
 
 AISSubscriber* EcWidget::getAisSub() const{
@@ -4637,6 +4643,11 @@ void EcWidget::ownShipDraw(){
                                 }
                                 lastOwnshipScreenForAoiCheck = QPoint(x, y);
                                 lastAoiContainmentCheckMs = nowMs;
+                            }
+
+                            if (cachedOwnshipOutsideAoi != cachedOwnshipOutsideAoiCopy){
+                                cachedOwnshipOutsideAoiCopy = cachedOwnshipOutsideAoi;
+                                publishToMOOS("OWNSHIP_OOB", cachedOwnshipOutsideAoi ? "true" : "false");
                             }
 
                             if (cachedOwnshipOutsideAoi) {
