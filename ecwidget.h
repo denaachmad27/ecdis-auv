@@ -75,6 +75,7 @@ struct ShipStruct {
     double course_og = std::numeric_limits<double>::quiet_NaN();
     double yaw = std::numeric_limits<double>::quiet_NaN();        // Sudut yaw kapal
     double depth = std::numeric_limits<double>::quiet_NaN();        // Kedalaman
+    double draft = std::numeric_limits<double>::quiet_NaN();        // Kedalaman
     double z = std::numeric_limits<double>::quiet_NaN();        // Vertikal kapal
     double stw = std::numeric_limits<double>::quiet_NaN();     // Speed through water
     double drift = std::numeric_limits<double>::quiet_NaN();   // Drift in knots

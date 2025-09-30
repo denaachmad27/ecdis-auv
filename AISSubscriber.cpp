@@ -236,6 +236,7 @@ void AISSubscriber::onReadyRead() {
         extractDouble("NAV_Z", [=](double v){ emit navZReceived(v);});
         extractDouble("NAV_STW", [=](double v){ emit navStwReceived(v);});
         extractDouble("NAV_DRIFT", [=](double v){ emit navDriftReceived(v);});
+        extractDouble("NAV_DRAFT", [=](double v){ emit navDraftReceived(v);});
         extractDouble("NAV_DRIFT_ANGLE", [=](double v){ emit navDriftAngleReceived(v);});
         extractDouble("NAV_SET", [=](double v){ emit navSetReceived(v);});
         extractDouble("NAV_ROT", [=](double v){ emit navRotReceived(v);});

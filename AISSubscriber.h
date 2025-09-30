@@ -35,6 +35,7 @@ signals:
     void navZReceived(const double z);
     void navStwReceived(const double stw);
     void navDriftReceived(const double drift);
+    void navDraftReceived(const double drift);
     void navDriftAngleReceived(const double driftAngle);
     void navSetReceived(const double set);
     void navRotReceived(const double rot);
