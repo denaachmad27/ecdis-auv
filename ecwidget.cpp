@@ -16346,5 +16346,9 @@ void EcWidget::applyShipDimensions()
 
     // Memaksa penggambaran ulang untuk menerapkan perubahan visual
     forceRedraw();
+
+    if (routeSafetyFeature) {
+        routeSafetyFeature->invalidateAll();
+    }
 }
 

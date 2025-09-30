@@ -74,8 +74,8 @@ void RouteSafetyFeature::render(QPainter& painter)
 
     hazardMarkers.clear();
 
-    const QColor warningColor(255, 204, 0);
-    const QColor dangerColor(220, 20, 60);
+    const QColor warningColor(255, 204, 0, 160);
+    const QColor dangerColor(220, 20, 60, 160);
     constexpr int warningRadius = 5;
     constexpr int dangerRadius = 6;
 
@@ -100,7 +100,7 @@ void RouteSafetyFeature::render(QPainter& painter)
             const QColor color = isDanger ? dangerColor : warningColor;
             const int radius = isDanger ? dangerRadius : warningRadius;
 
-            painter.setPen(QPen(color.darker(150), 1));
+            painter.setPen(QPen(color.darker(200), 2));
             painter.setBrush(color);
             painter.drawEllipse(QPoint(markerX, markerY), radius, radius);
 
