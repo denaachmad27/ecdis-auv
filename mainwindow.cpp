@@ -1869,6 +1869,7 @@ void MainWindow::onMouseMove(EcCoordinate lat, EcCoordinate lon)
 
 void MainWindow::onMouseRightClick(const QPoint& pos)
 {
+    ecchart->hideToolbox();
 
     // KLIK TARGET AIS
     EcAISTargetInfo* target = ecchart->findAISTargetInfoAtPosition(pos);

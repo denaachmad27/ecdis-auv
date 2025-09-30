@@ -143,7 +143,7 @@ class GuardZoneManager; // Forward declaration
 
 // Waypoint
 #define PICKRADIUS  (0.03 * GetRange)
-#define PAN_MARGIN 200
+#define PAN_MARGIN 500
 
 //Waypoint
 #include <QJsonDocument>
@@ -843,6 +843,9 @@ public:
   // EBL/VRM helpers
   void setEblVrmFixedTarget(double lat, double lon);
 
+  //
+  int rangeNM = 0;
+
 public slots:
   void updateAISTargetsList();
   void addOrUpdateAISTarget(const AISTargetData& target);
@@ -1134,6 +1137,7 @@ public:
 
   //popup
   void leaveEvent(QEvent *event) override;
+  void hideToolbox();
 
 private:
   MainWindow *mainWindow = nullptr;
@@ -1420,7 +1424,6 @@ private:
 
   void createWaypointToolbox(const QPoint& pos, int waypointIndex);
   void createLeglineToolbox(const QPoint& pos, int routeId, int segmentIndex);
-  void hideToolbox();
 
   QDialog *toolbox = nullptr;
   QDialog *toolboxLL = nullptr;
@@ -1503,7 +1506,7 @@ private:
   // Flag & data
   bool inDraw;
   bool isDragging = false;
-  bool dragMode = false;
+  bool dragMode = true;
   QPoint lastPanPoint;
   QPoint tempOffset;   // offset sementara saat drag
   QPoint totalOffset;  // offset akumulasi pan

@@ -1227,33 +1227,35 @@ void EcWidget::waypointDraw(){
 void EcWidget::paintEvent (QPaintEvent *e)
 {
     if (!initialized) return;
-
-    // ======== STABLE ========= //
     QPainter painter(this);
-    painter.drawPixmap(e->rect(), drawPixmap, e->rect());
-    // ======== STABLE ========= //
 
-    /*
-    QPainter painter(this);
-    painter.fillRect(rect(), QColor(204,197,123));
+    if (dragMode){
+        painter.fillRect(rect(), QColor(204,197,123));
 
-    // hitung offset supaya currentLat/currentLon ada di tengah window
-    int x, y;
-    LatLonToXy(currentLat, currentLon, x, y);
-    QPoint centerOffset = QPoint(width()/2, height()/2) - QPoint(x, y);
+        // hitung offset supaya currentLat/currentLon ada di tengah window
+        int x, y;
+        LatLonToXy(currentLat, currentLon, x, y);
+        QPoint centerOffset = QPoint(width()/2, height()/2) - QPoint(x, y);
 
-    // live drag
-    if (isDragging)
-        centerOffset += tempOffset;
+        // live drag
+        if (isDragging)
+            centerOffset += tempOffset;
 
-    // geser seluruh painter, semua layer ikut
-    painter.translate(centerOffset);
+        // geser seluruh painter, semua layer ikut
+        painter.translate(centerOffset);
 
-    // gambar chart pixmap di (0,0)
-    painter.drawPixmap(0, 0, drawPixmap);
+        // gambar chart pixmap di (0,0)
+        painter.drawPixmap(0, 0, drawPixmap);
 
-    //painter.drawPixmap(e->rect(), drawPixmap, e->rect());
-    */
+        //painter.drawPixmap(e->rect(), drawPixmap, e->rect());
+    }
+    else {
+        // ======== STABLE ========= //
+        painter.drawPixmap(e->rect(), drawPixmap, e->rect());
+        // ======== STABLE ========= //
+    }
+
+
 
   // FORCE CLEANUP: Run cleanup from paint event as fallback
   static int paintCleanupCounter = 0;
@@ -2452,7 +2454,7 @@ void EcWidget::resizeEvent (QResizeEvent *event)
     int wi;
     int hei;
 
-    if (dragMode) {
+    if (isDragging) {
         // Tambahkan margin agar ada buffer di luar layar
         wi = event->size().width() + 2*PAN_MARGIN;
         hei = event->size().height() + 2*PAN_MARGIN;
@@ -2475,11 +2477,15 @@ void EcWidget::resizeEvent (QResizeEvent *event)
   }
   else
   {
-    EcDrawEnd (view);
+      if (!isDragging){
+          EcDrawEnd (view);
+      }
   }
 
-  chartPixmap = QPixmap(wi, hei);
-  drawPixmap = QPixmap(wi, hei);
+  if (!isDragging){
+      chartPixmap = QPixmap(wi, hei);
+      drawPixmap = QPixmap(wi, hei);
+  }
 
   initialized = true;
 
@@ -2504,7 +2510,7 @@ void EcWidget::resizeEvent (QResizeEvent *event)
   Draw();
 
   bool hasRoutes = !waypointList.isEmpty();
-  if(showAIS || hasRoutes)
+  if((showAIS || hasRoutes) && !isDragging)
     drawAISCell();
 }
 
@@ -3167,6 +3173,9 @@ void EcWidget::waypointLeftClick(QMouseEvent *e){
                     tempOffset = QPoint(0,0);
 
                     setCursor(Qt::OpenHandCursor);
+
+                    QResizeEvent ev(size(), size());  // oldSize = newSize
+                    this->resizeEvent(&ev);
                 }
                 else {
                     // ======== STABLE ========= //
@@ -3394,6 +3403,8 @@ void EcWidget::mouseReleaseEvent(QMouseEvent *e)
 
     if (e->button() == Qt::LeftButton && isDragging && dragMode) {
         isDragging = false;
+        QResizeEvent ev(size(), size());
+        this->resizeEvent(&ev);
 
         QPoint releasePos = e->pos();
 
@@ -4374,8 +4385,10 @@ void EcWidget::allFunctionPerTime(){
         if (subscriber->hasData()){
             // DRAW PER TIME
             //qDebug() << "[DRAW] Autorun...";
-            draw(true);
-            slotUpdateAISTargets(true);
+            if (!isDragging) {
+                draw(true);
+                slotUpdateAISTargets(true);
+            }
 
             // PUBLISH PER TIME
             if (navShip.lat != 0 && navShip.lon != 0){
@@ -12253,7 +12266,9 @@ void EcWidget::updateTooltipIfVisible()
 // icon ownship
 void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, double heading, double sog)
 {
-    double rangeNM = GetRange(currentScale);
+    if (!isDragging){
+        rangeNM = GetRange(currentScale);
+    }
 
     // Jika zoom terlalu jauh, tampilkan dua lingkaran sebagai simbol ownship
     if (rangeNM > 2.0) {
@@ -12284,7 +12299,6 @@ void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, doub
         else {
             scaleFactor = 0.8;
         }
-
 
         painter.save();
 
@@ -12453,7 +12467,6 @@ void EcWidget::drawTestGuardSquare(QPainter& painter)
 {
     painter.save();
 
-    double rangeNM = GetRange(currentScale);  // misalnya return 6, 12, 24, 48, dst.
     if (rangeNM > 48.0) {
         painter.restore();
         return; // zoom terlalu jauh, tidak usah gambar kotak
