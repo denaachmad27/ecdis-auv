@@ -793,7 +793,7 @@ QString PickWindow::ownShipAutoFill()
               "<td style='text-align:right;'>"
               "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
               "</td>"
-              "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>°</td>"
+              "<td style='vertical-align:middle; padding-left:7px; text-align:left;'></td>"
               "</tr>")
               .arg(isEmpty(navShip.lat_dms));
     text.append(row);
@@ -806,7 +806,7 @@ QString PickWindow::ownShipAutoFill()
               "<td style='text-align:right;'>"
               "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
               "</td>"
-              "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>°</td>"
+              "<td style='vertical-align:middle; padding-left:7px; text-align:left;'></td>"
               "</tr>")
               .arg(isEmpty(navShip.lon_dms));
     text.append(row);
@@ -835,6 +835,19 @@ QString PickWindow::ownShipAutoFill()
               "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>m</td>"
               "</tr>")
               .arg(toStringOrEmpty(navShip.depth_below_keel));
+    text.append(row);
+    ownship.append(row);
+
+    // DRAFT
+    row = QString(
+              "<tr>"
+              "<td style='vertical-align:middle;'>DRAFT</td>"
+              "<td style='text-align:right;'>"
+              "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
+              "</td>"
+              "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>m</td>"
+              "</tr>")
+              .arg(toStringOrEmpty(navShip.draft));
     text.append(row);
     ownship.append(row);
 

@@ -38,7 +38,7 @@ class AISSubscriber;
 // data server id
 
 #define DSID "0"
-#define APP_TITLE "ECDIS AUV v1.31"
+#define APP_TITLE "ECDIS AUV v1.32"
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20

@@ -339,6 +339,9 @@ void AOIPanel::onDetach(){
         ecWidget->attachAOIToShip(-1);
         ecWidget->publishToMOOS("AREA_NAV", "");
 
+        //ecWidget->publishToMOOS("OWNSHIP_OOB", "");
+        //ecWidget->cachedOwnshipOutsideAoiCopy = false;
+
         // Ensure visibility is maintained
         //ecWidget->setRouteVisibility(selectedRouteId, currentVisibility);
 

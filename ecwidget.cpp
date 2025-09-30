@@ -1095,6 +1095,13 @@ void EcWidget::draw(bool upd)
         return;
     }
 
+    // ----------------------------
+    // Buat pixmap lebih besar untuk extra margin
+    // ----------------------------
+    const int extra_margin = 200;
+    QPixmap extendedPixmap(width() + 2*extra_margin, height() + 2*extra_margin);
+    extendedPixmap.fill(QColor(204, 197, 123)); // background
+
 #ifdef _WIN32
     if(!hdc || !hBitmap) { inDraw = false; return; }
     HPALETTE oldPal = SelectPalette(hdc, hPalette, true);
@@ -1139,6 +1146,13 @@ void EcWidget::draw(bool upd)
         drawPixmap = chartPixmap;
     #endif
 #endif
+
+    // Copy ke extendedPixmap agar ada margin ekstra
+    QPainter p(&extendedPixmap);
+    p.drawPixmap(extra_margin, extra_margin, chartPixmap); // titik tengah chart tetap di tengah pixmap
+    p.end();
+
+    drawPixmap = extendedPixmap;
 
     if(upd) update();
 
@@ -1209,12 +1223,39 @@ void EcWidget::waypointDraw(){
 }
 /*---------------------------------------------------------------------------*/
 
+
 void EcWidget::paintEvent (QPaintEvent *e)
 {
-  if (! initialized) return;
+    if (!initialized) return;
+    QPainter painter(this);
 
-  QPainter painter(this);
-  painter.drawPixmap(e->rect(), drawPixmap, e->rect());
+    if (dragMode){
+        painter.fillRect(rect(), QColor(204,197,123));
+
+        // hitung offset supaya currentLat/currentLon ada di tengah window
+        int x, y;
+        LatLonToXy(currentLat, currentLon, x, y);
+        QPoint centerOffset = QPoint(width()/2, height()/2) - QPoint(x, y);
+
+        // live drag
+        if (isDragging)
+            centerOffset += tempOffset;
+
+        // geser seluruh painter, semua layer ikut
+        painter.translate(centerOffset);
+
+        // gambar chart pixmap di (0,0)
+        painter.drawPixmap(0, 0, drawPixmap);
+
+        //painter.drawPixmap(e->rect(), drawPixmap, e->rect());
+    }
+    else {
+        // ======== STABLE ========= //
+        painter.drawPixmap(e->rect(), drawPixmap, e->rect());
+        // ======== STABLE ========= //
+    }
+
+
 
   // FORCE CLEANUP: Run cleanup from paint event as fallback
   static int paintCleanupCounter = 0;
@@ -1648,24 +1689,90 @@ void EcWidget::paintEvent (QPaintEvent *e)
       painter.setBrush(Qt::red);
       painter.drawPath(path);
   }
-
-  // Draw red box around dangerous AIS targets
-  if (false) {
-      QPainter painter(this);
-      painter.setRenderHint(QPainter::Antialiasing);
-      QMap<unsigned int, AISTargetData> targetMap = _aisObj->getTargetMap();
-      for (const AISTargetData &target : targetMap) {
-          if (target.isDangerous) {
-              int x, y;
-              if (LatLonToXy(target.lat, target.lon, x, y)) {
-                  painter.setPen(QPen(Qt::red, 2, Qt::SolidLine));
-                  painter.setBrush(QColor(255, 0, 0, 40)); // Solid red border, 40/255 transparent fill
-                  painter.drawRect(x - 20, y - 20, 40, 40);
-              }
-          }
-      }
-  }
 } // End paintEvent
+
+/*
+void EcWidget::paintEvent (QPaintEvent *e)
+{
+  if (! initialized) return;
+
+  QPainter painter(this);
+  painter.fillRect(rect(), QColor(204, 197, 123));
+
+  QPoint baseOffset(-PAN_MARGIN, -PAN_MARGIN);
+  if (isDragging) {
+      painter.drawPixmap(baseOffset + tempOffset, drawPixmap);
+  } else {
+      painter.drawPixmap(baseOffset, drawPixmap);
+  }
+
+} // End paintEvent
+*/
+
+// class member (header)
+// bool true = true;
+// QPoint lastPanPoint;
+
+// void EcWidget::mousePressEvent(QMouseEvent *e)
+// {
+//     if (e->button() == Qt::LeftButton) {
+//         isDragging = true;
+//         lastPanPoint = e->pos();
+//         tempOffset = QPoint(0,0);
+
+//         setCursor(Qt::OpenHandCursor);
+//     }
+// }
+
+// void EcWidget::mouseMoveEvent(QMouseEvent* e)
+// {
+//     if (!isDragging) return;
+//     tempOffset = e->pos() - lastPanPoint;
+//     setCursor(Qt::ClosedHandCursor);
+
+//     update();
+// }
+
+// void EcWidget::mouseReleaseEvent(QMouseEvent* e) {
+//     if (e->button() == Qt::LeftButton && isDragging) {
+//         isDragging = false;
+
+//         QPoint releasePos = e->pos();
+
+//         // --- ambil geo dari titik press & release ---
+//         EcCoordinate pressLat, pressLon;
+//         EcCoordinate releaseLat, releaseLon;
+
+//         bool ok1 = XyToLatLon(lastPanPoint.x(), lastPanPoint.y(), pressLat, pressLon);
+//         bool ok2 = XyToLatLon(releasePos.x(), releasePos.y(), releaseLat, releaseLon);
+
+//         if (ok1 && ok2) {
+//             // Hitung selisih geo
+//             double deltaLat = pressLat - releaseLat;
+//             double deltaLon = pressLon - releaseLon;
+
+//             // Update center ke posisi baru
+//             currentLat += deltaLat;
+//             currentLon += deltaLon;
+//         }
+
+//         tempOffset = QPoint();  // reset drag offset
+//         unsetCursor();
+
+//         Draw();             // redraw chart penuh
+//     }
+// }
+
+// Fungsi update koordinat sesuai pan
+void EcWidget::recalcView(const QPoint& offset) {
+    // Konversi offset pixel → delta koordinat lat/lon
+    // (contoh sederhana, kamu bisa ganti dengan rumus proyeksi peta)
+    double lonPerPixel = 0.0001;
+    double latPerPixel = 0.0001;
+
+    currentLon -= offset.x() * lonPerPixel;
+    currentLat += offset.y() * latPerPixel;
+}
 
 void EcWidget::setDisplayCategoryInternal(int category){
     displayCategory = category;
@@ -2344,8 +2451,19 @@ void EcWidget::clearOwnShipTrail()
 
 void EcWidget::resizeEvent (QResizeEvent *event)
 {
-  int wi  = event->size().width();
-  int hei = event->size().height();
+    int wi;
+    int hei;
+
+    if (isDragging) {
+        // Tambahkan margin agar ada buffer di luar layar
+        wi = event->size().width() + 2*PAN_MARGIN;
+        hei = event->size().height() + 2*PAN_MARGIN;
+    }
+    else {
+        wi  = event->size().width();
+        hei = event->size().height();
+    }
+
 
   if (! initialized)
   {
@@ -2359,11 +2477,16 @@ void EcWidget::resizeEvent (QResizeEvent *event)
   }
   else
   {
-    EcDrawEnd (view);
+      if (!isDragging){
+          EcDrawEnd (view);
+      }
   }
 
-  chartPixmap = QPixmap(wi, hei);
-  drawPixmap = QPixmap(wi, hei);
+  if (!isDragging){
+      chartPixmap = QPixmap(wi, hei);
+      drawPixmap = QPixmap(wi, hei);
+  }
+
   initialized = true;
 
 #ifdef _WIN32
@@ -2387,7 +2510,7 @@ void EcWidget::resizeEvent (QResizeEvent *event)
   Draw();
 
   bool hasRoutes = !waypointList.isEmpty();
-  if(showAIS || hasRoutes)
+  if((showAIS || hasRoutes) && !isDragging)
     drawAISCell();
 }
 
@@ -2828,7 +2951,8 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
                     }
                 }
                 return;
-            }*/
+            }
+            */
         }
         return; // consume
     }
@@ -2912,7 +3036,6 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
     waypointLeftClick(e);
     waypointRightClick(e);
 }
-
 
 void EcWidget::waypointRightClick(QMouseEvent *e){
     if (e->button() == Qt::RightButton && !creatingGuardZone) {
@@ -3044,9 +3167,23 @@ void EcWidget::waypointLeftClick(QMouseEvent *e){
             }
             else
             {
-                // Normal pan/click
-                SetCenter(lat, lon);
-                Draw();
+                if (dragMode){
+                    isDragging = true;
+                    lastPanPoint = e->pos();
+                    tempOffset = QPoint(0,0);
+
+                    setCursor(Qt::OpenHandCursor);
+
+                    QResizeEvent ev(size(), size());  // oldSize = newSize
+                    this->resizeEvent(&ev);
+                }
+                else {
+                    // ======== STABLE ========= //
+                    // Normal pan/click
+                    SetCenter(lat, lon);
+                    Draw();
+                    // ======== STABLE ========= //
+                }
             }
         }
     }
@@ -3054,6 +3191,7 @@ void EcWidget::waypointLeftClick(QMouseEvent *e){
 
 
 /*---------------------------------------------------------------------------*/
+
 
 void EcWidget::mouseMoveEvent(QMouseEvent *e)
 {
@@ -3106,7 +3244,7 @@ void EcWidget::mouseMoveEvent(QMouseEvent *e)
         }
     }
 
-    if (routeSafetyFeature) {
+    if (routeSafetyFeature && routeSafeMode) {
         QString hazardTip = routeSafetyFeature->tooltipForPosition(lastMousePos);
         if (!hazardTip.isEmpty()) {
             QToolTip::showText(e->globalPos(), hazardTip, this);
@@ -3208,6 +3346,16 @@ void EcWidget::mouseMoveEvent(QMouseEvent *e)
         eblvrm.onMouseMove(this, e->x(), e->y());
         update();
     }
+
+
+    // LAMUN DRAGGING
+    if (isDragging && dragMode) {
+        tempOffset = e->pos() - lastPanPoint;
+        setCursor(Qt::ClosedHandCursor);
+
+        update();
+    }
+
 }
 
 
@@ -3251,6 +3399,38 @@ void EcWidget::mouseReleaseEvent(QMouseEvent *e)
             return; // Event handled by manager
         }
     }
+
+
+    if (e->button() == Qt::LeftButton && isDragging && dragMode) {
+        isDragging = false;
+        QResizeEvent ev(size(), size());
+        this->resizeEvent(&ev);
+
+        QPoint releasePos = e->pos();
+
+        // --- ambil geo dari titik press & release ---
+        EcCoordinate pressLat, pressLon;
+        EcCoordinate releaseLat, releaseLon;
+
+        bool ok1 = XyToLatLon(lastPanPoint.x(), lastPanPoint.y(), pressLat, pressLon);
+        bool ok2 = XyToLatLon(releasePos.x(), releasePos.y(), releaseLat, releaseLon);
+
+        if (ok1 && ok2) {
+            // Hitung selisih geo
+            double deltaLat = pressLat - releaseLat;
+            double deltaLon = pressLon - releaseLon;
+
+            // Update center ke posisi baru
+            currentLat += deltaLat;
+            currentLon += deltaLon;
+        }
+
+        tempOffset = QPoint();  // reset drag offset
+        unsetCursor();
+
+        Draw();             // redraw chart penuh
+    }
+
 
     QWidget::mouseReleaseEvent(e);
 }
@@ -4205,8 +4385,10 @@ void EcWidget::allFunctionPerTime(){
         if (subscriber->hasData()){
             // DRAW PER TIME
             //qDebug() << "[DRAW] Autorun...";
-            draw(true);
-            slotUpdateAISTargets(true);
+            if (!isDragging) {
+                draw(true);
+                slotUpdateAISTargets(true);
+            }
 
             // PUBLISH PER TIME
             if (navShip.lat != 0 && navShip.lon != 0){
@@ -5627,7 +5809,7 @@ void EcWidget::setRouteCustomColor(int routeId, const QColor& color)
 
 bool EcWidget::deleteRoute(int routeId)
 {
-    if (routeSafetyFeature) {
+    if (routeSafetyFeature && routeSafeMode) {
         routeSafetyFeature->invalidateRoute(routeId);
     }
 
@@ -7369,7 +7551,7 @@ void EcWidget::drawRouteLinesOverlay(QPainter& painter)
     try {
         painter.setRenderHint(QPainter::Antialiasing, true);
 
-        if (routeSafetyFeature) {
+        if (routeSafetyFeature && routeSafeMode) {
             routeSafetyFeature->startFrame();
         }
 
@@ -7427,7 +7609,7 @@ void EcWidget::drawRouteLinesOverlay(QPainter& painter)
             }
         }
 
-        if (routeSafetyFeature && !activeIndices.isEmpty()) {
+        if (routeSafetyFeature && !activeIndices.isEmpty() && routeSafeMode) {
             QVector<RouteSafetyFeature::RouteWaypointSample> safetyPoints;
             safetyPoints.reserve(activeIndices.size());
             for (int idx : activeIndices) {
@@ -7485,7 +7667,7 @@ void EcWidget::drawRouteLinesOverlay(QPainter& painter)
         }
     }
 
-        if (routeSafetyFeature) {
+        if (routeSafetyFeature && routeSafeMode) {
             routeSafetyFeature->render(painter);
             routeSafetyFeature->finishFrame();
         }
@@ -7511,7 +7693,7 @@ void EcWidget::drawRouteLines()
         }
         painter.setRenderHint(QPainter::Antialiasing, true);
 
-        if (routeSafetyFeature) {
+        if (routeSafetyFeature && routeSafeMode) {
             routeSafetyFeature->startFrame();
         }
 
@@ -7641,7 +7823,7 @@ void EcWidget::drawRouteLines()
         }
     }
 
-    if (routeSafetyFeature) {
+    if (routeSafetyFeature && routeSafeMode) {
         routeSafetyFeature->render(painter);
         routeSafetyFeature->finishFrame();
     }
@@ -7829,7 +8011,7 @@ void EcWidget::clearWaypoints()
     routeList.clear();
     routeVisibility.clear();
 
-    if (routeSafetyFeature) {
+    if (routeSafetyFeature && routeSafeMode) {
         routeSafetyFeature->invalidateAll();
     }
 
@@ -12084,7 +12266,9 @@ void EcWidget::updateTooltipIfVisible()
 // icon ownship
 void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, double heading, double sog)
 {
-    double rangeNM = GetRange(currentScale);
+    if (!isDragging){
+        rangeNM = GetRange(currentScale);
+    }
 
     // Jika zoom terlalu jauh, tampilkan dua lingkaran sebagai simbol ownship
     if (rangeNM > 2.0) {
@@ -12115,7 +12299,6 @@ void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, doub
         else {
             scaleFactor = 0.8;
         }
-
 
         painter.save();
 
@@ -12284,7 +12467,6 @@ void EcWidget::drawTestGuardSquare(QPainter& painter)
 {
     painter.save();
 
-    double rangeNM = GetRange(currentScale);  // misalnya return 6, 12, 24, 48, dst.
     if (rangeNM > 48.0) {
         painter.restore();
         return; // zoom terlalu jauh, tidak usah gambar kotak

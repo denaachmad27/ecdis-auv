@@ -75,6 +75,7 @@ struct ShipStruct {
     double course_og = std::numeric_limits<double>::quiet_NaN();
     double yaw = std::numeric_limits<double>::quiet_NaN();        // Sudut yaw kapal
     double depth = std::numeric_limits<double>::quiet_NaN();        // Kedalaman
+    double draft = std::numeric_limits<double>::quiet_NaN();        // Kedalaman
     double z = std::numeric_limits<double>::quiet_NaN();        // Vertikal kapal
     double stw = std::numeric_limits<double>::quiet_NaN();     // Speed through water
     double drift = std::numeric_limits<double>::quiet_NaN();   // Drift in knots
@@ -126,8 +127,8 @@ class GuardZoneManager; // Forward declaration
 //#define USERPERMIT "66B5CBFDF7E4139D5B6086C23130"
 
 // DEVELOPMENT
-#define USERPERMIT "FA0B04B4D8C1175A18D44DE44246"
-#define HWID "8BA3-E363-1982-4EDB-257C-C"
+#define USERPERMIT "E12FF5B1C9BC7AFAC30030B64246"
+#define HWID "95C7-DAC8-182A-403D-257C-C"
 
 // PRODUCTION
 //#define USERPERMIT "E12FF5B1C9BC7AFAC30030B64246"
@@ -141,7 +142,8 @@ class GuardZoneManager; // Forward declaration
 #define MID "BF"
 
 // Waypoint
-#define PICKRADIUS  (0.03 * GetRange);
+#define PICKRADIUS  (0.03 * GetRange)
+#define PAN_MARGIN 500
 
 //Waypoint
 #include <QJsonDocument>
@@ -841,6 +843,9 @@ public:
   // EBL/VRM helpers
   void setEblVrmFixedTarget(double lat, double lon);
 
+  //
+  int rangeNM = 0;
+
 public slots:
   void updateAISTargetsList();
   void addOrUpdateAISTarget(const AISTargetData& target);
@@ -1132,6 +1137,7 @@ public:
 
   //popup
   void leaveEvent(QEvent *event) override;
+  void hideToolbox();
 
 private:
   MainWindow *mainWindow = nullptr;
@@ -1151,6 +1157,7 @@ private:
   QList<Waypoint> waypointList;
   QList<Route> routeList;
   RouteSafetyFeature* routeSafetyFeature = nullptr;
+  bool routeSafeMode = false;
   QMap<int, bool> routeVisibility; // Track visibility per route
   int selectedRouteId = -1; // Currently selected route for visual feedback
   int moveSelectedIndex = -1; // -1 artinya belum ada waypoint dipilih
@@ -1417,7 +1424,6 @@ private:
 
   void createWaypointToolbox(const QPoint& pos, int waypointIndex);
   void createLeglineToolbox(const QPoint& pos, int routeId, int segmentIndex);
-  void hideToolbox();
 
   QDialog *toolbox = nullptr;
   QDialog *toolboxLL = nullptr;
@@ -1497,6 +1503,18 @@ private:
   double trackDistance;
   double trackMinute;
 
+  // Flag & data
+  bool inDraw;
+  bool isDragging = false;
+  bool dragMode = true;
+  QPoint lastPanPoint;
+  QPoint tempOffset;   // offset sementara saat drag
+  QPoint totalOffset;  // offset akumulasi pan
+
+  void recalcView(const QPoint& offset);
+  QPoint mapToScene(const QPoint &widgetPos) const;
+
+  QPointF mapMouseToMapCoordinates(const QPoint& mousePos);
 }; // EcWidget
 
 #endif // _ec_widget_h_
