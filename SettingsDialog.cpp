@@ -2,6 +2,7 @@
 #include "SettingsManager.h"
 #include "appconfig.h"
 #include "mainwindow.h"
+#include "routesafetyfeature.h"
 
 #include <QLineEdit>
 #include <QComboBox>
@@ -78,6 +79,43 @@ void SettingsDialog::setupUI() {
     dimensionsForm->addRow(tr("Beam (meters):"), shipBeamSpin);
     dimensionsForm->addRow(tr("Overall Height (meters):"), shipHeightSpin);
 
+    // Navigation Safety Variables Group
+    QGroupBox *navSafetyGroup = new QGroupBox(tr("Navigation Safety Parameters"));
+    QFormLayout *navSafetyForm = new QFormLayout(navSafetyGroup);
+
+    navDepthSpin = new QDoubleSpinBox;
+    navDepthSpin->setRange(0.0, 500.0);
+    navDepthSpin->setDecimals(2);
+    navDepthSpin->setSingleStep(0.5);
+    navDepthSpin->setSuffix(" m");
+    navDepthSpin->setToolTip(tr("Current water depth (NAV_DEPTH from MOOSDB)"));
+
+    navDraftSpin = new QDoubleSpinBox;
+    navDraftSpin->setRange(0.0, 50.0);
+    navDraftSpin->setDecimals(2);
+    navDraftSpin->setSingleStep(0.1);
+    navDraftSpin->setSuffix(" m");
+    navDraftSpin->setToolTip(tr("Ship draft - deepest part below waterline (NAV_DRAFT)"));
+
+    navDraftBelowKeelSpin = new QDoubleSpinBox;
+    navDraftBelowKeelSpin->setRange(0.0, 20.0);
+    navDraftBelowKeelSpin->setDecimals(2);
+    navDraftBelowKeelSpin->setSingleStep(0.1);
+    navDraftBelowKeelSpin->setSuffix(" m");
+    navDraftBelowKeelSpin->setToolTip(tr("Desired minimum clearance below keel (NAV_DRAFT_BELOW_KEEL)"));
+
+    navSafetyForm->addRow(tr("NAV_DEPTH (Water Depth):"), navDepthSpin);
+    navSafetyForm->addRow(tr("NAV_DRAFT (Ship Draft):"), navDraftSpin);
+    navSafetyForm->addRow(tr("NAV_DRAFT_BELOW_KEEL (Clearance):"), navDraftBelowKeelSpin);
+
+    // Connect to update RouteSafetyFeature when values change
+    connect(navDepthSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &SettingsDialog::onNavDepthChanged);
+    connect(navDraftSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &SettingsDialog::onNavDraftChanged);
+    connect(navDraftBelowKeelSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &SettingsDialog::onNavDraftBelowKeelChanged);
+
     // GPS Configuration Group
     QGroupBox *gpsGroup = new QGroupBox(tr("GPS Antenna Positions"));
     QVBoxLayout *gpsLayout = new QVBoxLayout(gpsGroup);
@@ -101,6 +139,7 @@ void SettingsDialog::setupUI() {
     gpsLayout->addLayout(gpsButtons);
 
     shipDimensionsLayout->addWidget(dimensionsGroup);
+    shipDimensionsLayout->addWidget(navSafetyGroup);
     shipDimensionsLayout->addWidget(gpsGroup);
 
     centeringCombo = new QComboBox;
@@ -624,6 +663,16 @@ void SettingsDialog::loadSettings() {
     shipBeamSpin->setValue(settings.value("ShipDimensions/beam", 13.0).toDouble());
     shipHeightSpin->setValue(settings.value("ShipDimensions/height", 25.0).toDouble());
 
+    // Navigation Safety Variables
+    navDepthSpin->setValue(settings.value("Navigation/nav_depth", 10.0).toDouble());
+    navDraftSpin->setValue(settings.value("Navigation/nav_draft", 2.0).toDouble());
+    navDraftBelowKeelSpin->setValue(settings.value("Navigation/nav_draft_below_keel", 1.0).toDouble());
+
+    // Update RouteSafetyFeature with loaded values
+    RouteSafetyFeature::setNavDepth(navDepthSpin->value());
+    RouteSafetyFeature::setNavDraft(navDraftSpin->value());
+    RouteSafetyFeature::setNavDraftBelowKeel(navDraftBelowKeelSpin->value());
+
     // GPS Positions
     gpsTableWidget->setRowCount(0); // Clear table before loading
     int gpsCount = settings.beginReadArray("GPSPositions");
@@ -857,6 +906,13 @@ void SettingsDialog::accept() {
     }
     data.primaryGpsIndex = primaryGpsCombo->currentIndex();
 
+    // Save Navigation Safety Variables to settings file
+    QString configPath = QString(EcKernelGetEnv("APPDATA")) + "/SevenCs/EC2007/DENC" + "/config.ini";
+    QSettings settings(configPath, QSettings::IniFormat);
+    settings.setValue("Navigation/nav_depth", navDepthSpin->value());
+    settings.setValue("Navigation/nav_draft", navDraftSpin->value());
+    settings.setValue("Navigation/nav_draft_below_keel", navDraftBelowKeelSpin->value());
+
     SettingsManager::instance().save(data);
 
     // Find the EcWidget instance and apply the new dimensions
@@ -964,4 +1020,22 @@ void SettingsDialog::updatePrimaryGpsCombo()
     if (index != -1) {
         primaryGpsCombo->setCurrentIndex(index);
     }
+}
+
+void SettingsDialog::onNavDepthChanged(double value)
+{
+    RouteSafetyFeature::setNavDepth(value);
+    qDebug() << "[SETTINGS] NAV_DEPTH changed to:" << value;
+}
+
+void SettingsDialog::onNavDraftChanged(double value)
+{
+    RouteSafetyFeature::setNavDraft(value);
+    qDebug() << "[SETTINGS] NAV_DRAFT changed to:" << value;
+}
+
+void SettingsDialog::onNavDraftBelowKeelChanged(double value)
+{
+    RouteSafetyFeature::setNavDraftBelowKeel(value);
+    qDebug() << "[SETTINGS] NAV_DRAFT_BELOW_KEEL changed to:" << value;
 }

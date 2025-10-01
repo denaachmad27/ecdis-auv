@@ -1,6 +1,7 @@
 #include "routepanel.h"
 #include "ecwidget.h"
 #include "routedetaildialog.h"
+#include "routedeviationdetector.h"
 #include "appconfig.h"
 #include <QContextMenuEvent>
 #include <QInputDialog>
@@ -550,9 +551,11 @@ void RoutePanel::setupUI()
     visibilityCheckBox = new QCheckBox("Show on Chart");
     addToShipButton = new QPushButton("Attach");
     detachFromShipButton = new QPushButton("Detach");
+    routeDeviationCheckBox = new QCheckBox("Track Deviation Alert");
 
     addToShipButton->setToolTip("Attach this route to ship navigation (only one route can be attached)");
     detachFromShipButton->setToolTip("Remove this route from ship navigation");
+    routeDeviationCheckBox->setToolTip("Enable route deviation detection (shows alert when off track)");
 
     // Awal: addToShip aktif, detachFromShip pasif
     addToShipButton->setEnabled(true);
@@ -560,11 +563,16 @@ void RoutePanel::setupUI()
 
     addToShipButton->setVisible(false);
     detachFromShipButton->setVisible(false);
-    
-    // Layout actions in 3 columns to match other sections
+
+    // Route deviation checkbox - hidden by default (shown when MOOSDB connected)
+    routeDeviationCheckBox->setVisible(false);
+    routeDeviationCheckBox->setChecked(true);  // Enabled by default when visible
+
+    // Layout actions in rows
     actionsLayout->addWidget(visibilityCheckBox, 0, 0);
-    actionsLayout->addWidget(addToShipButton, 0, 1);
-    actionsLayout->addWidget(detachFromShipButton, 0, 2);
+    actionsLayout->addWidget(routeDeviationCheckBox, 0, 1);  // Row 0, column 1
+    actionsLayout->addWidget(addToShipButton, 1, 0);  // Row 1, column 0
+    actionsLayout->addWidget(detachFromShipButton, 1, 1);  // Row 1, column 1
     
     // Add actions group to info group
     infoGroupLayout->addWidget(actionsGroup);
@@ -654,6 +662,15 @@ void RoutePanel::setupConnections()
         }
     });
     
+    // Route deviation checkbox connection
+    connect(routeDeviationCheckBox, &QCheckBox::toggled, [this](bool checked) {
+        if (ecWidget && ecWidget->getRouteDeviationDetector()) {
+            ecWidget->getRouteDeviationDetector()->setAutoCheckEnabled(checked);
+            qDebug() << "[ROUTE-PANEL] Route deviation detection" << (checked ? "enabled" : "disabled");
+            emit statusMessage(QString("Track Deviation Alert %1").arg(checked ? "enabled" : "disabled"));
+        }
+    });
+
     // Add to ship button connection
     connect(addToShipButton, &QPushButton::clicked, [this]() {
         if (selectedRouteId > 0 && ecWidget) {
@@ -2977,4 +2994,5 @@ void RoutePanel::mousePressEvent(QMouseEvent* event)
 void RoutePanel::setAttachDetachButton(bool connection){
     addToShipButton->setVisible(connection);
     detachFromShipButton->setVisible(connection);
+    routeDeviationCheckBox->setVisible(connection);  // Show when MOOSDB connected
 }

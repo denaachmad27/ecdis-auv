@@ -17,10 +17,34 @@
 #include <cmath>
 #include <cstring>
 
+// Initialize static variables with default values
+double RouteSafetyFeature::staticNavDepth = 10.0;  // Default 10m water depth
+double RouteSafetyFeature::staticNavDraft = 2.0;   // Default 2m draft
+double RouteSafetyFeature::staticNavDraftBelowKeel = 1.0;  // Default 1m clearance
+
 RouteSafetyFeature::RouteSafetyFeature(EcWidget* widget, QObject* parent)
     : QObject(parent), ecWidget(widget)
 {
     refreshSafetyParams();
+}
+
+// Static setters for navigation data
+void RouteSafetyFeature::setNavDepth(double depth)
+{
+    staticNavDepth = qMax(0.0, depth);
+    qDebug() << "[ROUTE-SAFETY] NAV_DEPTH updated:" << staticNavDepth;
+}
+
+void RouteSafetyFeature::setNavDraft(double draft)
+{
+    staticNavDraft = qMax(0.0, draft);
+    qDebug() << "[ROUTE-SAFETY] NAV_DRAFT updated:" << staticNavDraft;
+}
+
+void RouteSafetyFeature::setNavDraftBelowKeel(double clearance)
+{
+    staticNavDraftBelowKeel = qMax(0.0, clearance);
+    qDebug() << "[ROUTE-SAFETY] NAV_DRAFT_BELOW_KEEL updated:" << staticNavDraftBelowKeel;
 }
 
 void RouteSafetyFeature::startFrame()
@@ -137,37 +161,39 @@ void RouteSafetyFeature::refreshSafetyParams()
     const SettingsData& settings = SettingsManager::instance().data();
     SafetyParams current;
 
-    double draft = settings.shipDraftMeters;
-    if (draft <= 0.0) {
-        draft = settings.shipHeight;
-    }
-    if (draft <= 0.0 && settings.shipLength > 0.0) {
-        draft = settings.shipLength * 0.05;
-    }
-    if (draft <= 0.0) {
-        draft = 3.0;
-    }
+    // Use static navigation variables instead of settings
+    current.navDepth = staticNavDepth;
+    current.navDraft = staticNavDraft;
+    current.navDraftBelowKeel = staticNavDraftBelowKeel;
 
+    // Calculate UKC thresholds based on draft and clearance
+    // Danger: when clearance below keel is less than minimum safe value
     double ukcDanger = settings.ukcDangerMeters;
-    if (ukcDanger < 0.0) {
-        ukcDanger = 0.0;
+    if (ukcDanger <= 0.0) {
+        // Use NAV_DRAFT_BELOW_KEEL as danger threshold
+        ukcDanger = qMax(0.5, staticNavDraftBelowKeel * 0.5);  // 50% of desired clearance
     }
 
     double ukcWarning = settings.ukcWarningMeters;
     if (ukcWarning <= 0.0) {
-        ukcWarning = qMax(0.5, draft * 0.2);
+        // Use NAV_DRAFT_BELOW_KEEL as warning threshold
+        ukcWarning = qMax(1.0, staticNavDraftBelowKeel * 0.8);  // 80% of desired clearance
     }
 
-    current.shipDraft = draft;
     current.ukcDanger = ukcDanger;
     current.ukcWarning = qMax(ukcWarning, ukcDanger + 0.5);
 
     if (safetyParamsChanged(current)) {
         safetyParams = current;
         ++paramsRevisionCounter;
-    }
 
-    qDebug() << "[ROUTE-SAFETY] params" << draft << ukcDanger << current.ukcWarning;
+        qDebug() << "[ROUTE-SAFETY] Safety params updated:";
+        qDebug() << "  NAV_DEPTH:" << current.navDepth << "m";
+        qDebug() << "  NAV_DRAFT:" << current.navDraft << "m";
+        qDebug() << "  NAV_DRAFT_BELOW_KEEL:" << current.navDraftBelowKeel << "m";
+        qDebug() << "  UKC Danger:" << current.ukcDanger << "m";
+        qDebug() << "  UKC Warning:" << current.ukcWarning << "m";
+    }
 }
 
 bool RouteSafetyFeature::safetyParamsChanged(const SafetyParams& other) const
@@ -176,7 +202,9 @@ bool RouteSafetyFeature::safetyParamsChanged(const SafetyParams& other) const
         return std::abs(a - b) > 1e-3;
     };
 
-    return diff(safetyParams.shipDraft, other.shipDraft) ||
+    return diff(safetyParams.navDepth, other.navDepth) ||
+           diff(safetyParams.navDraft, other.navDraft) ||
+           diff(safetyParams.navDraftBelowKeel, other.navDraftBelowKeel) ||
            diff(safetyParams.ukcDanger, other.ukcDanger) ||
            diff(safetyParams.ukcWarning, other.ukcWarning);
 }
@@ -214,9 +242,9 @@ bool RouteSafetyFeature::analyzeSegment(int routeId,
         return false;
     }
 
-    static constexpr double samplingStepNm = 0.05;
-    static constexpr int minSamples = 3;
-    static constexpr int maxSamples = 200;
+    static constexpr double samplingStepNm = 0.02;  // Reduced from 0.05 to 0.02 for better coverage
+    static constexpr int minSamples = 5;  // Increased from 3 to 5
+    static constexpr int maxSamples = 300;  // Increased from 200 to 300
 
     int sampleCount = static_cast<int>(std::ceil(segmentLengthNm / samplingStepNm));
     sampleCount = qBound(minSamples, sampleCount, maxSamples);
@@ -227,19 +255,38 @@ bool RouteSafetyFeature::analyzeSegment(int routeId,
     double worstLat = (lat1 + lat2) / 2.0;
     double worstLon = (lon1 + lon2) / 2.0;
 
+    // PERBAIKAN: Evaluate start waypoint explicitly (i=0)
+    // Evaluate end waypoint explicitly (i=sampleCount)
+    // This ensures waypoints themselves are always checked
     for (int i = 0; i <= sampleCount; ++i) {
-        const double travelledNm = (segmentLengthNm * i) / sampleCount;
-        double sampleLat = lat1;
-        double sampleLon = lon1;
-        EcCalculateRhumblinePosition(EC_GEO_DATUM_WGS84,
-                                     lat1, lon1,
-                                     travelledNm,
-                                     bearingDeg,
-                                     &sampleLat, &sampleLon);
+        double sampleLat, sampleLon;
+
+        if (i == 0) {
+            // Start waypoint - always evaluate
+            sampleLat = lat1;
+            sampleLon = lon1;
+        } else if (i == sampleCount) {
+            // End waypoint - always evaluate
+            sampleLat = lat2;
+            sampleLon = lon2;
+        } else {
+            // Intermediate samples along segment
+            const double travelledNm = (segmentLengthNm * i) / sampleCount;
+            EcCalculateRhumblinePosition(EC_GEO_DATUM_WGS84,
+                                         lat1, lon1,
+                                         travelledNm,
+                                         bearingDeg,
+                                         &sampleLat, &sampleLon);
+        }
 
         double minDepth = std::numeric_limits<double>::quiet_NaN();
         double ukc = std::numeric_limits<double>::quiet_NaN();
         HazardLevel level = classifyPoint(sampleLat, sampleLon, minDepth, ukc);
+
+        qDebug() << "[ROUTE-SAFETY] Sample" << i << "/" << sampleCount
+                 << "lat:" << sampleLat << "lon:" << sampleLon
+                 << "depth:" << minDepth << "ukc:" << ukc
+                 << "level:" << static_cast<int>(level);
 
         if (static_cast<int>(level) > static_cast<int>(worstLevel) ||
             (level == worstLevel && ((qIsNaN(worstDepth) && !qIsNaN(minDepth)) ||
@@ -249,6 +296,7 @@ bool RouteSafetyFeature::analyzeSegment(int routeId,
             worstUkc = ukc;
             worstLat = sampleLat;
             worstLon = sampleLon;
+            qDebug() << "[ROUTE-SAFETY] *** New worst found! Level:" << static_cast<int>(worstLevel);
         }
     }
 
@@ -404,7 +452,7 @@ RouteSafetyFeature::HazardLevel RouteSafetyFeature::classifyPoint(double lat, do
     if (landDetected) {
         qDebug() << "[ROUTE-SAFETY] land detected => danger";
         minDepthOut = 0.0;
-        ukcOut = -qMax(0.0, safetyParams.shipDraft);
+        ukcOut = -qMax(0.0, safetyParams.navDraft);
         return HazardLevel::Danger;
     }
 
@@ -418,7 +466,7 @@ RouteSafetyFeature::HazardLevel RouteSafetyFeature::classifyPoint(double lat, do
     qDebug() << "[ROUTE-SAFETY] depth result" << shallowestDepth
              << "ukc" << ukc
              << "level" << static_cast<int>(level)
-             << "draft" << safetyParams.shipDraft
+             << "draft" << safetyParams.navDraft
              << "warn" << safetyParams.ukcWarning
              << "danger" << safetyParams.ukcDanger;
 
@@ -503,13 +551,13 @@ RouteSafetyFeature::HazardLevel RouteSafetyFeature::classifyDepth(double minDept
     ukcOut = std::numeric_limits<double>::quiet_NaN();
 
     if (minDepth <= 0.0) {
-        ukcOut = -safetyParams.shipDraft;
+        ukcOut = -safetyParams.navDraft;
         qDebug() << "[ROUTE-SAFETY] classifyDepth => danger (<=0)" << minDepth;
         return HazardLevel::Danger;
     }
 
-    if (safetyParams.shipDraft > 0.0) {
-        ukcOut = minDepth - safetyParams.shipDraft;
+    if (safetyParams.navDraft > 0.0) {
+        ukcOut = minDepth - safetyParams.navDraft;
         if (ukcOut <= 0.0) {
             qDebug() << "[ROUTE-SAFETY] classifyDepth => danger (ukc <= 0)" << ukcOut;
             return HazardLevel::Danger;
