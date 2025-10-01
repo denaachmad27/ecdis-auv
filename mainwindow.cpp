@@ -150,6 +150,14 @@ void MainWindow::createActions()
     fileToolBar->addAction(routeAct);
     routeAct->setToolTip(tr("Routes Manager"));
 
+    const QIcon areaIcon = QIcon::fromTheme("import-area", QIcon(":/images/area.svg"));
+    areaAct = new QAction(areaIcon, tr("&area"), this);
+    areaAct->setShortcuts(QKeySequence::New);
+    //areaAct->setStatusTip(tr("route MOOSDB"));
+    connect(areaAct, SIGNAL(triggered()), this, SLOT(onOpenAOIPanel()));
+    fileToolBar->addAction(areaAct);
+    areaAct->setToolTip(tr("Area Tools Manager"));
+
     const QIcon connectIcon = QIcon::fromTheme("import-connect", QIcon(":/images/connect.png"));
     connectAct = new QAction(connectIcon, tr("&Connect"), this);
     connectAct->setShortcuts(QKeySequence::New);
@@ -4842,6 +4850,7 @@ void MainWindow::updateIcon(bool dark){
         rotateLeftAct->setIcon(QIcon(":/images/rotate-left-white.png"));
         settingAct->setIcon(QIcon(":/images/setting-white.png"));
         routeAct->setIcon(QIcon(":/images/route-white.png"));
+        areaAct->setIcon(QIcon(":/images/area-white.svg"));
     }
     else {
         connectAct->setIcon(QIcon(":/images/connect.png"));
@@ -4852,5 +4861,6 @@ void MainWindow::updateIcon(bool dark){
         rotateLeftAct->setIcon(QIcon(":/images/rotate-left.png"));
         settingAct->setIcon(QIcon(":/images/setting.png"));
         routeAct->setIcon(QIcon(":/images/route.png"));
+        areaAct->setIcon(QIcon(":/images/area.svg"));
     }
 }

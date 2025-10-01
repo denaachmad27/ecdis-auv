@@ -359,6 +359,7 @@ private:
     QAction *rotateLeftAct;
     QAction *settingAct;
     QAction *routeAct;
+    QAction *areaAct;
 
     // BAR BAR
     void createStatusBar();
