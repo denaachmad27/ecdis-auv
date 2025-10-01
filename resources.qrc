@@ -58,5 +58,7 @@
         <file>icon/move_o_light.svg</file>
         <file>icon/edit_o_light.svg</file>
         <file>icon/create_o_light.svg</file>
+        <file>images/area.svg</file>
+        <file>images/area-white.svg</file>
     </qresource>
 </RCC>
