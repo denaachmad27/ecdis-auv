@@ -729,7 +729,7 @@ void Ais::readAISLogfile( const QString &logFile )
 
     // OWNSHIP RIGHT PANEL
     if (navShip.lat != 0){
-        _cpaPanel->updateOwnShipInfo(navShip.lat, navShip.lon, navShip.speed_og, navShip.heading_og);
+        _cpaPanel->updateOwnShipInfo(navShip.lat, navShip.lon, navShip.sog, navShip.heading_og);
     }
 
     //qDebug() << nmea;
@@ -770,7 +770,7 @@ void Ais::nmeaSelection(const QString &line, QString &outNmea) {
     if (obj.contains("NAV_HEADING")){ navShip.heading = obj["NAV_HEADING"].toDouble();}
     if (obj.contains("NAV_HEADING_OVER_GROUND")){ navShip.heading_og = obj["NAV_HEADING_OVER_GROUND"].toDouble();}
     if (obj.contains("NAV_SPEED")){ navShip.speed = obj["NAV_SPEED"].toDouble();}
-    if (obj.contains("NAV_SPEED_OVER_GROUND")){ navShip.speed_og = obj["NAV_SPEED_OVER_GROUND"].toDouble();}
+    if (obj.contains("NAV_SOG")){ navShip.sog = obj["NAV_SOG"].toDouble();}
     if (obj.contains("NAV_YAW")){ navShip.yaw = obj["NAV_YAW"].toDouble();}
     if (obj.contains("NAV_Z")){ navShip.z = obj["NAV_Z"].toDouble();}
 
@@ -778,10 +778,10 @@ void Ais::nmeaSelection(const QString &line, QString &outNmea) {
 
     if (navShip.lat == 0) { qDebug() << line; }
 
-    qDebug() << QString("%1, %2, %3, %4").arg(navShip.lat).arg(navShip.lon).arg(navShip.speed).arg(navShip.heading_og);
+    qDebug() << QString("%1, %2, %3, %4").arg(navShip.lat).arg(navShip.lon).arg(navShip.sog).arg(navShip.heading_og);
 
     //outNmea = AIVDOEncoder::encodeAIVDO(0, navShip.lat, navShip.lon, navShip.speed, navShip.heading_og);
-    outNmea = AIVDOEncoder::encodeAIVDO1(navShip.lat, navShip.lon, navShip.heading_og, navShip.speed_og, navShip.heading, 0, 1);
+    outNmea = AIVDOEncoder::encodeAIVDO1(navShip.lat, navShip.lon, navShip.heading_og, navShip.sog, navShip.heading, 0, 1);
 }
 
 
@@ -837,7 +837,7 @@ void Ais::readAISLogfileWDelay(const QString &logFile, int delayMs, std::atomic<
         }
 
         if (navShip.lat != 0) {
-            _cpaPanel->updateOwnShipInfo(navShip.lat, navShip.lon, navShip.speed_og, navShip.heading_og);
+            _cpaPanel->updateOwnShipInfo(navShip.lat, navShip.lon, navShip.sog, navShip.heading_og);
         }
 
         if (!EcAISAddTransponderOutput(_transponder, (unsigned char*)sLine.toStdString().c_str(), sLine.count())) {
@@ -861,7 +861,7 @@ void Ais::extractNMEA(QString nmea){
     if (nmea.contains("!AIVDO")){
         navShip.lat = AisDecoder::decodeAisOption(nmea, "latitude", "!AIVDO");
         navShip.lon = AisDecoder::decodeAisOption(nmea, "longitude", "!AIVDO");
-        navShip.speed_og = AisDecoder::decodeAisOption(nmea, "sog", "!AIVDO");
+        navShip.sog = AisDecoder::decodeAisOption(nmea, "sog", "!AIVDO");
         navShip.heading_og = AisDecoder::decodeAisOption(nmea, "cog", "!AIVDO") / 10;
     }
 }
@@ -929,7 +929,7 @@ void Ais::readAISVariable( const QStringList &dataLines )
 
         if (navShip.lat != 0){
             ownShipText->setHtml(pickWindow->ownShipAutoFill());
-            _cpaPanel->updateOwnShipInfo(navShip.lat, navShip.lon, navShip.speed_og, navShip.heading_og);
+            _cpaPanel->updateOwnShipInfo(navShip.lat, navShip.lon, navShip.sog, navShip.heading_og);
         }
 
         std::string lineStd = line.toStdString();

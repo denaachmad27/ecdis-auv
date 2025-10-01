@@ -72,6 +72,7 @@ struct ShipStruct {
     double heading_og = std::numeric_limits<double>::quiet_NaN();   // Heading over ground
     double speed = std::numeric_limits<double>::quiet_NaN();        // Kecepatan dalam knot
     double speed_og = std::numeric_limits<double>::quiet_NaN();   // Kecepatan over ground
+    double sog = std::numeric_limits<double>::quiet_NaN();   // Kecepatan over ground
     double course_og = std::numeric_limits<double>::quiet_NaN();
     double yaw = std::numeric_limits<double>::quiet_NaN();        // Sudut yaw kapal
     double depth = std::numeric_limits<double>::quiet_NaN();        // Kedalaman
@@ -846,6 +847,8 @@ public:
   //
   int rangeNM = 0;
 
+  void defaultSettingsStartUp();
+
 public slots:
   void updateAISTargetsList();
   void addOrUpdateAISTarget(const AISTargetData& target);
@@ -1497,7 +1500,6 @@ private:
   void buttonInit();
 
   // DEFAULTSETTINGS
-  void defaultSettingsStartUp();
   int courseUpHeading;
   int trackLine;
   double trackDistance;

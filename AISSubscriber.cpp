@@ -217,9 +217,9 @@ void AISSubscriber::onReadyRead() {
             emit navHeadingOGReceived(v);
         });
 
-        extractDouble("NAV_SPEED_OVER_GROUND", [&](double v){
+        extractDouble("NAV_SOG", [&](double v){
             sog = v;
-            emit navSpeedOGReceived(v);
+            emit navSOGReceived(v);
         });
 
         extractDouble("NAV_COG", [&](double v){
@@ -230,6 +230,7 @@ void AISSubscriber::onReadyRead() {
         extractString("NAV_LAT_DMS", [&](QString v){ emit navLatDmsReceived(v);});
         extractString("NAV_LONG_DMS", [&](QString v){ emit navLongDmsReceived(v);});
 
+        extractDouble("NAV_SPEED_OVER_GROUND", [=](double v){ emit navSpeedOGReceived(v);});
         extractDouble("NAV_DEPTH", [=](double v){ emit navDepthReceived(v);});
         extractDouble("NAV_SPEED", [=](double v){ emit navSpeedReceived(v);});
         extractDouble("NAV_YAW", [=](double v){ emit navYawReceived(v);});

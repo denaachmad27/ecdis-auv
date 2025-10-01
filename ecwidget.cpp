@@ -4061,8 +4061,8 @@ void EcWidget::startAISConnection()
         navShip.course_og = cog;
     });
 
-    connect(subscriber, &AISSubscriber::navSpeedOGReceived, this, [=](double sog) {
-        navShip.speed_og = sog;
+    connect(subscriber, &AISSubscriber::navSOGReceived, this, [=](double sog) {
+        navShip.sog = sog;
         QDateTime now = QDateTime::currentDateTime();
         speedBuffer.append(qMakePair(now, sog));
     });
@@ -4070,6 +4070,7 @@ void EcWidget::startAISConnection()
     connect(subscriber, &AISSubscriber::navLatDmsReceived, this, [=](const QString &v) { navShip.lat_dms = v;});
     connect(subscriber, &AISSubscriber::navLongDmsReceived, this, [=](const QString &v) { navShip.lon_dms = v;});
 
+    connect(subscriber, &AISSubscriber::navSpeedOGReceived, this, [=](double speed_og) { navShip.speed_og = speed_og;});
     connect(subscriber, &AISSubscriber::navSpeedReceived, this, [=](double spe) { navShip.speed = spe;});
     connect(subscriber, &AISSubscriber::navYawReceived, this, [=](double yaw) { navShip.yaw = yaw;});
     connect(subscriber, &AISSubscriber::navZReceived, this, [=](double z) { navShip.z = z;});
@@ -12049,8 +12050,8 @@ void EcWidget::updateAISTooltipContent(EcAISTargetInfo* ti)
     // Untuk field yang tidak ada, gunakan nilai default seperti di panel
     QString shipBreadth = "7.00";  // Default value
     QString shipLength = "18.00";  // Default value
-    QString cogValue = QString("%1 kn").arg(ti->cog / 10.0, 0, 'f', 2);
-    QString sogValue = QString("%1 °").arg(ti->sog / 10.0, 0, 'f', 2);
+    QString cogValue = QString("%1 °T").arg(ti->cog / 10.0, 0, 'f', 2);
+    QString sogValue = QString("%1 kn").arg(ti->sog / 10.0, 0, 'f', 2);
     QString shipDraft = "3.00";    // Default value
 
     QString typeOfShip = getShipTypeString(ti->shipType);
@@ -16501,6 +16502,8 @@ void EcWidget::defaultSettingsStartUp(){
 
     trackDistance = SettingsManager::instance().data().trailDistance;
     trackMinute = SettingsManager::instance().data().trailMinute;
+
+    dragMode = SettingsManager::instance().data().chartMode == "Drag";
 }
 
 void EcWidget::applyShipDimensions()

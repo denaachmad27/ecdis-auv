@@ -31,6 +31,7 @@ signals:
     void navCourseOGReceived(const double courseOg);
     void navSpeedReceived(const double speed);
     void navSpeedOGReceived(const double speedOg);
+    void navSOGReceived(const double sog);
     void navYawReceived(const double yaw);
     void navZReceived(const double z);
     void navStwReceived(const double stw);
