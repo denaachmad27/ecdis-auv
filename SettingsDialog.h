@@ -113,6 +113,9 @@ private:
     QLabel *tcpaLabel;
     QDoubleSpinBox *cpaSpin;
     QDoubleSpinBox *tcpaSpin;
+
+    // CHART
+    QComboBox *chartCombo;
 };
 
 #endif // SETTINGSDIALOG_H

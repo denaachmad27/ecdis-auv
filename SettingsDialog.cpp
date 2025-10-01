@@ -39,29 +39,107 @@ void SettingsDialog::setupUI() {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
     QTabWidget *tabWidget = new QTabWidget(this);
 
-    // MOOSDB tab
+    // =========== MOOSDB TAB =========== //
     QWidget *moosTab = new QWidget;
     QFormLayout *moosLayout = new QFormLayout;
     moosIpLineEdit = new QLineEdit;
     moosIpLineEdit->setDisabled(false);
     moosPortLineEdit = new QLineEdit;
     moosLayout->addRow("MOOSDB IP:", moosIpLineEdit);
-
-
-
     //moosLayout->addRow("MOOSDB Port:", moosPortLineEdit);
 
     moosTab->setLayout(moosLayout);
 
-
-    // --- Own Ship Tab ---
+    // =========== OWNSHIP TAB =========== //
     QWidget *ownShipTab = new QWidget;
     QFormLayout *ownShipLayout = new QFormLayout;
 
+    centeringCombo = new QComboBox;
+    centeringCombo->addItem("Auto Recenter", "AutoRecenter");
+    centeringCombo->addItem("Centered", "Centered");
+    centeringCombo->addItem("Look Ahead", "LookAhead");
+    centeringCombo->addItem("Manual Offset", "Manual");
+    ownShipLayout->addRow("Default Centering:", centeringCombo);
 
+    orientationCombo = new QComboBox;
+    orientationCombo->addItem("North Up", "NorthUp");
+    orientationCombo->addItem("Head Up", "HeadUp");
+    orientationCombo->addItem("Course Up", "CourseUp");
+    ownShipLayout->addRow("Default Orientation:", orientationCombo);
 
+    // SEPARATOR
+    QFrame *line = new QFrame(this);
+    line->setFrameShape(QFrame::HLine);
+    line->setFrameShadow(QFrame::Sunken);
 
-    // --- Ship Dimensions Tab ---
+    if (AppConfig::isLight()){
+        line->setStyleSheet("color: gray;");
+    }
+    else {
+        line->setStyleSheet("color: #444444;");
+    }
+
+    ownShipLayout->addRow(line);
+
+    // NON DEFAULT DATA
+    headingLabel = new QLabel("Course-Up Heading:");
+    headingSpin = new QSpinBox;
+    headingSpin->setRange(0, 359);
+    headingSpin->setSuffix("°");
+    // headingLabel->setVisible(false);
+    // headingSpin->setVisible(false);
+    ownShipLayout->addRow(headingLabel, headingSpin);
+
+    /*
+    connect(orientationCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int) {
+        bool isCourseUp = (orientationCombo->currentData().toString() == "CourseUp");
+        headingLabel->setVisible(isCourseUp);
+        headingSpin->setVisible(isCourseUp);
+    });
+    */
+
+    trailCombo = new QComboBox;
+    trailCombo->addItem("Every Update", 0);
+    trailCombo->addItem("Fixed Interval", 1);
+    trailCombo->addItem("Fixed Distance", 2);
+    ownShipLayout->addRow("Track Line Mode:", trailCombo);
+
+    trailSpin = new QSpinBox;
+    trailLabel = new QLabel("Interval:");
+    trailSpin->setRange(1, 300);
+    trailSpin->setSuffix(" minute(s)");
+    trailLabel->setVisible(false);
+    trailSpin->setVisible(false);
+    ownShipLayout->addRow(trailLabel, trailSpin);
+
+    connect(trailCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int) {
+        bool isMode = (trailCombo->currentData() == 1);
+        trailLabel->setVisible(isMode);
+        trailSpin->setVisible(isMode);
+    });
+
+    trailSpinDistance = new QDoubleSpinBox;
+    trailSpinDistance->setRange(0.01, 10.0);
+    trailSpinDistance->setSuffix(" NM");
+    trailSpinDistance->setDecimals(2);
+    trailSpinDistance->setSingleStep(0.01);
+    trailSpinDistance->setSuffix(" NM");
+    trailSpinDistance->setVisible(false);
+
+    trailLabelDistance = new QLabel("Distance:");
+    trailLabelDistance->setVisible(false);
+
+    ownShipLayout->addRow(trailLabelDistance, trailSpinDistance);
+
+    connect(trailCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int) {
+        bool isMode = (trailCombo->currentData() == 2);
+        trailLabelDistance->setVisible(isMode);
+        trailSpinDistance->setVisible(isMode);
+    });
+
+    ownShipTab->setLayout(ownShipLayout);
+
+    // =========== SHIP DIMENSION TAB =========== //
     QWidget *shipDimensionsTab = new QWidget;
     QVBoxLayout *shipDimensionsLayout = new QVBoxLayout(shipDimensionsTab);
 
@@ -102,48 +180,6 @@ void SettingsDialog::setupUI() {
 
     shipDimensionsLayout->addWidget(dimensionsGroup);
     shipDimensionsLayout->addWidget(gpsGroup);
-
-    centeringCombo = new QComboBox;
-    centeringCombo->addItem("Auto Recenter", "AutoRecenter");
-    centeringCombo->addItem("Centered", "Centered");
-    centeringCombo->addItem("Look Ahead", "LookAhead");
-    centeringCombo->addItem("Manual Offset", "Manual");
-    ownShipLayout->addRow("Default Centering:", centeringCombo);
-
-    orientationCombo = new QComboBox;
-    orientationCombo->addItem("North Up", "NorthUp");
-    orientationCombo->addItem("Head Up", "HeadUp");
-    orientationCombo->addItem("Course Up", "CourseUp");
-    ownShipLayout->addRow("Default Orientation:", orientationCombo);
-
-    // SEPARATOR
-    QFrame *line = new QFrame(this);
-    line->setFrameShape(QFrame::HLine);
-    line->setFrameShadow(QFrame::Sunken);
-
-    if (AppConfig::isLight()){
-        line->setStyleSheet("color: gray;");
-    }
-    else {
-        line->setStyleSheet("color: #444444;");
-    }
-
-    ownShipLayout->addRow(line);
-
-    // NON DEFAULT DATA
-    headingLabel = new QLabel("Course-Up Heading:");
-    headingSpin = new QSpinBox;
-    headingSpin->setRange(0, 359);
-    headingSpin->setSuffix("°");
-    // headingLabel->setVisible(false);
-    // headingSpin->setVisible(false);
-    ownShipLayout->addRow(headingLabel, headingSpin);
-
-    // connect(orientationCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int) {
-    //     bool isCourseUp = (orientationCombo->currentData().toString() == "CourseUp");
-    //     headingLabel->setVisible(isCourseUp);
-    //     headingSpin->setVisible(isCourseUp);
-    // });
 
     if (AppConfig::isDevelopment()){
         // --- Navigation Safety Tab ---
@@ -210,47 +246,6 @@ void SettingsDialog::setupUI() {
         tabWidget->addTab(safetyTab, "Safety");
     }
 
-    trailCombo = new QComboBox;
-    trailCombo->addItem("Every Update", 0);
-    trailCombo->addItem("Fixed Interval", 1);
-    trailCombo->addItem("Fixed Distance", 2);
-    ownShipLayout->addRow("Track Line Mode:", trailCombo);
-
-    trailSpin = new QSpinBox;
-    trailLabel = new QLabel("Interval:");
-    trailSpin->setRange(1, 300);
-    trailSpin->setSuffix(" minute(s)");
-    trailLabel->setVisible(false);
-    trailSpin->setVisible(false);
-    ownShipLayout->addRow(trailLabel, trailSpin);
-
-    connect(trailCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int) {
-        bool isMode = (trailCombo->currentData() == 1);
-        trailLabel->setVisible(isMode);
-        trailSpin->setVisible(isMode);
-    });
-
-    trailSpinDistance = new QDoubleSpinBox;
-    trailSpinDistance->setRange(0.01, 10.0);
-    trailSpinDistance->setSuffix(" NM");
-    trailSpinDistance->setDecimals(2);
-    trailSpinDistance->setSingleStep(0.01);
-    trailSpinDistance->setSuffix(" NM");
-    trailSpinDistance->setVisible(false);
-
-    trailLabelDistance = new QLabel("Distance:");
-    trailLabelDistance->setVisible(false);
-
-    ownShipLayout->addRow(trailLabelDistance, trailSpinDistance);
-
-    connect(trailCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int) {
-        bool isMode = (trailCombo->currentData() == 2);
-        trailLabelDistance->setVisible(isMode);
-        trailSpinDistance->setVisible(isMode);
-    });
-
-    ownShipTab->setLayout(ownShipLayout);
-
     if (AppConfig::isDevelopment()){
         // --- AIS Tab ---
         QWidget *aisTab = new QWidget;
@@ -296,29 +291,34 @@ void SettingsDialog::setupUI() {
         tabWidget->addTab(aisTab, "AIS");
     }
 
-    // Display tab
+    // ================ DISPLAY TAB ======================
     QWidget *displayTab = new QWidget;
     QFormLayout *displayLayout = new QFormLayout;
     displayModeCombo = new QComboBox;
     displayModeCombo->addItems({"Day", "Dusk", "Night"});
     displayLayout->addRow("Default Chart Theme:", displayModeCombo);
-    displayTab->setLayout(displayLayout);
 
     themeModeCombo = new QComboBox;
     themeModeCombo->addItems({"Light", "Dim", "Dark"});
     displayLayout->addRow("Default UI Theme:", themeModeCombo);
+
+    chartCombo = new QComboBox;
+    chartCombo->addItem("Drag", "Drag");
+    chartCombo->addItem("Pan", "Pan");
+    displayLayout->addRow("Chart Move Mode:", chartCombo);
     displayTab->setLayout(displayLayout);
 
+    // ================= SHIP DIMENSION TAB ====================== //
     // GuardZone tab
     QWidget *guardzoneTab = new QWidget;
     QVBoxLayout *guardzoneLayout = new QVBoxLayout;
-    
+
     // Ship Type Filter Group
     QGroupBox *shipTypeGroup = new QGroupBox(tr("Ship Type Filter"));
     QVBoxLayout *shipTypeLayout = new QVBoxLayout;
-    
+
     shipTypeButtonGroup = new QButtonGroup(this);
-    
+
     QRadioButton *shipAllRadio = new QRadioButton(tr("All Ships"));
     QRadioButton *shipCargoRadio = new QRadioButton(tr("Cargo Ships"));
     QRadioButton *shipTankerRadio = new QRadioButton(tr("Tanker Ships"));
@@ -460,6 +460,9 @@ void SettingsDialog::setupUI() {
     cpatcpaTab->setLayout(cpatcpaLayout);
 
 
+
+    // ================================================= //
+
     tabWidget->addTab(moosTab, "MOOSDB");
     tabWidget->addTab(ownShipTab, "Own Ship");
     tabWidget->addTab(shipDimensionsTab, "Ship Dimensions");
@@ -473,6 +476,8 @@ void SettingsDialog::setupUI() {
 
     mainLayout->addWidget(tabWidget);
 
+
+    // ================ BUTTON CONNECT ================= //
     QDialogButtonBox *buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     mainLayout->addWidget(buttonBox);
 
@@ -526,6 +531,14 @@ void SettingsDialog::loadSettings() {
         themeModeCombo->setCurrentIndex(themeIndex);
     } else {
         themeModeCombo->setCurrentIndex(0); // fallback default
+    }
+
+    QString chartMode = settings.value("Display/move", "Drag").toString();
+    int chartIndex = chartCombo->findText(chartMode);
+    if (chartIndex >= 0) {
+        chartCombo->setCurrentIndex(chartIndex);
+    } else {
+        chartCombo->setCurrentIndex(0); // fallback default
     }
 
     // GuardZone
@@ -669,6 +682,9 @@ void SettingsDialog::saveSettings() {
     settings.setValue("Display/mode", displayModeCombo->currentText());
     settings.setValue("Display/theme", themeModeCombo->currentText());
 
+    // Chart
+    settings.setValue("Display/move", chartCombo->currentText());
+
     // GuardZone
     settings.setValue("GuardZone/default_ship_type", shipTypeButtonGroup->checkedId());
     settings.setValue("GuardZone/default_alert_direction", alertDirectionButtonGroup->checkedId());
@@ -741,6 +757,9 @@ SettingsData SettingsDialog::loadSettingsFromFile(const QString &filePath) {
     data.displayMode = settings.value("Display/mode", "Day").toString();
     data.themeMode = theme(settings.value("Display/theme", "Dark").toString());
 
+    // Chart
+    data.chartMode = settings.value("Display/move", "Drag").toString();
+
     // Guardzone
     data.defaultShipTypeFilter = settings.value("GuardZone/default_ship_type", 0).toInt();
     data.defaultAlertDirection = settings.value("GuardZone/default_alert_direction", 0).toInt();
@@ -789,6 +808,9 @@ void SettingsDialog::accept() {
     // Display
     data.displayMode = displayModeCombo->currentText();
     data.themeMode = theme(themeModeCombo->currentData().toString());
+
+    // Chart
+    data.chartMode = chartCombo->currentText();
 
     // Guardzone
     data.defaultShipTypeFilter = shipTypeButtonGroup->checkedId();
@@ -866,6 +888,7 @@ void SettingsDialog::accept() {
             EcWidget* ecWidget = mainWindow->findChild<EcWidget*>();
             if (ecWidget) {
                 ecWidget->applyShipDimensions();
+                ecWidget->defaultSettingsStartUp();
             }
         }
     }

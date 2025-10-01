@@ -30,6 +30,9 @@ void SettingsManager::load() {
     // DISPLAY
     m_data.displayMode = settings.value("Display/mode", "Day").toString();
     m_data.themeMode = dialogObj->theme(settings.value("Display/theme", "Dark").toString());
+
+    // DISPLAY
+    m_data.chartMode = settings.value("Display/move", "Drag").toString();
     
     // GUARDZON
     m_data.defaultShipTypeFilter = settings.value("GuardZone/default_ship_type", 0).toInt();
@@ -115,6 +118,9 @@ void SettingsManager::save(const SettingsData& data) {
     // DISPLAY
     settings.setValue("Display/mode", data.displayMode);
     settings.setValue("Display/theme", static_cast<int>(data.themeMode));
+
+    // CHART
+    settings.setValue("Display/move", data.chartMode);
 
     // GUARDZONE
     settings.setValue("GuardZone/default_ship_type", data.defaultShipTypeFilter);

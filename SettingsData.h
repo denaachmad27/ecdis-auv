@@ -27,6 +27,9 @@ struct SettingsData {
     QString displayMode;
     AppConfig::AppTheme themeMode;
 
+    // CHART
+    QString chartMode;
+
     // GUARDZONE
     int defaultShipTypeFilter;
     int defaultAlertDirection;
