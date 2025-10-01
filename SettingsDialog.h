@@ -46,6 +46,9 @@ private slots:
     void onAddGpsRow();
     void onRemoveGpsRow();
     void updatePrimaryGpsCombo();
+    void onNavDepthChanged(double value);
+    void onNavDraftChanged(double value);
+    void onNavDraftBelowKeelChanged(double value);
 
 private:
     void setupUI();
@@ -98,6 +101,11 @@ private:
     QDoubleSpinBox *shipDraftSpin;
     QDoubleSpinBox *ukcDangerSpin;
     QDoubleSpinBox *ukcWarningSpin;
+
+    // Navigation Safety Variables (for MOOSDB integration)
+    QDoubleSpinBox *navDepthSpin;
+    QDoubleSpinBox *navDraftSpin;
+    QDoubleSpinBox *navDraftBelowKeelSpin;
 
     // GPS Configuration
     QTableWidget *gpsTableWidget;

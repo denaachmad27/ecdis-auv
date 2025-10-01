@@ -6,6 +6,8 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QSignalBlocker>
+#include <QPainter>
+#include <QPixmap>
 
 AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
     : QWidget(parent), ecWidget(ecWidget)
@@ -17,7 +19,7 @@ AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
 
     tree = new QTreeWidget(this);
     tree->setColumnCount(4);
-    tree->setHeaderLabels({"Name", "Type", "Show", "Label"});
+    tree->setHeaderLabels({"Name", "Color", "Show", "Label"});
     tree->setRootIsDecorated(false);
     tree->setUniformRowHeights(true);
     // Better spacing: Name stretches, Type/Show sized to contents
@@ -110,7 +112,17 @@ void AOIPanel::refreshList()
             name += " (Active)";
         }
         item->setText(0, name);
-        item->setText(1, aoiTypeToString(aoi.type));
+
+        // Column 1: Display color box with filled color
+        // Create a colored square icon
+        QPixmap colorPixmap(16, 16);
+        colorPixmap.fill(aoi.color);
+        QPainter painter(&colorPixmap);
+        painter.setPen(QPen(Qt::black, 1));
+        painter.drawRect(0, 0, 15, 15);
+        item->setIcon(1, QIcon(colorPixmap));
+        item->setText(1, "");  // No text, just the icon
+
         // Checkbox for show/hide in column 2 and label in column 3
         item->setFlags(item->flags() | Qt::ItemIsUserCheckable | Qt::ItemIsEnabled | Qt::ItemIsSelectable);
         item->setCheckState(2, aoi.visible ? Qt::Checked : Qt::Unchecked);
@@ -137,19 +149,18 @@ void AOIPanel::onAddAOI()
     QLineEdit* nameEdit = new QLineEdit();
     QComboBox* typeCombo = new QComboBox();
 
-    typeCombo->addItem("Restricted Operations Zone (ROZ)", "ROZ");
-    typeCombo->addItem("Missile Engagement Zone (MEZ)", "MEZ");
-    typeCombo->addItem("Weapons Engagement Zone (WEZ)", "WEZ");
-    typeCombo->addItem("Patrol Area", "Patrol Area");
-    typeCombo->addItem("Sector of Action (SOA)", "SOA");
-    typeCombo->addItem("Area of Responsibility (AOR)", "AOR");
-    typeCombo->addItem("Joint Operations Area (JOA)", "JOA");
+    // Add color choices with color icon
+    typeCombo->addItem("🔴 Red", "Red");
+    typeCombo->addItem("🔵 Blue", "Blue");
+    typeCombo->addItem("🟢 Green", "Green");
+    typeCombo->addItem("🟡 Yellow", "Yellow");
+    typeCombo->addItem("🟠 Orange", "Orange");
 
     QTextEdit* coordsEdit = new QTextEdit();
     coordsEdit->setPlaceholderText("Enter vertices (one per line):\nlat,lon\nlat,lon\n...");
 
     form->addRow("Name:", nameEdit);
-    form->addRow("Type:", typeCombo);
+    form->addRow("Color:", typeCombo);
     form->addRow("Vertices:", coordsEdit);
 
     QHBoxLayout* btns = new QHBoxLayout();
@@ -168,8 +179,10 @@ void AOIPanel::onAddAOI()
     AOI aoi;
     aoi.id = ecWidget->getNextAoiId();
     aoi.name = nameEdit->text().trimmed();
-    aoi.type = aoiTypeFromString(typeCombo->currentData().toString());
-    aoi.color = aoiDefaultColor(aoi.type);
+    aoi.type = AOIType::AOI;  // Default type
+    // Get color from combo selection
+    AOIColorChoice colorChoice = aoiColorChoiceFromString(typeCombo->currentData().toString());
+    aoi.color = aoiColorFromChoice(colorChoice);
     aoi.visible = true;
 
     // Parse coordinates
@@ -233,16 +246,15 @@ void AOIPanel::onCreateByClick()
     nameEdit->setText(QString("Area %1").arg(ecWidget->getNextAoiId()));
     QComboBox* typeCombo = new QComboBox();
 
-    typeCombo->addItem("Restricted Operations Zone (ROZ)", "ROZ");
-    typeCombo->addItem("Missile Engagement Zone (MEZ)", "MEZ");
-    typeCombo->addItem("Weapons Engagement Zone (WEZ)", "WEZ");
-    typeCombo->addItem("Patrol Area", "Patrol Area");
-    typeCombo->addItem("Sector of Action (SOA)", "SOA");
-    typeCombo->addItem("Area of Responsibility (AOR)", "AOR");
-    typeCombo->addItem("Joint Operations Area (JOA)", "JOA");
+    // Add color choices with color icon
+    typeCombo->addItem("🔴 Red", "Red");
+    typeCombo->addItem("🔵 Blue", "Blue");
+    typeCombo->addItem("🟢 Green", "Green");
+    typeCombo->addItem("🟡 Yellow", "Yellow");
+    typeCombo->addItem("🟠 Orange", "Orange");
 
     form->addRow("Name:", nameEdit);
-    form->addRow("Type:", typeCombo);
+    form->addRow("Color:", typeCombo);
     QHBoxLayout* btns = new QHBoxLayout();
     QPushButton* ok = new QPushButton("Start");
     QPushButton* cancel = new QPushButton("Cancel");
@@ -256,8 +268,8 @@ void AOIPanel::onCreateByClick()
 
     QString name = nameEdit->text().trimmed();
     if (name.isEmpty()) name = "Area";
-    AOIType type = aoiTypeFromString(typeCombo->currentData().toString());
-    ecWidget->startAOICreation(name, type);
+    AOIColorChoice colorChoice = aoiColorChoiceFromString(typeCombo->currentData().toString());
+    ecWidget->startAOICreationWithColor(name, colorChoice);
     emit statusMessage("Area mode: Left-click to add points, Right-click to finish (min 3 points)");
 }
 

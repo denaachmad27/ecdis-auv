@@ -189,7 +189,8 @@ private:
     QCheckBox* visibilityCheckBox;
     QPushButton* addToShipButton;
     QPushButton* detachFromShipButton;
-    
+    QCheckBox* routeDeviationCheckBox;  // Enable/disable route deviation detection
+
     // FROM MOOSDB
     QString ttgText;
     QString etaText;

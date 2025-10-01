@@ -7,14 +7,23 @@
 #include <QPointF>
 
 enum class AOIType {
-    AOI,          // Generic Area of Interest
-    ROZ,          // Restricted Operations Zone
-    MEZ,          // Maritime Exclusion Zone
-    WEZ,          // Weapon Engagement Zone
-    PatrolArea,   // Patrol/Operating Area
-    SOA,          // Submarine Operating Area
-    AOR,          // Area of Responsibility
-    JOA           // Joint Operations Area
+    AOI,          // Generic Area of Interest (kept for backward compatibility)
+    ROZ,
+    MEZ,
+    WEZ,
+    PatrolArea,
+    SOA,
+    AOR,
+    JOA
+};
+
+// 5 basic color choices for AOI
+enum class AOIColorChoice {
+    Red,
+    Blue,
+    Green,
+    Yellow,
+    Orange
 };
 
 struct AOI {
@@ -41,6 +50,38 @@ inline QColor aoiDefaultColor(AOIType type) {
         case AOIType::JOA:        return QColor(0, 191, 255);   // DeepSkyBlue
     }
     return QColor(255, 215, 0);
+}
+
+inline QColor aoiColorFromChoice(AOIColorChoice choice) {
+    switch (choice) {
+        case AOIColorChoice::Red:    return QColor(255, 0, 0);     // Red
+        case AOIColorChoice::Blue:   return QColor(0, 120, 255);   // Blue
+        case AOIColorChoice::Green:  return QColor(0, 200, 0);     // Green
+        case AOIColorChoice::Yellow: return QColor(255, 220, 0);   // Yellow
+        case AOIColorChoice::Orange: return QColor(255, 140, 0);   // Orange
+    }
+    return QColor(255, 220, 0); // Default Yellow
+}
+
+inline QString aoiColorChoiceToString(AOIColorChoice choice) {
+    switch (choice) {
+        case AOIColorChoice::Red:    return "Red";
+        case AOIColorChoice::Blue:   return "Blue";
+        case AOIColorChoice::Green:  return "Green";
+        case AOIColorChoice::Yellow: return "Yellow";
+        case AOIColorChoice::Orange: return "Orange";
+    }
+    return "Yellow";
+}
+
+inline AOIColorChoice aoiColorChoiceFromString(const QString& s) {
+    QString t = s.trimmed().toLower();
+    if (t == "red") return AOIColorChoice::Red;
+    if (t == "blue") return AOIColorChoice::Blue;
+    if (t == "green") return AOIColorChoice::Green;
+    if (t == "yellow") return AOIColorChoice::Yellow;
+    if (t == "orange") return AOIColorChoice::Orange;
+    return AOIColorChoice::Yellow;
 }
 
 inline QString aoiTypeToString(AOIType type) {

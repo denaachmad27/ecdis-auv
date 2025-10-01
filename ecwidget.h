@@ -120,6 +120,7 @@ extern QTextEdit *ownShipTemp;
 class AlertSystem;
 struct AlertData;
 class GuardZoneManager; // Forward declaration
+class RouteDeviationDetector; // Forward declaration
 
 
 // Defines for S-63 Chart Import
@@ -259,8 +260,13 @@ public:
       double estimatedTime;      // in hours
       bool attachedToShip;       // Route attached to ship status
       QList<RouteWaypoint> waypoints; // Waypoints in this route with full data
-      
-      Route() : routeId(0), totalDistance(0.0), estimatedTime(0.0), attachedToShip(false) {
+
+      // Active waypoint tracking for navigation
+      int activeWaypointIndex;   // Index of target waypoint (0 = first WP)
+      double arrivalRadius;      // Radius in NM to consider waypoint "reached"
+
+      Route() : routeId(0), totalDistance(0.0), estimatedTime(0.0), attachedToShip(false),
+                activeWaypointIndex(0), arrivalRadius(0.1) {
           createdDate = QDateTime::currentDateTime();
           modifiedDate = createdDate;
       }
@@ -360,9 +366,14 @@ public:
   void setAOILabelVisibility(int id, bool showLabel);
   void drawAOIs(QPainter& painter);
   void startAOICreation(const QString& name, AOIType type);
+  void startAOICreationWithColor(const QString& name, AOIColorChoice colorChoice);
   void cancelAOICreation();
   void finishAOICreation();
   bool isCreatingAOI() const { return creatingAOI; }
+
+  // Route Deviation Detector getter
+  RouteDeviationDetector* getRouteDeviationDetector() const { return routeDeviationDetector; }
+
   // AOI attach-to-ship behavior (single active AOI like route)
   void attachAOIToShip(int aoiId);   // pass -1 to detach all
   bool isAOIAttachedToShip(int aoiId) const;
@@ -1013,6 +1024,10 @@ public:
   void drawGuardZone(QPainter& painter);
   void updateAttachedGuardZoneFromNavShip();
   void drawShipDot(QPainter& painter);
+
+  // Route Deviation Detector
+  void drawRouteDeviationIndicator(QPainter& painter);
+  void initializeRouteDeviationDetector();
   void createCircularGuardZone(EcCoordinate lat, EcCoordinate lon, double radius);
   void createPolygonGuardZone();
   void highlightDangersInGuardZone();
@@ -1088,6 +1103,7 @@ public:
   bool creatingAOI = false;
   QString pendingAOIName;
   AOIType pendingAOIType = AOIType::AOI;
+  QColor pendingAOIColor;
   QVector<QPointF> aoiVerticesLatLon; // lat,lon pairs during creation
   bool editingAOI = false;
   int editingAoiId = -1;  
@@ -1160,7 +1176,8 @@ private:
   QList<Waypoint> waypointList;
   QList<Route> routeList;
   RouteSafetyFeature* routeSafetyFeature = nullptr;
-  bool routeSafeMode = false;
+  RouteDeviationDetector* routeDeviationDetector = nullptr;
+  bool routeSafeMode = true;  // Enable by default for safety
   QMap<int, bool> routeVisibility; // Track visibility per route
   int selectedRouteId = -1; // Currently selected route for visual feedback
   int moveSelectedIndex = -1; // -1 artinya belum ada waypoint dipilih

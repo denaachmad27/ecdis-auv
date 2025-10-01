@@ -53,6 +53,16 @@ public:
 
     explicit RouteSafetyFeature(EcWidget* widget, QObject* parent = nullptr);
 
+    // Static setters for navigation data (to be called from MOOSDB updates)
+    static void setNavDepth(double depth);
+    static void setNavDraft(double draft);
+    static void setNavDraftBelowKeel(double clearance);
+
+    // Static getters
+    static double getNavDepth() { return staticNavDepth; }
+    static double getNavDraft() { return staticNavDraft; }
+    static double getNavDraftBelowKeel() { return staticNavDraftBelowKeel; }
+
     void startFrame();
     void prepareForRoute(int routeId, const QVector<RouteWaypointSample>& routePoints);
     void render(QPainter& painter);
@@ -63,10 +73,17 @@ public:
 
 private:
     struct SafetyParams {
-        double shipDraft = 0.0;
-        double ukcDanger = 0.0;
-        double ukcWarning = 0.0;
+        double navDepth = 0.0;         // NAV_DEPTH - Current water depth
+        double navDraft = 0.0;         // NAV_DRAFT - Ship draft
+        double navDraftBelowKeel = 0.0; // NAV_DRAFT_BELOW_KEEL - Clearance below keel
+        double ukcDanger = 0.0;        // Under Keel Clearance danger threshold
+        double ukcWarning = 0.0;       // Under Keel Clearance warning threshold
     };
+
+    // Static variables for navigation data (will be updated from MOOSDB later)
+    static double staticNavDepth;
+    static double staticNavDraft;
+    static double staticNavDraftBelowKeel;
 
     struct RouteCache {
         QVector<QPair<double, double>> pointKey;

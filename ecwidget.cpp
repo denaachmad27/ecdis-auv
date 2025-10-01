@@ -15,6 +15,7 @@
 #include "routeformdialog.h"
 #include "routequickformdialog.h"
 #include "routesafetyfeature.h"
+#include "routedeviationdetector.h"
 #include "alertsystem.h"
 #include "ais.h"
 #include "pickwindow.h"
@@ -153,6 +154,7 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
 
   guardZoneManager = new GuardZoneManager(this);
   routeSafetyFeature = new RouteSafetyFeature(this, this);
+  routeDeviationDetector = nullptr; // Will be initialized later
   connect(guardZoneManager, &GuardZoneManager::editModeChanged,
           [this](bool isEditing) {
               qDebug() << "GuardZone edit mode changed:" << isEditing;
@@ -272,6 +274,9 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   } else {
       qCritical() << "[ECWIDGET] ✗ AlertSystem initialization FAILED!";
   }
+
+  // Initialize Route Deviation Detector
+  QTimer::singleShot(150, this, &EcWidget::initializeRouteDeviationDetector);
 
   //popup
   // Initialize AIS tooltip
@@ -1298,6 +1303,8 @@ void EcWidget::paintEvent (QPaintEvent *e)
   drawAOIs(painter);
   // Draw GuardZones using the same painter
   drawGuardZone(painter);
+  // Draw Route Deviation Indicator
+  drawRouteDeviationIndicator(painter);
   // Draw EBL/VRM overlays
   eblvrm.draw(this, painter);
   // Draw ship dot if enabled (debug/utility)
@@ -1314,8 +1321,8 @@ void EcWidget::paintEvent (QPaintEvent *e)
       int luma = qRound(0.2126*win.red() + 0.7152*win.green() + 0.0722*win.blue());
       bool darkTheme = (luma < 128);
 
-      // Force dark gray projection line regardless of theme
-      QColor lineColor = QColor(80,80,80);
+      // Use pending AOI color for preview line, fallback to default
+      QColor lineColor = pendingAOIColor.isValid() ? pendingAOIColor : aoiDefaultColor(pendingAOIType);
       QPen pen(lineColor);
       pen.setStyle(Qt::DashLine);
       pen.setWidth(3); // Match route creation ghost line thickness
@@ -1465,9 +1472,9 @@ void EcWidget::paintEvent (QPaintEvent *e)
                   painter.setBrush(QColor(0,0,0,120));
                   painter.drawRoundedRect(labelRect, 4, 4);
 
-                  // Text colored by AOI type color
-                  QColor aoiColor = aoiDefaultColor(pendingAOIType);
-                  painter.setPen(Qt::white);
+                  // Text colored by pending AOI color
+                  QColor aoiColor = pendingAOIColor.isValid() ? pendingAOIColor : aoiDefaultColor(pendingAOIType);
+                  painter.setPen(aoiColor);
                   painter.drawText(labelRect, Qt::AlignCenter, centerText);
               }
           }
@@ -1913,13 +1920,18 @@ void EcWidget::drawAOIs(QPainter& painter)
         if (pts.size() < 3) continue;
 
         QColor c = a.color;
-        // If an AOI is attached, gray out others; keep attached in red
-        QColor outline;
+        // Use the selected color for outline
+        QColor outline = c;
+
+        // If an AOI is attached, make attached brighter, gray out others
         if (attachedAoiId >= 0) {
-            outline = (a.id == attachedAoiId) ? Qt::red : QColor(128,128,128);
-        } else {
-            outline = Qt::red; // default
+            if (a.id == attachedAoiId) {
+                outline = c; // Keep selected color for attached
+            } else {
+                outline = QColor(128,128,128); // Gray out non-attached
+            }
         }
+
         QColor fill = c; fill.setAlpha(50);
 
         pen.setColor(outline);
@@ -2090,6 +2102,21 @@ void EcWidget::startAOICreation(const QString& name, AOIType type)
     update();
 }
 
+void EcWidget::startAOICreationWithColor(const QString& name, AOIColorChoice colorChoice)
+{
+    creatingAOI = true;
+    // Set default name
+    if (name.trimmed().isEmpty() || name.trimmed().toUpper() == "AOI") {
+        pendingAOIName = QString("Area %1").arg(nextAoiId);
+    } else {
+        pendingAOIName = name;
+    }
+    pendingAOIType = AOIType::AOI;  // Default type
+    pendingAOIColor = aoiColorFromChoice(colorChoice);  // Store color directly
+    aoiVerticesLatLon.clear();
+    update();
+}
+
 void EcWidget::cancelAOICreation()
 {
     creatingAOI = false;
@@ -2100,12 +2127,19 @@ void EcWidget::cancelAOICreation()
 void EcWidget::finishAOICreation()
 {
     if (!creatingAOI || aoiVerticesLatLon.size() < 3) { cancelAOICreation(); return; }
-    AOI a; a.id = nextAoiId++; a.name = pendingAOIName; a.type = pendingAOIType; a.color = aoiDefaultColor(a.type); a.visible = true;
+    AOI a;
+    a.id = nextAoiId++;
+    a.name = pendingAOIName;
+    a.type = pendingAOIType;
+    // Use pendingAOIColor if it's valid, otherwise use default
+    a.color = pendingAOIColor.isValid() ? pendingAOIColor : aoiDefaultColor(a.type);
+    a.visible = true;
     a.vertices = aoiVerticesLatLon;
     aoiList.append(a);
     emit aoiListChanged();
     creatingAOI = false;
     aoiVerticesLatLon.clear();
+    pendingAOIColor = QColor();  // Reset color
     // Persist AOIs after creation
     saveAOIs();
     update();
@@ -5982,6 +6016,36 @@ void EcWidget::attachRouteToShip(int routeId)
         for (auto& route : routeList) {
             if (route.routeId == routeId) {
                 route.attachedToShip = true;
+
+                // Initialize activeWaypointIndex to SECOND ACTIVE waypoint (or first if only one)
+                // We need at least 2 waypoints to create a leg for deviation checking
+                route.activeWaypointIndex = -1;
+                int firstActiveIdx = -1;
+
+                // Find first and second active waypoints
+                for (int i = 0; i < route.waypoints.size(); i++) {
+                    if (route.waypoints[i].active) {
+                        if (firstActiveIdx < 0) {
+                            firstActiveIdx = i;
+                        } else {
+                            // Found second active waypoint - this is our target
+                            route.activeWaypointIndex = i;
+                            qDebug() << "[ROUTE] Active waypoint set to index:" << i
+                                     << "(leg from WP" << firstActiveIdx << "to WP" << i << ")";
+                            break;
+                        }
+                    }
+                }
+
+                // If only one active waypoint, use it (but deviation won't work)
+                if (route.activeWaypointIndex < 0 && firstActiveIdx >= 0) {
+                    route.activeWaypointIndex = firstActiveIdx;
+                    qDebug() << "[ROUTE] WARNING: Only one active waypoint found at index" << firstActiveIdx;
+                } else if (route.activeWaypointIndex < 0) {
+                    route.activeWaypointIndex = 0;
+                    qDebug() << "[ROUTE] WARNING: No active waypoint found!";
+                }
+
                 break;
             }
         }
@@ -16531,5 +16595,171 @@ void EcWidget::applyShipDimensions()
 
     // Memaksa penggambaran ulang untuk menerapkan perubahan visual
     forceRedraw();
+
+    if (routeSafetyFeature) {
+        routeSafetyFeature->invalidateAll();
+    }
+}
+
+// ========== ROUTE DEVIATION DETECTOR IMPLEMENTATION ==========
+
+void EcWidget::initializeRouteDeviationDetector()
+{
+    qDebug() << "[ROUTE-DEVIATION] Initializing Route Deviation Detector";
+
+    if (!routeDeviationDetector) {
+        routeDeviationDetector = new RouteDeviationDetector(this);
+
+        // Connect signals
+        connect(routeDeviationDetector, &RouteDeviationDetector::deviationDetected,
+                [this](const RouteDeviationDetector::DeviationInfo& info) {
+                    qDebug() << "[ROUTE-DEVIATION] Deviation detected signal received";
+                    emit statusMessage(tr("⚠ Off Track: %.2f NM, Angle: %.1f°")
+                                       .arg(std::abs(info.crossTrackDistance))
+                                       .arg(std::abs(info.deviationAngle)));
+                });
+
+        connect(routeDeviationDetector, &RouteDeviationDetector::deviationCleared,
+                [this]() {
+                    qDebug() << "[ROUTE-DEVIATION] Back on track";
+                    emit statusMessage(tr("✓ Back on track"));
+                });
+
+        connect(routeDeviationDetector, &RouteDeviationDetector::visualUpdateRequired,
+                [this]() {
+                    update();
+                });
+
+        // Set default parameters
+        routeDeviationDetector->setDeviationThreshold(0.1);  // 0.1 NM default
+        routeDeviationDetector->setAutoCheckEnabled(true);
+        routeDeviationDetector->setCheckInterval(2000);  // 2 seconds
+        routeDeviationDetector->setPulseEnabled(true);
+        routeDeviationDetector->setLabelVisible(true);
+
+        qDebug() << "[ROUTE-DEVIATION] ✓ RouteDeviationDetector initialized successfully";
+    }
+}
+
+void EcWidget::drawRouteDeviationIndicator(QPainter& painter)
+{
+    if (!routeDeviationDetector || !initialized || !view) {
+        return;
+    }
+
+    // Check if auto-check is enabled (controlled by checkbox)
+    if (!routeDeviationDetector->isAutoCheckEnabled()) {
+        return; // Feature disabled by user
+    }
+
+    // Get current deviation info
+    RouteDeviationDetector::DeviationInfo deviation = routeDeviationDetector->getCurrentDeviation();
+
+    if (!deviation.isDeviated) {
+        return; // No deviation to draw
+    }
+
+    qDebug() << "[ROUTE-DEVIATION-DRAW] Drawing deviation indicator";
+
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    // Get ownship screen position
+    int shipX = 0, shipY = 0;
+    if (!LatLonToXy(navShip.lat, navShip.lon, shipX, shipY)) {
+        painter.restore();
+        return;
+    }
+
+    // ========== DRAW PULSING CIRCLE (like red pulse with zoom-aware sizing) ==========
+    if (routeDeviationDetector->isPulseEnabled()) {
+        // Use pixel-based animation like AOI red pulse
+        static QElapsedTimer routePulseTimer;
+        if (!routePulseTimer.isValid()) {
+            routePulseTimer.start();
+        }
+        qint64 elapsedMs = routePulseTimer.elapsed();
+        double t = (elapsedMs % 1500) / 1500.0;  // 1.5 second cycle
+
+        // Calculate zoom-aware base radius (EXACTLY like red pulse logic)
+        double rangeNM = GetRange(GetScale());
+        int baseMinRadius;
+
+        if (rangeNM >= 2) {
+            baseMinRadius = 12;  // Zoomed out (range >= 2 NM)
+        } else if (rangeNM >= 1) {
+            baseMinRadius = 22;  // Medium zoom (1-2 NM)
+        } else {
+            baseMinRadius = 32;  // Zoomed in (< 1 NM)
+        }
+
+        // Animated pulse radius (pixels)
+        int pulseRadius = baseMinRadius + (int)(4 * std::sin(t * 2.0 * M_PI / 1.5));
+        int opacity = 170 + (int)(60 * std::sin(t * 2.0 * M_PI / 2.0));
+
+        // Outer glow (orange)
+        QPen glowPen(QColor(255, 140, 0, opacity / 3));
+        glowPen.setWidth(1);
+        painter.setPen(glowPen);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawEllipse(QPoint(shipX, shipY), pulseRadius + 5, pulseRadius + 5);
+
+        // Main orange ring + soft fill
+        QPen ringPen(QColor(255, 140, 0, opacity));
+        ringPen.setWidth(2);
+        painter.setPen(ringPen);
+        QBrush ringBrush(QColor(255, 140, 0, 0));  // No fill
+        painter.setBrush(ringBrush);
+        painter.drawEllipse(QPoint(shipX, shipY), pulseRadius, pulseRadius);
+    }
+
+    // ========== DRAW LINE TO CLOSEST POINT ON ROUTE ==========
+    QPointF closestPoint = deviation.closestPoint;
+    int closestX = 0, closestY = 0;
+    if (LatLonToXy(closestPoint.x(), closestPoint.y(), closestX, closestY)) {
+        QPen linePen(QColor(255, 140, 0, 200));  // Orange
+        linePen.setWidth(2);
+        linePen.setStyle(Qt::DashLine);
+        painter.setPen(linePen);
+        painter.drawLine(shipX, shipY, closestX, closestY);
+
+        // Draw small circle at closest point
+        painter.setBrush(QColor(255, 140, 0, 150));
+        painter.drawEllipse(QPoint(closestX, closestY), 5, 5);
+    }
+
+    // ========== DRAW DEVIATION LABEL ==========
+    if (routeDeviationDetector->isLabelVisible()) {
+        // Compose label text
+        QString labelText = QString("Off Track: %1 NM\nAngle: %2°")
+                           .arg(QString::number(std::abs(deviation.crossTrackDistance), 'f', 2))
+                           .arg(QString::number(std::abs(deviation.deviationAngle), 'f', 1));
+
+        // Draw label near ownship
+        QFont labelFont("Arial", 10, QFont::Bold);
+        painter.setFont(labelFont);
+        QFontMetrics fm(labelFont);
+
+        int labelWidth = fm.horizontalAdvance(labelText.split('\n')[0]) + 10;
+        int labelHeight = fm.height() * 2 + 10;
+
+        // Position label to the right of ownship
+        int labelX = shipX + 30;
+        int labelY = shipY - labelHeight / 2;
+
+        // Draw background
+        QRect labelRect(labelX, labelY, labelWidth + 20, labelHeight);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(0, 0, 0, 180));
+        painter.drawRoundedRect(labelRect, 5, 5);
+
+        // Draw text
+        painter.setPen(QColor(255, 165, 0));  // Orange text
+        painter.drawText(labelRect, Qt::AlignCenter, labelText);
+
+        qDebug() << "[ROUTE-DEVIATION-DRAW] Label drawn:" << labelText;
+    }
+
+    painter.restore();
 }
 
