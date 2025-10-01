@@ -118,9 +118,9 @@ void PickWindow::fill(QList<EcFeature> & pickFeatureList)
             text.append(row);
             ownship.append(row);
         }
-        if (navShip.speed_og != 0){
-            //row = QString("Speed Over Ground: %1</b><br>").arg(navShip.speed_og);
-            row = QString("<tr><td>SOG</td><td><b>%1 knots</b></td></tr>").arg(navShip.speed_og);
+        if (navShip.sog != 0){
+            //row = QString("Speed Over Ground: %1</b><br>").arg(navShip.sog);
+            row = QString("<tr><td>SOG</td><td><b>%1 knots</b></td></tr>").arg(navShip.sog);
             text.append(row);
             ownship.append(row);
         }
@@ -680,8 +680,8 @@ QString PickWindow::parseTxtFile(const QString &filePath)
 //                 text.append(row);
 //                 ownship.append(row);
 //             }
-//             if (navShip.speed_og != 0){
-//                 row = QString("<tr><td>SOG</td><td><b>%1 knots</b></td></tr>").arg(navShip.speed_og);
+//             if (navShip.sog != 0){
+//                 row = QString("<tr><td>SOG</td><td><b>%1 knots</b></td></tr>").arg(navShip.sog);
 //                 text.append(row);
 //                 ownship.append(row);
 //             }
@@ -776,7 +776,7 @@ QString PickWindow::ownShipAutoFill()
               "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>kn</td>"
               "</tr>"
               )
-              .arg(toStringOrEmpty(navShip.speed_og));
+              .arg(toStringOrEmpty(navShip.sog));
     text.append(row);
     ownship.append(row);
 
@@ -787,28 +787,37 @@ QString PickWindow::ownShipAutoFill()
     ownship.append("<table width='100%' cellspacing='0' cellpadding='2'>");
 
     // LAT
+    int font_size = 0;
+    if (navShip.lat_dms.size() > 30) font_size = 10;
+    else if (navShip.lat_dms.size() >= 20) font_size = 12;
+    else if (navShip.lat_dms.size() < 20) font_size = 15;
+
     row = QString(
               "<tr>"
               "<td style='vertical-align:middle;'>LAT</td>"
               "<td style='text-align:right;'>"
-              "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
+              "<span style='font-size:%1px; color:#71C9FF; font-weight:bold;'>%2</span>"
               "</td>"
               "<td style='vertical-align:middle; padding-left:7px; text-align:left;'></td>"
               "</tr>")
-              .arg(isEmpty(navShip.lat_dms));
+              .arg(font_size).arg(isEmpty(navShip.lat_dms));
     text.append(row);
     ownship.append(row);
 
     // LON
+    if (navShip.lon_dms.size() > 30) font_size = 10;
+    else if (navShip.lon_dms.size() >= 20) font_size = 12;
+    else if (navShip.lon_dms.size() < 20) font_size = 15;
+
     row = QString(
               "<tr>"
               "<td style='vertical-align:middle;'>LON</td>"
               "<td style='text-align:right;'>"
-              "<span style='font-size:15px; color:#71C9FF; font-weight:bold;'>%1</span>"
+              "<span style='font-size:%1px; color:#71C9FF; font-weight:bold;'>%2</span>"
               "</td>"
               "<td style='vertical-align:middle; padding-left:7px; text-align:left;'></td>"
               "</tr>")
-              .arg(isEmpty(navShip.lon_dms));
+              .arg(font_size).arg(isEmpty(navShip.lon_dms));
     text.append(row);
     ownship.append(row);
 
