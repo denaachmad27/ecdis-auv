@@ -366,8 +366,12 @@ void PickWindow::fillStyle(QList<EcFeature> & pickFeatureList, EcCoordinate lat,
             if (attrNameStr.compare("Textual description", Qt::CaseInsensitive) == 0) {
                 QString fileName = attrValueStr.trimmed();
                 if (!fileName.isEmpty()) {
+                    QString roamingPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+                    QDir dir(roamingPath);
+                    dir.cdUp();
+
                     QString path = QString("%1/SevenCs/EC2007/DENC/TXT/%2/%3/%4/%5")
-                    .arg("C:/Users/Ali/AppData/Roaming")
+                    .arg(dir.path())
                         .arg(fileName.mid(0,2))
                         .arg(fileName.mid(2,2))
                         .arg(fileName.mid(4,2))
@@ -519,8 +523,12 @@ void PickWindow::fillWarningOnly(QList<EcFeature> & pickFeatureList, EcCoordinat
             if (attrNameStr.compare("Textual description", Qt::CaseInsensitive) == 0) {
                 QString fileName = attrValueStr.trimmed();
                 if (!fileName.isEmpty()) {
+                    QString roamingPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+                    QDir dir(roamingPath);
+                    dir.cdUp();
+
                     QString path = QString("%1/SevenCs/EC2007/DENC/TXT/%2/%3/%4/%5")
-                    .arg("C:/Users/Ali/AppData/Roaming")
+                    .arg(dir.path())
                         .arg(fileName.mid(0,2))
                         .arg(fileName.mid(2,2))
                         .arg(fileName.mid(4,2))

@@ -759,7 +759,11 @@ void MainWindow::createMenuBar(){
     setupUI();
     setupConnections();
 
-    m_logDirectoryPath = "C:/Users/Ali/AppData/Roaming/SevenCs/EC2007/DENC/DVR";
+    QString roamingPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QDir dir(roamingPath);
+    dir.cdUp();
+
+    m_logDirectoryPath = QString("%1/SevenCs/EC2007/DENC/DVR").arg(dir.path());
 
     populateLogFiles();
     resetUIState("Ready. Choose log file.");
