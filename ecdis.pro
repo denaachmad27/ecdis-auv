@@ -59,7 +59,6 @@ HEADERS += mainwindow.h ecwidget.h pickwindow.h ais.h \
     iplugininterface.h \
     logger.h \
     guardzonecheckdialog.h \
-    logplayer.h \
     nmeadecoder.h \
     searchwindow.h \
     alertsystem.h \
@@ -97,7 +96,6 @@ SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     guardzonemanager.cpp \
     guardzonepanel.cpp \
     logger.cpp \
-    logplayer.cpp \
     nmeadecoder.cpp \
     searchwindow.cpp \
     alertsystem.cpp \

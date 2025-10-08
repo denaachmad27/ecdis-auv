@@ -16,7 +16,6 @@
 #include "routepanel.h"
 #include "SettingsData.h"
 #include "compasswidget.h"
-#include "LogPlayer.h"
 
 #include <QPluginLoader>
 
