@@ -1517,6 +1517,11 @@ private:
   QFrame *frameAoi;
   QFrame *frameAoiCreate;
 
+  QLabel *toolboxInfoLabel;
+  QLabel *toolboxLLInfoLabel;
+  QLabel *toolboxAoiInfoLabel;
+  QLabel *toolboxAoiCreateInfoLabel;
+
   QPoint lastClick;
   EcWidget::Waypoint lastWaypoint;
   int lastWaypointIndex;

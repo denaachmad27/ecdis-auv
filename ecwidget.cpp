@@ -2388,6 +2388,21 @@ void EcWidget::showAoiVertexContextMenu(const QPoint& pos, int aoiId, int vertex
 void EcWidget::showAoiToolbox(const QPoint& pos, int aoiId, int vertexIndex){
     hideToolbox();
 
+    // Check if AOI is attached to ship
+    bool isAttached = isAOIAttachedToShip(aoiId);
+
+    // Show/hide info label
+    if (isAttached) {
+        toolboxAoiInfoLabel->setText("Area attached - editing disabled");
+        toolboxAoiInfoLabel->show();
+    } else {
+        toolboxAoiInfoLabel->hide();
+    }
+
+    // Disable all AOI toolbox buttons if area is attached
+    btnMove->setEnabled(!isAttached);   // Move Point
+    btnDelete->setEnabled(!isAttached); // Delete Point
+
     // Posisi toolbox relatif cursor
     toolboxAoi->adjustSize();
     QPoint posT = QCursor::pos();
@@ -2820,6 +2835,20 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
             // QAction* chosen = contextMenu.exec(mapToGlobal(e->pos()));
 
             hideToolbox();
+
+            // Check if AOI is attached to ship
+            bool isAttached = isAOIAttachedToShip(bestAoiId);
+
+            // Show/hide info label
+            if (isAttached) {
+                toolboxAoiCreateInfoLabel->setText("Area attached - editing disabled");
+                toolboxAoiCreateInfoLabel->show();
+            } else {
+                toolboxAoiCreateInfoLabel->hide();
+            }
+
+            // Disable add point button if AOI is attached
+            btnCreate->setEnabled(!isAttached);
 
             // Posisi toolbox relatif cursor
             toolboxAoiCreate->adjustSize();
@@ -5508,9 +5537,22 @@ void EcWidget::buttonInit(){
     outerLayout->setContentsMargins(0, 0, 0, 0);  // biar frame nempel ke dialog
     outerLayout->addWidget(frame);
 
+    // Main layout vertical untuk label + buttons
+    QVBoxLayout *mainLayout = new QVBoxLayout(frame);
+    mainLayout->setContentsMargins(2, 2, 2, 2);
+    mainLayout->setSpacing(2);
+
+    // Info label (hidden by default)
+    toolboxInfoLabel = new QLabel();
+    toolboxInfoLabel->setStyleSheet("QLabel { color: #FF6B6B; font-size: 10px; padding: 2px; }");
+    toolboxInfoLabel->setAlignment(Qt::AlignCenter);
+    toolboxInfoLabel->setWordWrap(true);
+    toolboxInfoLabel->hide();
+    mainLayout->addWidget(toolboxInfoLabel);
+
     // Layout isi tombol
-    QHBoxLayout *layout = new QHBoxLayout(frame);
-    layout->setContentsMargins(2, 2, 2, 2);
+    QHBoxLayout *layout = new QHBoxLayout();
+    layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
 
     // Tambahkan tombol2
@@ -5542,6 +5584,7 @@ void EcWidget::buttonInit(){
     btn4->setStyleSheet("QToolButton { margin: 1px; padding: 1px; border: none; }");
     layout->addWidget(btn4);
 
+    mainLayout->addLayout(layout);
     toolbox->setAttribute(Qt::WA_AlwaysShowToolTips, true);
     // ==============================================================
 
@@ -5559,9 +5602,22 @@ void EcWidget::buttonInit(){
     outerLayoutLL->setContentsMargins(0, 0, 0, 0);  // biar frame nempel ke dialog
     outerLayoutLL->addWidget(frameLL);
 
+    // Main layout vertical untuk label + buttons
+    QVBoxLayout *mainLayoutLL = new QVBoxLayout(frameLL);
+    mainLayoutLL->setContentsMargins(2, 2, 2, 2);
+    mainLayoutLL->setSpacing(2);
+
+    // Info label (hidden by default)
+    toolboxLLInfoLabel = new QLabel();
+    toolboxLLInfoLabel->setStyleSheet("QLabel { color: #FF6B6B; font-size: 10px; padding: 2px; }");
+    toolboxLLInfoLabel->setAlignment(Qt::AlignCenter);
+    toolboxLLInfoLabel->setWordWrap(true);
+    toolboxLLInfoLabel->hide();
+    mainLayoutLL->addWidget(toolboxLLInfoLabel);
+
     // Layout isi tombol
-    QHBoxLayout *layoutLL = new QHBoxLayout(frameLL);
-    layoutLL->setContentsMargins(2, 2, 2, 2);
+    QHBoxLayout *layoutLL = new QHBoxLayout();
+    layoutLL->setContentsMargins(0, 0, 0, 0);
     layoutLL->setSpacing(0);
 
     // Tambahkan tombol2
@@ -5571,6 +5627,7 @@ void EcWidget::buttonInit(){
     btn->setToolButtonStyle(Qt::ToolButtonIconOnly);
     btn->setStyleSheet("QToolButton { margin: 1px; padding: 1px; border: none; }");
     layoutLL->addWidget(btn);
+    mainLayoutLL->addLayout(layoutLL);
     toolboxLL->setAttribute(Qt::WA_AlwaysShowToolTips, true);
     // ==============================================================
 
@@ -5589,9 +5646,22 @@ void EcWidget::buttonInit(){
     outerLayoutAoi->setContentsMargins(0, 0, 0, 0);  // biar frame nempel ke dialog
     outerLayoutAoi->addWidget(frameAoi);
 
+    // Main layout vertical untuk label + buttons
+    QVBoxLayout *mainLayoutAoi = new QVBoxLayout(frameAoi);
+    mainLayoutAoi->setContentsMargins(2, 2, 2, 2);
+    mainLayoutAoi->setSpacing(2);
+
+    // Info label (hidden by default)
+    toolboxAoiInfoLabel = new QLabel();
+    toolboxAoiInfoLabel->setStyleSheet("QLabel { color: #FF6B6B; font-size: 10px; padding: 2px; }");
+    toolboxAoiInfoLabel->setAlignment(Qt::AlignCenter);
+    toolboxAoiInfoLabel->setWordWrap(true);
+    toolboxAoiInfoLabel->hide();
+    mainLayoutAoi->addWidget(toolboxAoiInfoLabel);
+
     // Layout isi tombol
-    QHBoxLayout *layoutAoi = new QHBoxLayout(frameAoi);
-    layoutAoi->setContentsMargins(2, 2, 2, 2);
+    QHBoxLayout *layoutAoi = new QHBoxLayout();
+    layoutAoi->setContentsMargins(0, 0, 0, 0);
     layoutAoi->setSpacing(0);
 
     btnMove->setIconSize(QSize(20, 20));
@@ -5608,6 +5678,7 @@ void EcWidget::buttonInit(){
     btnDelete->setStyleSheet("QToolButton { margin: 1px; padding: 1px; border: none; }");
     layoutAoi->addWidget(btnDelete);
 
+    mainLayoutAoi->addLayout(layoutAoi);
     toolboxAoi->setAttribute(Qt::WA_AlwaysShowToolTips, true);
     // ==============================================================
 
@@ -5625,9 +5696,22 @@ void EcWidget::buttonInit(){
     outerLayoutAoiCreate->setContentsMargins(0, 0, 0, 0);  // biar frame nempel ke dialog
     outerLayoutAoiCreate->addWidget(frameAoiCreate);
 
+    // Main layout vertical untuk label + buttons
+    QVBoxLayout *mainLayoutAoiCreate = new QVBoxLayout(frameAoiCreate);
+    mainLayoutAoiCreate->setContentsMargins(2, 2, 2, 2);
+    mainLayoutAoiCreate->setSpacing(2);
+
+    // Info label (hidden by default)
+    toolboxAoiCreateInfoLabel = new QLabel();
+    toolboxAoiCreateInfoLabel->setStyleSheet("QLabel { color: #FF6B6B; font-size: 10px; padding: 2px; }");
+    toolboxAoiCreateInfoLabel->setAlignment(Qt::AlignCenter);
+    toolboxAoiCreateInfoLabel->setWordWrap(true);
+    toolboxAoiCreateInfoLabel->hide();
+    mainLayoutAoiCreate->addWidget(toolboxAoiCreateInfoLabel);
+
     // Layout isi tombol
-    QHBoxLayout *layoutAoiCreate = new QHBoxLayout(frameAoiCreate);
-    layoutAoiCreate->setContentsMargins(2, 2, 2, 2);
+    QHBoxLayout *layoutAoiCreate = new QHBoxLayout();
+    layoutAoiCreate->setContentsMargins(0, 0, 0, 0);
     layoutAoiCreate->setSpacing(0);
 
     btnCreate->setIconSize(QSize(20, 20));
@@ -5637,6 +5721,7 @@ void EcWidget::buttonInit(){
     btnCreate->setStyleSheet("QToolButton { margin: 1px; padding: 1px; border: none; }");
     layoutAoiCreate->addWidget(btnCreate);
 
+    mainLayoutAoiCreate->addLayout(layoutAoiCreate);
     toolboxAoiCreate->setAttribute(Qt::WA_AlwaysShowToolTips, true);
     // ==============================================================
 
@@ -7023,6 +7108,23 @@ void EcWidget::createWaypointToolbox(const QPoint& pos, int waypointIndex)
     lastWaypointIndex = waypointIndex;
     lastWaypoint = waypoint;
 
+    // Check if route is attached to ship
+    bool isAttached = isRouteAttachedToShip(waypoint.routeId);
+
+    // Show/hide info label and update buttons
+    if (isAttached) {
+        toolboxInfoLabel->setText("Route attached - editing disabled");
+        toolboxInfoLabel->show();
+    } else {
+        toolboxInfoLabel->hide();
+    }
+
+    // Disable all toolbox buttons if route is attached
+    btn1->setEnabled(!isAttached); // Edit Waypoint
+    btn2->setEnabled(!isAttached); // Move Waypoint
+    btn3->setEnabled(!isAttached); // Publish Waypoint
+    btn4->setEnabled(!isAttached); // Delete Waypoint
+
     // Highlight the waypoint with yellow pulse when right-clicked
     // Find the waypoint index within its route
     int routeWaypointIndex = 0;
@@ -7126,6 +7228,20 @@ void EcWidget::createLeglineToolbox(const QPoint& pos, int routeId, int segmentI
 
     if (routeId <= 0) return;
     lastClick = pos;
+
+    // Check if route is attached to ship
+    bool isAttached = isRouteAttachedToShip(routeId);
+
+    // Show/hide info label
+    if (isAttached) {
+        toolboxLLInfoLabel->setText("Route attached - editing disabled");
+        toolboxLLInfoLabel->show();
+    } else {
+        toolboxLLInfoLabel->hide();
+    }
+
+    // Disable legline toolbox button if route is attached
+    btn->setEnabled(!isAttached); // Add Waypoint to legline
 
     // Posisi toolbox relatif cursor
     toolboxLL->adjustSize();

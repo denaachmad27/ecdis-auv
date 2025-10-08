@@ -391,11 +391,55 @@ void AOIPanel::onCurrentItemChanged(QTreeWidgetItem* current, QTreeWidgetItem* /
 
 void AOIPanel::updateAttachButtons()
 {
-    if (!ecWidget) { attachBtn->setEnabled(false); detachBtn->setEnabled(false); return; }
+    if (!ecWidget) {
+        attachBtn->setEnabled(false);
+        detachBtn->setEnabled(false);
+        editBtn->setEnabled(false);
+        deleteBtn->setEnabled(false);
+        addBtn->setEnabled(false);
+        createByClickBtn->setEnabled(false);
+        exportBtn->setEnabled(false);
+        return;
+    }
+
     auto* item = tree->currentItem();
-    if (!item) { attachBtn->setEnabled(false); detachBtn->setEnabled(false); return; }
+    bool hasSelection = (item != nullptr);
+
+    if (!hasSelection) {
+        attachBtn->setEnabled(false);
+        detachBtn->setEnabled(false);
+        editBtn->setEnabled(false);
+        deleteBtn->setEnabled(false);
+        // Allow create buttons even when no selection
+        addBtn->setEnabled(true);
+        createByClickBtn->setEnabled(true);
+        exportBtn->setEnabled(tree->topLevelItemCount() > 0);
+        return;
+    }
+
     int id = item->data(0, Qt::UserRole).toInt();
     bool isAttached = ecWidget->isAOIAttachedToShip(id);
+
+    // Attach/Detach buttons
     attachBtn->setEnabled(!isAttached);
     detachBtn->setEnabled(isAttached);
+
+    // Disable modification buttons if AOI is attached
+    editBtn->setEnabled(!isAttached);
+    deleteBtn->setEnabled(!isAttached);
+
+    // Create buttons should be enabled if no AOI is attached
+    bool anyAttached = false;
+    const auto aoiList = ecWidget->getAOIs();
+    for (const auto& aoi : aoiList) {
+        if (ecWidget->isAOIAttachedToShip(aoi.id)) {
+            anyAttached = true;
+            break;
+        }
+    }
+    addBtn->setEnabled(!anyAttached);
+    createByClickBtn->setEnabled(!anyAttached);
+
+    // Export button always enabled if there are AOIs
+    exportBtn->setEnabled(tree->topLevelItemCount() > 0);
 }

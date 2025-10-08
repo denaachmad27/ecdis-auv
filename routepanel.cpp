@@ -1114,42 +1114,53 @@ void RoutePanel::clearRouteInfoDisplay()
 void RoutePanel::updateButtonStates()
 {
     QTreeWidgetItem* currentItem = routeTreeWidget->currentItem();
-    
+
     // Route selection states
     bool hasRouteSelected = (selectedRouteId > 0);
-    
+
+    // Check if selected route is attached to ship
+    bool isRouteAttached = false;
+    if (hasRouteSelected && ecWidget) {
+        isRouteAttached = ecWidget->isRouteAttachedToShip(selectedRouteId);
+    }
+
     // Waypoint selection states
     bool hasWaypointSelected = false;
     bool canMoveUp = false;
     bool canMoveDown = false;
     WaypointTreeItem* waypointItem = dynamic_cast<WaypointTreeItem*>(currentItem);
-    
+
     if (waypointItem && waypointItem->parent()) {
         hasWaypointSelected = true;
-        
+
         // Check if waypoint can move up/down
         QTreeWidgetItem* parent = waypointItem->parent();
         int waypointIndex = parent->indexOfChild(waypointItem);
         canMoveUp = (waypointIndex > 0);
         canMoveDown = (waypointIndex < parent->childCount() - 1);
     }
-    
-    // Enable Add Waypoint button only if route is selected
-    addWaypointButton->setEnabled(hasRouteSelected);
-    
-    // Enable waypoint operations only if waypoint is selected
-    editWaypointButton->setEnabled(hasWaypointSelected);
-    deleteWaypointButton->setEnabled(hasWaypointSelected);
-    duplicateWaypointButton->setEnabled(hasWaypointSelected);
-    toggleActiveButton->setEnabled(hasWaypointSelected);
-    
-    // Enable move buttons based on position
-    moveUpButton->setEnabled(canMoveUp);
-    moveDownButton->setEnabled(canMoveDown);
-    
+
+    // Enable Add Waypoint button only if route is selected AND not attached
+    addWaypointButton->setEnabled(hasRouteSelected && !isRouteAttached);
+
+    // Enable waypoint operations only if waypoint is selected AND route is not attached
+    editWaypointButton->setEnabled(hasWaypointSelected && !isRouteAttached);
+    deleteWaypointButton->setEnabled(hasWaypointSelected && !isRouteAttached);
+    duplicateWaypointButton->setEnabled(hasWaypointSelected && !isRouteAttached);
+    toggleActiveButton->setEnabled(hasWaypointSelected && !isRouteAttached);
+
+    // Enable move buttons based on position AND route is not attached
+    moveUpButton->setEnabled(canMoveUp && !isRouteAttached);
+    moveDownButton->setEnabled(canMoveDown && !isRouteAttached);
+
     // Enable export if there are any routes
     bool hasRoutes = (routeTreeWidget->topLevelItemCount() > 0);
     exportRoutesButton->setEnabled(hasRoutes);
+
+    // Disable route modification buttons if route is attached
+    clearAllButton->setEnabled(!isRouteAttached);
+    saveRouteButton->setEnabled(hasRouteSelected && !isRouteAttached);
+    loadRouteButton->setEnabled(!isRouteAttached);
 }
 
 QTreeWidgetItem* RoutePanel::getSelectedWaypointItem()
@@ -1410,14 +1421,48 @@ void RoutePanel::onShowContextMenu(const QPoint& pos)
 {
     QTreeWidgetItem* item = routeTreeWidget->itemAt(pos);
     if (!item) return;
-    
+
     if (dynamic_cast<RouteTreeItem*>(item)) {
         // Route item - show route context menu
         selectedRouteId = dynamic_cast<RouteTreeItem*>(item)->getRouteId();
+
+        // Check if route is attached to ship
+        bool isAttached = ecWidget ? ecWidget->isRouteAttachedToShip(selectedRouteId) : false;
+
+        // Disable modification actions for attached routes
+        renameRouteAction->setEnabled(!isAttached);
+        deleteRouteAction->setEnabled(!isAttached);
+        duplicateRouteAction->setEnabled(!isAttached);
+        reverseRouteAction->setEnabled(!isAttached);
+        changeColorAction->setEnabled(!isAttached);
+        exportRouteAction->setEnabled(!isAttached);
+
+        // Allow visibility and properties for all routes
+        toggleVisibilityAction->setEnabled(true);
+        routePropertiesAction->setEnabled(true);
+
         routeContextMenu->exec(routeTreeWidget->mapToGlobal(pos));
     } else if (dynamic_cast<WaypointTreeItem*>(item)) {
         // Waypoint item - show waypoint context menu
         routeTreeWidget->setCurrentItem(item); // Select the waypoint
+
+        // Get the route ID from the waypoint's parent route
+        WaypointTreeItem* waypointItem = dynamic_cast<WaypointTreeItem*>(item);
+        int routeId = waypointItem->getWaypoint().routeId;
+
+        // Check if route is attached to ship
+        bool isAttached = ecWidget ? ecWidget->isRouteAttachedToShip(routeId) : false;
+
+        // Disable all waypoint modification actions for attached routes
+        editWaypointAction->setEnabled(!isAttached);
+        duplicateWaypointAction->setEnabled(!isAttached);
+        deleteWaypointAction->setEnabled(!isAttached);
+        toggleActiveAction->setEnabled(!isAttached);
+        insertBeforeAction->setEnabled(!isAttached);
+        insertAfterAction->setEnabled(!isAttached);
+        moveUpAction->setEnabled(!isAttached);
+        moveDownAction->setEnabled(!isAttached);
+
         waypointContextMenu->exec(routeTreeWidget->mapToGlobal(pos));
     }
 }
