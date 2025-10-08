@@ -1103,9 +1103,9 @@ void EcWidget::draw(bool upd)
     // ----------------------------
     // Buat pixmap lebih besar untuk extra margin
     // ----------------------------
-    const int extra_margin = 200;
-    QPixmap extendedPixmap(width() + 2*extra_margin, height() + 2*extra_margin);
-    extendedPixmap.fill(QColor(204, 197, 123)); // background
+    // const int extra_margin = 200;
+    // QPixmap extendedPixmap(width() + 2*extra_margin, height() + 2*extra_margin);
+    // extendedPixmap.fill(QColor(204, 197, 123)); // background
 
 #ifdef _WIN32
     if(!hdc || !hBitmap) { inDraw = false; return; }
@@ -1153,11 +1153,11 @@ void EcWidget::draw(bool upd)
 #endif
 
     // Copy ke extendedPixmap agar ada margin ekstra
-    QPainter p(&extendedPixmap);
-    p.drawPixmap(extra_margin, extra_margin, chartPixmap); // titik tengah chart tetap di tengah pixmap
-    p.end();
+    // QPainter p(&extendedPixmap);
+    // p.drawPixmap(extra_margin, extra_margin, chartPixmap); // titik tengah chart tetap di tengah pixmap
+    // p.end();
 
-    drawPixmap = extendedPixmap;
+    // drawPixmap = extendedPixmap;
 
     if(upd) update();
 
@@ -3978,6 +3978,28 @@ void EcWidget::ReadAISLogfile( const QString &aisLogFile )
   _aisObj->clearTargetData();
   _aisObj->setAISCell( aisCellId );
   _aisObj->readAISLogfile( aisLogFile );
+}
+
+void EcWidget::createDvrRead(){
+    if( deleteAISCell() == false )
+    {
+      QMessageBox::warning( this, tr( "ReadAISLogfile" ), tr( "Could not remove old AIS overlay cell. Please restart the program." ) );
+      return;
+    }
+
+    if( createAISCell() == false )
+    {
+      QMessageBox::warning( this, tr( "ReadAISLogfile" ), tr( "Could not create AIS overlay cell. Please restart the program." ) );
+      return;
+    }
+
+    clearOwnShipTrail();
+    _aisObj->clearTargetData();
+    _aisObj->setAISCell( aisCellId );
+}
+
+void EcWidget::readAISVariableString(const QString &aisLogFile){
+    _aisObj->readAISVariableString(aisLogFile);
 }
 
 void EcWidget::ReadAISLogfileWDelay( const QString &aisLogFile)
@@ -16762,4 +16784,3 @@ void EcWidget::drawRouteDeviationIndicator(QPainter& painter)
 
     painter.restore();
 }
-

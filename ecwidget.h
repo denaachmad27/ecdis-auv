@@ -765,12 +765,15 @@ public:
   void InitAIS( EcDictInfo *dict );
   void ReadAISLogfile( const QString& );
   void ReadAISLogfileWDelay( const QString& );
+  void readAISVariableString( const QString& );
   void ReadAISVariable( const QStringList& );
   void StopReadAISVariable();
   QString StartReadAISSubscribe();
   QString StartReadAISSubscribeSSH();
   void startServerMOOSSubscribe();
   void ReadFromServer( const QString& );
+
+  void createDvrRead();
 
   void startAISSubscribe();
   void startAISConnection();
@@ -1157,6 +1160,7 @@ public:
   //popup
   void leaveEvent(QEvent *event) override;
   void hideToolbox();
+  bool isDragging = false;
 
 private:
   MainWindow *mainWindow = nullptr;
@@ -1524,7 +1528,6 @@ private:
 
   // Flag & data
   bool inDraw;
-  bool isDragging = false;
   bool dragMode = true;
   QPoint lastPanPoint;
   QPoint tempOffset;   // offset sementara saat drag

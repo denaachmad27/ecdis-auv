@@ -16,6 +16,7 @@
 #include "routepanel.h"
 #include "SettingsData.h"
 #include "compasswidget.h"
+#include "LogPlayer.h"
 
 #include <QPluginLoader>
 
@@ -29,6 +30,7 @@ class PickWindow;
 class SearchWindow;
 class Ais;
 class AISSubscriber;
+class QFile;
 
 // Defines for S-63 Chart Import
 // user permit (must have 28 characters)
@@ -93,6 +95,8 @@ public:
     void setCompassHeading(const int &hdg);
     void setCompassRotation(const int &rot);
     void setCompassHeadRot(const int &rot);
+
+    enum class PlayerState { Stopped, Playing, Paused };
 
 public slots:
     void onEnableRedDotTracker(bool enabled);
@@ -292,6 +296,16 @@ private slots:
     void setLightMode();
     void setDimMode();
 
+    void onLogFileClicked(QListWidgetItem *item);
+    void onPlayPauseClicked();
+    void onStopClicked();
+    void onRefreshClicked();
+    void onSliderPressed();
+    void onSliderValueChanged(int position);
+    void onSliderReleased();
+    void onPlaybackTimerTimeout();
+    void onDrawTimerTimeout();
+
 private:
     GuardZonePanel* guardZonePanel;
     QDockWidget* guardZoneDock;
@@ -376,6 +390,40 @@ private:
     void updateIcon(bool dark);
 
     bool conn = false;
+
+    // Fungsi helper privat
+    void setupUI();
+    void setupConnections();
+    void updatePlayerState(PlayerState newState);
+    void resetUIState(const QString& statusMessage);
+    void populateLogFiles();
+    void seekToLine(qint64 targetLine); // Fungsi baru untuk "fast-forward"
+
+    // --- Widget UI ---
+    QListWidget *m_logListWidget;
+    QTextEdit *m_logTextEdit;
+    QPushButton *m_playPauseButton;
+    QPushButton *m_stopButton;
+    QPushButton *m_refreshButton;
+    QSlider *m_slider;
+    QSpinBox *m_speedSpinBox;
+
+    // --- State & File Handling ---
+    PlayerState m_playerState;
+    QTimer *m_playbackTimer;
+    QTimer *m_drawTimer;
+
+    QString m_logDirectoryPath;
+    QString m_selectedFilePath;
+    qint64 m_totalLines;
+    qint64 m_currentLine;
+
+    QFile *m_logFile;
+    QTextStream *m_logStream;
+
+    // MENU
+    QMenu *viewTopMenu;
+    QMenu *viewMenu;
 };
 
 #endif // _mainwindow_h_

@@ -23,6 +23,7 @@
 #include "cpatcpasettings.h"
 #include "ecwidget.h"
 
+#include "LogPlayer.h"
 #include "aisdecoder.h"
 #include "aivdoencoder.h"
 #include "appconfig.h"
@@ -578,10 +579,10 @@ void MainWindow::createMenuBar(){
 
 
     // ================================== VIEW MENU
-    QMenu *viewTopMenu = menuBar()->addMenu("&View");
+    viewTopMenu = menuBar()->addMenu("&View");
 
     // ================================== LAYERS MENU
-    QMenu *viewMenu = viewTopMenu->addMenu("&Chart Display");
+    viewMenu = viewTopMenu->addMenu("&Chart Display");
 
     QActionGroup *lActionGroup = new QActionGroup(this);
     simplifiedAction  = lActionGroup->addAction("Simplified");
@@ -752,6 +753,17 @@ void MainWindow::createMenuBar(){
     dock->setWidget(logText);
     addDockWidget(Qt::BottomDockWidgetArea, dock);
     viewMenu->addAction(dock->toggleViewAction());
+
+    // ===================================================================
+    // --- MENU LOG PLAYER ---
+    // ===================================================================
+    setupUI();
+    setupConnections();
+
+    m_logDirectoryPath = "C:/Users/Ali/AppData/Roaming/SevenCs/EC2007/DENC/DVR";
+
+    populateLogFiles();
+    resetUIState("Ready. Choose log file.");
 
     if (AppConfig::isProduction()){
         dock->hide();
@@ -943,15 +955,13 @@ void MainWindow::createMenuBar(){
     // connect(autoCheckAction, SIGNAL(toggled(bool)), this, SLOT(onAutoCheckGuardZone(bool)));
 
     // ================================== AIS DVR MENU
-    if (AppConfig::isDevelopment()) {
-        QMenu *dvrMenu = menuBar()->addMenu("&AIS DVR");
+    QMenu *dvrMenu = menuBar()->addMenu("&AIS DVR");
 
-        startAisRecAction = dvrMenu->addAction("Start Record", this, SLOT(startAisRecord()) );
-        stopAisRecAction = dvrMenu->addAction("Stop Record", this, SLOT(stopAisRecord()) );
+    startAisRecAction = dvrMenu->addAction("Start Record", this, SLOT(startAisRecord()) );
+    stopAisRecAction = dvrMenu->addAction("Stop Record", this, SLOT(stopAisRecord()) );
 
-        startAisRecAction->setEnabled(true);
-        stopAisRecAction->setEnabled(false);
-    }
+    startAisRecAction->setEnabled(true);
+    stopAisRecAction->setEnabled(false);
 
     if (AppConfig::isDevelopment()) {
         QMenu *debugMenu = menuBar()->addMenu("&Debug");
@@ -1013,6 +1023,339 @@ void MainWindow::createMenuBar(){
     }
 }
 
+void MainWindow::setupUI(){
+    // Dock widget utama untuk semua kontrol
+    QDockWidget *logPlayerDock = new QDockWidget(tr("Log Player"), this);
+    logPlayerDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    viewMenu->addAction(logPlayerDock->toggleViewAction());
+
+    // Widget kontainer dan layout utama di dalam dock
+    QWidget *mainWidget = new QWidget();
+    QVBoxLayout *mainLayout = new QVBoxLayout(mainWidget);
+
+    // Daftar file log di bagian atas
+    m_logListWidget = new QListWidget();
+    m_logListWidget->setMaximumHeight(180);
+    mainLayout->addWidget(m_logListWidget);
+
+    // Layout grid untuk kontrol yang lebih rapi
+    QGridLayout *controlsLayout = new QGridLayout();
+
+    // Inisialisasi widget kontrol
+    m_playPauseButton = new QPushButton(tr("Play"));
+    m_stopButton = new QPushButton(tr("Stop"));
+    m_refreshButton = new QPushButton(tr("Refresh List"));
+
+    m_playPauseButton->setIcon(QIcon(":/icon/play.svg"));
+    m_stopButton->setIcon(QIcon(":/icon/stop.svg"));
+
+    QLabel *speedLabel = new QLabel(tr("Interval (ms):"));
+    m_speedSpinBox = new QSpinBox();
+    m_speedSpinBox->setRange(10, 5000);
+    m_speedSpinBox->setValue(200);
+    m_speedSpinBox->setSingleStep(50);
+
+    // Tata letak tombol dan kontrol dalam grid
+    // Baris 0
+    controlsLayout->addWidget(m_playPauseButton, 0, 0);
+    controlsLayout->addWidget(m_stopButton, 0, 1);
+    controlsLayout->addWidget(m_refreshButton, 0, 2);
+
+    // Baris 1
+    controlsLayout->addWidget(speedLabel, 1, 0, 1, 2, Qt::AlignRight); // Label merentang 2 kolom
+    controlsLayout->addWidget(m_speedSpinBox, 1, 2);                  // SpinBox di kolom terakhir
+
+    mainLayout->addLayout(controlsLayout);
+
+    // Slider di bawah kontrol
+    m_slider = new QSlider(Qt::Horizontal);
+    mainLayout->addWidget(m_slider);
+
+    // Text box untuk log di bagian paling bawah
+    m_logTextEdit = new QTextEdit();
+    m_logTextEdit->setFont(QFont("Courier New", 10));
+    m_logTextEdit->setReadOnly(true);
+    mainLayout->addWidget(m_logTextEdit);
+
+    // Atur widget utama ke dalam dock
+    logPlayerDock->setWidget(mainWidget);
+    addDockWidget(Qt::RightDockWidgetArea, logPlayerDock);
+}
+
+void MainWindow::setupConnections()
+{
+    // Timer untuk memproses data NMEA
+    m_playbackTimer = new QTimer(this);
+    connect(m_playbackTimer, &QTimer::timeout, this, &MainWindow::onPlaybackTimerTimeout);
+
+    // ===================================================================
+    // --- PENAMBAHAN YANG HILANG ADA DI SINI ---
+    // Timer untuk menggambar chart secara periodik
+    m_drawTimer = new QTimer(this);
+    connect(m_drawTimer, &QTimer::timeout, this, &MainWindow::onDrawTimerTimeout);
+    m_drawTimer->start(1000); // Atur untuk berjalan setiap 1000 ms = 1 detik
+    // ===================================================================
+
+    // Koneksi untuk semua widget UI
+    connect(m_logListWidget, &QListWidget::itemClicked, this, &MainWindow::onLogFileClicked);
+    connect(m_playPauseButton, &QPushButton::clicked, this, &MainWindow::onPlayPauseClicked);
+    connect(m_stopButton, &QPushButton::clicked, this, &MainWindow::onStopClicked);
+    connect(m_refreshButton, &QPushButton::clicked, this, &MainWindow::onRefreshClicked);
+    connect(m_slider, &QSlider::sliderPressed, this, &MainWindow::onSliderPressed);
+    connect(m_slider, &QSlider::valueChanged, this, &MainWindow::onSliderValueChanged);
+    connect(m_slider, &QSlider::sliderReleased, this, &MainWindow::onSliderReleased);
+}
+
+void MainWindow::resetUIState(const QString& statusMessage)
+{
+    updatePlayerState(MainWindow::PlayerState::Stopped);
+    m_selectedFilePath.clear();
+    m_totalLines = 0;
+    m_currentLine = 0;
+
+    delete m_logStream; m_logStream = nullptr;
+    if (m_logFile) {
+        if (m_logFile->isOpen()) m_logFile->close();
+        delete m_logFile; m_logFile = nullptr;
+    }
+
+    m_logTextEdit->clear();
+    m_playPauseButton->setEnabled(false);
+    m_stopButton->setEnabled(false);
+    m_slider->setEnabled(false); m_slider->setValue(0);
+    //routesStatusText->setText(statusMessage);
+
+    if (ecchart) {
+        ecchart->createDvrRead();
+        ecchart->Draw();
+    }
+}
+
+void MainWindow::onLogFileClicked(QListWidgetItem *item)
+{
+    QString newFilePath = item->data(Qt::UserRole).toString();
+    if (newFilePath.isEmpty() || newFilePath == m_selectedFilePath) return;
+
+    resetUIState(QString("Opening file: %1...").arg(item->text()));
+    m_selectedFilePath = newFilePath;
+
+    m_logFile = new QFile(m_selectedFilePath);
+    if (!m_logFile->open(QIODevice::ReadOnly | QIODevice::Text)) {
+        resetUIState("Error: Gagal membuka file.");
+        return;
+    }
+
+    QProgressDialog progress("Counting lines...", "Cancel", 0, 0, this);
+    progress.setWindowTitle("Processing Data");
+    progress.setWindowModality(Qt::WindowModal);
+    progress.show();
+    m_totalLines = 0;
+    while (!m_logFile->atEnd()) {
+        m_logFile->readLine();
+        m_totalLines++;
+        if (m_totalLines % 10000 == 0) progress.setLabelText(QString("Counting lines... (%1)").arg(m_totalLines));
+        QApplication::processEvents();
+        if (progress.wasCanceled()) {
+            resetUIState("Operasi dibatalkan.");
+            return;
+        }
+    }
+
+    m_logFile->seek(0);
+    m_logStream = new QTextStream(m_logFile);
+
+    m_slider->setRange(0, m_totalLines > 0 ? m_totalLines - 1 : 0);
+    m_playPauseButton->setEnabled(true);
+    m_stopButton->setEnabled(true);
+    m_slider->setEnabled(true);
+    routesStatusText->setText("Log data ready to play.");
+}
+
+void MainWindow::onPlayPauseClicked()
+{
+    if (m_playerState == MainWindow::PlayerState::Playing) {
+        updatePlayerState(MainWindow::PlayerState::Paused);
+    } else {
+        if (m_currentLine >= m_totalLines && m_totalLines > 0) {
+            seekToLine(0);
+        }
+        updatePlayerState(MainWindow::PlayerState::Playing);
+    }
+}
+
+void MainWindow::onStopClicked()
+{
+    updatePlayerState(MainWindow::PlayerState::Stopped);
+    seekToLine(0);
+}
+
+void MainWindow::onPlaybackTimerTimeout()
+{
+    if (!m_logStream || m_logStream->atEnd()) {
+        updatePlayerState(MainWindow::PlayerState::Stopped);
+        m_logTextEdit->append("--- AKHIR DARI LOG ---");
+        return;
+    }
+
+    QString line = m_logStream->readLine();
+
+    // "Beri makan" data ke engine SevenCs Anda
+    if (ecchart){
+        ecchart->readAISVariableString(line);
+    }
+
+    // Update UI
+    QString formattedLine = QString("[%1] %2").arg(m_currentLine).arg(line);
+    m_logTextEdit->append(formattedLine);
+
+    m_slider->blockSignals(true);
+    m_slider->setValue(m_currentLine);
+    m_slider->blockSignals(false);
+
+    m_currentLine++;
+}
+
+void MainWindow::updatePlayerState(PlayerState newState)
+{
+    m_playerState = newState;
+
+    if (newState == MainWindow::PlayerState::Playing) {
+        m_refreshButton->setEnabled(false);
+    } else {
+        m_refreshButton->setEnabled(true);
+    }
+
+    switch (m_playerState) {
+    case PlayerState::Playing:
+        m_playbackTimer->setInterval(m_speedSpinBox->value());
+        m_playbackTimer->start();
+        m_playPauseButton->setText(tr("Pause"));
+
+        if (AppConfig::isLight()){
+            m_playPauseButton->setIcon(QIcon(":/icon/pause.svg"));
+        }
+        else {
+            m_playPauseButton->setIcon(QIcon(":/icon/pause_white.svg"));
+        }
+
+        routesStatusText->setText(tr("Playing..."));
+        break;
+    case PlayerState::Paused:
+    case PlayerState::Stopped:
+        m_playbackTimer->stop();
+        m_playPauseButton->setText(tr("Play"));
+
+        if (AppConfig::isLight()){
+            m_playPauseButton->setIcon(QIcon(":/icon/play.svg"));
+        }
+        else {
+            m_playPauseButton->setIcon(QIcon(":/icon/play_white.svg"));
+        }
+
+        routesStatusText->setText(m_playerState == PlayerState::Paused ? tr("Paused.") : tr("Stopped."));
+        break;
+    }
+}
+
+void MainWindow::onSliderValueChanged(int position)
+{
+    if (m_slider->isSliderDown()) {
+        routesStatusText->setText(QString("Jump to line %1... Release to render.").arg(position));
+    }
+}
+
+void MainWindow::onSliderReleased()
+{
+    int finalPosition = m_slider->value();
+    seekToLine(finalPosition);
+}
+
+void MainWindow::onSliderPressed()
+{
+    if (m_playerState == MainWindow::PlayerState::Playing) {
+        updatePlayerState(MainWindow::PlayerState::Paused);
+    }
+}
+
+void MainWindow::seekToLine(qint64 targetLine)
+{
+    if (!m_logFile) return;
+
+    updatePlayerState(MainWindow::PlayerState::Paused);
+
+    QProgressDialog progress(QString("Rendering data up to line %1...").arg(targetLine), "Cancel", 0, targetLine, this);
+    progress.setWindowTitle("Rendering Data");
+    progress.setWindowModality(Qt::WindowModal);
+    progress.show();
+
+    // 1. Reset transponder
+    if (ecchart){
+        ecchart->createDvrRead();
+    }
+    m_logStream->seek(0);
+
+    // 2. Lakukan simulasi cepat (loop ini akan sangat cepat karena tidak ada drawing)
+    for (qint64 i = 0; i < targetLine; ++i) {
+        if (m_logStream->atEnd()) break;
+        QString line = m_logStream->readLine();
+
+        if (ecchart){
+            ecchart->readAISVariableString(line);
+        }
+
+        if (i % 5000 == 0) {
+            progress.setValue(i);
+            QApplication::processEvents();
+            if (progress.wasCanceled()) break;
+        }
+    }
+
+    // 3. Panggil Draw() SATU KALI untuk menampilkan hasil akhir
+    if(ecchart && !ecchart->isDragging) {
+        ecchart->Draw();
+    }
+
+    m_currentLine = targetLine;
+    m_slider->setValue(targetLine);
+    routesStatusText->setText(QString("Data at %1.").arg(targetLine));
+}
+
+void MainWindow::onRefreshClicked()
+{
+    populateLogFiles();
+    routesStatusText->setText("Log file refreshed.");
+}
+
+void MainWindow::populateLogFiles()
+{
+    QDir directory(m_logDirectoryPath);
+    if (!directory.exists()) { return; }
+    QStringList nameFilters;
+    nameFilters << "*.log" << "*.txt";
+    directory.setNameFilters(nameFilters);
+    QStringList fileList = directory.entryList(QDir::Files, QDir::Name);
+    m_logListWidget->clear();
+    if(fileList.isEmpty()){
+        m_logListWidget->addItem("Tidak ada file .log atau .txt ditemukan.");
+        m_logListWidget->setEnabled(false);
+    } else {
+        m_logListWidget->setEnabled(true);
+        for (const QString &fileName : fileList) {
+            QListWidgetItem *item = new QListWidgetItem(fileName);
+            item->setData(Qt::UserRole, directory.filePath(fileName));
+            m_logListWidget->addItem(item);
+        }
+    }
+}
+
+void MainWindow::onDrawTimerTimeout()
+{
+    if (ecchart && !ecchart->isDragging) {
+        ecchart->Draw();
+    }
+}
+
+
 // S-63 USER PERMIT GENERATE
 void MainWindow::userPermitGenerate(){
     char *userpermit = nullptr;
@@ -1030,12 +1373,27 @@ void MainWindow::startAisRecord(){
     IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
 
     if (dvr){
-        QString logName = "/ais_log_" + QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss") + ".nmea.log";
-        QString logPath = QCoreApplication::applicationDirPath() + logName;
-        dvr->startRecording(logPath);
+        //QString logPath = QCoreApplication::applicationDirPath() + logName;
+
+        QString logName = "/ais_log_"
+                          + QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss")
+                          + ".nmea.log";
+
+        QDir baseDir(QString::fromLocal8Bit(qgetenv("APPDATA")));
+        QString dvrDirPath = baseDir.filePath("SevenCs/EC2007/DENC/DVR");
+
+        // pastikan folder DVR ada
+        QDir dvrDir(dvrDirPath);
+        if (!dvrDir.exists()) {
+            if (!baseDir.mkpath("SevenCs/EC2007/DENC/DVR")) {
+                qCritical() << "Failed to create DVR directory:" << dvrDirPath;
+            }
+        }
+
+        dvr->startRecording(dvrDirPath + logName);
 
         qDebug() << "AIS Recording starts..";
-        qDebug() << "Log file created: "+logName;
+        qDebug() << "Log file created: "+dvrDirPath;
 
         startAisRecAction->setEnabled(false);
         stopAisRecAction->setEnabled(true);
@@ -1439,7 +1797,7 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL){
 
   ownShipText->setText(pickWindow->ownShipAutoFill());
 
-  userPermitGenerate();
+  //userPermitGenerate();
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1485,6 +1843,9 @@ MainWindow::~MainWindow()
   if (m_cpaUpdateTimer) {
       m_cpaUpdateTimer->stop();
   }
+
+  delete m_logStream;
+  delete m_logFile;
 }
 
 void MainWindow::onReload()
@@ -2153,7 +2514,7 @@ void MainWindow::onToggleRoutePanel()
         routeDock->setVisible(!routeDock->isVisible());
         
         if (routeDock->isVisible()) {
-            statusBar()->showMessage("Route Management Panel opened", 2000);
+            routesStatusText->setText("Route Management Panel opened");
         } else {
             statusBar()->showMessage("Route Management Panel closed", 2000);
         }
@@ -4851,6 +5212,16 @@ void MainWindow::updateIcon(bool dark){
         settingAct->setIcon(QIcon(":/images/setting-white.png"));
         routeAct->setIcon(QIcon(":/images/route-white.png"));
         areaAct->setIcon(QIcon(":/images/area-white.svg"));
+
+        if (m_playerState == PlayerState::Playing){
+            m_playPauseButton->setIcon(QIcon(":/icon/pause_white.svg"));
+        }
+        else {
+            m_playPauseButton->setIcon(QIcon(":/icon/play_white.svg"));
+        }
+
+        m_stopButton->setIcon(QIcon(":/icon/stop_white.svg"));
+        m_refreshButton->setIcon(QIcon(":/icon/refresh_white.svg"));
     }
     else {
         connectAct->setIcon(QIcon(":/images/connect.png"));
@@ -4862,5 +5233,15 @@ void MainWindow::updateIcon(bool dark){
         settingAct->setIcon(QIcon(":/images/setting.png"));
         routeAct->setIcon(QIcon(":/images/route.png"));
         areaAct->setIcon(QIcon(":/images/area.svg"));
+
+        if (m_playerState == PlayerState::Playing){
+            m_playPauseButton->setIcon(QIcon(":/icon/pause.svg"));
+        }
+        else {
+            m_playPauseButton->setIcon(QIcon(":/icon/play.svg"));
+        }
+
+        m_stopButton->setIcon(QIcon(":/icon/stop.svg"));
+        m_refreshButton->setIcon(QIcon(":/icon/refresh.svg"));
     }
 }

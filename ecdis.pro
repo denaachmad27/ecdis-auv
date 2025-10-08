@@ -7,6 +7,7 @@ QT += core gui
 QT += sql
 QT += multimedia
 QT += svg
+QT += concurrent
 
 # win32:KERNELPATH = ../../
 win32:KERNELPATH = C:/EC2007/5.22.69.3
@@ -35,6 +36,7 @@ unix:DEFINES += _LINUX_SOURCE
 HEADERS += mainwindow.h ecwidget.h pickwindow.h ais.h \
     AISSubscriber.h \
     IAisDvrPlugin.h \
+    IndexerWorker.h \
     PluginManager.h \
     SettingsData.h \
     SettingsDialog.h \
@@ -57,6 +59,7 @@ HEADERS += mainwindow.h ecwidget.h pickwindow.h ais.h \
     iplugininterface.h \
     logger.h \
     guardzonecheckdialog.h \
+    logplayer.h \
     nmeadecoder.h \
     searchwindow.h \
     alertsystem.h \
@@ -76,6 +79,7 @@ HEADERS += mainwindow.h ecwidget.h pickwindow.h ais.h \
 
 SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     AISSubscriber.cpp \
+    IndexerWorker.cpp \
     PluginManager.cpp \
     SettingsDialog.cpp \
     SettingsManager.cpp \
@@ -93,6 +97,7 @@ SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     guardzonemanager.cpp \
     guardzonepanel.cpp \
     logger.cpp \
+    logplayer.cpp \
     nmeadecoder.cpp \
     searchwindow.cpp \
     alertsystem.cpp \

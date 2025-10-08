@@ -60,5 +60,13 @@
         <file>icon/create_o_light.svg</file>
         <file>images/area.svg</file>
         <file>images/area-white.svg</file>
+        <file>icon/stop_white.svg</file>
+        <file>icon/pause_white.svg</file>
+        <file>icon/play_white.svg</file>
+        <file>icon/stop.svg</file>
+        <file>icon/pause.svg</file>
+        <file>icon/play.svg</file>
+        <file>icon/refresh_white.svg</file>
+        <file>icon/refresh.svg</file>
     </qresource>
 </RCC>

@@ -26,6 +26,8 @@ public:
         return plugin;
     }
 
+    QString getPluginPath(QString path) const;
+
 private:
     PluginManager() = default;
     ~PluginManager() = default;

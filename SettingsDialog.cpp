@@ -943,8 +943,8 @@ void SettingsDialog::accept() {
         if (mainWindow) {
             EcWidget* ecWidget = mainWindow->findChild<EcWidget*>();
             if (ecWidget) {
-                ecWidget->applyShipDimensions();
                 ecWidget->defaultSettingsStartUp();
+                ecWidget->applyShipDimensions();
             }
         }
     }

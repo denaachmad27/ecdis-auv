@@ -1011,12 +1011,14 @@ void Ais::readAISVariableString( const QString &data )
 
     if( !_transponder )
     {
+        qCritical("1");
         addLogFileEntry( QString( "Error in readAISVariable(): Transponder object is not initialized!" ) );
         return;
     }
 
     if( _bReadFromVariable == False )
     {
+        qCritical("2");
         addLogFileEntry( QString( "Error in readAISVariable(): Read from AIS variable permitted!" ) );
         return;
     }
@@ -1028,11 +1030,13 @@ void Ais::readAISVariableString( const QString &data )
 
     if( _bReadFromVariable == False )
     {
+        qCritical("3");
         return;
     }
 
     if( _transponder == NULL )
     {
+        qCritical("4");
         return;
     }
 
