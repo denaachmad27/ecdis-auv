@@ -23,7 +23,6 @@
 #include "cpatcpasettings.h"
 #include "ecwidget.h"
 
-#include "LogPlayer.h"
 #include "aisdecoder.h"
 #include "aivdoencoder.h"
 #include "appconfig.h"
@@ -1028,6 +1027,7 @@ void MainWindow::setupUI(){
     QDockWidget *logPlayerDock = new QDockWidget(tr("Log Player"), this);
     logPlayerDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     viewMenu->addAction(logPlayerDock->toggleViewAction());
+    logPlayerDock->hide();
 
     // Widget kontainer dan layout utama di dalam dock
     QWidget *mainWidget = new QWidget();
@@ -1350,7 +1350,7 @@ void MainWindow::populateLogFiles()
 
 void MainWindow::onDrawTimerTimeout()
 {
-    if (ecchart && !ecchart->isDragging) {
+    if (ecchart && !ecchart->isDragging && m_playerState == PlayerState::Playing) {
         ecchart->Draw();
     }
 }
