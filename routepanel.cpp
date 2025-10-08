@@ -588,6 +588,7 @@ void RoutePanel::setupUI()
     duplicateRouteAction = routeContextMenu->addAction("Duplicate Route");
     exportRouteAction = routeContextMenu->addAction("Export Route");
     changeColorAction = routeContextMenu->addAction("Change Color...");
+    reverseRouteAction = routeContextMenu->addAction("Reverse Route");
     routeContextMenu->addSeparator();
     toggleVisibilityAction = routeContextMenu->addAction("Toggle Visibility");
     routeContextMenu->addSeparator();
@@ -757,6 +758,7 @@ void RoutePanel::setupConnections()
     });
     connect(routePropertiesAction, &QAction::triggered, this, &RoutePanel::onRouteProperties);
     connect(changeColorAction, &QAction::triggered, this, &RoutePanel::onChangeRouteColor);
+    connect(reverseRouteAction, &QAction::triggered, this, &RoutePanel::onReverseRoute);
     
     // Waypoint Context menu connections
     connect(editWaypointAction, &QAction::triggered, this, &RoutePanel::onEditWaypointFromContext);
@@ -1429,6 +1431,43 @@ void RoutePanel::onChangeRouteColor()
     ecWidget->setRouteCustomColor(selectedRouteId, chosen);
     refreshRouteList();
     emit statusMessage(QString("Route %1 color updated").arg(selectedRouteId));
+}
+
+void RoutePanel::onReverseRoute()
+{
+    if (selectedRouteId <= 0 || !ecWidget) {
+        qDebug() << "[ROUTE-REVERSE] Invalid route ID or ecWidget";
+        return;
+    }
+
+    // Confirmation dialog
+    EcWidget::Route route = ecWidget->getRouteById(selectedRouteId);
+    QString routeName = route.name.isEmpty() ? QString::number(selectedRouteId) : route.name;
+
+    QMessageBox::StandardButton reply = QMessageBox::question(
+        this,
+        "Reverse Route",
+        QString("Are you sure you want to reverse route '%1'?\n\n"
+                "This will reverse the order of all waypoints in the route.").arg(routeName),
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::No
+    );
+
+    if (reply != QMessageBox::Yes) {
+        return;
+    }
+
+    // Perform reverse
+    bool success = ecWidget->reverseRoute(selectedRouteId);
+
+    if (success) {
+        refreshRouteList();
+        updateRouteInfo(selectedRouteId);
+        emit statusMessage(QString("Route '%1' reversed successfully").arg(routeName));
+    } else {
+        QMessageBox::warning(this, "Reverse Failed",
+                           QString("Failed to reverse route '%1'").arg(routeName));
+    }
 }
 
 void RoutePanel::onAddRouteClicked()

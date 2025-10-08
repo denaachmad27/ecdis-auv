@@ -341,7 +341,10 @@ public:
   // Route color customization
   void setRouteCustomColor(int routeId, const QColor& color);
   QColor getBaseRouteColor(int routeId) const; // returns custom or default base color
-  
+
+  // Route reverse
+  bool reverseRoute(int routeId);
+
   // Route mode methods
   void startRouteMode();
   void startAppendWaypointMode(int routeId);
