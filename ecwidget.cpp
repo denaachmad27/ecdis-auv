@@ -15388,6 +15388,57 @@ bool EcWidget::renameRoute(int routeId, const QString& newName)
     return true;
 }
 
+bool EcWidget::reverseRoute(int routeId)
+{
+    qDebug() << "[ROUTE-REVERSE] Reversing route" << routeId;
+
+    if (routeId <= 0) {
+        qDebug() << "[ROUTE-REVERSE] Invalid route ID";
+        return false;
+    }
+
+    // Get waypoints for this route
+    QList<Waypoint> routeWaypoints;
+    for (const Waypoint& wp : waypointList) {
+        if (wp.routeId == routeId) {
+            routeWaypoints.append(wp);
+        }
+    }
+
+    if (routeWaypoints.isEmpty()) {
+        qDebug() << "[ROUTE-REVERSE] No waypoints found for route" << routeId;
+        return false;
+    }
+
+    if (routeWaypoints.size() < 2) {
+        qDebug() << "[ROUTE-REVERSE] Route has less than 2 waypoints, nothing to reverse";
+        return false;
+    }
+
+    qDebug() << "[ROUTE-REVERSE] Found" << routeWaypoints.size() << "waypoints to reverse";
+
+    // Reverse the order of waypoints
+    QList<Waypoint> reversedWaypoints;
+    for (int i = routeWaypoints.size() - 1; i >= 0; i--) {
+        reversedWaypoints.append(routeWaypoints[i]);
+    }
+
+    // Update route modified date BEFORE replacing waypoints
+    for (auto &route : routeList) {
+        if (route.routeId == routeId) {
+            route.modifiedDate = QDateTime::currentDateTime();
+            break;
+        }
+    }
+
+    // Replace waypoints for route
+    // Note: replaceWaypointsForRoute() already calls saveRoutes() and Draw()
+    replaceWaypointsForRoute(routeId, reversedWaypoints);
+
+    qDebug() << "[ROUTE-REVERSE] Route reversed successfully";
+    return true;
+}
+
 void EcWidget::convertRoutesToWaypoints()
 {
     qDebug() << "[INFO] Converting loaded routes to waypoints for display";

@@ -131,6 +131,7 @@ private slots:
     void onToggleRouteVisibility();
     void onDeleteRoute();
     void onRouteProperties();
+    void onReverseRoute();
     void onEditWaypointFromContext();
     void onDuplicateWaypointFromContext();
     void onDeleteWaypointFromContext();
@@ -230,6 +231,7 @@ protected:
     QAction* duplicateRouteAction;
     QAction* exportRouteAction;
     QAction* changeColorAction;
+    QAction* reverseRouteAction;
     
     // Waypoint context menu actions
     QAction* editWaypointAction;
