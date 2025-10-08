@@ -183,6 +183,26 @@ void RouteDeviationDetector::setCheckInterval(int milliseconds)
     }
 }
 
+void RouteDeviationDetector::clearDeviation()
+{
+    bool wasDeviated = currentDeviation.isDeviated;
+
+    // Reset deviation info
+    currentDeviation = DeviationInfo();
+
+    // Reset pulse animation
+    pulseOpacity = 1.0;
+    pulseRadius = 0.0;
+    pulseExpanding = true;
+
+    // Emit signal if there was a deviation before
+    if (wasDeviated) {
+        emit deviationCleared();
+        emit visualUpdateRequired();
+        qDebug() << "[ROUTE-DEVIATION] Deviation cleared (route detached)";
+    }
+}
+
 void RouteDeviationDetector::performAutoCheck()
 {
     if (!ecWidget || !autoCheckEnabled) {
@@ -209,6 +229,9 @@ void RouteDeviationDetector::performAutoCheck()
         if (currentDeviation.isDeviated) {
             emit visualUpdateRequired();
         }
+    } else {
+        // No route attached, clear any existing deviation
+        clearDeviation();
     }
 }
 

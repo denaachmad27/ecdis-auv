@@ -702,24 +702,29 @@ void RoutePanel::setupConnections()
         if (selectedRouteId > 0 && ecWidget) {
             // Preserve visibility before detaching
             bool currentVisibility = ecWidget->isRouteVisible(selectedRouteId);
-            
+
             // Detach this route from ship (this will make all routes blue again)
             ecWidget->attachRouteToShip(-1); // Detach all routes
             ecWidget->publishToMOOS("WAYPT_NAV", "");
             ecWidget->setOwnShipTrail(false);
-            
+
+            // Clear deviation alert when detaching
+            if (ecWidget->getRouteDeviationDetector()) {
+                ecWidget->getRouteDeviationDetector()->clearDeviation();
+            }
+
             // Ensure visibility is maintained
             ecWidget->setRouteVisibility(selectedRouteId, currentVisibility);
-            
+
             // Update button states
             addToShipButton->setEnabled(true);
             detachFromShipButton->setEnabled(false);
-            
+
             // Use a timer to refresh the list after detachment is complete
             QTimer::singleShot(100, [this]() {
                 refreshRouteList();
             });
-            
+
             emit statusMessage(QString("Route %1 detached from ship").arg(selectedRouteId));
         }
     });

@@ -65,6 +65,9 @@ public:
     DeviationInfo getCurrentDeviation() const { return currentDeviation; }
     bool hasDeviation() const { return currentDeviation.isDeviated; }
 
+    // Clear deviation state
+    void clearDeviation();
+
     // Pulse animation state
     double getPulseOpacity() const { return pulseOpacity; }
     double getPulseRadius() const { return pulseRadius; }
