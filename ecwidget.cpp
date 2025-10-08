@@ -7023,6 +7023,16 @@ void EcWidget::createWaypointToolbox(const QPoint& pos, int waypointIndex)
     lastWaypointIndex = waypointIndex;
     lastWaypoint = waypoint;
 
+    // Highlight the waypoint with yellow pulse when right-clicked
+    // Find the waypoint index within its route
+    int routeWaypointIndex = 0;
+    for (int i = 0; i < waypointIndex; ++i) {
+        if (waypointList[i].routeId == waypoint.routeId) {
+            routeWaypointIndex++;
+        }
+    }
+    highlightWaypoint(waypoint.routeId, routeWaypointIndex);
+
     // Posisi toolbox relatif cursor
     toolbox->adjustSize();
     QPoint posT = QCursor::pos();

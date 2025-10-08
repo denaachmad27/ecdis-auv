@@ -1334,7 +1334,7 @@ void RoutePanel::onRouteItemSelectionChanged()
             ecWidget->setSelectedRoute(selectedRouteId);
             // Clear waypoint highlight when route is selected (not waypoint)
             qDebug() << "[ROUTE-SELECTION] ❌ CLEARING WAYPOINT HIGHLIGHT due to route selection";
-            // ecWidget->clearWaypointHighlight(); // keep highlight on route selection
+            ecWidget->clearWaypointHighlight(); // Clear highlight when route is selected
             // Note: setSelectedRoute already calls forceRedraw() internally, no need for additional redraw
         }
         
