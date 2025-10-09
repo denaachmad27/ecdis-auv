@@ -1,6 +1,7 @@
 #ifndef _pickwindow_h_
 #define _pickwindow_h_
 
+#include "ecwidget.h"
 #include <QDialog>
 #include <QTextEdit>
 
@@ -35,11 +36,16 @@ public:
 
     QString parseTxtFile(const QString &filePath);
 
+    void setLatView(QString val);
+    void setLongView(QString val);
+
 private:
     QTextEdit  *textEdit;
   EcDictInfo *dictInfo;
   EcDENC     *denc;
 
+  QString latViewMode;
+  QString longViewMode;
 };
 
 #endif // _pickwindow_h_

@@ -229,6 +229,8 @@ void AISSubscriber::onReadyRead() {
 
         extractString("NAV_LAT_DMS", [&](QString v){ emit navLatDmsReceived(v);});
         extractString("NAV_LONG_DMS", [&](QString v){ emit navLongDmsReceived(v);});
+        extractString("NAV_LAT_DMM", [&](QString v){ emit navLatDmmReceived(v);});
+        extractString("NAV_LONG_DMM", [&](QString v){ emit navLongDmmReceived(v);});
 
         extractDouble("NAV_SPEED_OVER_GROUND", [=](double v){ emit navSpeedOGReceived(v);});
         extractDouble("NAV_DEPTH", [=](double v){ emit navDepthReceived(v);});

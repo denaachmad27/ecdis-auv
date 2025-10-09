@@ -6,6 +6,7 @@
 #include "ecwidget.h"
 #include "nmeadecoder.h"
 #include "appconfig.h"
+#include "SettingsManager.h"
 
 PickWindow::PickWindow(QWidget *parent, EcDictInfo *dict, EcDENC *dc)
 : QDialog(parent)
@@ -28,6 +29,9 @@ PickWindow::PickWindow(QWidget *parent, EcDictInfo *dict, EcDENC *dc)
 
   mainLayout->addWidget(textEdit);
   setLayout(mainLayout);
+
+  latViewMode = SettingsManager::instance().data().latViewMode;
+  longViewMode = SettingsManager::instance().data().longViewMode;
 }
 
 void PickWindow::fill(QList<EcFeature> & pickFeatureList)
@@ -626,85 +630,86 @@ QString PickWindow::parseTxtFile(const QString &filePath)
 }
 
 
+/*
+QString PickWindow::ownShipAutoFill(QList<EcFeature> & pickFeatureList)
+{
+    EcFeature        feature;
+    EcClassToken     featToken;
+    char             featName[1024];
+    QString          row = "";
+    QString          text = "";
+    QString          ais = "";
+    QString          ownship = "";
 
-// QString PickWindow::ownShipAutoFill(QList<EcFeature> & pickFeatureList)
-// {
-//     EcFeature        feature;
-//     EcClassToken     featToken;
-//     char             featName[1024];
-//     QString          row = "";
-//     QString          text = "";
-//     QString          ais = "";
-//     QString          ownship = "";
+    QList<EcFeature>::Iterator iT;
+    for (iT=pickFeatureList.begin(); iT!=pickFeatureList.end(); ++iT)
+    {
+        feature = (*iT);
 
-//     QList<EcFeature>::Iterator iT;
-//     for (iT=pickFeatureList.begin(); iT!=pickFeatureList.end(); ++iT)
-//     {
-//         feature = (*iT);
+        // Get the six character long feature token
+        EcFeatureGetClass(feature, dictInfo, featToken, sizeof(featToken));
 
-//         // Get the six character long feature token
-//         EcFeatureGetClass(feature, dictInfo, featToken, sizeof(featToken));
+        // Translate the token to a human readable name
+        if (EcDictionaryTranslateObjectToken(dictInfo, featToken, featName, sizeof(featName)) != EC_DICT_OK)
+            strcpy(featName,"unknown");
 
-//         // Translate the token to a human readable name
-//         if (EcDictionaryTranslateObjectToken(dictInfo, featToken, featName, sizeof(featName)) != EC_DICT_OK)
-//             strcpy(featName,"unknown");
+        row = QString("<br><b>%1 (%2)</b><br>").arg(QString(featName)).arg(QString(featToken));
+        text.append(row);
 
-//         row = QString("<br><b>%1 (%2)</b><br>").arg(QString(featName)).arg(QString(featToken));
-//         text.append(row);
+        if (QString(featToken) == "ownshp"){
+            ownship.append(row);
+            ownship.append("<table width='100%' cellspacing='0' cellpadding='2'>");
+        }
 
-//         if (QString(featToken) == "ownshp"){
-//             ownship.append(row);
-//             ownship.append("<table width='100%' cellspacing='0' cellpadding='2'>");
-//         }
+        if (featToken == QString("ownshp")){
+            if (navShip.lat != 0){
+                row = QString("<tr><td>LAT</td><td><b>%1 °</b></td></tr>").arg(navShip.lat);
+                text.append(row);
+                ownship.append(row);
+            }
+            if (navShip.lon != 0){
+                row = QString("<tr><td>LONG</td><td><b>%1 °</b></td></tr>").arg(navShip.lon);
+                text.append(row);
+                ownship.append(row);
+            }
+            if (navShip.depth != 0){
+                row = QString("<tr><td>DEP</td><td><b>%1 m</b></td></tr>").arg(navShip.depth);
+                text.append(row);
+                ownship.append(row);
+            }
+            if (navShip.heading != 0){
+                row = QString("<tr><td>HEAD</td><td><b>%1 °</b></td></tr>").arg(navShip.heading);
+                text.append(row);
+                ownship.append(row);
+            }
+            if (navShip.heading_og != 0){
+                row = QString("<tr><td>HOG</td><td><b>%1 °</b></td></tr>").arg(navShip.heading_og);
+                text.append(row);
+                ownship.append(row);
+            }
+            if (navShip.speed != 0){
+                row = QString("<tr><td>SPEED</td><td><b>%1 knots</b></td></tr>").arg(navShip.speed);
+                text.append(row);
+                ownship.append(row);
+            }
+            if (navShip.sog != 0){
+                row = QString("<tr><td>SOG</td><td><b>%1 knots</b></td></tr>").arg(navShip.sog);
+                text.append(row);
+                ownship.append(row);
+            }
+            if (navShip.z != 0){
+                row = QString("<tr><td>Z</td><td><b>%1 m</b></td></tr>").arg(navShip.z);
+                text.append(row);
+                ownship.append(row);
+            }
+        }
 
-//         if (featToken == QString("ownshp")){
-//             if (navShip.lat != 0){
-//                 row = QString("<tr><td>LAT</td><td><b>%1 °</b></td></tr>").arg(navShip.lat);
-//                 text.append(row);
-//                 ownship.append(row);
-//             }
-//             if (navShip.lon != 0){
-//                 row = QString("<tr><td>LONG</td><td><b>%1 °</b></td></tr>").arg(navShip.lon);
-//                 text.append(row);
-//                 ownship.append(row);
-//             }
-//             if (navShip.depth != 0){
-//                 row = QString("<tr><td>DEP</td><td><b>%1 m</b></td></tr>").arg(navShip.depth);
-//                 text.append(row);
-//                 ownship.append(row);
-//             }
-//             if (navShip.heading != 0){
-//                 row = QString("<tr><td>HEAD</td><td><b>%1 °</b></td></tr>").arg(navShip.heading);
-//                 text.append(row);
-//                 ownship.append(row);
-//             }
-//             if (navShip.heading_og != 0){
-//                 row = QString("<tr><td>HOG</td><td><b>%1 °</b></td></tr>").arg(navShip.heading_og);
-//                 text.append(row);
-//                 ownship.append(row);
-//             }
-//             if (navShip.speed != 0){
-//                 row = QString("<tr><td>SPEED</td><td><b>%1 knots</b></td></tr>").arg(navShip.speed);
-//                 text.append(row);
-//                 ownship.append(row);
-//             }
-//             if (navShip.sog != 0){
-//                 row = QString("<tr><td>SOG</td><td><b>%1 knots</b></td></tr>").arg(navShip.sog);
-//                 text.append(row);
-//                 ownship.append(row);
-//             }
-//             if (navShip.z != 0){
-//                 row = QString("<tr><td>Z</td><td><b>%1 m</b></td></tr>").arg(navShip.z);
-//                 text.append(row);
-//                 ownship.append(row);
-//             }
-//         }
+        return ownship;
+    }
 
-//         return ownship;
-//     }
-
-//     return "";
-// }
+    return "";
+}
+*/
 
 QString PickWindow::ownShipAutoFill()
 {
@@ -795,10 +800,22 @@ QString PickWindow::ownShipAutoFill()
     ownship.append("<table width='100%' cellspacing='0' cellpadding='2'>");
 
     // LAT
+    QString degree = "";
+    if (latViewMode == "NAV_LAT"){
+        navShip.slat = QString::number(navShip.lat);
+        degree = "°";
+    }
+    else if (latViewMode == "NAV_LAT_DMS"){
+        navShip.slat = navShip.lat_dms;
+    }
+    else {
+        navShip.slat = navShip.lat_dmm;
+    }
+
     int font_size = 0;
-    if (navShip.lat_dms.size() > 30) font_size = 10;
-    else if (navShip.lat_dms.size() >= 20) font_size = 12;
-    else if (navShip.lat_dms.size() < 20) font_size = 15;
+    if (navShip.slat.size() > 30) font_size = 10;
+    else if (navShip.slat.size() >= 20) font_size = 12;
+    else if (navShip.slat.size() < 20) font_size = 15;
 
     row = QString(
               "<tr>"
@@ -806,16 +823,27 @@ QString PickWindow::ownShipAutoFill()
               "<td style='text-align:right;'>"
               "<span style='font-size:%1px; color:#71C9FF; font-weight:bold;'>%2</span>"
               "</td>"
-              "<td style='vertical-align:middle; padding-left:7px; text-align:left;'></td>"
+              "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>%3</td>"
               "</tr>")
-              .arg(font_size).arg(isEmpty(navShip.lat_dms));
+              .arg(font_size).arg(isEmpty(navShip.slat)).arg(degree);
     text.append(row);
     ownship.append(row);
 
     // LON
-    if (navShip.lon_dms.size() > 30) font_size = 10;
-    else if (navShip.lon_dms.size() >= 20) font_size = 12;
-    else if (navShip.lon_dms.size() < 20) font_size = 15;
+    if (longViewMode == "NAV_LONG"){
+        navShip.slon = QString::number(navShip.lon);
+        degree = "°";
+    }
+    else if (longViewMode == "NAV_LONG_DMS"){
+        navShip.slon = navShip.lon_dms;
+    }
+    else {
+        navShip.slon = navShip.lon_dmm;
+    }
+
+    if (navShip.slon.size() > 30) font_size = 10;
+    else if (navShip.slon.size() >= 20) font_size = 12;
+    else if (navShip.slon.size() < 20) font_size = 15;
 
     row = QString(
               "<tr>"
@@ -823,9 +851,9 @@ QString PickWindow::ownShipAutoFill()
               "<td style='text-align:right;'>"
               "<span style='font-size:%1px; color:#71C9FF; font-weight:bold;'>%2</span>"
               "</td>"
-              "<td style='vertical-align:middle; padding-left:7px; text-align:left;'></td>"
+              "<td style='vertical-align:middle; padding-left:7px; text-align:left;'>%3</td>"
               "</tr>")
-              .arg(font_size).arg(isEmpty(navShip.lon_dms));
+              .arg(font_size).arg(isEmpty(navShip.slon)).arg(degree);
     text.append(row);
     ownship.append(row);
 
@@ -1183,4 +1211,13 @@ QJsonObject PickWindow::fillJsonSubs(QList<EcFeature> &pickFeatureList)
     }
 
     return jsonOutput;
+}
+
+
+void PickWindow::setLatView(QString val){
+    latViewMode = val;
+}
+
+void PickWindow::setLongView(QString val){
+    longViewMode = val;
 }

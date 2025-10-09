@@ -124,6 +124,8 @@ private:
 
     // CHART
     QComboBox *chartCombo;
+    QComboBox *latViewCombo;
+    QComboBox *longViewCombo;
 };
 
 #endif // SETTINGSDIALOG_H

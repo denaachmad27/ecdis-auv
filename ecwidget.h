@@ -88,6 +88,8 @@ struct ShipStruct {
     QString slon; // String Lon
     QString lat_dms;
     QString lon_dms;
+    QString lat_dmm;
+    QString lon_dmm;
 };
 
 struct ActiveRouteStruct {
@@ -1184,7 +1186,7 @@ private:
   QList<Route> routeList;
   RouteSafetyFeature* routeSafetyFeature = nullptr;
   RouteDeviationDetector* routeDeviationDetector = nullptr;
-  bool routeSafeMode = true;  // Enable by default for safety
+  bool routeSafeMode = false;  // Enable by default for safety
   QMap<int, bool> routeVisibility; // Track visibility per route
   int selectedRouteId = -1; // Currently selected route for visual feedback
   int moveSelectedIndex = -1; // -1 artinya belum ada waypoint dipilih
@@ -1533,6 +1535,8 @@ private:
   int trackLine;
   double trackDistance;
   double trackMinute;
+  QString latView;
+  QString longView;
 
   // Flag & data
   bool inDraw;

@@ -53,43 +53,32 @@ void SettingsDialog::setupUI() {
 
     // =========== OWNSHIP TAB =========== //
     QWidget *ownShipTab = new QWidget;
-    QFormLayout *ownShipLayout = new QFormLayout;
+    QVBoxLayout *ownShipLayout = new QVBoxLayout(ownShipTab);
+
+    // Chart Display
+    QGroupBox *chartDisplayGroup = new QGroupBox(tr("Chart Display Mode"));
+    QFormLayout *chartDisplayForm = new QFormLayout(chartDisplayGroup);
 
     centeringCombo = new QComboBox;
     centeringCombo->addItem("Auto Recenter", "AutoRecenter");
     centeringCombo->addItem("Centered", "Centered");
     centeringCombo->addItem("Look Ahead", "LookAhead");
     centeringCombo->addItem("Manual Offset", "Manual");
-    ownShipLayout->addRow("Default Centering:", centeringCombo);
+    chartDisplayForm->addRow("Default Centering:", centeringCombo);
 
     orientationCombo = new QComboBox;
     orientationCombo->addItem("North Up", "NorthUp");
     orientationCombo->addItem("Head Up", "HeadUp");
     orientationCombo->addItem("Course Up", "CourseUp");
-    ownShipLayout->addRow("Default Orientation:", orientationCombo);
+    chartDisplayForm->addRow("Default Orientation:", orientationCombo);
 
-    // SEPARATOR
-    QFrame *line = new QFrame(this);
-    line->setFrameShape(QFrame::HLine);
-    line->setFrameShadow(QFrame::Sunken);
-
-    if (AppConfig::isLight()){
-        line->setStyleSheet("color: gray;");
-    }
-    else {
-        line->setStyleSheet("color: #444444;");
-    }
-
-    ownShipLayout->addRow(line);
-
-    // NON DEFAULT DATA
     headingLabel = new QLabel("Course-Up Heading:");
     headingSpin = new QSpinBox;
     headingSpin->setRange(0, 359);
     headingSpin->setSuffix("°");
     // headingLabel->setVisible(false);
     // headingSpin->setVisible(false);
-    ownShipLayout->addRow(headingLabel, headingSpin);
+    chartDisplayForm->addRow(headingLabel, headingSpin);
 
     /*
     connect(orientationCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int) {
@@ -99,11 +88,15 @@ void SettingsDialog::setupUI() {
     });
     */
 
+    // Track Line Group
+    QGroupBox *trackLineGroup = new QGroupBox(tr("Track Line"));
+    QFormLayout *trackLineForm = new QFormLayout(trackLineGroup);
+
     trailCombo = new QComboBox;
     trailCombo->addItem("Every Update", 0);
     trailCombo->addItem("Fixed Interval", 1);
     trailCombo->addItem("Fixed Distance", 2);
-    ownShipLayout->addRow("Track Line Mode:", trailCombo);
+    trackLineForm->addRow("Track Line Mode:", trailCombo);
 
     trailSpin = new QSpinBox;
     trailLabel = new QLabel("Interval:");
@@ -111,7 +104,7 @@ void SettingsDialog::setupUI() {
     trailSpin->setSuffix(" minute(s)");
     trailLabel->setVisible(false);
     trailSpin->setVisible(false);
-    ownShipLayout->addRow(trailLabel, trailSpin);
+    trackLineForm->addRow(trailLabel, trailSpin);
 
     connect(trailCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int) {
         bool isMode = (trailCombo->currentData() == 1);
@@ -130,7 +123,7 @@ void SettingsDialog::setupUI() {
     trailLabelDistance = new QLabel("Distance:");
     trailLabelDistance->setVisible(false);
 
-    ownShipLayout->addRow(trailLabelDistance, trailSpinDistance);
+    trackLineForm->addRow(trailLabelDistance, trailSpinDistance);
 
     connect(trailCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int) {
         bool isMode = (trailCombo->currentData() == 2);
@@ -138,7 +131,31 @@ void SettingsDialog::setupUI() {
         trailSpinDistance->setVisible(isMode);
     });
 
-    ownShipTab->setLayout(ownShipLayout);
+    // Data View
+    QGroupBox *dataViewGroup = new QGroupBox(tr("Data View"));
+    QFormLayout *dataViewForm = new QFormLayout(dataViewGroup);
+
+    latViewCombo = new QComboBox;
+    latViewCombo->addItem("NAV_LAT", "NAV_LAT");
+    latViewCombo->addItem("NAV_LAT_DMS", "NAV_LAT_DMS");
+    latViewCombo->addItem("NAV_LAT_DMM", "NAV_LAT_DMM");
+    dataViewForm->addRow("Latitude:", latViewCombo);
+
+    longViewCombo = new QComboBox;
+    longViewCombo->addItem("NAV_LONG", "NAV_LONG");
+    longViewCombo->addItem("NAV_LONG_DMS", "NAV_LONG_DMS");
+    longViewCombo->addItem("NAV_LONG_DMM", "NAV_LONG_DMM");
+    dataViewForm->addRow("Longitude:", longViewCombo);
+
+    //
+
+    //ownShipTab->setLayout(ownShipLayout);
+    ownShipLayout->addWidget(chartDisplayGroup);
+    ownShipLayout->addWidget(trackLineGroup);
+    ownShipLayout->addWidget(dataViewGroup);
+
+    ownShipLayout->setSpacing(10);
+    ownShipLayout->addStretch();
 
     // =========== SHIP DIMENSION TAB =========== //
     QWidget *shipDimensionsTab = new QWidget;
@@ -207,7 +224,7 @@ void SettingsDialog::setupUI() {
     gpsButtons->addStretch();
     gpsButtons->addWidget(addGpsButton);
     gpsButtons->addWidget(removeGpsButton);
-    
+
     QFormLayout* primaryGpsForm = new QFormLayout;
     primaryGpsCombo = new QComboBox;
     primaryGpsForm->addRow(tr("Primary Reference (CCRP):"), primaryGpsCombo);
@@ -603,6 +620,9 @@ void SettingsDialog::loadSettings() {
     int trailMinute = settings.value("OwnShip/interval", 1).toInt();
     double trailDistance = settings.value("OwnShip/distance", 0.01).toDouble();
 
+    QString latView = settings.value("OwnShip/lat_view", "NAV_LAT").toString();
+    QString longView = settings.value("OwnShip/long_view", "NAV_LONG").toString();
+
     int oriIndex = orientationCombo->findData(ori);
     if (oriIndex >= 0) orientationCombo->setCurrentIndex(oriIndex);
     else orientationCombo->setCurrentIndex(0);
@@ -629,6 +649,14 @@ void SettingsDialog::loadSettings() {
     bool isDistance = (trailMode == 2);
     trailLabelDistance->setVisible(isDistance);
     trailSpinDistance->setVisible(isDistance);
+
+    int latIndex = latViewCombo->findData(latView);
+    if (latIndex >= 0) latViewCombo->setCurrentIndex(latIndex);
+    else latViewCombo->setCurrentIndex(0);
+
+    int longIndex = longViewCombo->findData(longView);
+    if (longIndex >= 0) longViewCombo->setCurrentIndex(longIndex);
+    else longViewCombo->setCurrentIndex(0);
 
     // Alert Settings
     visualFlashingCheckBox->setChecked(settings.value("Alert/visual_flashing", true).toBool());
@@ -753,6 +781,9 @@ void SettingsDialog::saveSettings() {
     settings.setValue("OwnShip/interval", trailSpin->value());
     settings.setValue("OwnShip/distance", trailSpinDistance->value());
 
+    settings.setValue("OwnShip/lat_view", latViewCombo->currentData().toString());
+    settings.setValue("OwnShip/long_view", longViewCombo->currentData().toString());
+
     if(AppConfig::isDevelopment()){
         // Navigation safety
         settings.setValue("OwnShip/ship_draft", shipDraftSpin->value());
@@ -821,6 +852,9 @@ SettingsData SettingsDialog::loadSettingsFromFile(const QString &filePath) {
     data.trailMinute = settings.value("OwnShip/interval", 1).toInt();
     data.trailDistance = settings.value("OwnShip/distance", 0.01).toDouble();
 
+    data.latViewMode = settings.value("OwnShip/lat_view", "NAV_LAT").toString();
+    data.longViewMode = settings.value("OwnShip/long_view", "NAV_LONG").toString();
+
     if(AppConfig::isDevelopment()){
         data.shipDraftMeters = settings.value("OwnShip/ship_draft", 2.5).toDouble();
         data.ukcDangerMeters = settings.value("OwnShip/ukc_danger", 0.5).toDouble();
@@ -873,6 +907,9 @@ void SettingsDialog::accept() {
     data.trailMode = trailCombo->currentData().toInt();
     data.trailMinute = trailSpin->value();
     data.trailDistance = trailSpinDistance->value();
+
+    data.latViewMode = latViewCombo->currentData().toString();
+    data.longViewMode = longViewCombo->currentData().toString();
 
     if(AppConfig::isDevelopment()){
         data.shipDraftMeters = shipDraftSpin->value();

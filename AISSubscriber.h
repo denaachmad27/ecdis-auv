@@ -25,6 +25,8 @@ signals:
     void navLongReceived(const double lon);
     void navLatDmsReceived(const QString latDms);
     void navLongDmsReceived(const QString lonDms);
+    void navLatDmmReceived(const QString latDmm);
+    void navLongDmmReceived(const QString lonDmm);
     void navDepthReceived(const double depth);
     void navHeadingReceived(const double heading);
     void navHeadingOGReceived(const double headingOg);

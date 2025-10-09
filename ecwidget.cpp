@@ -4115,16 +4115,16 @@ void EcWidget::startAISConnection()
     connect(subscriber, &AISSubscriber::navLatReceived, this, [=](double lat) {
         navShip.lat = lat;
 
-        QString slat = latLonToDegMin(lat, true);
-        navShip.slat = slat;
+        // QString slat = latLonToDegMin(lat, true);
+        // navShip.slat = slat;
         updateAttachedGuardZoneFromNavShip();
         if (shipDotEnabled) update();
     });
     connect(subscriber, &AISSubscriber::navLongReceived, this, [=](double lon) {
         navShip.lon = lon;
 
-        QString slon = latLonToDegMin(lon, false);
-        navShip.slon = slon;
+        // QString slon = latLonToDegMin(lon, false);
+        // navShip.slon = slon;
         updateAttachedGuardZoneFromNavShip();
         if (shipDotEnabled) update();
     });
@@ -4155,11 +4155,15 @@ void EcWidget::startAISConnection()
     connect(subscriber, &AISSubscriber::navLatDmsReceived, this, [=](const QString &v) { navShip.lat_dms = v;});
     connect(subscriber, &AISSubscriber::navLongDmsReceived, this, [=](const QString &v) { navShip.lon_dms = v;});
 
+    connect(subscriber, &AISSubscriber::navLatDmmReceived, this, [=](const QString &v) { navShip.lat_dmm = v;});
+    connect(subscriber, &AISSubscriber::navLongDmmReceived, this, [=](const QString &v) { navShip.lon_dmm = v;});
+
     connect(subscriber, &AISSubscriber::navSpeedOGReceived, this, [=](double speed_og) { navShip.speed_og = speed_og;});
     connect(subscriber, &AISSubscriber::navSpeedReceived, this, [=](double spe) { navShip.speed = spe;});
     connect(subscriber, &AISSubscriber::navYawReceived, this, [=](double yaw) { navShip.yaw = yaw;});
     connect(subscriber, &AISSubscriber::navZReceived, this, [=](double z) { navShip.z = z;});
     connect(subscriber, &AISSubscriber::navStwReceived, this, [=](double stw) { navShip.stw = stw;});
+    connect(subscriber, &AISSubscriber::navDraftReceived, this, [=](double draft) { navShip.draft = draft;});
     connect(subscriber, &AISSubscriber::navDriftReceived, this, [=](double drift) { navShip.drift = drift;});
     connect(subscriber, &AISSubscriber::navDriftAngleReceived, this, [=](double drift_angle) { navShip.drift_angle = drift_angle;});
     connect(subscriber, &AISSubscriber::navSetReceived, this, [=](double set) { navShip.set = set;});
@@ -16766,7 +16770,14 @@ void EcWidget::defaultSettingsStartUp(){
     trackDistance = SettingsManager::instance().data().trailDistance;
     trackMinute = SettingsManager::instance().data().trailMinute;
 
+    latView = SettingsManager::instance().data().latViewMode;
+    longView = SettingsManager::instance().data().longViewMode;
+
     dragMode = SettingsManager::instance().data().chartMode == "Drag";
+
+    EcDENC *denc = nullptr;
+    EcDictInfo *dictInfo = nullptr;
+    QWidget *parentWidget = nullptr;
 }
 
 void EcWidget::applyShipDimensions()

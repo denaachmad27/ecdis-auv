@@ -48,6 +48,9 @@ void SettingsManager::load() {
     m_data.trailMinute = settings.value("OwnShip/interval", 1).toInt();
     m_data.trailDistance = settings.value("OwnShip/distance", 0.01).toDouble();
 
+    m_data.latViewMode = settings.value("OwnShip/lat_view", "NAV_LAT").toString();
+    m_data.longViewMode = settings.value("OwnShip/long_view", "NAV_LONG").toString();
+
     if(AppConfig::isDevelopment()){
         // NAVIGATION SAFETY
         m_data.shipDraftMeters = settings.value("OwnShip/ship_draft", 2.5).toDouble();
@@ -138,6 +141,9 @@ void SettingsManager::save(const SettingsData& data) {
     settings.setValue("OwnShip/mode", data.trailMode);
     settings.setValue("OwnShip/interval", data.trailMinute);
     settings.setValue("OwnShip/distance", data.trailDistance);
+
+    settings.setValue("OwnShip/lat_view", data.latViewMode);
+    settings.setValue("OwnShip/long_view", data.longViewMode);
 
     if(AppConfig::isDevelopment()){
         // NAVIGATION SAFETY

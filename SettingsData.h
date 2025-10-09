@@ -39,6 +39,9 @@ struct SettingsData {
     EcWidget::OSCenteringMode centeringMode;
     int courseUpHeading;
 
+    QString latViewMode;
+    QString longViewMode;
+
     // ALERT SETTINGS
     bool visualFlashingEnabled;
     QString soundAlarmFile;
