@@ -564,8 +564,8 @@ void RoutePanel::setupUI()
     addToShipButton->setVisible(false);
     detachFromShipButton->setVisible(false);
 
-    // Route deviation checkbox - hidden by default (shown when MOOSDB connected)
-    routeDeviationCheckBox->setVisible(false);
+    // Route deviation checkbox - only visible in development mode
+    routeDeviationCheckBox->setVisible(AppConfig::isDevelopment());
     routeDeviationCheckBox->setChecked(true);  // Enabled by default when visible
 
     // Layout actions in rows
