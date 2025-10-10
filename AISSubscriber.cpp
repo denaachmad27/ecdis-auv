@@ -245,6 +245,8 @@ void AISSubscriber::onReadyRead() {
         extractDouble("NAV_ROT", [=](double v){ emit navRotReceived(v);});
         extractDouble("NAV_DEPTH_BELOW_KEEL", [=](double v){ emit navDepthBelowKeelReceived(v);});
 
+        extractString("NAV_DR", [=](QString v){ emit navDeadReckonReceived(v);});
+
         extractString("MAP_INFO_REQ", [=](QString v){ emit mapInfoReqReceived(v);});
 
         if (hasLat && hasLon) { emit processingData(lat, lon, cog, sog, hdg, spd, dep, yaw, z);}

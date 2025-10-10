@@ -43,6 +43,7 @@ signals:
     void navSetReceived(const double set);
     void navRotReceived(const double rot);
     void navDepthBelowKeelReceived(const double DepthBelowKeel);
+    void navDeadReckonReceived(const QString deadReckon);
 
     void mapInfoReqReceived(QString map);
     void waisNmeaReceived(QString nmea);

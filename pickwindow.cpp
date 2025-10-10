@@ -1020,6 +1020,19 @@ QString PickWindow::ownShipAutoFill()
     text.append(row);
     ownship.append(row);
 
+    // DEAD RECKON
+    row = QString(
+              "<tr>"
+              "<td style='vertical-align:middle;'>DEAD RECKON</td>"
+              "<td style='text-align:right;'>"
+              "<span style='font-size:12px; color:#71C9FF; font-weight:bold;'>%1</span>"
+              "</td>"
+              "<td style='vertical-align:middle; padding-left:7px; text-align:left;'></td>"
+              "</tr>")
+              .arg(isEmpty(navShip.deadReckon));
+    text.append(row);
+    ownship.append(row);
+
     ownship.append(sizing);
 
     return ownship;

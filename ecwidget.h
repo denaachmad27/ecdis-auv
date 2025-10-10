@@ -90,6 +90,7 @@ struct ShipStruct {
     QString lon_dms;
     QString lat_dmm;
     QString lon_dmm;
+    QString deadReckon;
 };
 
 struct ActiveRouteStruct {
