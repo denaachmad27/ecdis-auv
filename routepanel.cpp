@@ -565,8 +565,8 @@ void RoutePanel::setupUI()
     detachFromShipButton->setVisible(false);
 
     // Route deviation checkbox - only visible in development mode
-    routeDeviationCheckBox->setVisible(AppConfig::isDevelopment());
-    routeDeviationCheckBox->setChecked(true);  // Enabled by default when visible
+    routeDeviationCheckBox->setVisible(true && AppConfig::isDevelopment());
+    routeDeviationCheckBox->setChecked(true && AppConfig::isDevelopment());  // Enabled by default when visible
 
     // Layout actions in rows
     actionsLayout->addWidget(visibilityCheckBox, 0, 0);
@@ -664,13 +664,15 @@ void RoutePanel::setupConnections()
     });
     
     // Route deviation checkbox connection
-    connect(routeDeviationCheckBox, &QCheckBox::toggled, [this](bool checked) {
-        if (ecWidget && ecWidget->getRouteDeviationDetector()) {
-            ecWidget->getRouteDeviationDetector()->setAutoCheckEnabled(checked);
-            qDebug() << "[ROUTE-PANEL] Route deviation detection" << (checked ? "enabled" : "disabled");
-            emit statusMessage(QString("Track Deviation Alert %1").arg(checked ? "enabled" : "disabled"));
-        }
-    });
+    if (AppConfig::isDevelopment()){
+        connect(routeDeviationCheckBox, &QCheckBox::toggled, [this](bool checked) {
+            if (ecWidget && ecWidget->getRouteDeviationDetector()) {
+                ecWidget->getRouteDeviationDetector()->setAutoCheckEnabled(checked);
+                qDebug() << "[ROUTE-PANEL] Route deviation detection" << (checked ? "enabled" : "disabled");
+                emit statusMessage(QString("Track Deviation Alert %1").arg(checked ? "enabled" : "disabled"));
+            }
+        });
+    }
 
     // Add to ship button connection
     connect(addToShipButton, &QPushButton::clicked, [this]() {
@@ -3083,5 +3085,5 @@ void RoutePanel::mousePressEvent(QMouseEvent* event)
 void RoutePanel::setAttachDetachButton(bool connection){
     addToShipButton->setVisible(connection);
     detachFromShipButton->setVisible(connection);
-    routeDeviationCheckBox->setVisible(connection);  // Show when MOOSDB connected
+    routeDeviationCheckBox->setVisible(connection && AppConfig::isDevelopment());  // Show when MOOSDB connected
 }

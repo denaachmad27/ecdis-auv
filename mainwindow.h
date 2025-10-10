@@ -39,7 +39,7 @@ class QFile;
 // data server id
 
 #define DSID "0"
-#define APP_TITLE "ECDIS AUV v1.32"
+#define APP_TITLE "ECDIS AUV v1.4"
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
@@ -183,6 +183,7 @@ protected slots:
     void onImportWaypoints();
 
     void openSettingsDialog();
+    void restartApplication();
     void openReleaseNotesDialog();
     void setDisplay();
 

@@ -36,9 +36,6 @@ public:
 
     QString parseTxtFile(const QString &filePath);
 
-    void setLatView(QString val);
-    void setLongView(QString val);
-
 private:
     QTextEdit  *textEdit;
   EcDictInfo *dictInfo;

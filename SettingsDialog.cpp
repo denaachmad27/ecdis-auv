@@ -132,7 +132,7 @@ void SettingsDialog::setupUI() {
     });
 
     // Data View
-    QGroupBox *dataViewGroup = new QGroupBox(tr("Data View"));
+    QGroupBox *dataViewGroup = new QGroupBox(tr("Data View (restart required)"));
     QFormLayout *dataViewForm = new QFormLayout(dataViewGroup);
 
     latViewCombo = new QComboBox;
@@ -162,7 +162,7 @@ void SettingsDialog::setupUI() {
     QVBoxLayout *shipDimensionsLayout = new QVBoxLayout(shipDimensionsTab);
 
     // Ship Dimensions Group
-    QGroupBox *dimensionsGroup = new QGroupBox(tr("Vessel Dimensions"));
+    QGroupBox *dimensionsGroup = new QGroupBox(tr("Vessel Dimensions (restart required)"));
     QFormLayout *dimensionsForm = new QFormLayout(dimensionsGroup);
     shipLengthSpin = new QDoubleSpinBox;
     shipLengthSpin->setRange(1.0, 2000.0); shipLengthSpin->setSuffix(" m");
@@ -175,7 +175,7 @@ void SettingsDialog::setupUI() {
     dimensionsForm->addRow(tr("Overall Height (meters):"), shipHeightSpin);
 
     // Navigation Safety Variables Group
-    QGroupBox *navSafetyGroup = new QGroupBox(tr("Navigation Safety Parameters"));
+    QGroupBox *navSafetyGroup = new QGroupBox(tr("Navigation Safety Parameters (restart required)"));
     QFormLayout *navSafetyForm = new QFormLayout(navSafetyGroup);
 
     navDepthSpin = new QDoubleSpinBox;
@@ -212,7 +212,7 @@ void SettingsDialog::setupUI() {
             this, &SettingsDialog::onNavDraftBelowKeelChanged);
 
     // GPS Configuration Group
-    QGroupBox *gpsGroup = new QGroupBox(tr("GPS Antenna Positions"));
+    QGroupBox *gpsGroup = new QGroupBox(tr("GPS Antenna Positions (restart required)"));
     QVBoxLayout *gpsLayout = new QVBoxLayout(gpsGroup);
     gpsTableWidget = new QTableWidget;
     gpsTableWidget->setColumnCount(3);
@@ -975,6 +975,7 @@ void SettingsDialog::accept() {
     SettingsManager::instance().save(data);
 
     // Find the EcWidget instance and apply the new dimensions
+    /*
     if (parentWidget()) {
         MainWindow* mainWindow = qobject_cast<MainWindow*>(parentWidget());
         if (mainWindow) {
@@ -985,6 +986,7 @@ void SettingsDialog::accept() {
             }
         }
     }
+    */
 
     QDialog::accept();
 

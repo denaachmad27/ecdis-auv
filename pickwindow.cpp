@@ -1109,7 +1109,6 @@ QJsonObject PickWindow::fillJson(QList<EcFeature> &pickFeatureList)
     return jsonOutput;
 }
 
-
 QJsonObject PickWindow::fillJsonSubs(QList<EcFeature> &pickFeatureList)
 {
     EcFeature        feature;
@@ -1213,11 +1212,3 @@ QJsonObject PickWindow::fillJsonSubs(QList<EcFeature> &pickFeatureList)
     return jsonOutput;
 }
 
-
-void PickWindow::setLatView(QString val){
-    latViewMode = val;
-}
-
-void PickWindow::setLongView(QString val){
-    longViewMode = val;
-}

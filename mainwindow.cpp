@@ -359,20 +359,11 @@ void MainWindow::createStatusBar(){
 // MENU BAR
 void MainWindow::createMenuBar(){
 
-
-    /*
-     * {
-    // DELETE LATER
     // File menu
     QMenu *fileMenu = menuBar()->addMenu("&File");
 
-    fileMenu->addAction("E&xit", this, SLOT(close()))->setShortcut(tr("Ctrl+x", "File|Exit"));
-    // fileMenu->addAction("Reload", this, SLOT(onReload()));
-    * }
-    */
-
     // ================================== IMPORT MENU
-    QMenu *importMenu = menuBar()->addMenu("&Import");
+    QMenu *importMenu = fileMenu->addMenu("&Import");
 
     dencActionGroup = new QActionGroup(this);
 
@@ -399,6 +390,11 @@ void MainWindow::createMenuBar(){
     importMenu->addAction(action);
 
     dencActionGroup->setEnabled(!dencPath.isEmpty());
+
+    //fileMenu->addAction("Refresh Chart", this, SLOT(onReload()));
+    fileMenu->addAction("Restart", this, SLOT(restartApplication()));
+    fileMenu->addAction("Exit", this, SLOT(close()));
+
 
     // ================================== NAVIGATION MENU
     QMenu *navMenu = menuBar()->addMenu("&Navigation");
@@ -702,7 +698,9 @@ void MainWindow::createMenuBar(){
     dock->setWidget(container);
 
     addDockWidget(Qt::LeftDockWidgetArea, dock);
-    viewMenu->addAction(dock->toggleViewAction());
+    if (AppConfig::isDevelopment()){
+        viewMenu->addAction(dock->toggleViewAction());
+    }
     dock->hide();
 
     // AIS TARGET PANEL
@@ -958,13 +956,15 @@ void MainWindow::createMenuBar(){
     // connect(autoCheckAction, SIGNAL(toggled(bool)), this, SLOT(onAutoCheckGuardZone(bool)));
 
     // ================================== AIS DVR MENU
-    QMenu *dvrMenu = menuBar()->addMenu("&AIS DVR");
+    if (AppConfig::isDevelopment()){
+        QMenu *dvrMenu = menuBar()->addMenu("&AIS DVR");
 
-    startAisRecAction = dvrMenu->addAction("Start Record", this, SLOT(startAisRecord()) );
-    stopAisRecAction = dvrMenu->addAction("Stop Record", this, SLOT(stopAisRecord()) );
+        startAisRecAction = dvrMenu->addAction("Start Record", this, SLOT(startAisRecord()) );
+        stopAisRecAction = dvrMenu->addAction("Stop Record", this, SLOT(stopAisRecord()) );
 
-    startAisRecAction->setEnabled(true);
-    stopAisRecAction->setEnabled(false);
+        startAisRecAction->setEnabled(true);
+        stopAisRecAction->setEnabled(false);
+    }
 
     if (AppConfig::isDevelopment()) {
         QMenu *debugMenu = menuBar()->addMenu("&Debug");
@@ -1030,7 +1030,10 @@ void MainWindow::setupUI(){
     // Dock widget utama untuk semua kontrol
     QDockWidget *logPlayerDock = new QDockWidget(tr("Log Player"), this);
     logPlayerDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
-    viewMenu->addAction(logPlayerDock->toggleViewAction());
+
+    if (AppConfig::isDevelopment()){
+        viewMenu->addAction(logPlayerDock->toggleViewAction());
+    }
     logPlayerDock->hide();
 
     // Widget kontainer dan layout utama di dalam dock
@@ -1461,6 +1464,12 @@ void MainWindow::openSettingsDialog() {
     }
 }
 
+void MainWindow::restartApplication() {
+    QString program = QCoreApplication::applicationFilePath();
+    QStringList arguments = QCoreApplication::arguments();
+    QProcess::startDetached(program, arguments);
+    QCoreApplication::quit();
+}
 
 void MainWindow::openReleaseNotesDialog() {
     QDialog dialog(this);

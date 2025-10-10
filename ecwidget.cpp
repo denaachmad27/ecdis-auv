@@ -2392,8 +2392,8 @@ void EcWidget::showAoiToolbox(const QPoint& pos, int aoiId, int vertexIndex){
     bool isAttached = isAOIAttachedToShip(aoiId);
 
     // Show/hide info label
-    if (isAttached) {
-        toolboxAoiInfoLabel->setText("Area attached - editing disabled");
+    if (isAttached && false) {
+        //toolboxAoiInfoLabel->setText("Area attached - editing disabled");
         toolboxAoiInfoLabel->show();
     } else {
         toolboxAoiInfoLabel->hide();
@@ -2840,7 +2840,7 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
             bool isAttached = isAOIAttachedToShip(bestAoiId);
 
             // Show/hide info label
-            if (isAttached) {
+            if (isAttached && false) {
                 toolboxAoiCreateInfoLabel->setText("Area attached - editing disabled");
                 toolboxAoiCreateInfoLabel->show();
             } else {
@@ -3110,7 +3110,6 @@ void EcWidget::waypointRightClick(QMouseEvent *e){
            update();
            return;
         }
-
 
         // Check if in route mode - right-click to end route
         if (activeFunction == CREATE_ROUTE) {
@@ -7116,28 +7115,29 @@ void EcWidget::createWaypointToolbox(const QPoint& pos, int waypointIndex)
     bool isAttached = isRouteAttachedToShip(waypoint.routeId);
 
     // Show/hide info label and update buttons
-    if (isAttached) {
-        toolboxInfoLabel->setText("Route attached - editing disabled");
+    if (isAttached && false) {
+        toolboxInfoLabel->setText("Disabled");
         toolboxInfoLabel->show();
     } else {
+        toolboxInfoLabel->setText("Disabled");
         toolboxInfoLabel->hide();
     }
 
     // Disable all toolbox buttons if route is attached
     btn1->setEnabled(!isAttached); // Edit Waypoint
     btn2->setEnabled(!isAttached); // Move Waypoint
-    btn3->setEnabled(!isAttached); // Publish Waypoint
+    //btn3->setEnabled(!isAttached); // Publish Waypoint
     btn4->setEnabled(!isAttached); // Delete Waypoint
 
     // Highlight the waypoint with yellow pulse when right-clicked
     // Find the waypoint index within its route
-    int routeWaypointIndex = 0;
-    for (int i = 0; i < waypointIndex; ++i) {
-        if (waypointList[i].routeId == waypoint.routeId) {
-            routeWaypointIndex++;
-        }
-    }
-    highlightWaypoint(waypoint.routeId, routeWaypointIndex);
+    // int routeWaypointIndex = 0;
+    // for (int i = 0; i < waypointIndex; ++i) {
+    //     if (waypointList[i].routeId == waypoint.routeId) {
+    //         routeWaypointIndex++;
+    //     }
+    // }
+    // highlightWaypoint(waypoint.routeId, routeWaypointIndex);
 
     // Posisi toolbox relatif cursor
     toolbox->adjustSize();
@@ -7237,7 +7237,7 @@ void EcWidget::createLeglineToolbox(const QPoint& pos, int routeId, int segmentI
     bool isAttached = isRouteAttachedToShip(routeId);
 
     // Show/hide info label
-    if (isAttached) {
+    if (isAttached && false) {
         toolboxLLInfoLabel->setText("Route attached - editing disabled");
         toolboxLLInfoLabel->show();
     } else {
@@ -16774,10 +16774,6 @@ void EcWidget::defaultSettingsStartUp(){
     longView = SettingsManager::instance().data().longViewMode;
 
     dragMode = SettingsManager::instance().data().chartMode == "Drag";
-
-    EcDENC *denc = nullptr;
-    EcDictInfo *dictInfo = nullptr;
-    QWidget *parentWidget = nullptr;
 }
 
 void EcWidget::applyShipDimensions()
@@ -16842,7 +16838,7 @@ void EcWidget::initializeRouteDeviationDetector()
 
         // Set default parameters
         routeDeviationDetector->setDeviationThreshold(0.1);  // 0.1 NM default
-        routeDeviationDetector->setAutoCheckEnabled(true);
+        routeDeviationDetector->setAutoCheckEnabled(true && AppConfig::isDevelopment());
         routeDeviationDetector->setCheckInterval(2000);  // 2 seconds
         routeDeviationDetector->setPulseEnabled(true);
         routeDeviationDetector->setLabelVisible(true);
