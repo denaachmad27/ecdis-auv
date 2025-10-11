@@ -308,9 +308,16 @@ void MainWindow::createStatusBar(){
         connect(sub, &AISSubscriber::connectionStatusChanged, this, [this](bool connected) {
             qDebug() << "[MainWindow] connectionStatusChanged called, connected =" << connected;
             if (connected) {
-                moosLedCircle->setStyleSheet("background-color: green; border-radius: 6px;");
-                moosStatusText->setText(" MOOSDB: Connected");
-                moosStatusText->setStyleSheet("color: green; font-weight: bold;");
+                if (navShip.deadReckon == "TRUE"){
+                    moosLedCircle->setStyleSheet("background-color: orange; border-radius: 6px;");
+                    moosStatusText->setText(" MOOSDB: Connected - Dead Reckoning");
+                    moosStatusText->setStyleSheet("color: orange; font-weight: bold;");
+                }
+                else {
+                    moosLedCircle->setStyleSheet("background-color: green; border-radius: 6px;");
+                    moosStatusText->setText(" MOOSDB: Connected");
+                    moosStatusText->setStyleSheet("color: green; font-weight: bold;");
+                }
             } else {
                 moosLedCircle->setStyleSheet("background-color: red; border-radius: 6px;");
                 moosStatusText->setText(" MOOSDB: Disconnected");
@@ -757,14 +764,16 @@ void MainWindow::createMenuBar(){
     setupUI();
     setupConnections();
 
-    QString roamingPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    QDir dir(roamingPath);
-    dir.cdUp();
+    if (AppConfig::isDevelopment()){
+        QString roamingPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+        QDir dir(roamingPath);
+        dir.cdUp();
 
-    m_logDirectoryPath = QString("%1/SevenCs/EC2007/DENC/DVR").arg(dir.path());
+        m_logDirectoryPath = QString("%1/SevenCs/EC2007/DENC/DVR").arg(dir.path());
 
-    populateLogFiles();
-    resetUIState("Ready. Choose log file.");
+        populateLogFiles();
+        resetUIState("Ready. Choose log file.");
+    }
 
     if (AppConfig::isProduction()){
         dock->hide();

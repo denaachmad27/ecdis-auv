@@ -4168,7 +4168,14 @@ void EcWidget::startAISConnection()
     connect(subscriber, &AISSubscriber::navSetReceived, this, [=](double set) { navShip.set = set;});
     connect(subscriber, &AISSubscriber::navRotReceived, this, [=](double rot) { navShip.rot = rot;});
     connect(subscriber, &AISSubscriber::navDepthBelowKeelReceived, this, [=](double depth_below_keel) { navShip.depth_below_keel = depth_below_keel;});
-    connect(subscriber, &AISSubscriber::navDeadReckonReceived, this, [=](QString deadReckon) { navShip.deadReckon = deadReckon;});
+
+    connect(subscriber, &AISSubscriber::navDeadReckonReceived, this, [=](QString deadReckon) {
+        if (navShip.deadReckon != deadReckon){
+            navShip.deadReckon = deadReckon;
+
+            emit subscriber->connectionStatusChanged(true);
+        }
+    });
 
     connect(subscriber, &AISSubscriber::mapInfoReqReceived, this, &EcWidget::processMapInfoReq);
     connect(subscriber, &AISSubscriber::processingAis, this, &EcWidget::processAis);
