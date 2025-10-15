@@ -102,6 +102,13 @@ private:
     QDoubleSpinBox *ukcDangerSpin;
     QDoubleSpinBox *ukcWarningSpin;
 
+    // TURNING PREDICTION
+    QCheckBox *showTurningPredictionCheckBox;
+    QSpinBox *predictionTimeSpin;
+    QLabel *predictionTimeLabel;
+    QComboBox *predictionDensityCombo;
+    QLabel *predictionDensityLabel;
+
     // Navigation Safety Variables (for MOOSDB integration)
     QDoubleSpinBox *navDepthSpin;
     QDoubleSpinBox *navDraftSpin;

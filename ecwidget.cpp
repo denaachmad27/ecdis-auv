@@ -4904,6 +4904,12 @@ void EcWidget::ownShipDraw(){
                 // ⭐ PANGGIL DENGAN PARAMETER BARU: COG, Heading, SOG
                 drawOwnShipIcon(painter, x, y, cog, heading, ownShipData.sog);
 
+                // GAMBAR TURNING PREDICTION (menggunakan data navShip untuk ROT)
+                // Gunakan heading dan cog absolut (belum dikurangi GetHeading) untuk kalkulasi kernel
+                drawTurningPrediction(painter, ownShipData.lat, ownShipData.lon,
+                                    ownShipData.heading, ownShipData.cog,
+                                    ownShipData.sog, navShip.rot);
+
                 // AOI EXIT PULSE: If ownship attached to an AOI and outside its area, draw pulsing red ring
                 if (attachedAoiId >= 0) {
                     const AOI* attached = nullptr;
@@ -12504,12 +12510,15 @@ void EcWidget::updateTooltipIfVisible()
 // icon ownship
 void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, double heading, double sog)
 {
+    // Selalu gunakan currentScale untuk perhitungan yang konsisten saat drag
+    double viewRangeNM = GetRange(currentScale);
+
     if (!isDragging){
-        rangeNM = GetRange(currentScale);
+        rangeNM = viewRangeNM;  // Update rangeNM hanya untuk kompatibilitas backward
     }
 
     // Jika zoom terlalu jauh, tampilkan dua lingkaran sebagai simbol ownship
-    if (rangeNM > 2.0) {
+    if (viewRangeNM > 2.0) {
         painter.save();
         painter.setPen(QPen(Qt::black, 2));
 
@@ -12529,9 +12538,74 @@ void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, doub
     }
 
     else {
-        // Skala ikon kapal berdasarkan range
+        // Ambil dimensi kapal dari settings
+        const SettingsData& settings = SettingsManager::instance().data();
+        double actualLength = settings.shipLength;   // dalam meter
+        double actualBeam = settings.shipBeam;       // dalam meter
+
+        // Konversi meter ke nautical miles (1 NM = 1852 meter)
+        double lengthNM = actualLength / 1852.0;
+        double beamNM = actualBeam / 1852.0;
+
+        // Hitung pixel per nautical mile berdasarkan current scale (gunakan viewRangeNM yang sudah dihitung di awal)
+        // Gunakan drawPixmap height untuk konsistensi, bukan widget height yang bisa berubah saat transform
+        int viewHeightPixels = drawPixmap.height();  // tinggi pixmap chart dalam pixel
+        if (viewHeightPixels == 0) viewHeightPixels = height(); // fallback jika pixmap belum diinisialisasi
+        double pixelsPerNM = viewHeightPixels / (viewRangeNM * 2.0);  // *2 karena range adalah dari center ke edge
+
+        // Konversi dimensi kapal ke pixel
+        int outlineLengthPx = int(lengthNM * pixelsPerNM);
+        int outlineBeamPx = int(beamNM * pixelsPerNM);
+
+        // Gambar outline kapal jika dimensi cukup besar untuk terlihat
+        // Hanya gambar outline jika kapal lebih besar dari icon default (threshold: 50 meter)
+        if (actualLength > 50.0 && outlineLengthPx > 60) {
+            painter.save();
+            painter.translate(x, y);
+            painter.rotate(heading);
+
+            // Gambar kerangka kapal berbentuk seperti kapal dengan haluan runcing
+            QPainterPath outlinePath;
+
+            double halfLength = outlineLengthPx / 2.0;
+            double halfBeam = outlineBeamPx / 2.0;
+
+            // Mulai dari haluan (bow) - ujung depan runcing
+            outlinePath.moveTo(0, -halfLength);
+
+            // Sisi kanan dari haluan ke tengah kapal
+            outlinePath.lineTo(halfBeam, -halfLength * 0.7);
+
+            // Sisi kanan bagian tengah (paralel)
+            outlinePath.lineTo(halfBeam, halfLength * 0.85);
+
+            // Buritan kanan (stern - sedikit miring)
+            outlinePath.lineTo(halfBeam * 0.7, halfLength);
+
+            // Buritan tengah
+            outlinePath.lineTo(-halfBeam * 0.7, halfLength);
+
+            // Buritan kiri
+            outlinePath.lineTo(-halfBeam, halfLength * 0.85);
+
+            // Sisi kiri bagian tengah (paralel)
+            outlinePath.lineTo(-halfBeam, -halfLength * 0.7);
+
+            // Kembali ke haluan
+            outlinePath.lineTo(0, -halfLength);
+
+            // Gaya outline: garis solid, semi-transparan
+            QPen outlinePen(QColor(0, 255, 0, 180), 2, Qt::SolidLine);  // Hijau transparan, solid line
+            painter.setPen(outlinePen);
+            painter.setBrush(Qt::NoBrush);  // Tanpa fill
+            painter.drawPath(outlinePath);
+
+            painter.restore();
+        }
+
+        // Skala ikon kapal berdasarkan range (gunakan viewRangeNM yang konsisten)
         double scaleFactor = 0;
-        if (rangeNM < 1){
+        if (viewRangeNM < 1){
             scaleFactor = 1.0;
         }
         else {
@@ -12627,6 +12701,226 @@ void EcWidget::drawOwnShipVectors(QPainter& painter, int x, int y, double cog, d
         int headingEndX = x + (int)(sin(headingRad) * vectorLength);
         int headingEndY = y - (int)(cos(headingRad) * vectorLength);
         painter.drawLine(x, y, headingEndX, headingEndY);
+    }
+
+    painter.restore();
+}
+
+// Helper function: Menggambar ship outline pada posisi tertentu
+void EcWidget::drawShipOutlineAt(QPainter& painter, int x, int y, double heading, double alpha)
+{
+    const SettingsData& settings = SettingsManager::instance().data();
+    double actualLength = settings.shipLength;   // dalam meter
+    double actualBeam = settings.shipBeam;       // dalam meter
+
+    // Konversi meter ke nautical miles
+    double lengthNM = actualLength / 1852.0;
+    double beamNM = actualBeam / 1852.0;
+
+    // Hitung pixel per nautical mile
+    double viewRangeNM = GetRange(currentScale);
+    int viewHeightPixels = drawPixmap.height();
+    if (viewHeightPixels == 0) viewHeightPixels = height();
+    double pixelsPerNM = viewHeightPixels / (viewRangeNM * 2.0);
+
+    // Konversi dimensi kapal ke pixel (scaled down untuk prediction)
+    int outlineLengthPx = int(lengthNM * pixelsPerNM * 0.8);  // 80% ukuran untuk prediction
+    int outlineBeamPx = int(beamNM * pixelsPerNM * 0.8);
+
+    // Minimum size untuk visibility
+    if (outlineLengthPx < 20) outlineLengthPx = 20;
+    if (outlineBeamPx < 8) outlineBeamPx = 8;
+
+    painter.save();
+    painter.translate(x, y);
+    painter.rotate(heading);
+
+    // Gambar kerangka kapal
+    QPainterPath outlinePath;
+
+    double halfLength = outlineLengthPx / 2.0;
+    double halfBeam = outlineBeamPx / 2.0;
+
+    // Mulai dari haluan (bow) - ujung depan runcing
+    outlinePath.moveTo(0, -halfLength);
+
+    // Sisi kanan dari haluan ke tengah kapal
+    outlinePath.lineTo(halfBeam, -halfLength * 0.7);
+
+    // Sisi kanan bagian tengah (paralel)
+    outlinePath.lineTo(halfBeam, halfLength * 0.85);
+
+    // Buritan kanan (stern)
+    outlinePath.lineTo(halfBeam * 0.7, halfLength);
+
+    // Buritan tengah
+    outlinePath.lineTo(-halfBeam * 0.7, halfLength);
+
+    // Buritan kiri
+    outlinePath.lineTo(-halfBeam, halfLength * 0.85);
+
+    // Sisi kiri bagian tengah (paralel)
+    outlinePath.lineTo(-halfBeam, -halfLength * 0.7);
+
+    // Kembali ke haluan
+    outlinePath.lineTo(0, -halfLength);
+
+    // Gaya outline: dashed line dengan warna abu-abu dan alpha transparency
+    QPen outlinePen(QColor(140, 140, 140, (int)alpha), 2.0, Qt::DashLine);
+    painter.setPen(outlinePen);
+    painter.setBrush(Qt::NoBrush);
+    painter.drawPath(outlinePath);
+
+    painter.restore();
+}
+
+// Fungsi untuk menggambar prediksi turning (belokan kapal)
+void EcWidget::drawTurningPrediction(QPainter& painter, double shipLat, double shipLon, double heading, double cog, double sog, double rot)
+{
+    // Cek apakah turning prediction enabled di settings
+    const SettingsData& settings = SettingsManager::instance().data();
+    if (!settings.showTurningPrediction) return;
+
+    // Jangan gambar jika kapal tidak bergerak
+    if (sog < 0.5) return;
+
+    // Jika ROT tidak valid atau terlalu kecil, coba deteksi turning dari perbedaan heading dan COG
+    bool useRotData = false;
+    if (!std::isnan(rot) && qAbs(rot) > 0.1) { // ROT threshold lebih rendah: 0.1 deg/min
+        useRotData = true;
+    } else {
+        // Deteksi turning dari perbedaan heading dan COG
+        double headingCogDiff = heading - cog;
+        // Normalize to -180 to 180
+        while (headingCogDiff > 180) headingCogDiff -= 360;
+        while (headingCogDiff < -180) headingCogDiff += 360;
+
+        // Jika perbedaan heading dan COG < 5 derajat, tidak ada turning
+        if (qAbs(headingCogDiff) < 5.0) return;
+
+        // Estimasi ROT dari perbedaan heading-COG (asumsi kapal akan align ke COG)
+        rot = headingCogDiff * 0.5; // Estimasi sederhana
+        useRotData = true;
+    }
+
+    if (!useRotData) return;
+
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    // Waktu prediksi dari settings (dalam menit)
+    int predictionMinutes = settings.predictionTimeMinutes;
+    if (predictionMinutes <= 0) predictionMinutes = 3; // Default 3 menit
+
+    // Hitung prediksi posisi menggunakan kernel EcMonitorCalculatePrediction
+    // Interval kalkulasi path (selalu 5 detik untuk smooth curve)
+    double timeIntervalSec = 5.0;
+    int numPoints = (int)((predictionMinutes * 60.0) / timeIntervalSec);
+
+    // Density untuk menggambar ship outlines (dari settings)
+    int densityMode = settings.predictionDensity; // 1=Low(20s), 2=Medium(10s), 3=High(5s)
+    int drawInterval;
+    if (densityMode == 1) {
+        drawInterval = 4; // 20 detik (setiap 4 points * 5s)
+    } else if (densityMode == 3) {
+        drawInterval = 1; // 5 detik (setiap point)
+    } else {
+        drawInterval = 2; // Default: 10 detik (setiap 2 points)
+    }
+
+    QVector<QPoint> predictionPoints;
+
+    EcCoordinate currentLat = shipLat;
+    EcCoordinate currentLon = shipLon;
+    double currentHeading = heading;
+
+    // Gambar path prediksi
+    for (int i = 1; i <= numPoints; ++i) {
+        double timeDiff = timeIntervalSec; // 15 detik increment untuk kurva lebih halus
+
+        EcCoordinate predictLat, predictLon, rotLat, rotLon;
+        double predictHeading;
+
+        // Panggil kernel function untuk menghitung prediksi
+        Bool success = EcMonitorCalculatePrediction(
+            timeDiff,           // time difference in seconds
+            currentLat,         // current latitude
+            currentLon,         // current longitude
+            currentHeading,     // heading (in degrees)
+            cog,                // course made good
+            sog,                // speed (knots)
+            rot,                // rate of turn (deg/min)
+            &predictLat,        // output: predicted latitude
+            &predictLon,        // output: predicted longitude
+            &predictHeading,    // output: predicted heading
+            &rotLat,            // output: rotation center latitude
+            &rotLon             // output: rotation center longitude
+        );
+
+        if (success) {
+            // Konversi ke screen coordinates
+            int px, py;
+            if (LatLonToXy(predictLat, predictLon, px, py)) {
+                predictionPoints.append(QPoint(px, py));
+
+                // Update current position untuk iterasi berikutnya
+                currentLat = predictLat;
+                currentLon = predictLon;
+                currentHeading = predictHeading;
+            }
+        }
+    }
+
+    // Gambar ship outlines di sepanjang prediction path
+    if (predictionPoints.size() > 1) {
+        // Store headings untuk setiap prediction point
+        QVector<double> predictionHeadings;
+        predictionHeadings.reserve(predictionPoints.size());
+
+        // Recalculate untuk mendapatkan heading di setiap point
+        EcCoordinate tempLat = shipLat;
+        EcCoordinate tempLon = shipLon;
+        double tempHeading = heading;
+
+        for (int i = 1; i <= numPoints; ++i) {
+            EcCoordinate predictLat, predictLon, rotLat, rotLon;
+            double predictHeading;
+
+            Bool success = EcMonitorCalculatePrediction(
+                timeIntervalSec, tempLat, tempLon, tempHeading,
+                cog, sog, rot,
+                &predictLat, &predictLon, &predictHeading,
+                &rotLat, &rotLon
+            );
+
+            if (success) {
+                predictionHeadings.append(predictHeading);
+                tempLat = predictLat;
+                tempLon = predictLon;
+                tempHeading = predictHeading;
+            }
+        }
+
+        // Gambar ship outlines dengan interval sesuai density setting
+        for (int i = 0; i < predictionPoints.size(); i += drawInterval) {
+            // Hitung alpha berdasarkan jarak dari posisi saat ini (fade out lebih halus)
+            double alpha = 220.0 - (i / (double)predictionPoints.size()) * 70.0;
+            if (alpha < 120) alpha = 120;
+
+            // Gambar ship outline dengan PREDICTED HEADING (bukan actual heading)
+            // Ini akan membuat ship outline mengikuti turning circle
+            if (i < predictionHeadings.size()) {
+                drawShipOutlineAt(painter, predictionPoints[i].x(), predictionPoints[i].y(),
+                                predictionHeadings[i], alpha);
+            }
+        }
+
+        // Gambar outline terakhir juga untuk menunjukkan posisi final
+        if (!predictionPoints.isEmpty() && !predictionHeadings.isEmpty()) {
+            int lastIdx = predictionPoints.size() - 1;
+            drawShipOutlineAt(painter, predictionPoints[lastIdx].x(), predictionPoints[lastIdx].y(),
+                            predictionHeadings[lastIdx], 180);
+        }
     }
 
     painter.restore();
