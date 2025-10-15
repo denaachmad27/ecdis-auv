@@ -12491,12 +12491,15 @@ void EcWidget::updateTooltipIfVisible()
 // icon ownship
 void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, double heading, double sog)
 {
+    // Selalu gunakan currentScale untuk perhitungan yang konsisten saat drag
+    double viewRangeNM = GetRange(currentScale);
+
     if (!isDragging){
-        rangeNM = GetRange(currentScale);
+        rangeNM = viewRangeNM;  // Update rangeNM hanya untuk kompatibilitas backward
     }
 
     // Jika zoom terlalu jauh, tampilkan dua lingkaran sebagai simbol ownship
-    if (rangeNM > 2.0) {
+    if (viewRangeNM > 2.0) {
         painter.save();
         painter.setPen(QPen(Qt::black, 2));
 
@@ -12516,9 +12519,74 @@ void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, doub
     }
 
     else {
-        // Skala ikon kapal berdasarkan range
+        // Ambil dimensi kapal dari settings
+        const SettingsData& settings = SettingsManager::instance().data();
+        double actualLength = settings.shipLength;   // dalam meter
+        double actualBeam = settings.shipBeam;       // dalam meter
+
+        // Konversi meter ke nautical miles (1 NM = 1852 meter)
+        double lengthNM = actualLength / 1852.0;
+        double beamNM = actualBeam / 1852.0;
+
+        // Hitung pixel per nautical mile berdasarkan current scale (gunakan viewRangeNM yang sudah dihitung di awal)
+        // Gunakan drawPixmap height untuk konsistensi, bukan widget height yang bisa berubah saat transform
+        int viewHeightPixels = drawPixmap.height();  // tinggi pixmap chart dalam pixel
+        if (viewHeightPixels == 0) viewHeightPixels = height(); // fallback jika pixmap belum diinisialisasi
+        double pixelsPerNM = viewHeightPixels / (viewRangeNM * 2.0);  // *2 karena range adalah dari center ke edge
+
+        // Konversi dimensi kapal ke pixel
+        int outlineLengthPx = int(lengthNM * pixelsPerNM);
+        int outlineBeamPx = int(beamNM * pixelsPerNM);
+
+        // Gambar outline kapal jika dimensi cukup besar untuk terlihat
+        // Hanya gambar outline jika kapal lebih besar dari icon default (threshold: 50 meter)
+        if (actualLength > 50.0 && outlineLengthPx > 60) {
+            painter.save();
+            painter.translate(x, y);
+            painter.rotate(heading);
+
+            // Gambar kerangka kapal berbentuk seperti kapal dengan haluan runcing
+            QPainterPath outlinePath;
+
+            double halfLength = outlineLengthPx / 2.0;
+            double halfBeam = outlineBeamPx / 2.0;
+
+            // Mulai dari haluan (bow) - ujung depan runcing
+            outlinePath.moveTo(0, -halfLength);
+
+            // Sisi kanan dari haluan ke tengah kapal
+            outlinePath.lineTo(halfBeam, -halfLength * 0.7);
+
+            // Sisi kanan bagian tengah (paralel)
+            outlinePath.lineTo(halfBeam, halfLength * 0.85);
+
+            // Buritan kanan (stern - sedikit miring)
+            outlinePath.lineTo(halfBeam * 0.7, halfLength);
+
+            // Buritan tengah
+            outlinePath.lineTo(-halfBeam * 0.7, halfLength);
+
+            // Buritan kiri
+            outlinePath.lineTo(-halfBeam, halfLength * 0.85);
+
+            // Sisi kiri bagian tengah (paralel)
+            outlinePath.lineTo(-halfBeam, -halfLength * 0.7);
+
+            // Kembali ke haluan
+            outlinePath.lineTo(0, -halfLength);
+
+            // Gaya outline: garis solid, semi-transparan
+            QPen outlinePen(QColor(0, 255, 0, 180), 2, Qt::SolidLine);  // Hijau transparan, solid line
+            painter.setPen(outlinePen);
+            painter.setBrush(Qt::NoBrush);  // Tanpa fill
+            painter.drawPath(outlinePath);
+
+            painter.restore();
+        }
+
+        // Skala ikon kapal berdasarkan range (gunakan viewRangeNM yang konsisten)
         double scaleFactor = 0;
-        if (rangeNM < 1){
+        if (viewRangeNM < 1){
             scaleFactor = 1.0;
         }
         else {
