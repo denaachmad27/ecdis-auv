@@ -42,6 +42,11 @@ struct SettingsData {
     QString latViewMode;
     QString longViewMode;
 
+    // TURNING PREDICTION
+    bool showTurningPrediction;    // Enable/disable turning prediction display
+    int predictionTimeMinutes;     // Prediction time in minutes (default: 3)
+    int predictionDensity;         // Density of ship outlines: 1=Low (20s), 2=Medium (10s), 3=High (5s)
+
     // ALERT SETTINGS
     bool visualFlashingEnabled;
     QString soundAlarmFile;

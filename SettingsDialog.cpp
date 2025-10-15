@@ -174,6 +174,46 @@ void SettingsDialog::setupUI() {
     dimensionsForm->addRow(tr("Beam (meters):"), shipBeamSpin);
     dimensionsForm->addRow(tr("Overall Height (meters):"), shipHeightSpin);
 
+    // Turning Prediction Group
+    QGroupBox *turningPredictionGroup = new QGroupBox(tr("Turning Radius Prediction"));
+    QFormLayout *turningPredictionForm = new QFormLayout(turningPredictionGroup);
+
+    showTurningPredictionCheckBox = new QCheckBox(tr("Show Turning Prediction"));
+    showTurningPredictionCheckBox->setChecked(false); // Default disabled
+    showTurningPredictionCheckBox->setToolTip(tr("Display predicted ship path when turning (requires ROT data)"));
+    turningPredictionForm->addRow("", showTurningPredictionCheckBox);
+
+    predictionTimeLabel = new QLabel(tr("Prediction Time:"));
+    predictionTimeSpin = new QSpinBox;
+    predictionTimeSpin->setRange(1, 10);
+    predictionTimeSpin->setValue(3);
+    predictionTimeSpin->setSuffix(" min");
+    predictionTimeSpin->setToolTip(tr("How many minutes ahead to predict the ship's path"));
+    turningPredictionForm->addRow(predictionTimeLabel, predictionTimeSpin);
+
+    predictionDensityLabel = new QLabel(tr("Ship Outline Density:"));
+    predictionDensityCombo = new QComboBox;
+    predictionDensityCombo->addItem("Low (every 20s)", 1);
+    predictionDensityCombo->addItem("Medium (every 10s)", 2);
+    predictionDensityCombo->addItem("High (every 5s)", 3);
+    predictionDensityCombo->setCurrentIndex(1); // Default: Medium
+    predictionDensityCombo->setToolTip(tr("How often to draw ship outlines along the prediction path"));
+    turningPredictionForm->addRow(predictionDensityLabel, predictionDensityCombo);
+
+    // Connect checkbox to enable/disable controls
+    connect(showTurningPredictionCheckBox, &QCheckBox::toggled, this, [=](bool enabled) {
+        predictionTimeLabel->setEnabled(enabled);
+        predictionTimeSpin->setEnabled(enabled);
+        predictionDensityLabel->setEnabled(enabled);
+        predictionDensityCombo->setEnabled(enabled);
+    });
+
+    // Initialize enabled state based on checkbox
+    predictionTimeLabel->setEnabled(showTurningPredictionCheckBox->isChecked());
+    predictionTimeSpin->setEnabled(showTurningPredictionCheckBox->isChecked());
+    predictionDensityLabel->setEnabled(showTurningPredictionCheckBox->isChecked());
+    predictionDensityCombo->setEnabled(showTurningPredictionCheckBox->isChecked());
+
     // Navigation Safety Variables Group
     QGroupBox *navSafetyGroup = new QGroupBox(tr("Navigation Safety Parameters (restart required)"));
     QFormLayout *navSafetyForm = new QFormLayout(navSafetyGroup);
@@ -234,6 +274,7 @@ void SettingsDialog::setupUI() {
     gpsLayout->addLayout(gpsButtons);
 
     shipDimensionsLayout->addWidget(dimensionsGroup);
+    shipDimensionsLayout->addWidget(turningPredictionGroup);
     shipDimensionsLayout->addWidget(navSafetyGroup);
     shipDimensionsLayout->addWidget(gpsGroup);
 
@@ -704,6 +745,25 @@ void SettingsDialog::loadSettings() {
     shipBeamSpin->setValue(settings.value("ShipDimensions/beam", 13.0).toDouble());
     shipHeightSpin->setValue(settings.value("ShipDimensions/height", 25.0).toDouble());
 
+    // Turning Prediction
+    showTurningPredictionCheckBox->setChecked(settings.value("TurningPrediction/enabled", false).toBool());
+    predictionTimeSpin->setValue(settings.value("TurningPrediction/timeMinutes", 3).toInt());
+
+    int densityValue = settings.value("TurningPrediction/density", 2).toInt();
+    int densityIndex = predictionDensityCombo->findData(densityValue);
+    if (densityIndex >= 0) {
+        predictionDensityCombo->setCurrentIndex(densityIndex);
+    } else {
+        predictionDensityCombo->setCurrentIndex(1); // Default: Medium
+    }
+
+    // Update enabled state of prediction time controls
+    bool predictionEnabled = showTurningPredictionCheckBox->isChecked();
+    predictionTimeLabel->setEnabled(predictionEnabled);
+    predictionTimeSpin->setEnabled(predictionEnabled);
+    predictionDensityLabel->setEnabled(predictionEnabled);
+    predictionDensityCombo->setEnabled(predictionEnabled);
+
     // Navigation Safety Variables
     navDepthSpin->setValue(settings.value("Navigation/nav_depth", 10.0).toDouble());
     navDraftSpin->setValue(settings.value("Navigation/nav_draft", 2.0).toDouble());
@@ -800,6 +860,11 @@ void SettingsDialog::saveSettings() {
     // CPA/TCPA
     settings.setValue("CPA-TCPA/cpa_threshold", cpaSpin->value());
     settings.setValue("CPA-TCPA/tcpa_threshold", tcpaSpin->value());
+
+    // Turning Prediction
+    settings.setValue("TurningPrediction/enabled", showTurningPredictionCheckBox->isChecked());
+    settings.setValue("TurningPrediction/timeMinutes", predictionTimeSpin->value());
+    settings.setValue("TurningPrediction/density", predictionDensityCombo->currentData().toInt());
 }
 
 void SettingsDialog::updateAisWidgetsVisibility(const QString &text) {
@@ -938,6 +1003,11 @@ void SettingsDialog::accept() {
     data.shipBeam = shipBeamSpin->value();
     data.shipHeight = shipHeightSpin->value();
 
+    // Turning Prediction
+    data.showTurningPrediction = showTurningPredictionCheckBox->isChecked();
+    data.predictionTimeMinutes = predictionTimeSpin->value();
+    data.predictionDensity = predictionDensityCombo->currentData().toInt();
+
     // GPS Positions
     data.gpsPositions.clear();
     for (int i = 0; i < gpsTableWidget->rowCount(); ++i) {
@@ -948,11 +1018,6 @@ void SettingsDialog::accept() {
         data.gpsPositions.append(pos);
     }
     data.primaryGpsIndex = primaryGpsCombo->currentIndex();
-
-    // Ship Dimensions
-    data.shipLength = shipLengthSpin->value();
-    data.shipBeam = shipBeamSpin->value();
-    data.shipHeight = shipHeightSpin->value();
 
     // GPS Positions
     data.gpsPositions.clear();
