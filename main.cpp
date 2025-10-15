@@ -36,14 +36,7 @@ int main( int argc, char ** argv )
   SettingsManager::instance().load();
 
   // LOAD PLUGIN
-  if (AppConfig::isDevelopment()){
-      PluginManager::instance().loadPlugin("/AisDvrPlugin.dll", "IAisDvrPlugin");
-  }
-
-  // LOAD DATABASE
-  if (AppConfig::isDevelopment()){
-      AisDatabaseManager::instance().connect("localhost", 5432, "ecdis", "postgres", "112030");
-  }
+  PluginManager::instance().loadPlugin("/AisDvrPlugin.dll", "IAisDvrPlugin");
 
   MainWindow * mw;
   try

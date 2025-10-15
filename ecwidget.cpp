@@ -4245,15 +4245,23 @@ void EcWidget::startAISConnection()
     allTimer.setInterval(1000);
     allTimer.setSingleShot(true);
 
+    dbTimer.setInterval(1000);
+    dbTimer.setSingleShot(true);
+
     // DRAW TIMER START
     connect(subscriber, &AISSubscriber::startDrawTimer, this, [this]() {
         qDebug() << "TIMER STARTED!";
         allTimer.start();
+        dbTimer.start();
     });
 
     connect(&allTimer, &QTimer::timeout, this, [=](){
         allFunctionPerTime();
         canWork = true;
+    });
+
+    connect(&dbTimer, &QTimer::timeout, this, [=](){
+        canRecord = true;
     });
 
     //connect(this, &EcWidget::ownshipCache, this, &EcWidget::updateOwnshipCache);
@@ -4389,6 +4397,11 @@ void EcWidget::processData(double lat, double lon, double cog, double sog, doubl
     // INSERT TO DATABASE
     // PLEASE WAIT!!
     // AisDatabaseManager::instance().insertOwnShipToDB(lat, lon, dep, hdg, cog, spd, sog, yaw, z);
+    if (canRecord){
+        AisDatabaseManager::instance().insertOwnShipToDB(nmea);
+        canRecord = false;
+        dbTimer.start();
+    }
 
     // EKOR OWNSHIP
     //ownShipTrailPoints.append(qMakePair(EcCoordinate(lat), EcCoordinate(lon)));

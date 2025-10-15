@@ -111,3 +111,47 @@ void AisDatabaseManager::insertOwnShipToDB(double lat, double lon, double depth,
         qWarning() << "OwnShip insert failed:" << query.lastError().text();
     }
 }
+
+void AisDatabaseManager::insertOwnShipToDB(QString nmea)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        INSERT INTO ownship_nmea (
+            timestamp, nmea
+        ) VALUES (
+            :ts, :nmea
+        )
+    )");
+
+    query.bindValue(":ts", QDateTime::currentDateTimeUtc());
+    query.bindValue(":nmea", nmea);
+
+    if (!query.exec()) {
+        qWarning() << "OwnShip insert failed:" << query.lastError().text();
+    }
+}
+
+void AisDatabaseManager::getOwnShipNmeaData(QSqlQuery& query, const QDateTime& startTime, const QDateTime& endTime)
+{
+    // Prepare the SELECT query with a WHERE clause for the time range
+    query.prepare(R"(
+        SELECT
+            timestamp,
+            nmea
+        FROM
+            ownship_nmea
+        WHERE
+            timestamp BETWEEN :startTime AND :endTime
+        ORDER BY
+            timestamp ASC
+    )");
+
+    // Bind the start and end timestamps to the query
+    query.bindValue(":startTime", startTime);
+    query.bindValue(":endTime", endTime);
+
+    // Execute the query and check for errors
+    if (!query.exec()) {
+        qWarning() << "Failed to retrieve NMEA data with time range:" << query.lastError().text();
+    }
+}

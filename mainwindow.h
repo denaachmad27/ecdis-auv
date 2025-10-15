@@ -185,6 +185,7 @@ protected slots:
     void openSettingsDialog();
     void restartApplication();
     void openReleaseNotesDialog();
+    void fetchNmea();
     void setDisplay();
 
     void openRouteManager();
@@ -204,12 +205,12 @@ protected slots:
 
     // AOI
     void onCreateAOIByClick();
-  void onOpenAOIPanel();
-  void onToggleAoiLabels(bool checked);
-  // EBL/VRM
-  void onToggleEBL(bool checked);
-  void onToggleVRM(bool checked);
-  void onStartMeasure();
+    void onOpenAOIPanel();
+    void onToggleAoiLabels(bool checked);
+    // EBL/VRM
+    void onToggleEBL(bool checked);
+    void onToggleVRM(bool checked);
+    void onStartMeasure();
 
     // Route Panel slots
     void onRouteSelected(int routeId);
@@ -305,6 +306,13 @@ private slots:
     void onSliderReleased();
     void onPlaybackTimerTimeout();
     void onDrawTimerTimeout();
+
+    // PLAYBACK DB
+    void onPlayClickedDB();
+    void onStopClickedDB();
+    void processNextNmeaDataDB();
+    void onIncreaseSpeedClickedDB();
+    void onDecreaseSpeedClickedDB();
 
 private:
     GuardZonePanel* guardZonePanel;
@@ -424,6 +432,21 @@ private:
     // MENU
     QMenu *viewTopMenu;
     QMenu *viewMenu;
+
+    // PLAYBACK DB
+    QPushButton *m_playButtonDB;
+    QPushButton *m_stopButtonDB;
+    QPushButton *m_increaseSpeedButtonDB;
+    QPushButton *m_decreaseSpeedButtonDB;
+    QDateTimeEdit *m_startEditDB;
+    QDateTimeEdit *m_endEditDB;
+    QTextEdit *m_displayEditDB;
+    QLabel *m_speedLabelDB;
+
+    QTimer *m_playbackTimerDB;
+    QQueue<QVariantList> m_nmeaDataQueueDB;
+    bool m_isPlayingDB = false;
+    int m_currentIntervalDB = 1000;
 };
 
 #endif // _mainwindow_h_

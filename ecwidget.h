@@ -1485,8 +1485,10 @@ private:
 
   // ALL TIME
   void allFunctionPerTime();
-  bool canWork = true;
   QTimer allTimer;
+  QTimer dbTimer;
+  bool canWork = true;
+  bool canRecord = true;
 
   // RIGHT CLICK ICON
   QAction* editAction;

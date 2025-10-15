@@ -27,6 +27,9 @@ public:
                        double speed, double speedOverGround,
                            double yaw, double z);
 
+    void insertOwnShipToDB(QString nmea);
+    void getOwnShipNmeaData(QSqlQuery& query, const QDateTime& startTime, const QDateTime& endTime);
+
 private:
     AisDatabaseManager() {}
     QSqlDatabase db;

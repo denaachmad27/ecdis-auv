@@ -8,6 +8,7 @@
 #include <QSet>
 
 #include "mainwindow.h"
+#include "aisdatabasemanager.h"
 #include "pickwindow.h"
 #include "searchwindow.h"
 #include "iplugininterface.h"
@@ -365,7 +366,6 @@ void MainWindow::createStatusBar(){
 
 // MENU BAR
 void MainWindow::createMenuBar(){
-
     // File menu
     QMenu *fileMenu = menuBar()->addMenu("&File");
 
@@ -965,15 +965,13 @@ void MainWindow::createMenuBar(){
     // connect(autoCheckAction, SIGNAL(toggled(bool)), this, SLOT(onAutoCheckGuardZone(bool)));
 
     // ================================== AIS DVR MENU
-    if (AppConfig::isDevelopment()){
-        QMenu *dvrMenu = menuBar()->addMenu("&AIS DVR");
+    QMenu *dvrMenu = menuBar()->addMenu("&AIS DVR");
 
-        startAisRecAction = dvrMenu->addAction("Start Record", this, SLOT(startAisRecord()) );
-        stopAisRecAction = dvrMenu->addAction("Stop Record", this, SLOT(stopAisRecord()) );
+    startAisRecAction = dvrMenu->addAction("Start Record", this, SLOT(startAisRecord()) );
+    stopAisRecAction = dvrMenu->addAction("Stop Record", this, SLOT(stopAisRecord()) );
 
-        startAisRecAction->setEnabled(true);
-        stopAisRecAction->setEnabled(false);
-    }
+    startAisRecAction->setEnabled(true);
+    stopAisRecAction->setEnabled(false);
 
     if (AppConfig::isDevelopment()) {
         QMenu *debugMenu = menuBar()->addMenu("&Debug");
@@ -1019,6 +1017,7 @@ void MainWindow::createMenuBar(){
     // ================================== ABOUT MENU
     QMenu *aboutMenu = menuBar()->addMenu("&About");
     aboutMenu->addAction("Release Notes", this, SLOT(openReleaseNotesDialog()) );
+    aboutMenu->addAction("Debug", this, SLOT(fetchNmea()) );
 
     // Set default → dark
     if (AppConfig::isDark()){
@@ -1032,6 +1031,211 @@ void MainWindow::createMenuBar(){
     else {
         lightAction->setChecked(true);
         setLightMode();
+    }
+
+    // Get the singleton instance of the database manager
+    fetchNmea();
+}
+
+void MainWindow::fetchNmea(){
+    // === 1. Buat dan Inisialisasi Widget ===
+    QWidget *dockWidgetContents = new QWidget();
+    QVBoxLayout *mainLayout = new QVBoxLayout(dockWidgetContents);
+
+    QLabel *startLabel = new QLabel("Waktu Mulai:");
+    m_startEditDB = new QDateTimeEdit(QDateTime::currentDateTime().addSecs(-3600));
+    m_startEditDB->setCalendarPopup(true);
+    m_startEditDB->setDisplayFormat("yyyy-MM-dd hh:mm:ss");
+
+    QLabel *endLabel = new QLabel("Waktu Selesai:");
+    m_endEditDB = new QDateTimeEdit(QDateTime::currentDateTime());
+    m_endEditDB->setCalendarPopup(true);
+    m_endEditDB->setDisplayFormat("yyyy-MM-dd hh:mm:ss");
+
+    m_playButtonDB = new QPushButton("Play");
+    m_stopButtonDB = new QPushButton("Stop");
+
+    m_decreaseSpeedButtonDB = new QPushButton("-");
+    m_increaseSpeedButtonDB = new QPushButton("+");
+    m_speedLabelDB = new QLabel("1x"); // Label kecepatan awal
+    m_speedLabelDB->setAlignment(Qt::AlignCenter);
+
+    QSize smallButtonSize(30, 25);
+    m_decreaseSpeedButtonDB->setFixedSize(smallButtonSize);
+    m_increaseSpeedButtonDB->setFixedSize(smallButtonSize);
+
+    m_displayEditDB = new QTextEdit();
+    m_displayEditDB->setReadOnly(true);
+
+    // === 2. Buat layout horizontal untuk kontrol kecepatan dan tombol pemutaran ===
+    QHBoxLayout *controlLayout = new QHBoxLayout();
+    controlLayout->addWidget(m_playButtonDB);
+    controlLayout->addWidget(m_stopButtonDB);
+    controlLayout->addStretch();
+    controlLayout->addWidget(m_decreaseSpeedButtonDB);
+    controlLayout->addWidget(m_speedLabelDB);
+    controlLayout->addWidget(m_increaseSpeedButtonDB);
+    controlLayout->addStretch();
+
+    // === 3. Tambahkan layout dan widget ke layout utama ===
+    mainLayout->addWidget(startLabel);
+    mainLayout->addWidget(m_startEditDB);
+    mainLayout->addWidget(endLabel);
+    mainLayout->addWidget(m_endEditDB);
+    mainLayout->addLayout(controlLayout);
+    mainLayout->addWidget(m_displayEditDB);
+
+    // === 4. Atur Dock Widget ===
+    QDockWidget *dock = new QDockWidget("NMEA Playback Control", this);
+    dock->setWidget(dockWidgetContents);
+    addDockWidget(Qt::RightDockWidgetArea, dock);
+
+    dock->hide();
+
+    // === 5. Hubungkan sinyal/slot ===
+    connect(m_playButtonDB, &QPushButton::clicked, this, &MainWindow::onPlayClickedDB);
+    connect(m_stopButtonDB, &QPushButton::clicked, this, &MainWindow::onStopClickedDB);
+    connect(m_increaseSpeedButtonDB, &QPushButton::clicked, this, &MainWindow::onIncreaseSpeedClickedDB);
+    connect(m_decreaseSpeedButtonDB, &QPushButton::clicked, this, &MainWindow::onDecreaseSpeedClickedDB);
+
+    m_playbackTimerDB = new QTimer(this);
+    connect(m_playbackTimerDB, &QTimer::timeout, this, &MainWindow::processNextNmeaDataDB);
+
+    // === 6. Koneksi database ===
+    if (AisDatabaseManager::instance().connect("localhost", 5432, "ecdis", "postgress", "112030")) {
+        qDebug() << "Database connected.";
+    } else {
+        QMessageBox::critical(this, "Error", "Gagal terhubung ke database.");
+    }
+}
+
+void MainWindow::onPlayClickedDB()
+{
+    if (m_isPlayingDB) {
+        // Logika PAUSE: Hentikan timer, ubah tombol menjadi 'Play'
+        m_playbackTimerDB->stop();
+        m_isPlayingDB = false;
+        m_playButtonDB->setText("Play");
+        m_playButtonDB->setIcon(QIcon(":/icon/play.svg"));
+        qDebug() << "Playback dijeda.";
+    } else {
+        // Logika PLAY: Ada dua kemungkinan (melanjutkan atau mulai baru)
+        // Jika antrean kosong, artinya ini adalah pemutaran pertama atau setelah di-stop total
+        if (m_nmeaDataQueueDB.isEmpty()) {
+            QDateTime startTime = m_startEditDB->dateTime();
+            QDateTime endTime = m_endEditDB->dateTime();
+
+            if (startTime >= endTime) {
+                QMessageBox::warning(this, "Rentang Waktu Tidak Valid", "Waktu mulai harus sebelum waktu selesai.");
+                return;
+            }
+
+            m_displayEditDB->clear();
+
+            QSqlQuery query;
+            AisDatabaseManager::instance().getOwnShipNmeaData(query, startTime, endTime);
+
+            if (query.isActive()) {
+                while (query.next()) {
+                    QVariantList row;
+                    row << query.value("timestamp") << query.value("nmea");
+                    m_nmeaDataQueueDB.enqueue(row);
+                }
+
+                if (!m_nmeaDataQueueDB.isEmpty()) {
+                    m_isPlayingDB = true;
+                    m_playButtonDB->setText("Pause");
+                    m_playButtonDB->setIcon(QIcon(":/icon/pause.svg"));
+                    m_playbackTimerDB->start(m_currentIntervalDB);
+                    qDebug() << "Playback dimulai.";
+                } else {
+                    m_isPlayingDB = false;
+                    QMessageBox::information(this, "Data Kosong", "Tidak ada data NMEA dalam rentang waktu yang dipilih.");
+                }
+            } else {
+                QMessageBox::warning(this, "Kesalahan Database", "Gagal mengambil data NMEA.");
+            }
+        } else {
+            // Jika antrean tidak kosong, artinya ini adalah RESUME
+            m_isPlayingDB = true;
+            m_playButtonDB->setText("Pause");
+            m_playButtonDB->setIcon(QIcon(":/icon/pause.svg"));
+            m_playbackTimerDB->start(m_currentIntervalDB);
+            qDebug() << "Playback dilanjutkan.";
+        }
+    }
+}
+
+void MainWindow::onStopClickedDB()
+{
+    m_playbackTimerDB->stop();
+    m_isPlayingDB = false;
+    m_nmeaDataQueueDB.clear();
+    m_displayEditDB->clear();
+    m_playButtonDB->setText("Play");
+    m_playButtonDB->setIcon(QIcon(":/icon/play.svg"));
+
+    // Reset kecepatan ke default (1x)
+    m_currentIntervalDB = 1000;
+    m_speedLabelDB->setText("1x");
+    qDebug() << "Playback dihentikan dan antrean dibersihkan.";
+}
+
+void MainWindow::onIncreaseSpeedClickedDB()
+{
+    // Maksimal kecepatan adalah 8x (interval 125ms)
+    if (m_currentIntervalDB > 125) {
+        m_currentIntervalDB /= 2;
+
+        int speedFactor = 1000 / m_currentIntervalDB;
+        m_speedLabelDB->setText(QString("%1x").arg(speedFactor));
+
+        if (m_isPlayingDB) {
+            m_playbackTimerDB->stop();
+            m_playbackTimerDB->start(m_currentIntervalDB);
+        }
+    }
+}
+
+void MainWindow::onDecreaseSpeedClickedDB()
+{
+    // Minimal kecepatan adalah 0.5x (interval 2000ms)
+    if (m_currentIntervalDB < 2000) {
+        m_currentIntervalDB *= 2;
+
+        // Atur label khusus untuk 0.5x
+        if (m_currentIntervalDB == 2000) {
+            m_speedLabelDB->setText("0.5x");
+        } else {
+            int speedFactor = 1000 / m_currentIntervalDB;
+            m_speedLabelDB->setText(QString("%1x").arg(speedFactor));
+        }
+
+        if (m_isPlayingDB) {
+            m_playbackTimerDB->stop();
+            m_playbackTimerDB->start(m_currentIntervalDB);
+        }
+    }
+}
+
+void MainWindow::processNextNmeaDataDB()
+{
+    if (!m_nmeaDataQueueDB.isEmpty()) {
+        QVariantList data = m_nmeaDataQueueDB.dequeue();
+        QDateTime timestamp = data.at(0).toDateTime();
+        QString nmea = data.at(1).toString();
+
+        if(ecchart && !ecchart->isDragging){
+            ecchart->readAISVariableString(nmea);
+        }
+
+        m_displayEditDB->append(QString("Waktu: %1, NMEA: %2").arg(timestamp.toString(Qt::ISODate)).arg(nmea));
+    } else {
+        m_playbackTimerDB->stop();
+        m_isPlayingDB = false;
+        m_playButtonDB->setText("Play");
+        m_playButtonDB->setIcon(QIcon(":/icon/play.svg"));
+        qDebug() << "Playback selesai.";
     }
 }
 
@@ -1367,6 +1571,9 @@ void MainWindow::populateLogFiles()
 void MainWindow::onDrawTimerTimeout()
 {
     if (ecchart && !ecchart->isDragging && m_playerState == PlayerState::Playing) {
+        ecchart->Draw();
+    }
+    else if (ecchart && m_isPlayingDB) {
         ecchart->Draw();
     }
 }
