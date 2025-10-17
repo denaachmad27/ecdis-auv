@@ -36,7 +36,9 @@ int main( int argc, char ** argv )
   SettingsManager::instance().load();
 
   // LOAD PLUGIN
-  PluginManager::instance().loadPlugin("/AisDvrPlugin.dll", "IAisDvrPlugin");
+  if (AppConfig::isBeta()){
+      PluginManager::instance().loadPlugin("/AisDvrPlugin.dll", "IAisDvrPlugin");
+  }
 
   MainWindow * mw;
   try

@@ -56,30 +56,28 @@ Ais::Ais( EcWidget *parent, EcView *view, EcDictInfo *dict,
   deleteOldOwnShipFeature();
 }
 
-Ais::~Ais()
-{
-  if( _transponder != NULL && _tcpSocket->state() == 0 )
-  {
-    if( EcAISDeleteTransponder( &_transponder ) == False )
-    {
-      addLogFileEntry( QString( "Error in ~Ais(): EcAISDeleteTransponder() failed!" ) );
+Ais::~Ais(){
+    if( _transponder != NULL && _tcpSocket->state() == 0 ){
+        if( EcAISDeleteTransponder( &_transponder ) == False ){
+            addLogFileEntry( QString( "Error in ~Ais(): EcAISDeleteTransponder() failed!" ) );
+        }
     }
-  }
 
-  if( _tcpSocket && _tcpSocket->state() == 0 )
-  {
-    delete _tcpSocket;
-  }
+    if( _tcpSocket && _tcpSocket->state() == 0 ){
+        delete _tcpSocket;
+    }
+    
+    if( _errLog ){
+        delete _errLog;
+    }
 
-  if( _errLog )
-  {
-    delete _errLog;
-  }
+    if( _fAisFile ){
+        delete _fAisFile;
+    }
 
-  if( _fAisFile )
-  {
-    delete _fAisFile;
-  }
+    if (_myAis == this){
+        _myAis = nullptr;
+    }
 }
 
 void Ais::setOwnShipPos(EcCoordinate lat, EcCoordinate lon)
@@ -565,8 +563,11 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
                 data._dictInfo = _dictInfo;
                 data.isDangerous = (aisTrkStatus == aisDangerous);
 
-                Ais::instance()->_aisTargetMap[ti->mmsi] = data;
-                Ais::instance()->_aisTargetInfoMap[ti->mmsi] = *ti;
+                data.rawInfo = *ti;
+                _myAis->postTargetUpdate(data);
+
+                // Ais::instance()->_aisTargetInfoMap[ti->mmsi] = *ti;
+                // Ais::instance()->_aisTargetMap[ti->mmsi] = data;
             }
 
             // EMIT KE CPA/TCPA PANEL
@@ -583,6 +584,9 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
     //_myAis->emitSignalTarget(ownLat, ownLon);
 }
 
+void Ais::postTargetUpdate(const AISTargetData& info){
+    emit targetUpdateReceived(info);
+}
 
 void Ais::emitSignal( double lat, double lon, double head )
 {
@@ -711,12 +715,12 @@ void Ais::readAISLogfile( const QString &logFile )
     QString nmea;
     nmeaSelection(sLine, nmea);
 
-    nmeaText->append(nmea);
+    emit nmeaTextAppend(nmea);
     extractNMEA(nmea);
 
     // OWNSHIP NMEA
     PickWindow *pickWindow = new PickWindow(parentWidget, dictInfo, denc);
-    if (navShip.lat != 0){
+    if (navShip.lat != 0 && ownShipText){
         ownShipText->setHtml(pickWindow->ownShipAutoFill());
     }
 
@@ -728,7 +732,7 @@ void Ais::readAISLogfile( const QString &logFile )
     }
 
     // OWNSHIP RIGHT PANEL
-    if (navShip.lat != 0){
+    if (navShip.lat != 0 && _cpaPanel){
         _cpaPanel->updateOwnShipInfo(navShip.lat, navShip.lon, navShip.sog, navShip.heading_og);
     }
 
@@ -823,11 +827,11 @@ void Ais::readAISLogfileWDelay(const QString &logFile, int delayMs, std::atomic<
 
         QString sLine = in.readLine().append("\r\n");
 
-        nmeaText->append(sLine);
+        emit nmeaTextAppend(sLine);
         extractNMEA(sLine);
 
         PickWindow *pickWindow = new PickWindow(parentWidget, dictInfo, denc);
-        if (navShip.lat != 0) {
+        if (navShip.lat != 0 && ownShipText) {
             ownShipText->setHtml(pickWindow->ownShipAutoFill());
         }
 
@@ -836,7 +840,7 @@ void Ais::readAISLogfileWDelay(const QString &logFile, int delayMs, std::atomic<
             dvr->recordRawNmea(sLine);
         }
 
-        if (navShip.lat != 0) {
+        if (navShip.lat != 0 && _cpaPanel) {
             _cpaPanel->updateOwnShipInfo(navShip.lat, navShip.lon, navShip.sog, navShip.heading_og);
         }
 
@@ -919,7 +923,7 @@ void Ais::readAISVariable( const QStringList &dataLines )
         }
 
         QString line = sLine + "\r\n";
-        nmeaText->append(sLine);
+        emit nmeaTextAppend(sLine);
         extractNMEA(sLine);
 
         // qDebug() << sLine;
@@ -927,9 +931,11 @@ void Ais::readAISVariable( const QStringList &dataLines )
         // OWNSHIP PANEL
         PickWindow *pickWindow = new PickWindow(parentWidget, dictInfo, denc);
 
-        if (navShip.lat != 0){
+        if (navShip.lat != 0 && ownShipText){
             ownShipText->setHtml(pickWindow->ownShipAutoFill());
-            _cpaPanel->updateOwnShipInfo(navShip.lat, navShip.lon, navShip.sog, navShip.heading_og);
+            if (_cpaPanel){
+                _cpaPanel->updateOwnShipInfo(navShip.lat, navShip.lon, navShip.sog, navShip.heading_og);
+            }
         }
 
         std::string lineStd = line.toStdString();
@@ -984,11 +990,11 @@ void Ais::readAISVariableThread(const QStringList &dataLines)
         // APPEND NMEA TO SIGNAL
         emit nmeaTextAppend(sLine);
 
-        extractNMEA(sLine);
+        // extractNMEA(sLine);
 
-        //qDebug() << sLine;
+        // qDebug() << sLine;
 
-        emit pickWindowOwnship();
+        // emit pickWindowOwnship();
 
         std::string lineStd = line.toStdString();
         if( EcAISAddTransponderOutput( _transponder, (unsigned char*)lineStd.c_str(), line.count() ) == False )

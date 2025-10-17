@@ -813,9 +813,9 @@ QString PickWindow::ownShipAutoFill()
     }
 
     int font_size = 0;
-    if (navShip.slat.size() > 30) font_size = 10;
-    else if (navShip.slat.size() >= 20) font_size = 12;
-    else if (navShip.slat.size() < 20) font_size = 15;
+    if (navShip.slat.size() > 30) font_size = 8;
+    else if (navShip.slat.size() >= 20) font_size = 10;
+    else if (navShip.slat.size() < 20) font_size = 12;
 
     row = QString(
               "<tr>"
@@ -841,9 +841,9 @@ QString PickWindow::ownShipAutoFill()
         navShip.slon = navShip.lon_dmm;
     }
 
-    if (navShip.slon.size() > 30) font_size = 10;
-    else if (navShip.slon.size() >= 20) font_size = 12;
-    else if (navShip.slon.size() < 20) font_size = 15;
+    if (navShip.slon.size() > 30) font_size = 8;
+    else if (navShip.slon.size() >= 20) font_size = 10;
+    else if (navShip.slon.size() < 20) font_size = 12;
 
     row = QString(
               "<tr>"

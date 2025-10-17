@@ -102,6 +102,10 @@ public:
     QMap<unsigned int, AISTargetData>& getTargetMap();
     AISTargetData& getOwnShipVar();
 
+    QMap<unsigned int, AISTargetData> _aisTargetMap;
+    QMap<unsigned int, EcAISTargetInfo> _aisTargetInfoMap;
+
+
     static Ais* instance();                       // untuk ambil pointer dari class lain
 
     EcAISTransponder    *_transponder;
@@ -109,11 +113,15 @@ public:
     QMap<unsigned int, EcAISTargetInfo>& getTargetInfoMap() { return _aisTargetInfoMap; }
     EcAISTargetInfo* getTargetInfo(unsigned int mmsi);
 
+    void postTargetUpdate(const AISTargetData& info);
+
 signals:
     void signalRefreshChartDisplay( double, double, double );
     void signalRefreshCenter( double, double );
     void nmeaTextAppend(const QString&);
     void pickWindowOwnship();
+
+    void targetUpdateReceived(AISTargetData info);
 
 private slots:
     void slotReadAISServerData();
@@ -145,9 +153,7 @@ private:
 
     // CPA TCPA
     CPATCPAPanel* _cpaPanel = nullptr;
-    QMap<unsigned int, AISTargetData> _aisTargetMap;
     AISTargetData _aisOwnShip;
-    QMap<unsigned int, EcAISTargetInfo> _aisTargetInfoMap;
 
     // icon ship
     EcCoordinate ownShipLat;

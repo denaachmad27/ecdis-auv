@@ -4145,11 +4145,11 @@ void EcWidget::startAISConnection()
         navShip.course_og = cog;
     });
 
-    connect(subscriber, &AISSubscriber::navSOGReceived, this, [=](double sog) {
-        navShip.sog = sog;
-        QDateTime now = QDateTime::currentDateTime();
-        speedBuffer.append(qMakePair(now, sog));
-    });
+    // connect(subscriber, &AISSubscriber::navSOGReceived, this, [=](double sog) {
+    //     navShip.sog = sog;
+    //     // QDateTime now = QDateTime::currentDateTime();
+    //     // speedBuffer.append(qMakePair(now, sog));
+    // });
 
     connect(subscriber, &AISSubscriber::navLatDmsReceived, this, [=](const QString &v) { navShip.lat_dms = v;});
     connect(subscriber, &AISSubscriber::navLongDmsReceived, this, [=](const QString &v) { navShip.lon_dms = v;});
@@ -4158,6 +4158,7 @@ void EcWidget::startAISConnection()
     connect(subscriber, &AISSubscriber::navLongDmmReceived, this, [=](const QString &v) { navShip.lon_dmm = v;});
 
     connect(subscriber, &AISSubscriber::navSpeedOGReceived, this, [=](double speed_og) { navShip.speed_og = speed_og;});
+    connect(subscriber, &AISSubscriber::navSOGReceived, this, [=](double sog) { navShip.sog = sog;});
     connect(subscriber, &AISSubscriber::navSpeedReceived, this, [=](double spe) { navShip.speed = spe;});
     connect(subscriber, &AISSubscriber::navYawReceived, this, [=](double yaw) { navShip.yaw = yaw;});
     connect(subscriber, &AISSubscriber::navZReceived, this, [=](double z) { navShip.z = z;});
@@ -4194,13 +4195,14 @@ void EcWidget::startAISConnection()
     connect(subscriber, &AISSubscriber::publishToMOOSDB, this, &EcWidget::publishToMOOSDB);
 
     // AIS
-    connect(_aisObj, &Ais::nmeaTextAppend, this, [=](const QString &msg){
-        nmeaText->append(msg);
+    connect(_aisObj, &Ais::nmeaTextAppend, this, [=](const QString &msg){ nmeaText->append(msg);});
+
+    connect(_aisObj, &Ais::targetUpdateReceived, this, [=](AISTargetData info){
+        Ais::instance()->_aisTargetMap[info.mmsi.toInt()] = info;
     });
 
     connect(_aisObj, &Ais::signalRefreshChartDisplay, this, &EcWidget::slotRefreshChartDisplayThread, Qt::QueuedConnection);
     connect(_aisObj, &Ais::signalRefreshCenter, this, &EcWidget::slotRefreshCenter, Qt::QueuedConnection);
-
 
     EcDENC *denc = nullptr;
     EcDictInfo *dictInfo = nullptr;
@@ -4256,7 +4258,7 @@ void EcWidget::startAISConnection()
     });
 
     connect(&allTimer, &QTimer::timeout, this, [=](){
-        allFunctionPerTime();
+        allFunctionPerTime(pickWindow);
         canWork = true;
     });
 
@@ -4355,7 +4357,9 @@ void EcWidget::stopAISConnection()
         }
     }
     */
-    subscriber->disconnectFromHost();
+    if (subscriber){
+        subscriber->disconnectFromHost();
+    }
 }
 
 void EcWidget::stopAllThread()
@@ -4397,7 +4401,7 @@ void EcWidget::processData(double lat, double lon, double cog, double sog, doubl
     // INSERT TO DATABASE
     // PLEASE WAIT!!
     // AisDatabaseManager::instance().insertOwnShipToDB(lat, lon, dep, hdg, cog, spd, sog, yaw, z);
-    if (canRecord){
+    if (canRecord && AppConfig::isBeta()){
         AisDatabaseManager::instance().insertOwnShipToDB(nmea);
         canRecord = false;
         dbTimer.start();
@@ -4489,12 +4493,11 @@ void EcWidget::drawPerTime(){
 
 }
 
-void EcWidget::allFunctionPerTime(){
+void EcWidget::allFunctionPerTime(PickWindow *pickWindow){
     if (!canWork) { return;}
     if (subscriber){
         if (subscriber->hasData()){
             // DRAW PER TIME
-            //qDebug() << "[DRAW] Autorun...";
             if (!isDragging) {
                 draw(true);
                 slotUpdateAISTargets(true);
@@ -4502,7 +4505,6 @@ void EcWidget::allFunctionPerTime(){
 
             // PUBLISH PER TIME
             if (navShip.lat != 0 && navShip.lon != 0){
-                //qDebug() << "[PUBLISH] Autorun";
                 publishNavInfo(navShip.lat, navShip.lon);
             }
             else {
@@ -4511,6 +4513,9 @@ void EcWidget::allFunctionPerTime(){
 
             // UPDATE ETA
             emit updateEta();
+
+            // UPDATE OWNSHIP PANEL
+            ownShipText->setText(pickWindow->ownShipAutoFill());
 
             // start countdown
             canWork = false;
@@ -12352,7 +12357,7 @@ EcAISTargetInfo* EcWidget::findAISTargetInfoAtPosition(const QPoint& mousePos)
     }
 
     // Ambil semua AIS target info lengkap
-    QMap<unsigned int, EcAISTargetInfo>& targetInfos = Ais::instance()->getTargetInfoMap();
+    QMap<unsigned int, AISTargetData>& targetDatas = Ais::instance()->getTargetMap();
 
     // Toleransi dalam pixel untuk deteksi hover
     const int tolerancePixels = 20;
@@ -12360,8 +12365,9 @@ EcAISTargetInfo* EcWidget::findAISTargetInfoAtPosition(const QPoint& mousePos)
     EcAISTargetInfo* closestTarget = nullptr;
     double closestDistance = tolerancePixels + 1;
 
-    for (auto it = targetInfos.begin(); it != targetInfos.end(); ++it) {
-        EcAISTargetInfo& targetInfo = it.value();
+    for (auto it = targetDatas.begin(); it != targetDatas.end(); ++it) {
+        AISTargetData& targetData = it.value();
+        EcAISTargetInfo& targetInfo = targetData.rawInfo;
 
         // Konversi posisi AIS target ke screen coordinates
         double lat = ((double)targetInfo.latitude / 10000.0) / 60.0;
@@ -12376,7 +12382,7 @@ EcAISTargetInfo* EcWidget::findAISTargetInfoAtPosition(const QPoint& mousePos)
 
             if (distance <= tolerancePixels && distance < closestDistance) {
                 closestDistance = distance;
-                closestTarget = &targetInfo;
+                closestTarget = &targetData.rawInfo;
             }
         }
     }
@@ -12518,7 +12524,7 @@ void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, doub
     }
 
     // Jika zoom terlalu jauh, tampilkan dua lingkaran sebagai simbol ownship
-    if (viewRangeNM > 2.0) {
+    if (viewRangeNM > 0.7) {
         painter.save();
         painter.setPen(QPen(Qt::black, 2));
 
@@ -12529,9 +12535,9 @@ void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, doub
         painter.drawEllipse(QPointF(x, y), r1, r1); // Lingkaran dalam
 
         // Titik kecil di tengah (hitam solid)
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(Qt::black);
-        painter.drawEllipse(QPointF(x, y), 2, 2); // Titik diameter 4px
+        //painter.setPen(Qt::NoPen);
+        //painter.setBrush(Qt::black);
+        //painter.drawEllipse(QPointF(x, y), 2, 2); // Titik diameter 4px
 
         painter.restore();
         return;  // jangan lanjut gambar kapal
@@ -12540,6 +12546,7 @@ void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, doub
     else {
         // Ambil dimensi kapal dari settings
         const SettingsData& settings = SettingsManager::instance().data();
+        bool actualSize = false;
         double actualLength = settings.shipLength;   // dalam meter
         double actualBeam = settings.shipBeam;       // dalam meter
 
@@ -12559,7 +12566,7 @@ void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, doub
 
         // Gambar outline kapal jika dimensi cukup besar untuk terlihat
         // Hanya gambar outline jika kapal lebih besar dari icon default (threshold: 50 meter)
-        if (actualLength > 50.0 && outlineLengthPx > 60) {
+        if (actualLength > 45.0 && outlineLengthPx > 55) {
             painter.save();
             painter.translate(x, y);
             painter.rotate(heading);
@@ -12595,22 +12602,25 @@ void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, doub
             outlinePath.lineTo(0, -halfLength);
 
             // Gaya outline: garis solid, semi-transparan
-            QPen outlinePen(QColor(0, 255, 0, 180), 2, Qt::SolidLine);  // Hijau transparan, solid line
+            //QPen outlinePen(QColor(0, 255, 0, 180), 2, Qt::SolidLine);  // Hijau transparan, solid line
+            QPen outlinePen(Qt::black, 1, Qt::SolidLine);  // Hijau transparan, solid line
             painter.setPen(outlinePen);
             painter.setBrush(Qt::NoBrush);  // Tanpa fill
             painter.drawPath(outlinePath);
 
             painter.restore();
+
+            actualSize = true;
         }
 
         // Skala ikon kapal berdasarkan range (gunakan viewRangeNM yang konsisten)
-        double scaleFactor = 0;
-        if (viewRangeNM < 1){
-            scaleFactor = 1.0;
-        }
-        else {
-            scaleFactor = 0.8;
-        }
+        double scaleFactor = 1;
+        // if (viewRangeNM < 1){
+        //     scaleFactor = 1.0;
+        // }
+        // else {
+        //     scaleFactor = 0.8;
+        // }
 
         painter.save();
 
@@ -12618,7 +12628,7 @@ void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, doub
         painter.rotate(heading);  // Rotasi kapal sesuai heading
 
         int shipLength = int(45 * scaleFactor);
-        int shipWidth  = int(15 * scaleFactor);
+        int shipWidth  = int(10 * scaleFactor);
 
         QPainterPath shipPath;
         shipPath.moveTo(0, -shipLength / 2);  // ujung hidung
@@ -12667,17 +12677,32 @@ void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, doub
         painter.restore();
 
         // Gambar vektor COG/SOG di luar rotasi
-        drawOwnShipVectors(painter, x, y, cog, heading, sog);
+        drawOwnShipVectors(painter, x, y, cog, heading, sog, actualLength, actualSize);
     }
 }
 
-void EcWidget::drawOwnShipVectors(QPainter& painter, int x, int y, double cog, double heading, double sog)
+void EcWidget::drawOwnShipVectors(QPainter& painter, int x, int y, double cog, double heading, double sog, double actualLength, bool actualSize)
 {
     // Jangan gambar vector jika kecepatan terlalu rendah
     if (sog < 0.5) return;
 
     // Panjang vector berdasarkan kecepatan (max 60 pixel)
     int vectorLength = qMin(60, qMax(20, (int)(sog * 3)));
+
+    // Ambil skala tampilan (dari chart view)
+    int viewHeightPixels = drawPixmap.height();
+    if (viewHeightPixels == 0) viewHeightPixels = height(); // fallback
+
+    // 1 NM = 1852 meter
+    double pixelsPerNM = viewHeightPixels / (GetRange(currentScale) * 2.0);
+    double lengthNM = actualLength / 1852.0;
+
+    // Konversi ke pixel
+    int outlineLengthPx = static_cast<int>(lengthNM * pixelsPerNM);
+
+    if (actualSize){
+        vectorLength = qMax(30, outlineLengthPx);
+    }
 
     // Toleransi untuk menentukan apakah COG dan heading berbeda
     double angleDifference = qAbs(cog - heading);

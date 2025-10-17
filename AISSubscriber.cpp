@@ -78,13 +78,17 @@ void AISSubscriber::connectToHost(const QString &host, quint16 port) {
 
 void AISSubscriber::onConnected() {
     QString connection = "Connecting to MOOSDB...";
-    mainWindow->setReconnectStatusText(connection);
+    if (mainWindow){
+        mainWindow->setReconnectStatusText(connection);
+    }
 
     // Timeout kalau 10 detik gak ada data
     QTimer::singleShot(11000, this, [this]() {
         if (!hasReceivedData && socket && socket->state() == QAbstractSocket::ConnectedState) {
             QString qconnection = "MOOSDB not connected, reconnecting...";
-            mainWindow->setReconnectStatusText(qconnection);
+            if (mainWindow){
+                mainWindow->setReconnectStatusText(qconnection);
+            }
             socket->disconnectFromHost();
             tryReconnect();
         }
@@ -267,7 +271,9 @@ void AISSubscriber::onReadyRead() {
 void AISSubscriber::onSocketError(QAbstractSocket::SocketError) {
     emit errorOccurred(socket->errorString());
     QString connection = "TCP not connected, reconnecting...";
-    mainWindow->setReconnectStatusText(connection);
+    if (mainWindow){
+        mainWindow->setReconnectStatusText(connection);
+    }
 
     tryReconnect();
 }

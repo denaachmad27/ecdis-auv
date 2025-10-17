@@ -8,7 +8,8 @@ class AppConfig
 public:
     enum class Mode {
         Development,
-        Production
+        Production,
+        Beta
     };
 
     enum class AppTheme {
@@ -21,6 +22,7 @@ public:
     static Mode mode();
     static bool isDevelopment();
     static bool isProduction();
+    static bool isBeta();
 
     static void setTheme(AppTheme theme);
     static AppTheme theme();

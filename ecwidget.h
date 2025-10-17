@@ -60,6 +60,8 @@ struct AISTargetData {
 
     EcFeature feat;
     EcDictInfo *_dictInfo;
+
+    EcAISTargetInfo rawInfo;
 };
 
 // Struktur untuk menyimpan data kapal
@@ -1409,7 +1411,7 @@ private:
 
   // icon vessel
   void drawOwnShipIcon(QPainter& painter, int x, int y, double cog, double heading, double sog);
-  void drawOwnShipVectors(QPainter& painter, int x, int y, double cog, double heading, double sog);
+  void drawOwnShipVectors(QPainter& painter, int x, int y, double cog, double heading, double sog, double actualLength, bool actualSize);
   void drawTurningPrediction(QPainter& painter, double shipLat, double shipLon, double heading, double cog, double sog, double rot);
   void drawShipOutlineAt(QPainter& painter, int x, int y, double heading, double alpha = 100.0);
   AISTargetData ownShipData;
@@ -1486,7 +1488,7 @@ private:
   QTimer timerPublish;
 
   // ALL TIME
-  void allFunctionPerTime();
+  void allFunctionPerTime(PickWindow *pickWindow);
   QTimer allTimer;
   QTimer dbTimer;
   bool canWork = true;

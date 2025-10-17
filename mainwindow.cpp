@@ -248,7 +248,9 @@ void MainWindow::onMoosConnectionStatusChanged(bool connected)
     stopAction->setEnabled(connected);
 
     // ROUTE PANEL
-    routePanel->setAttachDetachButton(connected);
+    if (routePanel){
+        routePanel->setAttachDetachButton(connected);
+    }
 
     // AREA
     if(aoiPanel){
@@ -705,9 +707,7 @@ void MainWindow::createMenuBar(){
     dock->setWidget(container);
 
     addDockWidget(Qt::LeftDockWidgetArea, dock);
-    if (AppConfig::isDevelopment()){
-        viewMenu->addAction(dock->toggleViewAction());
-    }
+    viewMenu->addAction(dock->toggleViewAction());
     dock->hide();
 
     // AIS TARGET PANEL
@@ -775,9 +775,7 @@ void MainWindow::createMenuBar(){
         resetUIState("Ready. Choose log file.");
     }
 
-    if (AppConfig::isProduction()){
-        dock->hide();
-    }
+    dock->hide();
 
     // ================================== DISPLAY MENU
     QMenu *appearanceMenu = menuBar()->addMenu("&Appearance");
@@ -965,13 +963,15 @@ void MainWindow::createMenuBar(){
     // connect(autoCheckAction, SIGNAL(toggled(bool)), this, SLOT(onAutoCheckGuardZone(bool)));
 
     // ================================== AIS DVR MENU
-    QMenu *dvrMenu = menuBar()->addMenu("&AIS DVR");
+    if (AppConfig::isBeta()){
+        QMenu *dvrMenu = menuBar()->addMenu("&AIS DVR");
 
-    startAisRecAction = dvrMenu->addAction("Start Record", this, SLOT(startAisRecord()) );
-    stopAisRecAction = dvrMenu->addAction("Stop Record", this, SLOT(stopAisRecord()) );
+        startAisRecAction = dvrMenu->addAction("Start Record", this, SLOT(startAisRecord()) );
+        stopAisRecAction = dvrMenu->addAction("Stop Record", this, SLOT(stopAisRecord()) );
 
-    startAisRecAction->setEnabled(true);
-    stopAisRecAction->setEnabled(false);
+        startAisRecAction->setEnabled(true);
+        stopAisRecAction->setEnabled(false);
+    }
 
     if (AppConfig::isDevelopment()) {
         QMenu *debugMenu = menuBar()->addMenu("&Debug");
@@ -980,44 +980,42 @@ void MainWindow::createMenuBar(){
 
     // ================================== CPA/TCPA MENU
     if (AppConfig::isDevelopment()){
-        if (AppConfig::isDevelopment()) {
-            QMenu *cpaMenu = menuBar()->addMenu("&CPA/TCPA");
+        QMenu *cpaMenu = menuBar()->addMenu("&CPA/TCPA");
 
-            // Sub menu untuk CPA/TCPA
-            QAction *cpaSettingsAction = cpaMenu->addAction("CPA/TCPA Settings");
-            connect(cpaSettingsAction, SIGNAL(triggered()), this, SLOT(onCPASettings()));
+        // Sub menu untuk CPA/TCPA
+        QAction *cpaSettingsAction = cpaMenu->addAction("CPA/TCPA Settings");
+        connect(cpaSettingsAction, SIGNAL(triggered()), this, SLOT(onCPASettings()));
 
-            cpaMenu->addSeparator();
+        cpaMenu->addSeparator();
 
-            QAction *showCPATargetsAction = cpaMenu->addAction("Show CPA/TCPA Monitor");
-            showCPATargetsAction->setCheckable(true);
-            showCPATargetsAction->setChecked(false);
-            connect(showCPATargetsAction, SIGNAL(triggered(bool)), this, SLOT(onShowCPATargets(bool)));
+        QAction *showCPATargetsAction = cpaMenu->addAction("Show CPA/TCPA Monitor");
+        showCPATargetsAction->setCheckable(true);
+        showCPATargetsAction->setChecked(false);
+        connect(showCPATargetsAction, SIGNAL(triggered(bool)), this, SLOT(onShowCPATargets(bool)));
 
-            QAction *showTCPAInfoAction = cpaMenu->addAction("Show TCPA Info");
-            showTCPAInfoAction->setCheckable(true);
-            showTCPAInfoAction->setChecked(false);
-            connect(showTCPAInfoAction, SIGNAL(triggered(bool)), this, SLOT(onShowTCPAInfo(bool)));
+        QAction *showTCPAInfoAction = cpaMenu->addAction("Show TCPA Info");
+        showTCPAInfoAction->setCheckable(true);
+        showTCPAInfoAction->setChecked(false);
+        connect(showTCPAInfoAction, SIGNAL(triggered(bool)), this, SLOT(onShowTCPAInfo(bool)));
 
-            cpaMenu->addSeparator();
+        cpaMenu->addSeparator();
 
-            QAction *cpaTcpaAlarmsAction = cpaMenu->addAction("Enable CPA/TCPA Alarms");
-            cpaTcpaAlarmsAction->setCheckable(true);
-            cpaTcpaAlarmsAction->setChecked(true);
-            connect(cpaTcpaAlarmsAction, SIGNAL(triggered(bool)), this, SLOT(onCPATCPAAlarms(bool)));
+        QAction *cpaTcpaAlarmsAction = cpaMenu->addAction("Enable CPA/TCPA Alarms");
+        cpaTcpaAlarmsAction->setCheckable(true);
+        cpaTcpaAlarmsAction->setChecked(true);
+        connect(cpaTcpaAlarmsAction, SIGNAL(triggered(bool)), this, SLOT(onCPATCPAAlarms(bool)));
 
-            connect(m_cpatcpaDock, &QDockWidget::visibilityChanged, this, [=](bool visible) {
-                if (!visible) { showCPATargetsAction->setChecked(false);}
-                else { showCPATargetsAction->setChecked(true);}
-            });
-        }
+        connect(m_cpatcpaDock, &QDockWidget::visibilityChanged, this, [=](bool visible) {
+            if (!visible) { showCPATargetsAction->setChecked(false);}
+            else { showCPATargetsAction->setChecked(true);}
+        });
     }
 
 
     // ================================== ABOUT MENU
     QMenu *aboutMenu = menuBar()->addMenu("&About");
     aboutMenu->addAction("Release Notes", this, SLOT(openReleaseNotesDialog()) );
-    aboutMenu->addAction("Debug", this, SLOT(fetchNmea()) );
+    //aboutMenu->addAction("Debug", this, SLOT(fetchNmea()) );
 
     // Set default → dark
     if (AppConfig::isDark()){
@@ -1033,8 +1031,9 @@ void MainWindow::createMenuBar(){
         setLightMode();
     }
 
-    // Get the singleton instance of the database manager
-    fetchNmea();
+    if (AppConfig::isBeta()){
+        fetchNmea();
+    }
 }
 
 void MainWindow::fetchNmea(){
@@ -1697,6 +1696,21 @@ void MainWindow::openReleaseNotesDialog() {
     QTextEdit *textEdit = new QTextEdit(&dialog);
     textEdit->setReadOnly(true);
     textEdit->setHtml(R"(
+        <h3><b>ECDIS v1.4 Changelog</b></h3>
+
+        <h3>New Features</h3>
+        <div style="font-size: 14px; margin-left: 0;">• Dead Reckoning</div>
+        <div style="font-size: 14px; margin-left: 0;">• Drag Mode on Chart View</div>
+        <div style="font-size: 14px; margin-left: 0;">• Ownship Actual Size</div>
+
+        <h3>Enhancements</h3>
+        <div style="font-size: 14px; margin-left: 0;">• Bug Fixing</div>
+        <div style="font-size: 14px; margin-left: 0;">• UI Refinements</div>
+        <div style="font-size: 14px; margin-left: 0;">• Routes Reverse</div>
+        <div style="font-size: 14px; margin-left: 0;">• Area Tools Shortcut</div>
+
+        <hr>
+
         <h3><b>ECDIS v1.3 Changelog</b></h3>
 
         <h3>New Features</h3>
@@ -2011,7 +2025,7 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL){
   }
 
   // AUTO CONNECT TO MOOSDB
-  if (AppConfig::isProduction()){
+  if (!AppConfig::isDevelopment()){
       ecchart->startAISSubscribe();
 
       // FOR AISSubscriber

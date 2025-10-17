@@ -19,6 +19,9 @@ bool AppConfig::isProduction() {
     return _mode == Mode::Production;
 }
 
+bool AppConfig::isBeta() {
+    return _mode == Mode::Beta;
+}
 
 AppConfig::AppTheme AppConfig::_theme = AppTheme::Dark;
 
