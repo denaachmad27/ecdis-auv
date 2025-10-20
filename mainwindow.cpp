@@ -289,6 +289,12 @@ void MainWindow::createStatusBar(){
     oriEdit->setFixedWidth(wi + 10);
     oriEdit->setText("0°");
 
+    clockEdit = new QLineEdit(statusBar());
+    clockEdit->setReadOnly(true);
+    wi = QFontMetrics(clockEdit->font()).horizontalAdvance("01 January 2000 23:59:58");
+    clockEdit->setFixedWidth(wi + 10);
+    clockEdit->setText("-");
+
     // CONNECTION STATUS
     moosLedCircle = new QLabel;
     moosLedCircle->setFixedSize(12, 12);  // lingkaran 12x12
@@ -342,6 +348,13 @@ void MainWindow::createStatusBar(){
     statusBar()->addPermanentWidget(proEdit, 0);
     statusBar()->addPermanentWidget(new QLabel("Cursor:", statusBar()));
     statusBar()->addPermanentWidget(posEdit, 0);
+
+    QWidget *separator = new QWidget(statusBar());
+    separator->setFixedWidth(20);
+    statusBar()->addPermanentWidget(separator);
+
+    statusBar()->addPermanentWidget(new QLabel("Time", statusBar()));
+    statusBar()->addPermanentWidget(clockEdit, 0);
 
     // RECONNECTING STATUS BAR
     reconnectStatusText = new QLabel("");
@@ -2039,6 +2052,15 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL){
   }
 
   ownShipText->setText(pickWindow->ownShipAutoFill());
+
+  // LOCAL DATE
+  QTimer *timer = new QTimer(this);
+  connect(timer, &QTimer::timeout, [=]() {
+      QDateTime now = QDateTime::currentDateTime(); // otomatis jam lokal
+      QString text = now.toString("dd MMM yyyy — HH:mm:ss");
+      clockEdit->setText(text);
+  });
+  timer->start(1000); // update tiap 1 detik
 
   //userPermitGenerate();
 }

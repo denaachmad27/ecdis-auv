@@ -12518,13 +12518,34 @@ void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, doub
 {
     // Selalu gunakan currentScale untuk perhitungan yang konsisten saat drag
     double viewRangeNM = GetRange(currentScale);
+    double chartScale = GetScale();
 
     if (!isDragging){
         rangeNM = viewRangeNM;  // Update rangeNM hanya untuk kompatibilitas backward
     }
 
+    // Ambil dimensi kapal dari settings
+    const SettingsData& settings = SettingsManager::instance().data();
+    bool actualSize = false;
+    double actualLength = settings.shipLength;   // dalam meter
+    double actualBeam = settings.shipBeam;       // dalam meter
+
+    // Konversi meter ke nautical miles (1 NM = 1852 meter)
+    double lengthNM = actualLength / 1852.0;
+    double beamNM = actualBeam / 1852.0;
+
+    // Hitung pixel per nautical mile berdasarkan current scale (gunakan viewRangeNM yang sudah dihitung di awal)
+    // Gunakan drawPixmap height untuk konsistensi, bukan widget height yang bisa berubah saat transform
+    int viewHeightPixels = drawPixmap.height();  // tinggi pixmap chart dalam pixel
+    if (viewHeightPixels == 0) viewHeightPixels = height(); // fallback jika pixmap belum diinisialisasi
+    double pixelsPerNM = viewHeightPixels / (viewRangeNM * 2.0);  // *2 karena range adalah dari center ke edge
+
+    // Konversi dimensi kapal ke pixel
+    int outlineLengthPx = int(lengthNM * pixelsPerNM);
+    int outlineBeamPx = int(beamNM * pixelsPerNM);
+
     // Jika zoom terlalu jauh, tampilkan dua lingkaran sebagai simbol ownship
-    if (viewRangeNM > 0.7) {
+    if (chartScale > 10000) {
         painter.save();
         painter.setPen(QPen(Qt::black, 2));
 
@@ -12544,29 +12565,9 @@ void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, doub
     }
 
     else {
-        // Ambil dimensi kapal dari settings
-        const SettingsData& settings = SettingsManager::instance().data();
-        bool actualSize = false;
-        double actualLength = settings.shipLength;   // dalam meter
-        double actualBeam = settings.shipBeam;       // dalam meter
-
-        // Konversi meter ke nautical miles (1 NM = 1852 meter)
-        double lengthNM = actualLength / 1852.0;
-        double beamNM = actualBeam / 1852.0;
-
-        // Hitung pixel per nautical mile berdasarkan current scale (gunakan viewRangeNM yang sudah dihitung di awal)
-        // Gunakan drawPixmap height untuk konsistensi, bukan widget height yang bisa berubah saat transform
-        int viewHeightPixels = drawPixmap.height();  // tinggi pixmap chart dalam pixel
-        if (viewHeightPixels == 0) viewHeightPixels = height(); // fallback jika pixmap belum diinisialisasi
-        double pixelsPerNM = viewHeightPixels / (viewRangeNM * 2.0);  // *2 karena range adalah dari center ke edge
-
-        // Konversi dimensi kapal ke pixel
-        int outlineLengthPx = int(lengthNM * pixelsPerNM);
-        int outlineBeamPx = int(beamNM * pixelsPerNM);
-
         // Gambar outline kapal jika dimensi cukup besar untuk terlihat
         // Hanya gambar outline jika kapal lebih besar dari icon default (threshold: 50 meter)
-        if (actualLength > 45.0 && outlineLengthPx > 55) {
+        if (outlineLengthPx > 55) {
             painter.save();
             painter.translate(x, y);
             painter.rotate(heading);
@@ -12613,68 +12614,70 @@ void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, doub
             actualSize = true;
         }
 
-        // Skala ikon kapal berdasarkan range (gunakan viewRangeNM yang konsisten)
-        double scaleFactor = 1;
-        // if (viewRangeNM < 1){
-        //     scaleFactor = 1.0;
-        // }
-        // else {
-        //     scaleFactor = 0.8;
-        // }
+        else {
+            // Skala ikon kapal berdasarkan range (gunakan viewRangeNM yang konsisten)
+            double scaleFactor = 1;
+            // if (viewRangeNM < 1){
+            //     scaleFactor = 1.0;
+            // }
+            // else {
+            //     scaleFactor = 0.8;
+            // }
 
-        painter.save();
+            painter.save();
 
-        painter.translate(x, y);
-        painter.rotate(heading);  // Rotasi kapal sesuai heading
+            painter.translate(x, y);
+            painter.rotate(heading);  // Rotasi kapal sesuai heading
 
-        int shipLength = int(45 * scaleFactor);
-        int shipWidth  = int(10 * scaleFactor);
+            int shipLength = int(45 * scaleFactor);
+            int shipWidth  = int(10 * scaleFactor);
 
-        QPainterPath shipPath;
-        shipPath.moveTo(0, -shipLength / 2);  // ujung hidung
+            QPainterPath shipPath;
+            shipPath.moveTo(0, -shipLength / 2);  // ujung hidung
 
-        // Sisi kanan
-        QPointF control1(shipWidth / 3, -shipLength / 2 + 3);
-        QPointF point1(shipWidth / 2, -shipLength / 4);
-        shipPath.quadTo(control1, point1);
+            // Sisi kanan
+            QPointF control1(shipWidth / 3, -shipLength / 2 + 3);
+            QPointF point1(shipWidth / 2, -shipLength / 4);
+            shipPath.quadTo(control1, point1);
 
-        QPointF point2(shipWidth / 2, shipLength / 4);
-        shipPath.lineTo(point2);
+            QPointF point2(shipWidth / 2, shipLength / 4);
+            shipPath.lineTo(point2);
 
-        QPointF control2(shipWidth / 2, shipLength / 2 - 2);
-        QPointF point3(shipWidth / 3, shipLength / 2);
-        shipPath.quadTo(control2, point3);
+            QPointF control2(shipWidth / 2, shipLength / 2 - 2);
+            QPointF point3(shipWidth / 3, shipLength / 2);
+            shipPath.quadTo(control2, point3);
 
-        // Buritan datar
-        shipPath.lineTo(-shipWidth / 3, shipLength / 2);
+            // Buritan datar
+            shipPath.lineTo(-shipWidth / 3, shipLength / 2);
 
-        // Sisi kiri (mirror)
-        QPointF control3(-shipWidth / 2, shipLength / 2 - 2);
-        QPointF point4(-shipWidth / 2, shipLength / 4);
-        shipPath.quadTo(control3, point4);
+            // Sisi kiri (mirror)
+            QPointF control3(-shipWidth / 2, shipLength / 2 - 2);
+            QPointF point4(-shipWidth / 2, shipLength / 4);
+            shipPath.quadTo(control3, point4);
 
-        QPointF point5(-shipWidth / 2, -shipLength / 4);
-        shipPath.lineTo(point5);
+            QPointF point5(-shipWidth / 2, -shipLength / 4);
+            shipPath.lineTo(point5);
 
-        QPointF control4(-shipWidth / 3, -shipLength / 2 + 3);
-        QPointF point6(0, -shipLength / 2);
-        shipPath.quadTo(control4, point6);
+            QPointF control4(-shipWidth / 3, -shipLength / 2 + 3);
+            QPointF point6(0, -shipLength / 2);
+            shipPath.quadTo(control4, point6);
 
-        // Gambar kapal
-        painter.setBrush(QBrush(QColor(120, 120, 120)));   // Abu-abu
-        painter.setPen(QPen(Qt::black, 1));
-        painter.drawPath(shipPath);
+            // Gambar kapal
+            painter.setBrush(QBrush(QColor(120, 120, 120)));   // Abu-abu
+            painter.setPen(QPen(Qt::black, 1));
+            painter.drawPath(shipPath);
 
-        // Titik pusat kapal
-        painter.setBrush(QBrush(Qt::black));
-        painter.setPen(QPen(Qt::black, 1));
-        painter.drawEllipse(-1, -1, 2, 2);
+            // Titik pusat kapal
+            painter.setBrush(QBrush(Qt::black));
+            painter.setPen(QPen(Qt::black, 1));
+            painter.drawEllipse(-1, -1, 2, 2);
 
-        // Garis heading
-        painter.setPen(QPen(Qt::black, 2));
-        painter.drawLine(0, 0, 0, -shipLength / 2 - int(10 * scaleFactor));
+            // Garis heading
+            painter.setPen(QPen(Qt::black, 2));
+            painter.drawLine(0, 0, 0, -shipLength / 2 - int(10 * scaleFactor));
 
-        painter.restore();
+            painter.restore();
+        }
 
         // Gambar vektor COG/SOG di luar rotasi
         drawOwnShipVectors(painter, x, y, cog, heading, sog, actualLength, actualSize);

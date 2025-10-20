@@ -237,7 +237,7 @@ protected:
 
     EcDictInfo  *dict;
     EcWidget    *ecchart;
-    QLineEdit   *rngEdit, *posEdit, *proEdit, *sclEdit, *oriEdit;
+    QLineEdit   *rngEdit, *posEdit, *proEdit, *sclEdit, *oriEdit, *clockEdit;
 
     QString      dencPath;
     QString      impPath;
