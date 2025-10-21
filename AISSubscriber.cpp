@@ -39,6 +39,21 @@ AISSubscriber::AISSubscriber(QObject* parent)
             }
         }
     });
+
+    // No-data watchdog: if no data arrives for a while, mark disconnected
+    noDataTimer = new QTimer(this);
+    noDataTimer->setInterval(noDataIntervalMs);
+    connect(noDataTimer, &QTimer::timeout, this, [this]() {
+        if (socket && socket->state() == QAbstractSocket::ConnectedState) {
+            qWarning() << "[AISSubscriber] No data for" << noDataIntervalMs << "ms. Forcing disconnect.";
+            hasReceivedData = false;
+            dataFlag = false;
+            emit connectionStatusChanged(false);
+            socket->disconnectFromHost();
+            tryReconnect();
+        }
+        noDataTimer->stop();
+    });
 }
 
 void AISSubscriber::connectToHost(const QString &host, quint16 port) {
@@ -73,6 +88,7 @@ void AISSubscriber::connectToHost(const QString &host, quint16 port) {
         mainWindow->setReconnectStatusText(connection);
     }
 
+    if (noDataTimer) noDataTimer->stop();
     socket->connectToHost(host, port);
 }
 
@@ -82,7 +98,7 @@ void AISSubscriber::onConnected() {
         mainWindow->setReconnectStatusText(connection);
     }
 
-    // Timeout kalau 10 detik gak ada data
+    // Timeout kalau 10 detik gak ada data (initial)
     QTimer::singleShot(11000, this, [this]() {
         if (!hasReceivedData && socket && socket->state() == QAbstractSocket::ConnectedState) {
             QString qconnection = "MOOSDB not connected, reconnecting...";
@@ -93,6 +109,9 @@ void AISSubscriber::onConnected() {
             tryReconnect();
         }
     });
+
+    // Start runtime no-data watchdog
+    if (noDataTimer) noDataTimer->start();
 }
 
 void AISSubscriber::disconnectFromHost() {
@@ -106,6 +125,7 @@ void AISSubscriber::disconnectFromHost() {
 
         // Tunda reconnect 100ms supaya socket benar-benar bersih
         QTimer::singleShot(100, this, &AISSubscriber::tryReconnect);
+        if (noDataTimer) noDataTimer->stop();
     }
 }
 
@@ -131,6 +151,9 @@ void AISSubscriber::onReadyRead() {
         // TIMER
         emit startDrawTimer();
     }
+
+    // reset runtime no-data watchdog on every data
+    if (noDataTimer) noDataTimer->start();
 
     QList<QByteArray> lines;
 
@@ -270,11 +293,14 @@ void AISSubscriber::onReadyRead() {
 
 void AISSubscriber::onSocketError(QAbstractSocket::SocketError) {
     emit errorOccurred(socket->errorString());
+    hasReceivedData = false;
+    dataFlag = false;
+    emit connectionStatusChanged(false);
     QString connection = "TCP not connected, reconnecting...";
     if (mainWindow){
         mainWindow->setReconnectStatusText(connection);
     }
-
+    if (noDataTimer) noDataTimer->stop();
     tryReconnect();
 }
 
@@ -284,6 +310,7 @@ void AISSubscriber::onDisconnected() {
 
     emit connectionStatusChanged(false);  // ✅ emit jika disconnect
     tryReconnect();
+    if (noDataTimer) noDataTimer->stop();
 }
 
 void AISSubscriber::tryReconnect()

@@ -90,6 +90,9 @@ private:
     QTimer* countdownTimer;
     int countdownSeconds;
 
+    // No-data watchdog to detect silent disconnects during runtime
+    QTimer* noDataTimer = nullptr;
+    int noDataIntervalMs = 11000; // 11 seconds without data => disconnect
     QString lastHost;
     quint16 lastPort;
 
