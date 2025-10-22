@@ -70,13 +70,8 @@ static QString formatDegMinCoord(double value, bool isLat)
 int EcWidget::minScale = 100;
 int EcWidget::maxScale = 50000000;
 
-QThread* threadAIS = nullptr;
-QTcpSocket* socketAIS = nullptr;
-std::atomic<bool> stopThread;
-
-QThread* threadAISMAP = nullptr;
-QTcpSocket* socketAISMAP = nullptr;
-std::atomic<bool> stopThreadMAP;
+// NOTE: Removed duplicate globals for AIS threading/socket state.
+// Use EcWidget member variables declared in ecwidget.h instead.
 
 std::atomic<bool> stopFlag;
 
@@ -4328,45 +4323,22 @@ void EcWidget::startConnectionAgain()
 
 void EcWidget::stopAISConnection()
 {
-    /*
+    // Minta disconnect secara asinkron di thread milik subscriber
     if (subscriber) {
-        // Hubungkan ke slot lambda sementara
-        connect(subscriber, &AISSubscriber::disconnected, this, [this]() {
-            qDebug() << "[EcWidget] Subscriber disconnected, cleaning up";
-
-            if (threadAIS) {
-                threadAIS->quit();
-                threadAIS->wait();
-                threadAIS->deleteLater();
-                threadAIS = nullptr;
-            }
-
-            // Aman untuk kosongkan subscriber setelah benar-benar disconnect
-            // subscriber = nullptr;
-        });
-
-        // Minta disconnect secara asinkron
         QMetaObject::invokeMethod(subscriber, "disconnectFromHost", Qt::QueuedConnection);
-    } else {
-        // Kalau subscriber sudah null, tetap bersihkan thread kalau ada
-        if (threadAIS) {
-            threadAIS->quit();
-            threadAIS->wait();
-            threadAIS->deleteLater();
-            threadAIS = nullptr;
-        }
-    }
-    */
-    if (subscriber){
-        subscriber->disconnectFromHost();
     }
 }
 
 void EcWidget::stopAllThread()
 {
     if (threadAIS && subscriber) {
-        // Minta worker berhenti
-        emit stopAISConnection();
+        // Beri tahu subscriber untuk tidak reconnect saat shutdown (blocking agar urutan terjamin)
+        QMetaObject::invokeMethod(subscriber, "setShuttingDown", Qt::BlockingQueuedConnection, Q_ARG(bool, true));
+        // Minta worker memutus koneksi (blocking agar selesai sebelum quit)
+        QMetaObject::invokeMethod(subscriber, "disconnectFromHost", Qt::BlockingQueuedConnection);
+
+        // Putus semua koneksi subscriber -> EcWidget untuk mencegah queued calls saat shutdown
+        QObject::disconnect(subscriber, nullptr, this, nullptr);
 
         // Minta thread keluar event loop
         threadAIS->quit();
@@ -4374,7 +4346,8 @@ void EcWidget::stopAllThread()
         // Tunggu thread benar-benar mati
         threadAIS->wait();
 
-        // Bersihkan
+        // Pindahkan subscriber ke thread utama agar deleteLater dieksekusi
+        subscriber->moveToThread(QApplication::instance()->thread());
         subscriber->deleteLater();
         threadAIS->deleteLater();
 

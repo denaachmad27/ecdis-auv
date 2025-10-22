@@ -18,6 +18,7 @@ public:
     bool dataFlag = false;
     bool hasData();
     void setDialogOpen(bool open);
+    void setShuttingDown(bool v);
 
 signals:
     // OWNSHIP
@@ -86,6 +87,7 @@ private:
     MainWindow* mainWindow = nullptr;
     QTcpSocket *socket = nullptr;
     bool hasReceivedData = false;
+    bool shuttingDown = false;
 
     QTimer* countdownTimer;
     int countdownSeconds;

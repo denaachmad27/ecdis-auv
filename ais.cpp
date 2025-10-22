@@ -57,14 +57,20 @@ Ais::Ais( EcWidget *parent, EcView *view, EcDictInfo *dict,
 }
 
 Ais::~Ais(){
-    if( _transponder != NULL && _tcpSocket->state() == 0 ){
+    // Pastikan transponder dibersihkan
+    if( _transponder != NULL ){
         if( EcAISDeleteTransponder( &_transponder ) == False ){
             addLogFileEntry( QString( "Error in ~Ais(): EcAISDeleteTransponder() failed!" ) );
         }
+        _transponder = NULL;
     }
 
-    if( _tcpSocket && _tcpSocket->state() == 0 ){
+    // Putuskan dan bebaskan socket secara aman
+    if( _tcpSocket ){
+        _tcpSocket->abort();
+        _tcpSocket->disconnect(this);
         delete _tcpSocket;
+        _tcpSocket = nullptr;
     }
     
     if( _errLog ){

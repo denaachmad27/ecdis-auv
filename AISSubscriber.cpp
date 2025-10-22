@@ -123,9 +123,18 @@ void AISSubscriber::disconnectFromHost() {
         qDebug() << "Disconnected";
         dataFlag = false;
 
-        // Tunda reconnect 100ms supaya socket benar-benar bersih
-        QTimer::singleShot(100, this, &AISSubscriber::tryReconnect);
+        // Tunda reconnect 100ms supaya socket benar-benar bersih, kecuali saat shutdown
+        if (!shuttingDown) {
+            QTimer::singleShot(100, this, &AISSubscriber::tryReconnect);
+        }
         if (noDataTimer) noDataTimer->stop();
+    }
+}
+
+void AISSubscriber::setShuttingDown(bool v) {
+    shuttingDown = v;
+    if (noDataTimer && shuttingDown) {
+        noDataTimer->stop();
     }
 }
 
