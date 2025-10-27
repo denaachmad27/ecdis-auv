@@ -6,6 +6,23 @@
 #include <QString>
 #include <QFont>
 #include <QFontMetrics>
+#include <QStringList>
+
+QString EblVrm::formatDistance(double nm) const {
+  QStringList parts;
+  if (showNmUnit) {
+    parts << QString("%1 NM").arg(QString::number(nm, 'f', 2));
+  }
+  if (showYardUnit) {
+    const double yards = nm * 1852.0 / 0.9144; // 1 NM = 1852 m, 1 yd = 0.9144 m
+    parts << QString("%1 yd").arg(QString::number(yards, 'f', 0));
+  }
+  if (showKmUnit) {
+    const double km = nm * 1.852; // 1 NM = 1.852 km
+    parts << QString("%1 km").arg(QString::number(km, 'f', 2));
+  }
+  return parts.join(" / ");
+}
 
 void EblVrm::onMouseMove(EcWidget* w, int x, int y)
 {
@@ -73,7 +90,9 @@ void EblVrm::draw(EcWidget* w, QPainter& p)
     double brg = 0.0;
     EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84, navShip.lat, navShip.lon, lat2, lon2, &distNM, &brg);
     QString degree = QString::fromUtf8("\u00B0");
-    QString text = QString("%1 NM @ %2%3").arg(QString::number(distNM, 'f', 2)).arg(QString::number(brg, 'f', 0)).arg(degree);
+    QString text = QString("%1 @ %2%3")
+                     .arg(formatDistance(distNM))
+                     .arg(QString::number(brg, 'f', 0)).arg(degree);
     QFont f("Arial", 9, QFont::Bold); p.setFont(f); QFontMetrics fm(f);
     int midX = (cx + ex) / 2; int midY = (cy + ey) / 2;
     int dx = ex - cx, dy = ey - cy; double len = qSqrt(double(dx*dx + dy*dy));
@@ -130,7 +149,7 @@ void EblVrm::draw(EcWidget* w, QPainter& p)
       int tx=0, ty=0;
       if (EcCalculateRhumblinePosition(EC_GEO_DATUM_WGS84, navShip.lat, navShip.lon, vr, 0.0, &latTop, &lonTop),
           w->LatLonToXy(latTop, lonTop, tx, ty)) {
-        QString rtext = QString("R: %1 NM").arg(QString::number(vr, 'f', 2));
+        QString rtext = QString("R: %1").arg(formatDistance(vr));
         QFont rf("Arial", 9, QFont::Bold); p.setFont(rf); QFontMetrics rfm(rf);
         int tw = rfm.horizontalAdvance(rtext); int ascent = rfm.ascent(); int th = rfm.height();
         int off = qMax(24, int(rfm.height()*2 + 4));
@@ -199,8 +218,8 @@ void EblVrm::draw(EcWidget* w, QPainter& p)
         double dnm=0.0, brg=0.0;
         EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84, lat1, lon1, lat2, lon2, &dnm, &brg);
         QString degree = QString::fromUtf8("\u00B0");
-        QString text = QString("%1 NM @ %2%3  %4")
-                       .arg(QString::number(dnm,'f',2))
+        QString text = QString("%1 @ %2%3  %4")
+                       .arg(formatDistance(dnm))
                        .arg(QString::number(brg,'f',0)).arg(degree)
                        .arg(formatLatLon(lat2, lon2));
         drawLabel(x1, y1, x2, y2, text);
@@ -220,8 +239,8 @@ void EblVrm::draw(EcWidget* w, QPainter& p)
         double dnm=0.0, brg=0.0;
         EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84, latA, lonA, latB, lonB, &dnm, &brg);
         QString degree = QString::fromUtf8("\u00B0");
-        QString text = QString("%1 NM @ %2%3  %4")
-                       .arg(QString::number(dnm,'f',2))
+        QString text = QString("%1 @ %2%3  %4")
+                       .arg(formatDistance(dnm))
                        .arg(QString::number(brg,'f',0)).arg(degree)
                        .arg(formatLatLon(latB, lonB));
         drawLabel(xa, ya, xb, yb, text);
@@ -242,8 +261,8 @@ void EblVrm::draw(EcWidget* w, QPainter& p)
         double dnm=0.0, brg=0.0;
         EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84, latA, lonA, latB, lonB, &dnm, &brg);
         QString degree = QString::fromUtf8("\u00B0");
-        QString text = QString("%1 NM @ %2%3  %4")
-                       .arg(QString::number(dnm,'f',2))
+        QString text = QString("%1 @ %2%3  %4")
+                       .arg(formatDistance(dnm))
                        .arg(QString::number(brg,'f',0)).arg(degree)
                        .arg(formatLatLon(latB, lonB));
         drawLabel(xa, ya, xb, yb, text);
@@ -271,7 +290,7 @@ void EblVrm::draw(EcWidget* w, QPainter& p)
       if (liveHasCursor) { latL = liveCursorLat; lonL = liveCursorLon; }
       else               { latL = measurePoints.back().x(); lonL = measurePoints.back().y(); }
       int lx=0, ly=0; if (w->LatLonToXy(latL, lonL, lx, ly)) {
-        QString t = QString("Total: %1 NM").arg(QString::number(totalNM,'f',2));
+        QString t = QString("Total: %1").arg(formatDistance(totalNM));
         int tw = fm.horizontalAdvance(t); int ascent = fm.ascent(); int th = fm.height();
         QRect bgRect(lx - tw/2 - pad, ly - ascent - pad - 16, tw + pad*2, th + pad*2);
         p.setPen(Qt::NoPen); p.setBrush(labelBg); p.drawRoundedRect(bgRect, 4, 4);

@@ -2771,6 +2771,16 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
         if (hitEbl || hitVrm) {
             QMenu menu(this);
             QAction* del = menu.addAction(tr("Delete EBL && VRM"));
+            QAction* actNm = menu.addAction(tr("Show NM Unit"));
+            actNm->setCheckable(true);
+            actNm->setChecked(eblvrm.showNmUnit);
+            QAction* actYd = menu.addAction(tr("Show Yard Unit"));
+            actYd->setCheckable(true);
+            actYd->setChecked(eblvrm.showYardUnit);
+            QAction* actKm = menu.addAction(tr("Show Kilometer Unit"));
+            actKm->setCheckable(true);
+            actKm->setChecked(eblvrm.showKmUnit);
+
             QAction* chosen = menu.exec(mapToGlobal(e->pos()));
             if (chosen == del) {
                 eblvrm.clearFixedPoint();
@@ -2781,6 +2791,18 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
                 emit statusMessage(tr("EBL/VRM deleted"));
                 update();
                 return; // handled
+            } else if (chosen == actNm) {
+                eblvrm.showNmUnit = actNm->isChecked();
+                update();
+                return;
+            } else if (chosen == actYd) {
+                eblvrm.showYardUnit = actYd->isChecked();
+                update();
+                return;
+            } else if (chosen == actKm) {
+                eblvrm.showKmUnit = actKm->isChecked();
+                update();
+                return;
             }
         }
     }

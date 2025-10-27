@@ -5,6 +5,7 @@
 #include <QPainter>
 #include <QPointF>
 #include <QVector>
+#include <QString>
 
 class EcWidget; // fwd
 
@@ -21,6 +22,11 @@ public:
   // Parameters
   double eblBearingDeg = 0.0;  // 0..360
   double vrmRadiusNM = 1.0;    // radius in NM
+
+  // Unit visibility controls (default: all shown)
+  bool showNmUnit = true;
+  bool showYardUnit = true;
+  bool showKmUnit = true;
 
   // Live cursor (used when measureMode is true)
   double liveCursorLat = 0.0;
@@ -73,6 +79,9 @@ public:
 
   // Draw overlays
   void draw(EcWidget* w, QPainter& p);
+
+  // Format distance string according to enabled units
+  QString formatDistance(double nm) const;
 };
 
 #endif // EBLVRM_H
