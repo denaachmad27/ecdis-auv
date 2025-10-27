@@ -6,6 +6,7 @@
 #include <QVector>
 #include <limits>
 #include <cmath>
+#include <algorithm>
 #ifndef _WIN32
 #include <QX11Info>
 #endif
@@ -115,16 +116,13 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   currentBrightness     = 100;
   currentGreyMode       = false;
 
-  // PERBAIKAN: Set default position jika currentLat/Lon belum diset
-  if (qIsNaN(currentLat) || qIsNaN(currentLon)) {
-      // Default position (Jakarta, Indonesia - bisa disesuaikan)
-      ownShip.lat = -6.2088;  // Jakarta latitude
-      ownShip.lon = 106.8456; // Jakarta longitude
-      qDebug() << "[INIT] Using default ownship position: Jakarta" << ownShip.lat << "," << ownShip.lon;
-  } else {
-      ownShip.lat = currentLat;
-      ownShip.lon = currentLon;
+  // Jangan set posisi ownship default saat init; biarkan 0 agar icon tidak tergambar
+  if (!qIsNaN(currentLat) && !qIsNaN(currentLon)) {
+      currentLat = currentLat;
+      currentLon = currentLon;
   }
+  ownShip.lat = 0.0;
+  ownShip.lon = 0.0;
   ownShip.cog =     331;
   ownShip.sog =     13;
   ownShip.heading = 325;
@@ -2507,11 +2505,11 @@ void EcWidget::resizeEvent (QResizeEvent *event)
     int hei;
 
     if (isDragging) {
-        // Tambahkan margin agar ada buffer di luar layar
-        wi = event->size().width() + 2*PAN_MARGIN;
-        hei = event->size().height() + 2*PAN_MARGIN;
-    }
-    else {
+        // Tambahkan margin dinamis agar buffer mengikuti skala
+        int margin = effectivePanMargin();
+        wi = event->size().width() + 2*margin;
+        hei = event->size().height() + 2*margin;
+    } else {
         wi  = event->size().width();
         hei = event->size().height();
     }
@@ -2564,6 +2562,27 @@ void EcWidget::resizeEvent (QResizeEvent *event)
   bool hasRoutes = !waypointList.isEmpty();
   if((showAIS || hasRoutes) && !isDragging)
     drawAISCell();
+}
+
+int EcWidget::effectivePanMargin() const {
+    // Default margin saat skala kecil (zoom in)
+    int margin = PAN_MARGIN;
+    // Jika skala > 1.000.000 (zoom out), kecilkan margin secara linier hingga 0 di 2.000.000
+    const int start = 1000000;
+    const int end   = 10000000;
+    const int scale = GetScale();
+    if (scale > start) {
+        if (scale >= end) {
+            margin = 0;
+        } else {
+            const double denom = static_cast<double>(end - start);
+            double t = static_cast<double>(scale - start);
+            double factor = 1.0 - (t / denom); // 1.0 di 1e6, 0.0 di 2e6
+            margin = static_cast<int>(std::round(PAN_MARGIN * factor));
+        }
+    }
+    if (margin < 0) margin = 0;
+    return margin;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -3437,7 +3456,41 @@ void EcWidget::mouseMoveEvent(QMouseEvent *e)
 
     // LAMUN DRAGGING
     if (isDragging && dragMode) {
-        tempOffset = e->pos() - lastPanPoint;
+        // Default offset by pixel delta
+        QPoint proposedOffset = e->pos() - lastPanPoint;
+
+        // Hindari kalkulasi geo saat belum siap (awal startup)
+        if (initialized) {
+            // Cegah menembus atas/bawah: hitung pusat baru (calon) dalam koordinat geo,
+            // clamp lat, lalu turunkan kembali ke offset piksel yang diizinkan.
+            EcCoordinate pressLat=0.0, pressLon=0.0;
+            bool okPress = XyToLatLon(lastPanPoint.x(), lastPanPoint.y(), pressLat, pressLon);
+            EcCoordinate curLat = 0.0, curLon = 0.0;
+            bool okCur = XyToLatLon(e->x(), e->y(), curLat, curLon);
+
+            if (okPress && okCur) {
+                // Calon pusat baru bila commit drag sekarang
+                double candLat = currentLat + (pressLat - curLat);
+                double candLon = currentLon + (pressLon - curLon);
+
+                // Clamp ke rentang aman (Mercator) dan normalisasi lon
+                if (candLat > 85.0) candLat = 85.0;
+                if (candLat < -85.0) candLat = -85.0;
+                while (candLon > 180.0) candLon -= 360.0;
+                while (candLon < -180.0) candLon += 360.0;
+
+                // Hitung kembali posisi release yang diizinkan dari pusat yang telah di-clamp
+                double allowedReleaseLat = pressLat - (candLat - currentLat);
+                double allowedReleaseLon = pressLon - (candLon - currentLon);
+
+                int allowedPx=0, allowedPy=0;
+                if (LatLonToXy(allowedReleaseLat, allowedReleaseLon, allowedPx, allowedPy)) {
+                    proposedOffset = QPoint(allowedPx, allowedPy) - lastPanPoint;
+                }
+            }
+        }
+
+        tempOffset = proposedOffset;
         setCursor(Qt::ClosedHandCursor);
 
         update();
@@ -3510,6 +3563,17 @@ void EcWidget::mouseReleaseEvent(QMouseEvent *e)
             // Update center ke posisi baru
             currentLat += deltaLat;
             currentLon += deltaLon;
+
+            // Batasi agar tidak melewati "ujung dunia"
+            // Clamp latitude ke rentang aman Mercator dan normalisasi longitude
+            auto normalizeLon = [](double lon){
+                while (lon > 180.0) lon -= 360.0;
+                while (lon < -180.0) lon += 360.0;
+                return lon;
+            };
+            if (currentLat > 85.0) currentLat = 85.0;
+            if (currentLat < -85.0) currentLat = -85.0;
+            currentLon = normalizeLon(currentLon);
         }
 
         tempOffset = QPoint();  // reset drag offset
@@ -4142,6 +4206,9 @@ void EcWidget::startAISConnection()
         // QString slat = latLonToDegMin(lat, true);
         // navShip.slat = slat;
         updateAttachedGuardZoneFromNavShip();
+        if (!showCustomOwnShip && navShip.lat != 0.0 && navShip.lon != 0.0) {
+            showCustomOwnShip = true;
+        }
         if (shipDotEnabled) update();
     });
     connect(subscriber, &AISSubscriber::navLongReceived, this, [=](double lon) {
@@ -4150,6 +4217,9 @@ void EcWidget::startAISConnection()
         // QString slon = latLonToDegMin(lon, false);
         // navShip.slon = slon;
         updateAttachedGuardZoneFromNavShip();
+        if (!showCustomOwnShip && navShip.lat != 0.0 && navShip.lon != 0.0) {
+            showCustomOwnShip = true;
+        }
         if (shipDotEnabled) update();
     });
 

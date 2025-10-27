@@ -1415,7 +1415,7 @@ private:
   void drawTurningPrediction(QPainter& painter, double shipLat, double shipLon, double heading, double cog, double sog, double rot);
   void drawShipOutlineAt(QPainter& painter, int x, int y, double heading, double alpha = 100.0);
   AISTargetData ownShipData;
-  bool showCustomOwnShip = true; // Flag untuk kontrol visibility
+  bool showCustomOwnShip = false; // Mulai tersembunyi sampai posisi ownship valid
   bool showOwnShipTrail;
 
   // Test GuardZone properties
@@ -1556,6 +1556,9 @@ private:
   QPoint mapToScene(const QPoint &widgetPos) const;
 
   QPointF mapMouseToMapCoordinates(const QPoint& mousePos);
+
+  // Compute dynamic pan margin based on current scale
+  int effectivePanMargin() const;
 }; // EcWidget
 
 #endif // _ec_widget_h_
