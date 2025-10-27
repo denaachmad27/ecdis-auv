@@ -3,6 +3,8 @@
 #include "appconfig.h"
 #include <QSettings>
 #include <QCoreApplication>
+#include <QStandardPaths>
+#include <QDir>
 
 SettingsManager& SettingsManager::instance() {
     static SettingsManager instance;
@@ -10,8 +12,21 @@ SettingsManager& SettingsManager::instance() {
 }
 
 void SettingsManager::load() {
-    //QString configPath = QCoreApplication::applicationDirPath() + "/config.ini";
-    QString configPath = QString(EcKernelGetEnv("APPDATA")) + "/SevenCs/EC2007/DENC" + "/config.ini";
+    // Resolve config path with robust APPDATA fallback
+    QString baseAppData;
+    const char* appDataEnv = EcKernelGetEnv("APPDATA");
+    if (appDataEnv && *appDataEnv) {
+        baseAppData = QString::fromLocal8Bit(appDataEnv);
+    } else {
+        baseAppData = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+        if (baseAppData.isEmpty()) {
+            baseAppData = QCoreApplication::applicationDirPath();
+        }
+    }
+    QDir baseDir(baseAppData);
+    QString dirPath = baseDir.filePath("SevenCs/EC2007/DENC");
+    QDir().mkpath(dirPath);
+    QString configPath = QDir(dirPath).filePath("config.ini");
     QSettings settings(configPath, QSettings::IniFormat);
 
     // MOOSDB
@@ -81,30 +96,28 @@ void SettingsManager::load() {
     }
     settings.endArray();
 
-    // Ship Dimensions
-    m_data.shipLength = settings.value("ShipDimensions/length", 170.0).toDouble();
-    m_data.shipBeam = settings.value("ShipDimensions/beam", 13.0).toDouble();
-    m_data.shipHeight = settings.value("ShipDimensions/height", 15.0).toDouble();
-    m_data.primaryGpsIndex = settings.value("ShipDimensions/primaryGpsIndex", 0).toInt();
-
-    // GPS Positions
-    m_data.gpsPositions.clear();
-    for (int i = 0; i < gpsCount; ++i) {
-        settings.setArrayIndex(i);
-        GpsPosition pos;
-        pos.name = settings.value("name", QString("GPS %1").arg(i + 1)).toString();
-        pos.offsetX = settings.value("offsetX", 0.0).toDouble();
-        pos.offsetY = settings.value("offsetY", 0.0).toDouble();
-        m_data.gpsPositions.append(pos);
-    }
-    settings.endArray();
+    // NOTE: removed duplicate ShipDimensions and GPSPositions read to avoid
+    // mismatched beginReadArray/endArray and inconsistent state
 }
 
 void SettingsManager::save(const SettingsData& data) {
     m_data = data;
 
-    //QString configPath = QCoreApplication::applicationDirPath() + "/config.ini";
-    QString configPath = QString(EcKernelGetEnv("APPDATA")) + "/SevenCs/EC2007/DENC" + "/config.ini";
+    // Resolve config path with robust APPDATA fallback
+    QString baseAppData;
+    const char* appDataEnv = EcKernelGetEnv("APPDATA");
+    if (appDataEnv && *appDataEnv) {
+        baseAppData = QString::fromLocal8Bit(appDataEnv);
+    } else {
+        baseAppData = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+        if (baseAppData.isEmpty()) {
+            baseAppData = QCoreApplication::applicationDirPath();
+        }
+    }
+    QDir baseDir(baseAppData);
+    QString dirPath = baseDir.filePath("SevenCs/EC2007/DENC");
+    QDir().mkpath(dirPath);
+    QString configPath = QDir(dirPath).filePath("config.ini");
     QSettings settings(configPath, QSettings::IniFormat);
 
     // MOOSDB

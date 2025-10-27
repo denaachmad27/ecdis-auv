@@ -426,8 +426,8 @@ private:
     qint64 m_totalLines;
     qint64 m_currentLine;
 
-    QFile *m_logFile;
-    QTextStream *m_logStream;
+    QFile *m_logFile = nullptr;
+    QTextStream *m_logStream = nullptr;
 
     // MENU
     QMenu *viewTopMenu;

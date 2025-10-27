@@ -32,6 +32,8 @@
 
 #include <QTime>
 #include <QMessageBox>
+#include <QScreen>
+#include <QGuiApplication>
 #include <QInputDialog>
 #include <QStandardPaths>
 #include <QDir>
@@ -329,9 +331,15 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
 #endif
 
   QDesktopWidget *dt = QApplication::desktop();
-  if (dt->width() > 1024)
+  int screenWidth = 1024;
+  if (dt) {
+    screenWidth = dt->width();
+  } else if (QGuiApplication::primaryScreen()) {
+    screenWidth = QGuiApplication::primaryScreen()->size().width();
+  }
+  if (screenWidth > 1024)
     view = EcChartViewCreate (dictInfo, EC_RESOLUTION_HIGH);
-  else if (dt->width() > 800)
+  else if (screenWidth > 800)
     view = EcChartViewCreate (dictInfo, EC_RESOLUTION_MEDIUM);
   else
     view = EcChartViewCreate (dictInfo, EC_RESOLUTION_LOW);
@@ -4212,7 +4220,7 @@ void EcWidget::startAISConnection()
     connect(subscriber, &AISSubscriber::publishToMOOSDB, this, &EcWidget::publishToMOOSDB);
 
     // AIS
-    connect(_aisObj, &Ais::nmeaTextAppend, this, [=](const QString &msg){ nmeaText->append(msg);});
+    connect(_aisObj, &Ais::nmeaTextAppend, this, [=](const QString &msg){ if (nmeaText) nmeaText->append(msg);});
 
     connect(_aisObj, &Ais::targetUpdateReceived, this, [=](AISTargetData info){
         Ais::instance()->_aisTargetMap[info.mmsi.toInt()] = info;
@@ -4228,7 +4236,7 @@ void EcWidget::startAISConnection()
     PickWindow *pickWindow = new PickWindow(parentWidget, dictInfo, denc);
 
     connect(_aisObj, &Ais::pickWindowOwnship, this, [=](){
-        if (navShip.lat != 0){
+        if (navShip.lat != 0 && ownShipText){
             ownShipText->setHtml(pickWindow->ownShipAutoFill());
             //_cpaPanel->updateOwnShipInfo(navShip.lat, navShip.lon, navShip.speed_og, navShip.heading_og);
         }
