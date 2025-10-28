@@ -31,11 +31,14 @@
 #include "guardzone.h"
 #include "aoi.h"
 #include "AISSubscriber.h"
+#include "autorouteplanner.h"
+#include "autoroutedialog.h"
 
 //popup
 #include <QLabel>
 #include <QFrame>
 #include <QVBoxLayout>
+#include <QProgressDialog>
 #include <QHBoxLayout>
 
 class CPATCPAPanel;
@@ -277,6 +280,23 @@ public:
       }
   };
 
+  struct AutoRoutePreviewState
+  {
+      bool active = false;
+      GeoPoint start;
+      GeoPoint target;
+      AutoRouteOptions options;
+      AutoRouteResult result;
+  };
+
+  struct AutoRouteStartSelectionState
+  {
+      bool active = false;
+      GeoPoint target;
+      GeoPoint shadowStart;
+      bool hasShadowPosition = false;
+  };
+
   void setActiveFunction(ActiveFunction func) { activeFunction = func; }
 
   void drawOverlayCell();
@@ -301,8 +321,20 @@ public:
   void showMapContextMenu(const QPoint& pos);
   bool resetWaypointCell();
   void drawLeglineLabels();
+  void drawRouteNamesOnly(); // Draw route names at center for zoomed out view
   void drawRouteLines(); // Gambar garis route dengan warna berbeda per route (DEPRECATED)
   void drawRouteLinesOverlay(QPainter& painter); // Draw route lines directly to widget like GuardZone
+  void drawAutoRoutePreview(QPainter& painter);
+  void clearAutoRoutePreview(bool updateDisplay = true);
+  void startAutoRouteWorkflow(const QPoint& pos);
+  void presentAutoRoutePreview(const AutoRouteResult& result, const AutoRouteOptions& options);
+  void commitAutoRoutePreview();
+
+  // Auto route start selection
+  void startAutoRouteStartSelection(const GeoPoint& target);
+  void drawAutoRouteStartShadow(QPainter& painter);
+  void confirmAutoRouteStartSelection(const GeoPoint& start);
+  QVector<GeoPoint> simplifyWaypointsByDirection(const QVector<GeoPoint>& waypoints, double angleThresholdDeg);
 
   void iconUpdate(bool);
 
@@ -852,6 +884,7 @@ public:
 
   // ACTION
   QAction* createRouteAction;
+  QAction* goHereAutoRouteAction;
   QAction* pickInfoAction;
   QAction* warningInfoAction;
   QAction* measureEblVrmAction;
@@ -1187,6 +1220,8 @@ private:
 
   QList<Waypoint> waypointList;
   QList<Route> routeList;
+  AutoRoutePreviewState autoRoutePreview;
+  AutoRouteStartSelectionState autoRouteStartSelection;
   RouteSafetyFeature* routeSafetyFeature = nullptr;
   RouteDeviationDetector* routeDeviationDetector = nullptr;
   bool routeSafeMode = false;  // Enable by default for safety
@@ -1211,7 +1246,10 @@ private:
       
       GhostWaypoint() : visible(false), lat(0), lon(0), routeId(0), waypointIndex(-1) {}
   } ghostWaypoint;
-  
+
+  // Label collision tracking (cleared at start of each Draw())
+  QList<QRect> usedLabelRects;
+
   // Highlighted waypoint for route panel selection visualization
   struct HighlightedWaypoint {
       bool visible;
@@ -1220,7 +1258,7 @@ private:
       QString label;
       int routeId;
       int waypointIndex;
-      
+
       HighlightedWaypoint() : visible(false), lat(0), lon(0), routeId(0), waypointIndex(-1) {}
   } highlightedWaypoint;
 

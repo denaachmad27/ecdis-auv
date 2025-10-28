@@ -35,6 +35,7 @@
 #include <QMessageBox>
 #include <QScreen>
 #include <QGuiApplication>
+#include <QPushButton>
 #include <QInputDialog>
 #include <QStandardPaths>
 #include <QDir>
@@ -1198,7 +1199,10 @@ void EcWidget::draw(bool upd)
 /*---------------------------------------------------------------------------*/
 
 void EcWidget::Draw()
-{    
+{
+    // Clear label collision tracking at start of new draw
+    usedLabelRects.clear();
+
     draw(true);
 
     // ROUTE FIX: Enhanced conditional drawAISCell() for route stability
@@ -1226,32 +1230,122 @@ void EcWidget::Draw()
     update();
 }
 
+void EcWidget::drawRouteNamesOnly()
+{
+    // Draw route name at the middle waypoint of each route (on the route line)
+    for (const Route& route : routeList) {
+        if (!isRouteVisible(route.routeId)) {
+            continue; // Skip hidden routes
+        }
+
+        if (route.waypoints.isEmpty()) {
+            continue; // Skip empty routes
+        }
+
+        // Use middle waypoint position (ensures label is on route line)
+        int middleIndex = route.waypoints.size() / 2;
+        const auto& middleWaypoint = route.waypoints[middleIndex];
+
+        double labelLat = middleWaypoint.lat;
+        double labelLon = middleWaypoint.lon;
+
+        int x, y;
+        if (!LatLonToXy(labelLat, labelLon, x, y))
+            continue;
+
+        // Check if position is visible on screen
+        QRect screenBounds = rect();
+        if (x < -50 || x > screenBounds.width() + 50 ||
+            y < -50 || y > screenBounds.height() + 50) {
+            continue; // Position is off-screen
+        }
+
+        // Draw route name label
+        QPainter painter(&drawPixmap);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+
+        QFont labelFont("Arial", 11, QFont::Bold);
+        painter.setFont(labelFont);
+        QFontMetrics fm(labelFont);
+
+        QString routeName = route.name.isEmpty() ? QString("Route %1").arg(route.routeId) : route.name;
+        int labelWidth = fm.horizontalAdvance(routeName);
+        int labelHeight = fm.height();
+
+        // Position label ABOVE the route line (offset upward with larger clearance)
+        int labelX = x - labelWidth / 2;
+        int labelY = y - labelHeight - 30; // 30px above the waypoint position for clearance
+
+        // Draw background
+        QColor bgColor(50, 50, 50, 220);
+        QColor routeColor = getRouteColor(route.routeId);
+        routeColor.setAlpha(200);
+
+        QRect bgRect(labelX - 6, labelY - 4, labelWidth + 12, labelHeight + 8);
+
+        // Shadow
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QBrush(QColor(0, 0, 0, 120)));
+        painter.drawRoundedRect(bgRect.adjusted(2, 2, 2, 2), 4, 4);
+
+        // Background
+        painter.setBrush(QBrush(bgColor));
+        painter.setPen(QPen(routeColor, 2));
+        painter.drawRoundedRect(bgRect, 4, 4);
+
+        // Text
+        painter.setPen(QColor(255, 255, 255));
+        painter.drawText(labelX, labelY + fm.ascent(), routeName);
+
+        painter.end();
+    }
+}
+
 void EcWidget::waypointDraw(){
     //qDebug() << "[WAYPOINT-DRAW] Drawing" << waypointList.size() << "waypoints";
 
-    // Gambar waypoint dengan warna konsisten
-    for (const Waypoint &wp : waypointList)
-    {
-        // Check visibility - skip hidden routes
-        if (wp.routeId > 0 && !isRouteVisible(wp.routeId)) {
-            //qDebug() << "[WAYPOINT-DRAW] Skipping waypoint" << wp.label << "from hidden route" << wp.routeId;
-            continue; // Skip waypoints from hidden routes
-        }
+    // Clear label collision rects before drawing waypoints
+    // This ensures fresh collision detection for current frame
+    usedLabelRects.clear();
 
-        //qDebug() << "[WAYPOINT-DRAW] Drawing waypoint" << wp.label << "route:" << wp.routeId << "active:" << wp.active;
-        QColor waypointColor;
-        if (wp.active) {
-            waypointColor = getRouteColor(wp.routeId);
-        } else {
-            waypointColor = QColor(128, 128, 128); // Grey for inactive waypoints
+    // Get current range for adaptive rendering
+    int currentScale = GetScale();
+    double currentRange = GetRange(currentScale);
+
+    // Adaptive zoom levels based on range:
+    // Range >= 123: Show route name only (zoomed out to specific threshold)
+    // Range < 123: Show full waypoint details
+    bool showRouteNamesOnly = (currentRange >= 123.0);
+
+    // IMPORTANT: Draw route lines FIRST (bottom layer)
+    drawRouteLines();
+
+    // Then draw labels AFTER (top layer) - proper z-index layering
+    if (showRouteNamesOnly) {
+        // Range >= 123: Show route names only at center of routes
+        drawRouteNamesOnly();
+    } else {
+        // Range < 123: Full details with waypoint labels
+        for (const Waypoint &wp : waypointList)
+        {
+            // Check visibility - skip hidden routes
+            if (wp.routeId > 0 && !isRouteVisible(wp.routeId)) {
+                continue; // Skip waypoints from hidden routes
+            }
+
+            QColor waypointColor;
+            if (wp.active) {
+                waypointColor = getRouteColor(wp.routeId);
+            } else {
+                waypointColor = QColor(128, 128, 128); // Grey for inactive waypoints
+            }
+
+            // Always show full details with labels when range < 123
+            drawWaypointWithLabel(wp.lat, wp.lon, wp.label, waypointColor);
         }
-        drawWaypointWithLabel(wp.lat, wp.lon, wp.label, waypointColor);
     }
 
     drawLeglineLabels();
-
-    // Re-enable stable route drawing for presentation
-    drawRouteLines();
 }
 /*---------------------------------------------------------------------------*/
 
@@ -1306,6 +1400,11 @@ void EcWidget::paintEvent (QPaintEvent *e)
   // Draw highlighted waypoint for route panel selection
   if (highlightedWaypoint.visible) {
       drawHighlightedWaypoint(painter, highlightedWaypoint.lat, highlightedWaypoint.lon, highlightedWaypoint.label);
+  }
+
+  // Draw auto route start selection shadow marker
+  if (autoRouteStartSelection.active) {
+      drawAutoRouteStartShadow(painter);
   }
 
   if (AppConfig::isDevelopment()){
@@ -2716,6 +2815,33 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
 {
     setFocus();
 
+    // Handle auto route start selection
+    if (autoRouteStartSelection.active && e->button() == Qt::LeftButton) {
+        qDebug() << "[EcWidget] Left click during manual selection mode, hasShadow=" << autoRouteStartSelection.hasShadowPosition;
+        if (autoRouteStartSelection.hasShadowPosition) {
+            GeoPoint start = autoRouteStartSelection.shadowStart;
+            qDebug() << "[EcWidget] Confirming start position:" << start.lat << start.lon;
+            confirmAutoRouteStartSelection(start);
+        } else {
+            qDebug() << "[EcWidget] WARNING: No shadow position set!";
+        }
+        return;
+    }
+
+    // Cancel auto route start selection with right click
+    if (autoRouteStartSelection.active && e->button() == Qt::RightButton) {
+        qDebug() << "[AutoRoute] Manual selection canceled by right-click";
+        autoRouteStartSelection.active = false;
+        autoRouteStartSelection.hasShadowPosition = false;
+        update();
+
+        if (mainWindow && mainWindow->routesStatusText) {
+            mainWindow->routesStatusText->setText(tr("Auto route start selection canceled"));
+        }
+
+        return;
+    }
+
     // EBL/VRM Measure interactions
     if (eblvrm.measureMode) {
         if (e->button() == Qt::RightButton) {
@@ -3329,6 +3455,18 @@ void EcWidget::mouseMoveEvent(QMouseEvent *e)
 {
     // Simpan posisi mouse terakhir
     lastMousePos = e->pos();
+
+    // Handle auto route start selection shadow
+    if (autoRouteStartSelection.active) {
+        EcCoordinate shadowLat = 0.0, shadowLon = 0.0;
+        if (XyToLatLon(e->x(), e->y(), shadowLat, shadowLon)) {
+            autoRouteStartSelection.shadowStart.lat = shadowLat;
+            autoRouteStartSelection.shadowStart.lon = shadowLon;
+            autoRouteStartSelection.hasShadowPosition = true;
+            update();
+        }
+        return; // Don't process other mouse move events during selection
+    }
 
     if (editingAOI) {
         if (draggedAoiVertex >= 0) {
@@ -5643,6 +5781,7 @@ void EcWidget::buttonInit(){
     publishAction = new QAction(tr("Publish Waypoint"), this);
     insertWaypointAction = new QAction(tr("Insert Waypoint"), this);
     createRouteAction = new QAction(tr("Create Route"), this);
+    goHereAutoRouteAction = new QAction(tr("Go Here (Auto Route)"), this);
     pickInfoAction = new QAction(tr("Map Information"), this);
     warningInfoAction = new QAction(tr("Caution and Restricted Info"), this);
     measureEblVrmAction = new QAction(tr("Measure Here"), this);
@@ -6472,6 +6611,14 @@ void EcWidget::drawWaypointWithLabel(double lat, double lon, const QString& labe
     if (!LatLonToXy(lat, lon, x, y))
         return;
 
+    // Check if waypoint is visible on screen (with margin)
+    QRect screenBounds = rect();
+    int margin = 50; // Allow 50px off-screen before hiding
+    if (x < -margin || x > screenBounds.width() + margin ||
+        y < -margin || y > screenBounds.height() + margin) {
+        return; // Waypoint is off-screen, don't draw label
+    }
+
     QPainter painter(&drawPixmap);
     painter.setRenderHint(QPainter::Antialiasing, true);
 
@@ -6484,17 +6631,44 @@ void EcWidget::drawWaypointWithLabel(double lat, double lon, const QString& labe
     painter.drawEllipse(QPoint(x, y), 8, 8);
 
     // Setup font dan ukuran teks
-    QFont font("Arial", 9, QFont::Bold);
-    painter.setFont(font);
-    QFontMetrics fm(font);
-    QRect textRect = fm.boundingRect(label);
+    QFont labelFont("Arial", 9, QFont::Bold);
+    painter.setFont(labelFont);
+    QFontMetrics fm(labelFont);
+    int labelWidth = fm.horizontalAdvance(label);
+    int labelHeight = fm.height();
+    QSize textSize(labelWidth, labelHeight);
 
-    // Use fixed label position instead of findOptimalLabelPosition
-    QPoint labelPos(x + 10, y - 10); // Fixed offset: 10px right and 10px up from waypoint
+    // Use optimal label position with collision detection (allow off-screen)
+    QPoint labelPos = findOptimalLabelPosition(x, y, textSize, 12);
 
-    // Gambar teks label tanpa background
-    painter.setBrush(Qt::NoBrush);
-    painter.setPen(QPen(color, 1));
+    // Calculate background rectangle
+    QRect bgRect(labelPos.x() - 4, labelPos.y() - labelHeight - 2,
+                 labelWidth + 8, labelHeight + 4);
+
+    // Skip label if it would be completely off-screen
+    if (bgRect.right() < -margin || bgRect.left() > screenBounds.width() + margin ||
+        bgRect.bottom() < -margin || bgRect.top() > screenBounds.height() + margin) {
+        painter.end();
+        return; // Label would be off-screen
+    }
+
+    // Draw label background (dark transparent like ghost waypoint)
+    QColor bgColor(50, 50, 50, 200); // Dark semi-transparent
+    QColor borderColor = color;
+    borderColor.setAlpha(180);
+
+    // Draw shadow for depth
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QBrush(QColor(0, 0, 0, 100)));
+    painter.drawRoundedRect(bgRect.adjusted(2, 2, 2, 2), 3, 3);
+
+    // Draw background
+    painter.setBrush(QBrush(bgColor));
+    painter.setPen(QPen(borderColor, 1));
+    painter.drawRoundedRect(bgRect, 3, 3);
+
+    // Draw label text
+    painter.setPen(QColor(255, 255, 255)); // White text for contrast
     painter.drawText(labelPos, label);
 
     painter.end();
@@ -6502,20 +6676,9 @@ void EcWidget::drawWaypointWithLabel(double lat, double lon, const QString& labe
 
 QPoint EcWidget::findOptimalLabelPosition(int waypointX, int waypointY, const QSize& textSize, int minDistance)
 {
-    // Static list untuk menyimpan posisi label yang sudah digunakan dalam satu frame draw
-    static QList<QRect> usedLabelRects;
-    static int lastDrawTime = 0;
-
-    // Reset list setiap kali draw baru dimulai
-    int currentTime = QTime::currentTime().msecsSinceStartOfDay();
-    if (currentTime - lastDrawTime > 100) {
-        usedLabelRects.clear();
-        lastDrawTime = currentTime;
-    }
-
-    // Dapatkan bounds widget untuk memastikan label tidak keluar
-    QRect widgetBounds = rect();
-    int margin = 10; // Margin dari tepi widget
+    // Use member variable instead of static to avoid position changes during drag
+    // This ensures stable label positions across frames
+    // usedLabelRects will be cleared in Draw() at the start of each complete redraw
 
     // Daftar posisi kandidat dengan prioritas UI/UX yang baik
     QList<QPoint> candidatePositions;
@@ -6543,61 +6706,34 @@ QPoint EcWidget::findOptimalLabelPosition(int waypointX, int waypointY, const QS
     candidatePositions << QPoint(waypointX + distance, waypointY + distance);
     candidatePositions << QPoint(waypointX - distance, waypointY + distance);
 
-    // Cari posisi optimal yang memenuhi kriteria UI/UX
+    // Cari posisi optimal - hanya check collision, tidak check bounds
     for (const QPoint& candidate : candidatePositions) {
-        // Hitung rectangle label dengan padding
-        QRect labelRect(candidate.x() - 3, candidate.y() - textSize.height() - 3,
-                       textSize.width() + 6, textSize.height() + 4);
+        // Hitung rectangle label dengan padding (sesuai dengan background baru: -4, -2, +8, +4)
+        QRect labelRect(candidate.x() - 4, candidate.y() - textSize.height() - 2,
+                       textSize.width() + 8, textSize.height() + 4);
 
-        // KRITERIA 1: Pastikan label tidak keluar dari bounds widget
-        if (labelRect.left() < widgetBounds.left() + margin ||
-            labelRect.right() > widgetBounds.right() - margin ||
-            labelRect.top() < widgetBounds.top() + margin ||
-            labelRect.bottom() > widgetBounds.bottom() - margin) {
-            continue; // Skip posisi yang keluar bounds
-        }
-
-        // KRITERIA 2: Check collision dengan label lain
+        // Check collision dengan label lain (dengan margin 2px untuk spacing)
         bool hasCollision = false;
-        for (const QRect& usedRect : usedLabelRects) {
-            if (labelRect.intersects(usedRect)) {
+        for (const QRect& usedRect : this->usedLabelRects) {
+            QRect expandedUsedRect = usedRect.adjusted(-2, -2, 2, 2); // Add 2px margin
+            if (labelRect.intersects(expandedUsedRect)) {
                 hasCollision = true;
                 break;
             }
         }
 
-        // Jika posisi memenuhi semua kriteria, gunakan posisi ini
+        // Jika tidak collision, gunakan posisi ini (allow off-screen)
         if (!hasCollision) {
-            usedLabelRects.append(labelRect);
+            this->usedLabelRects.append(labelRect);
             return candidate;
         }
     }
 
-    // Fallback dengan constraining ke dalam bounds
+    // Fallback - no bounds constraint, just use default position
     QPoint fallbackPos(waypointX + minDistance, waypointY - minDistance);
-
-    // Constraint ke dalam widget bounds
-    QRect fallbackRect(fallbackPos.x() - 3, fallbackPos.y() - textSize.height() - 3,
-                       textSize.width() + 6, textSize.height() + 4);
-
-    // Adjust jika keluar bounds
-    if (fallbackRect.right() > widgetBounds.right() - margin) {
-        fallbackPos.setX(widgetBounds.right() - margin - textSize.width() - 6);
-    }
-    if (fallbackRect.left() < widgetBounds.left() + margin) {
-        fallbackPos.setX(widgetBounds.left() + margin + 3);
-    }
-    if (fallbackRect.top() < widgetBounds.top() + margin) {
-        fallbackPos.setY(widgetBounds.top() + margin + textSize.height() + 3);
-    }
-    if (fallbackRect.bottom() > widgetBounds.bottom() - margin) {
-        fallbackPos.setY(widgetBounds.bottom() - margin - 3);
-    }
-
-    // Update rectangle dengan posisi yang sudah di-adjust
-    fallbackRect = QRect(fallbackPos.x() - 3, fallbackPos.y() - textSize.height() - 3,
-                        textSize.width() + 6, textSize.height() + 4);
-    usedLabelRects.append(fallbackRect);
+    QRect fallbackRect(fallbackPos.x() - 4, fallbackPos.y() - textSize.height() - 2,
+                       textSize.width() + 8, textSize.height() + 4);
+    this->usedLabelRects.append(fallbackRect);
 
     return fallbackPos;
 }
@@ -7391,9 +7527,16 @@ void EcWidget::createLeglineToolbox(const QPoint& pos, int routeId, int segmentI
 void EcWidget::showMapContextMenu(const QPoint& pos)
 {
     QMenu contextMenu(this);
+    qDebug() << "[CONTEXT-MENU] Map menu invoked. AutoRoute action exists?"
+             << (goHereAutoRouteAction != nullptr);
 
-    // Create Route option
+    // Route options
     contextMenu.addAction(createRouteAction);
+    if (goHereAutoRouteAction) {
+        goHereAutoRouteAction->setEnabled(true);
+        goHereAutoRouteAction->setVisible(true);
+        contextMenu.addAction(goHereAutoRouteAction);
+    }
     contextMenu.addSeparator();
     contextMenu.addAction(pickInfoAction);
     contextMenu.addAction(warningInfoAction);
@@ -7414,6 +7557,9 @@ void EcWidget::showMapContextMenu(const QPoint& pos)
         }
 
         qDebug() << "[CONTEXT-MENU] Create Route mode started";
+    }
+    else if (selectedAction == goHereAutoRouteAction) {
+        startAutoRouteWorkflow(pos);
     }
     else if (selectedAction == pickInfoAction){
         QList<EcFeature> pickedFeatureList;
@@ -7436,6 +7582,602 @@ void EcWidget::showMapContextMenu(const QPoint& pos)
             setEblVrmFixedTarget(lat, lon);
         }
     }
+}
+
+void EcWidget::startAutoRouteStartSelection(const GeoPoint& target)
+{
+    qDebug() << "[EcWidget] startAutoRouteStartSelection called with target:" << target.lat << target.lon;
+
+    autoRouteStartSelection.active = true;
+    autoRouteStartSelection.target = target;
+    autoRouteStartSelection.hasShadowPosition = false;
+
+    if (mainWindow && mainWindow->routesStatusText) {
+        mainWindow->routesStatusText->setText(tr("Auto Route: Click on map to select starting position (or right-click to cancel)"));
+    }
+
+    qDebug() << "[EcWidget] Manual selection mode activated, active=" << autoRouteStartSelection.active;
+    update();
+}
+
+void EcWidget::drawAutoRouteStartShadow(QPainter& painter)
+{
+    if (!autoRouteStartSelection.active || !autoRouteStartSelection.hasShadowPosition) {
+        return;
+    }
+
+    painter.save();
+
+    int shadowX = 0, shadowY = 0;
+    if (!LatLonToXy(autoRouteStartSelection.shadowStart.lat, autoRouteStartSelection.shadowStart.lon, shadowX, shadowY)) {
+        painter.restore();
+        return;
+    }
+
+    // Draw shadow marker (similar to ghost waypoint but with different style)
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    // Draw shadow circle (semi-transparent orange like ghost waypoint)
+    QPen pen(QColor(255, 140, 0, 120)); // Orange semi-transparent
+    pen.setWidth(2);
+    pen.setStyle(Qt::DashLine);
+    painter.setPen(pen);
+    painter.setBrush(Qt::NoBrush);
+    painter.drawEllipse(QPoint(shadowX, shadowY), 8, 8);
+
+    // Draw inner filled circle
+    painter.setPen(QPen(QColor(255, 140, 0, 200), 2));
+    painter.setBrush(QBrush(QColor(255, 165, 0, 100)));
+    painter.drawEllipse(QPoint(shadowX, shadowY), 5, 5);
+
+    // Format coordinates like ghost waypoint
+    QString latDM = formatDegMinCoord(autoRouteStartSelection.shadowStart.lat, true);
+    QString lonDM = formatDegMinCoord(autoRouteStartSelection.shadowStart.lon, false);
+
+    // Create multi-line label with name and coordinates
+    QString nameLine = "Start Point";
+    QString coordLine = latDM + ", " + lonDM;
+
+    // Font settings
+    QFont labelFont("Arial", 9, QFont::Bold);
+    QFont coordFont("Arial", 8);
+    painter.setFont(labelFont);
+    QFontMetrics fmName(labelFont);
+    QFontMetrics fmCoord(coordFont);
+
+    int nameWidth = fmName.horizontalAdvance(nameLine);
+    int coordWidth = fmCoord.horizontalAdvance(coordLine);
+    int maxWidth = qMax(nameWidth, coordWidth);
+    int nameHeight = fmName.height();
+    int coordHeight = fmCoord.height();
+    int totalHeight = nameHeight + coordHeight + 6; // 6px padding between lines
+
+    // Position label to the right and slightly above the marker
+    int labelX = shadowX + 15;
+    int labelY = shadowY - totalHeight / 2;
+
+    // Draw label background with shadow
+    QColor bgColor(50, 50, 50, 220);
+    QColor borderColor(255, 140, 0, 180);
+
+    // Shadow
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QBrush(QColor(0, 0, 0, 100)));
+    painter.drawRoundedRect(labelX + 2, labelY + 2, maxWidth + 12, totalHeight, 4, 4);
+
+    // Background
+    painter.setBrush(QBrush(bgColor));
+    painter.setPen(QPen(borderColor, 1));
+    painter.drawRoundedRect(labelX, labelY, maxWidth + 12, totalHeight, 4, 4);
+
+    // Draw name line (bold)
+    painter.setFont(labelFont);
+    painter.setPen(QColor(255, 200, 100)); // Light orange
+    painter.drawText(labelX + 6, labelY + nameHeight - 2, nameLine);
+
+    // Draw coordinate line (regular)
+    painter.setFont(coordFont);
+    painter.setPen(QColor(200, 200, 200)); // Light gray
+    painter.drawText(labelX + 6, labelY + nameHeight + coordHeight + 2, coordLine);
+
+    // Draw dashed line to target
+    int targetX = 0, targetY = 0;
+    if (LatLonToXy(autoRouteStartSelection.target.lat, autoRouteStartSelection.target.lon, targetX, targetY)) {
+        // Draw connecting line with semi-transparent orange
+        painter.setPen(QPen(QColor(255, 140, 0, 100), 2, Qt::DashLine));
+        painter.drawLine(shadowX, shadowY, targetX, targetY);
+
+        // Draw target marker with red color to differentiate from start
+        QPen targetPen(QColor(220, 50, 50, 120)); // Red semi-transparent
+        targetPen.setWidth(2);
+        targetPen.setStyle(Qt::DashLine);
+        painter.setPen(targetPen);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawEllipse(QPoint(targetX, targetY), 8, 8);
+
+        // Draw inner filled circle
+        painter.setPen(QPen(QColor(220, 50, 50, 200), 2));
+        painter.setBrush(QBrush(QColor(255, 80, 80, 100)));
+        painter.drawEllipse(QPoint(targetX, targetY), 5, 5);
+
+        // Format target coordinates
+        QString targetLatDM = formatDegMinCoord(autoRouteStartSelection.target.lat, true);
+        QString targetLonDM = formatDegMinCoord(autoRouteStartSelection.target.lon, false);
+
+        QString targetNameLine = "Target";
+        QString targetCoordLine = targetLatDM + ", " + targetLonDM;
+
+        painter.setFont(labelFont);
+        QFontMetrics fmTargetName(labelFont);
+        QFontMetrics fmTargetCoord(coordFont);
+
+        int targetNameWidth = fmTargetName.horizontalAdvance(targetNameLine);
+        int targetCoordWidth = fmTargetCoord.horizontalAdvance(targetCoordLine);
+        int targetMaxWidth = qMax(targetNameWidth, targetCoordWidth);
+        int targetTotalHeight = nameHeight + coordHeight + 6;
+
+        int targetLabelX = targetX + 15;
+        int targetLabelY = targetY - targetTotalHeight / 2;
+
+        // Draw target label background with shadow
+        QColor targetBgColor(50, 50, 50, 220);
+        QColor targetBorderColor(220, 50, 50, 180);
+
+        // Shadow
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QBrush(QColor(0, 0, 0, 100)));
+        painter.drawRoundedRect(targetLabelX + 2, targetLabelY + 2, targetMaxWidth + 12, targetTotalHeight, 4, 4);
+
+        // Background
+        painter.setBrush(QBrush(targetBgColor));
+        painter.setPen(QPen(targetBorderColor, 1));
+        painter.drawRoundedRect(targetLabelX, targetLabelY, targetMaxWidth + 12, targetTotalHeight, 4, 4);
+
+        // Draw target name (bold)
+        painter.setFont(labelFont);
+        painter.setPen(QColor(255, 100, 100)); // Light red
+        painter.drawText(targetLabelX + 6, targetLabelY + nameHeight - 2, targetNameLine);
+
+        // Draw target coordinate (regular)
+        painter.setFont(coordFont);
+        painter.setPen(QColor(200, 200, 200)); // Light gray
+        painter.drawText(targetLabelX + 6, targetLabelY + nameHeight + coordHeight + 2, targetCoordLine);
+    }
+
+    painter.restore();
+}
+
+QVector<GeoPoint> EcWidget::simplifyWaypointsByDirection(const QVector<GeoPoint>& waypoints, double angleThresholdDeg)
+{
+    if (waypoints.size() <= 2) {
+        return waypoints; // Can't simplify less than 3 points
+    }
+
+    QVector<GeoPoint> simplified;
+    simplified.append(waypoints.first()); // Always keep first
+
+    auto calculateBearing = [](const GeoPoint& from, const GeoPoint& to) -> double {
+        double dLon = (to.lon - from.lon) * M_PI / 180.0;
+        double lat1 = from.lat * M_PI / 180.0;
+        double lat2 = to.lat * M_PI / 180.0;
+
+        double y = std::sin(dLon) * std::cos(lat2);
+        double x = std::cos(lat1) * std::sin(lat2) - std::sin(lat1) * std::cos(lat2) * std::cos(dLon);
+        double bearing = std::atan2(y, x) * 180.0 / M_PI;
+
+        return std::fmod(bearing + 360.0, 360.0);
+    };
+
+    auto angleDifference = [](double angle1, double angle2) -> double {
+        double diff = std::abs(angle1 - angle2);
+        if (diff > 180.0) diff = 360.0 - diff;
+        return diff;
+    };
+
+    double prevBearing = calculateBearing(waypoints[0], waypoints[1]);
+
+    for (int i = 1; i < waypoints.size() - 1; ++i) {
+        double currentBearing = calculateBearing(waypoints[i], waypoints[i + 1]);
+        double bearingChange = angleDifference(prevBearing, currentBearing);
+
+        // Keep waypoint if direction changes significantly
+        if (bearingChange > angleThresholdDeg) {
+            simplified.append(waypoints[i]);
+            prevBearing = currentBearing;
+            qDebug() << "[Waypoint Simplify] Keeping waypoint" << i << "- bearing change:" << bearingChange << "degrees";
+        } else {
+            qDebug() << "[Waypoint Simplify] Skipping waypoint" << i << "- bearing change only:" << bearingChange << "degrees";
+        }
+    }
+
+    simplified.append(waypoints.last()); // Always keep last
+
+    qDebug() << "[Waypoint Simplify] Simplified from" << waypoints.size() << "to" << simplified.size() << "waypoints";
+
+    return simplified;
+}
+
+void EcWidget::confirmAutoRouteStartSelection(const GeoPoint& start)
+{
+    if (!autoRouteStartSelection.active) {
+        qDebug() << "[AutoRoute] confirmAutoRouteStartSelection called but mode not active";
+        return;
+    }
+
+    qDebug() << "[AutoRoute] Start position confirmed:" << start.lat << start.lon;
+
+    GeoPoint target = autoRouteStartSelection.target;
+
+    // Clear selection state
+    autoRouteStartSelection.active = false;
+    autoRouteStartSelection.hasShadowPosition = false;
+
+    // Clear status message
+    if (mainWindow && mainWindow->routesStatusText) {
+        mainWindow->routesStatusText->setText(tr("Start position selected. Generating route..."));
+    }
+
+    update();
+
+    qDebug() << "[AutoRoute] Proceeding to route dialog with start:" << start.lat << start.lon << "target:" << target.lat << target.lon;
+
+    // Continue with auto route dialog
+    AutoRouteDialog dialog(target.lat, target.lon, start.lat, start.lon, this);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        if (mainWindow && mainWindow->routesStatusText) {
+            mainWindow->routesStatusText->clear();
+        }
+        return;
+    }
+
+    AutoRouteOptions options = dialog.getOptions();
+
+    // Show progress dialog
+    QProgressDialog progressDialog("Generating safe route...", "Cancel", 0, 100, this);
+    progressDialog.setWindowTitle("Auto Route");
+    progressDialog.setWindowModality(Qt::WindowModal);
+    progressDialog.setMinimumDuration(0);
+    progressDialog.setValue(10);
+    QApplication::processEvents();
+
+    AutoRoutePlanner planner(view, dictInfo);
+
+    progressDialog.setLabelText("Analyzing chart data and planning safe path...");
+    progressDialog.setValue(30);
+    QApplication::processEvents();
+
+    AutoRouteResult result = planner.planRoute(start, target, options);
+
+    progressDialog.setValue(80);
+    progressDialog.setLabelText("Optimizing waypoints...");
+    QApplication::processEvents();
+
+    if (!result.success) {
+        progressDialog.close();
+        QString message = result.warnings.isEmpty()
+            ? tr("Auto route generation failed. Please review the selected options and chart coverage.")
+            : result.warnings.join("\n");
+        QMessageBox::warning(this, tr("Auto Route"), message);
+        clearAutoRoutePreview();
+        return;
+    }
+
+    // Simplify waypoints based on direction changes
+    progressDialog.setLabelText("Simplifying waypoints...");
+    progressDialog.setValue(90);
+    QApplication::processEvents();
+
+    result.waypoints = simplifyWaypointsByDirection(result.waypoints, 10.0); // 10 degree threshold
+
+    progressDialog.setValue(100);
+    QApplication::processEvents();
+    progressDialog.close();
+
+    qDebug() << "[AutoRoute] Route generated with" << result.waypoints.size() << "waypoints after simplification";
+
+    clearAutoRoutePreview(false);
+    autoRoutePreview.active = true;
+    autoRoutePreview.start = start;
+    autoRoutePreview.target = target;
+    autoRoutePreview.options = options;
+    autoRoutePreview.result = result;
+
+    update();
+    presentAutoRoutePreview(result, options);
+}
+
+void EcWidget::startAutoRouteWorkflow(const QPoint& pos)
+{
+    EcCoordinate targetLat = 0.0;
+    EcCoordinate targetLon = 0.0;
+
+    if (!XyToLatLon(pos.x(), pos.y(), targetLat, targetLon)) {
+        QMessageBox::warning(this, tr("Auto Route"), tr("Unable to determine geographic position for the selected point."));
+        return;
+    }
+
+    auto isValidCoord = [](double lat, double lon) {
+        return std::isfinite(lat) && std::isfinite(lon) &&
+               std::abs(lat) <= 90.0 && std::abs(lon) <= 180.0 &&
+               !(qFuzzyIsNull(lat) && qFuzzyIsNull(lon));
+    };
+
+    GeoPoint ownShipPoint;
+    bool ownShipValid = false;
+
+    if (isValidCoord(navShip.lat, navShip.lon)) {
+        ownShipPoint.lat = navShip.lat;
+        ownShipPoint.lon = navShip.lon;
+        ownShipValid = true;
+    } else if (isValidCoord(ownShip.lat, ownShip.lon)) {
+        ownShipPoint.lat = ownShip.lat;
+        ownShipPoint.lon = ownShip.lon;
+        ownShipValid = true;
+    }
+
+    if (!ownShipValid) {
+        QMessageBox::warning(this, tr("Auto Route"), tr("Own ship position is unavailable. Ensure GPS/AIS data is received before generating an auto route."));
+        return;
+    }
+
+    GeoPoint targetPoint{targetLat, targetLon};
+
+    // Simple selection using QMessageBox
+    QMessageBox msgBox(this);
+    msgBox.setWindowTitle("Select Starting Point");
+    msgBox.setText("Choose the starting point for auto route:");
+    msgBox.setInformativeText(QString("Target: %1° %2°\n\nFrom where do you want to start the route?")
+                              .arg(targetLat, 0, 'f', 4)
+                              .arg(targetLon, 0, 'f', 4));
+
+    QPushButton* ownShipButton = msgBox.addButton("From Own Ship", QMessageBox::AcceptRole);
+    QPushButton* manualButton = msgBox.addButton("Select on Map", QMessageBox::ActionRole);
+    QPushButton* cancelButton = msgBox.addButton(QMessageBox::Cancel);
+
+    msgBox.exec();
+
+    GeoPoint startPoint;
+    bool startPointSelected = false;
+
+    if (msgBox.clickedButton() == ownShipButton) {
+        qDebug() << "[AutoRoute] User chose: From Own Ship";
+        startPoint = ownShipPoint;
+        startPointSelected = true;
+    }
+    else if (msgBox.clickedButton() == manualButton) {
+        qDebug() << "[AutoRoute] User chose: Select on Map - starting selection mode";
+
+        // Start manual selection mode
+        autoRouteStartSelection.active = true;
+        autoRouteStartSelection.target = targetPoint;
+        autoRouteStartSelection.hasShadowPosition = false;
+
+        if (mainWindow && mainWindow->routesStatusText) {
+            mainWindow->routesStatusText->setText(tr("Auto Route: Click on map to select starting position (or right-click to cancel)"));
+        }
+
+        qDebug() << "[AutoRoute] Selection mode activated, waiting for user click...";
+        update();
+
+        // Wait for user to click on map - this will be handled by mousePressEvent
+        // We need to return here and let the mouse event handler call us back
+        // Store target in a member variable for callback
+        autoRouteStartSelection.target = targetPoint;
+
+        return; // Exit here, will continue in confirmAutoRouteStartSelection
+    }
+    else {
+        qDebug() << "[AutoRoute] User canceled";
+        return;
+    }
+
+    if (!startPointSelected) {
+        return;
+    }
+
+    // Continue with auto route dialog
+    AutoRouteDialog dialog(targetPoint.lat, targetPoint.lon, startPoint.lat, startPoint.lon, this);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    AutoRouteOptions options = dialog.getOptions();
+    AutoRoutePlanner planner(view, dictInfo);
+    AutoRouteResult routeResult = planner.planRoute(startPoint, targetPoint, options);
+
+    if (!routeResult.success) {
+        QString message = routeResult.warnings.isEmpty()
+            ? tr("Auto route generation failed. Please review the selected options and chart coverage.")
+            : routeResult.warnings.join("\n");
+        QMessageBox::warning(this, tr("Auto Route"), message);
+        clearAutoRoutePreview();
+        return;
+    }
+
+    clearAutoRoutePreview(false);
+    autoRoutePreview.active = true;
+    autoRoutePreview.start = startPoint;
+    autoRoutePreview.target = targetPoint;
+    autoRoutePreview.options = options;
+    autoRoutePreview.result = routeResult;
+
+    update();
+    presentAutoRoutePreview(routeResult, options);
+}
+
+void EcWidget::presentAutoRoutePreview(const AutoRouteResult& result, const AutoRouteOptions& options)
+{
+    if (!autoRoutePreview.active || !result.success) {
+        return;
+    }
+
+    auto formatDuration = [](double hours) -> QString {
+        if (hours <= 0.0 || !std::isfinite(hours)) {
+            return QObject::tr("Not available");
+        }
+        int totalMinutes = qMax(0, static_cast<int>(std::round(hours * 60.0)));
+        int hh = totalMinutes / 60;
+        int mm = totalMinutes % 60;
+        if (hh == 0) {
+            return QObject::tr("%1 min").arg(mm);
+        }
+        return QObject::tr("%1 h %2 min").arg(hh).arg(mm, 2, 10, QChar('0'));
+    };
+
+    QStringList summaryLines;
+    summaryLines << tr("Distance: %1 NM").arg(result.totalDistanceNm, 0, 'f', 2);
+    summaryLines << tr("ETA: %1").arg(formatDuration(result.estimatedTimeHours));
+    summaryLines << tr("Planned speed: %1 kn").arg(options.plannedSpeed, 0, 'f', 1);
+    summaryLines << tr("Waypoints: %1").arg(result.waypoints.size());
+
+    QString warningsText;
+    if (result.warnings.isEmpty()) {
+        warningsText = tr("Warnings: none");
+    } else {
+        QStringList warningLines;
+        for (const QString& warning : result.warnings) {
+            warningLines << QString::fromUtf8("• ") + warning;
+        }
+        warningsText = warningLines.join("\n");
+    }
+
+    QMessageBox previewBox(this);
+    previewBox.setWindowTitle(tr("Auto Route Preview"));
+    previewBox.setIcon(QMessageBox::Information);
+    previewBox.setText(tr("Auto route generated. Preview is highlighted on the chart."));
+    previewBox.setInformativeText(summaryLines.join("\n") + "\n\n" + warningsText);
+
+    QPushButton* acceptButton = previewBox.addButton(tr("Accept (Create as INACTIVE)"), QMessageBox::AcceptRole);
+    QPushButton* discardButton = previewBox.addButton(tr("Discard"), QMessageBox::RejectRole);
+    previewBox.addButton(tr("Adjust Later"), QMessageBox::DestructiveRole);
+
+    previewBox.exec();
+
+    QAbstractButton* clickedButton = previewBox.clickedButton();
+    if (clickedButton == acceptButton) {
+        commitAutoRoutePreview();
+    } else if (clickedButton == discardButton) {
+        clearAutoRoutePreview();
+    } else {
+        // Keep preview active for further review
+        update();
+    }
+}
+
+void EcWidget::drawAutoRoutePreview(QPainter& painter)
+{
+    if (!autoRoutePreview.active || !autoRoutePreview.result.success) {
+        return;
+    }
+
+    const auto& waypoints = autoRoutePreview.result.waypoints;
+    if (waypoints.size() < 2) {
+        return;
+    }
+
+    painter.save();
+    QPen previewPen(QColor(0, 196, 255, 200));
+    previewPen.setWidth(4);
+    previewPen.setStyle(Qt::DashLine);
+    painter.setPen(previewPen);
+
+    for (int i = 0; i < waypoints.size() - 1; ++i) {
+        int x1 = 0, y1 = 0, x2 = 0, y2 = 0;
+        if (LatLonToXy(waypoints[i].lat, waypoints[i].lon, x1, y1) &&
+            LatLonToXy(waypoints[i + 1].lat, waypoints[i + 1].lon, x2, y2)) {
+            painter.drawLine(x1, y1, x2, y2);
+        }
+    }
+
+    QBrush waypointBrush(QColor(0, 196, 255, 160));
+    painter.setBrush(waypointBrush);
+    painter.setPen(Qt::NoPen);
+
+    for (const auto& point : waypoints) {
+        int x = 0, y = 0;
+        if (LatLonToXy(point.lat, point.lon, x, y)) {
+            painter.drawEllipse(QPoint(x, y), 6, 6);
+        }
+    }
+
+    painter.restore();
+}
+
+void EcWidget::clearAutoRoutePreview(bool updateDisplay)
+{
+    if (!autoRoutePreview.active) {
+        return;
+    }
+
+    autoRoutePreview.active = false;
+    autoRoutePreview.result = AutoRouteResult();
+    autoRoutePreview.options = AutoRouteOptions();
+    autoRoutePreview.start = GeoPoint();
+    autoRoutePreview.target = GeoPoint();
+
+    if (updateDisplay) {
+        update();
+    }
+}
+
+void EcWidget::commitAutoRoutePreview()
+{
+    if (!autoRoutePreview.active || !autoRoutePreview.result.success) {
+        return;
+    }
+
+    const auto& waypoints = autoRoutePreview.result.waypoints;
+    if (waypoints.size() < 2) {
+        QMessageBox::warning(this, tr("Auto Route"), tr("Auto route preview does not contain enough waypoints."));
+        clearAutoRoutePreview();
+        return;
+    }
+
+    int newRouteId = getNextAvailableRouteId();
+    QList<Waypoint> newWaypoints;
+    newWaypoints.reserve(waypoints.size());
+
+    int index = 1;
+    for (const auto& point : waypoints) {
+        Waypoint wp;
+        wp.lat = point.lat;
+        wp.lon = point.lon;
+        wp.routeId = newRouteId;
+        wp.turningRadius = 10.0;
+        wp.active = true;
+        wp.label = QString("R%1-WP%2").arg(newRouteId).arg(index, 3, 10, QChar('0'));
+        wp.remark = tr("Auto route waypoint %1").arg(index);
+        wp.featureHandle.id = EC_NOCELLID;
+        wp.featureHandle.offset = 0;
+        newWaypoints.append(wp);
+        ++index;
+    }
+
+    replaceWaypointsForRoute(newRouteId, newWaypoints);
+    QString routeName = QString("Auto Route %1").arg(QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm"));
+    renameRoute(newRouteId, routeName);
+    setRouteVisibility(newRouteId, true);
+    selectedRouteId = newRouteId;
+
+    // IMPORTANT: Do NOT attach route to ship automatically
+    // User must manually review and activate the route
+    setRouteAttachedToShip(newRouteId, false);
+
+    if (mainWindow) {
+        if (mainWindow->routesStatusText) {
+            mainWindow->routesStatusText->setText(tr("Auto route %1 created (INACTIVE - Review before activating)").arg(routeName));
+        }
+        if (mainWindow->logText) {
+            mainWindow->logText->append(tr("Auto route '%1' created with %2 waypoints. INACTIVE - Please review all waypoints before activation.")
+                                        .arg(routeName)
+                                        .arg(newWaypoints.size()));
+        }
+    }
+
+    clearAutoRoutePreview(false);
+    update();
 }
 
 void EcWidget::saveWaypoints()
@@ -7721,6 +8463,13 @@ void EcWidget::drawLeglineLabels()
     if (waypointList.size() < 2)
         return;
 
+    // Hide distance and bearing labels when range >= 123
+    int currentScale = GetScale();
+    double currentRange = GetRange(currentScale);
+    if (currentRange >= 123.0) {
+        return; // Don't draw legline labels when zoomed out
+    }
+
     QPainter painter(&drawPixmap);
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setFont(QFont("Arial", 8, QFont::Bold));
@@ -7815,6 +8564,7 @@ void EcWidget::iconUpdate(bool dark){
         insertWaypointAction->setIcon(QIcon(":/icon/create_wp_white.svg"));
         createRouteAction->setIcon(QIcon(":/icon/create_route_white.svg"));
         pickInfoAction->setIcon(QIcon(":/icon/info_white.svg"));
+        goHereAutoRouteAction->setIcon(QIcon(":/icon/create_route_white.svg"));
         warningInfoAction->setIcon(QIcon(":/icon/warning_white.svg"));
         measureEblVrmAction->setIcon(QIcon(":/icon/measure_white.svg"));
 
@@ -7854,6 +8604,7 @@ void EcWidget::iconUpdate(bool dark){
         insertWaypointAction->setIcon(QIcon(":/icon/create_wp.svg"));
         createRouteAction->setIcon(QIcon(":/icon/create_route.svg"));
         pickInfoAction->setIcon(QIcon(":/icon/info.svg"));
+        goHereAutoRouteAction->setIcon(QIcon(":/icon/create_route.svg"));
         warningInfoAction->setIcon(QIcon(":/icon/warning.svg"));
         measureEblVrmAction->setIcon(QIcon(":/icon/measure.svg"));
 
@@ -8019,6 +8770,11 @@ void EcWidget::drawRouteLinesOverlay(QPainter& painter)
             routeSafetyFeature->render(painter);
             routeSafetyFeature->finishFrame();
         }
+
+        drawAutoRoutePreview(painter);
+
+        // Draw auto route start selection shadow
+        drawAutoRouteStartShadow(painter);
 
     } catch (const std::exception& e) {
         qDebug() << "[ROUTE-OVERLAY-ERROR] Exception in drawRouteLinesOverlay:" << e.what();

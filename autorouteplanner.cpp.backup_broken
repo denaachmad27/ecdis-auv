@@ -1,0 +1,806 @@
+#include "autorouteplanner.h"
+
+#include <QtMath>
+#include <QObject>
+#include <QDebug>
+#include <cmath>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+namespace {
+
+double degNormalize(double value)
+{
+    double normalized = std::fmod(value, 360.0);
+    if (normalized < 0.0) {
+        normalized += 360.0;
+    }
+    return normalized;
+}
+
+double toRadians(double deg)
+{
+    return deg * M_PI / 180.0;
+}
+
+double toDegrees(double rad)
+{
+    return rad * 180.0 / M_PI;
+}
+
+} // namespace
+
+AutoRoutePlanner::AutoRoutePlanner(EcView* view, EcDictInfo* dictInfo)
+    : m_view(view)
+    , m_dictInfo(dictInfo)
+{
+}
+
+AutoRouteResult AutoRoutePlanner::planRoute(const GeoPoint& start,
+                                            const GeoPoint& target,
+                                            const AutoRouteOptions& options) const
+{
+    AutoRouteResult result;
+
+    if (!m_view || !m_dictInfo) {
+        result.warnings << QObject::tr("Chart kernel is not ready. Please load a chart before generating an auto route.");
+        return result;
+    }
+
+    // Check if start and target positions are safe
+    if (!isPositionSafe(start, options)) {
+        result.success = false;
+        result.warnings << QObject::tr("Starting position is on land or in unsafe waters. Cannot generate route.");
+        return result;
+    }
+
+    if (!isPositionSafe(target, options)) {
+        result.success = false;
+        result.warnings << QObject::tr("Target position is on land or in unsafe waters. Cannot generate route.");
+        return result;
+    }
+
+    // Use A* pathfinding to find safe route
+    qDebug() << "[AutoRoute] Using A* pathfinding to avoid land...";
+    QVector<GeoPoint> safePath = findSafePathAStar(start, target, options);
+
+    if (safePath.isEmpty()) {
+        result.success = false;
+        result.warnings << QObject::tr("Could not find safe route avoiding land and shallow water. Try adjusting safety parameters.");
+        return result;
+    }
+
+    qDebug() << "[AutoRoute] A* found safe path with" << safePath.size() << "waypoints";
+
+    // Use A* waypoints directly
+    result.waypoints = safePath;
+
+    // Calculate legs between waypoints
+    for (int i = 0; i < safePath.size() - 1; ++i) {
+        const GeoPoint& legStart = safePath[i];
+        const GeoPoint& legEnd = safePath[i + 1];
+
+        double legBearing = 0.0;
+        double legDistance = computeRhumbDistance(legStart, legEnd, &legBearing);
+        if (legDistance <= 0.0) {
+            legDistance = haversineDistanceNm(legStart, legEnd);
+        }
+
+        AutoRouteLegInfo leg;
+        leg.start = legStart;
+        leg.end = legEnd;
+        leg.distanceNm = legDistance;
+        leg.initialBearingDeg = legBearing;
+        leg.estimatedTimeHours = options.plannedSpeed > 0.0 ? legDistance / options.plannedSpeed : 0.0;
+
+        result.legs.push_back(leg);
+        result.totalDistanceNm += legDistance;
+    }
+
+    result.estimatedTimeHours = options.plannedSpeed > 0.0 ? result.totalDistanceNm / options.plannedSpeed : 0.0;
+    result.warnings = buildWarnings(result, options);
+    result.success = true;
+
+    return result;
+}
+
+// Old simple route planning (without A*) removed - now using A* pathfinding for land avoidance
+
+double AutoRoutePlanner::computeGreatCircleDistance(const GeoPoint& start,
+                                                      const GeoPoint& target,
+                                                      double* initialBearing,
+                                                      double* finalBearing) const
+{
+    case RouteOptimization::SHORTEST_DISTANCE:
+        overheadFactor = 1.02; // allow minor detours for smoothing
+        break;
+    case RouteOptimization::FASTEST_TIME:
+        overheadFactor = 1.05; // compensate for current & manoeuvring overheads
+        break;
+    case RouteOptimization::SAFEST_ROUTE:
+        overheadFactor = 1.15; // larger detours expected
+        break;
+    case RouteOptimization::BALANCED:
+        overheadFactor = 1.08;
+        break;
+    }
+
+    const double adjustedDistanceNm = gcDistanceNm * overheadFactor;
+    const int minSegments = 1;
+    const int maxSegments = 60;
+    int segmentHint = options.waypointDensity > 0
+        ? static_cast<int>(std::ceil(adjustedDistanceNm / options.waypointDensity))
+        : 6;
+
+    segmentHint = qBound(minSegments, segmentHint, maxSegments);
+
+    result.waypoints.reserve(segmentHint + 1);
+    result.waypoints.push_back(start);
+
+    double cumulativeDistance = 0.0;
+    GeoPoint previousPoint = start;
+    double previousCourse = startCourseDeg;
+    double totalDistanceAccumulator = 0.0;
+
+    const double maxOffsetNmBase = [&]() {
+        switch (options.optimization) {
+        case RouteOptimization::SHORTEST_DISTANCE:
+            return 0.1;
+        case RouteOptimization::FASTEST_TIME:
+            return 0.25;
+        case RouteOptimization::SAFEST_ROUTE:
+            return 1.2;
+        case RouteOptimization::BALANCED:
+        default:
+            return 0.6;
+        }
+    }();
+
+    const double shallowBoost = options.avoidShallowWater
+        ? qBound(0.0, options.minDepth / 10.0, 2.0)
+        : 0.0;
+
+    const double ukcBoost = (options.considerUKC && options.minUKC > 0.0)
+        ? qBound(0.0, options.minUKC / 5.0, 1.5)
+        : 0.0;
+
+    const double lateralOffsetAmplitude = maxOffsetNmBase + shallowBoost + ukcBoost;
+
+    for (int i = 1; i < segmentHint; ++i) {
+        double fraction = static_cast<double>(i) / static_cast<double>(segmentHint);
+        cumulativeDistance = gcDistanceNm * fraction;
+
+        double localEndCourseDeg = previousCourse;
+        GeoPoint gcPoint = computeGreatCirclePosition(start, startCourseDeg, cumulativeDistance, &localEndCourseDeg);
+
+        // Apply smooth lateral offset to mimic safer corridor searching.
+        double sineEnvelope = std::sin(M_PI * fraction); // zero at start/end, peak at mid
+        double signedSine = sineEnvelope * ((i % 2 == 0) ? 1.0 : -1.0);
+        double offsetNm = lateralOffsetAmplitude * signedSine;
+
+        GeoPoint adjustedPoint = gcPoint;
+        if (std::fabs(offsetNm) > 1e-3) {
+            double crossBearing = degNormalize(localEndCourseDeg + (offsetNm >= 0.0 ? 90.0 : -90.0));
+            adjustedPoint = applyLateralOffset(gcPoint, crossBearing, std::fabs(offsetNm));
+        }
+
+        // CRITICAL: Check if adjusted point is safe (not on land, sufficient depth)
+        if (!isPositionSafe(adjustedPoint, options)) {
+            // Try to find a safe alternative nearby
+            adjustedPoint = findSafeAlternative(adjustedPoint, previousPoint, target, options, lateralOffsetAmplitude * 2.0);
+
+            // If still unsafe, skip this waypoint or warn
+            if (!isPositionSafe(adjustedPoint, options)) {
+                result.warnings << QObject::tr("Warning: Waypoint %1 may be in unsafe waters. Manual review required.")
+                                    .arg(i + 1);
+            }
+        }
+
+        // Check if the leg from previous point to this point is safe
+        if (!checkLineSegmentSafety(previousPoint, adjustedPoint, options, 10)) {
+            result.warnings << QObject::tr("Warning: Route segment between waypoints %1 and %2 crosses unsafe waters. Manual review required.")
+                                .arg(i).arg(i + 1);
+        }
+
+        double legBearingDeg = 0.0;
+        double legDistanceNm = computeRhumbDistance(previousPoint, adjustedPoint, &legBearingDeg);
+        if (legDistanceNm <= 0.0) {
+            legDistanceNm = haversineDistanceNm(previousPoint, adjustedPoint);
+        }
+        totalDistanceAccumulator += legDistanceNm;
+
+        AutoRouteLegInfo leg;
+        leg.start = previousPoint;
+        leg.end = adjustedPoint;
+        leg.distanceNm = legDistanceNm;
+        leg.initialBearingDeg = legBearingDeg;
+        leg.estimatedTimeHours = options.plannedSpeed > 0.0
+            ? legDistanceNm / options.plannedSpeed
+            : 0.0;
+
+        result.legs.push_back(leg);
+        result.waypoints.push_back(adjustedPoint);
+
+        previousPoint = adjustedPoint;
+        previousCourse = localEndCourseDeg;
+    }
+
+    // Final leg to target - check safety
+    if (!checkLineSegmentSafety(previousPoint, target, options, 10)) {
+        result.warnings << QObject::tr("Warning: Final route segment to target crosses unsafe waters. Manual review required.");
+    }
+
+    double finalBearingDeg = 0.0;
+    double finalLegDistanceNm = computeRhumbDistance(previousPoint, target, &finalBearingDeg);
+    if (finalLegDistanceNm <= 0.0) {
+        finalLegDistanceNm = haversineDistanceNm(previousPoint, target);
+    }
+
+    AutoRouteLegInfo finalLeg;
+    finalLeg.start = previousPoint;
+    finalLeg.end = target;
+    finalLeg.distanceNm = finalLegDistanceNm;
+    finalLeg.initialBearingDeg = finalBearingDeg;
+    finalLeg.estimatedTimeHours = options.plannedSpeed > 0.0
+        ? finalLegDistanceNm / options.plannedSpeed
+        : 0.0;
+
+    result.legs.push_back(finalLeg);
+    result.waypoints.push_back(target);
+
+    totalDistanceAccumulator += finalLegDistanceNm;
+
+    // Blend direct great-circle length with accumulated leg length to get realistic distance.
+    result.totalDistanceNm = (totalDistanceAccumulator * 0.7) + (adjustedDistanceNm * 0.3);
+    result.estimatedTimeHours = options.plannedSpeed > 0.0
+        ? result.totalDistanceNm / options.plannedSpeed
+        : 0.0;
+
+    result.warnings = buildWarnings(result, options);
+    result.success = true;
+
+    return result;
+}
+
+double AutoRoutePlanner::computeGreatCircleDistance(const GeoPoint& start,
+                                                    const GeoPoint& target,
+                                                    double* startCourseDeg,
+                                                    double* endCourseDeg) const
+{
+    double distanceNm = 0.0;
+    double startCourse = 0.0;
+    double endCourse = 0.0;
+
+    if (EcCalculateGreatCircleDistanceAndBearing(
+            EC_GEO_DATUM_WGS84,
+            start.lat, start.lon,
+            target.lat, target.lon,
+            &distanceNm,
+            &startCourse,
+            &endCourse)) {
+        if (startCourseDeg) *startCourseDeg = degNormalize(startCourse);
+        if (endCourseDeg) *endCourseDeg = degNormalize(endCourse);
+        return distanceNm;
+    }
+
+    // Fallback using haversine
+    double fallback = haversineDistanceNm(start, target);
+    if (startCourseDeg) *startCourseDeg = 0.0;
+    if (endCourseDeg) *endCourseDeg = 0.0;
+    return fallback;
+}
+
+GeoPoint AutoRoutePlanner::computeGreatCirclePosition(const GeoPoint& start,
+                                                      double startCourseDeg,
+                                                      double distanceNm,
+                                                      double* endCourseDeg) const
+{
+    GeoPoint result = start;
+    double endCourse = startCourseDeg;
+
+    EcCoordinate outLat = start.lat;
+    EcCoordinate outLon = start.lon;
+
+    if (EcCalculateGreatCirclePosition(
+            EC_GEO_DATUM_WGS84,
+            start.lat, start.lon,
+            distanceNm,
+            startCourseDeg,
+            &outLat,
+            &outLon,
+            &endCourse)) {
+        result.lat = outLat;
+        result.lon = outLon;
+        if (endCourseDeg) *endCourseDeg = degNormalize(endCourse);
+        return result;
+    }
+
+    // Fallback: linear interpolation
+    double fraction = distanceNm <= 0.0 ? 0.0 : distanceNm / qMax(distanceNm, 1.0);
+    result.lat = start.lat + (fraction * (outLat - start.lat));
+    result.lon = start.lon + (fraction * (outLon - start.lon));
+    if (endCourseDeg) *endCourseDeg = startCourseDeg;
+    return result;
+}
+
+GeoPoint AutoRoutePlanner::applyLateralOffset(const GeoPoint& basePoint,
+                                              double bearingDeg,
+                                              double offsetNm) const
+{
+    GeoPoint result = basePoint;
+    EcCoordinate outLat = basePoint.lat;
+    EcCoordinate outLon = basePoint.lon;
+
+    if (EcCalculateRhumblinePosition(
+            EC_GEO_DATUM_WGS84,
+            basePoint.lat, basePoint.lon,
+            offsetNm,
+            bearingDeg,
+            &outLat,
+            &outLon)) {
+        result.lat = outLat;
+        result.lon = outLon;
+        return result;
+    }
+
+    // If rhumbline calculation fails, fallback to simple approximation
+    double angularDistance = offsetNm / 60.0; // approx degrees (1 NM ~ 1/60 deg)
+    result.lat += angularDistance * std::cos(toRadians(bearingDeg));
+    result.lon += angularDistance * std::sin(toRadians(bearingDeg));
+    return result;
+}
+
+double AutoRoutePlanner::computeRhumbDistance(const GeoPoint& start,
+                                              const GeoPoint& end,
+                                              double* bearingDeg) const
+{
+    double distanceNm = 0.0;
+    double bearing = 0.0;
+    if (EcCalculateRhumblineDistanceAndBearing(
+            EC_GEO_DATUM_WGS84,
+            start.lat, start.lon,
+            end.lat, end.lon,
+            &distanceNm,
+            &bearing)) {
+        if (bearingDeg) *bearingDeg = degNormalize(bearing);
+        return distanceNm;
+    }
+    if (bearingDeg) *bearingDeg = 0.0;
+    return 0.0;
+}
+
+double AutoRoutePlanner::haversineDistanceNm(const GeoPoint& start,
+                                             const GeoPoint& end) const
+{
+    double lat1 = toRadians(start.lat);
+    double lat2 = toRadians(end.lat);
+    double dLat = lat2 - lat1;
+    double dLon = toRadians(end.lon - start.lon);
+
+    double a = std::sin(dLat / 2.0) * std::sin(dLat / 2.0) +
+               std::cos(lat1) * std::cos(lat2) *
+               std::sin(dLon / 2.0) * std::sin(dLon / 2.0);
+    double c = 2.0 * std::atan2(std::sqrt(a), std::sqrt(1.0 - a));
+    double distanceKm = 6371.0 * c; // Earth radius (km)
+    return distanceKm * 0.5399568;  // convert km to NM
+}
+
+bool AutoRoutePlanner::isPositionSafe(const GeoPoint& point,
+                                      const AutoRouteOptions& options,
+                                      double* foundDepth) const
+{
+    if (!m_view || !m_dictInfo) {
+        return true; // Cannot validate without chart data
+    }
+
+    // Get all loaded cells for querying
+    EcCellId* cellIds = nullptr;
+    int numCells = EcChartGetLoadedCellsOfView(m_view, &cellIds);
+
+    if (numCells <= 0 || !cellIds) {
+        return true; // No chart data available for validation
+    }
+
+    // Check for land areas (LNDARE)
+    EcFindInfo landFindInfo;
+    landFindInfo.v[0] = 0; // Initialize
+    EcCoordinate centerLat = 0.0, centerLon = 0.0;
+
+    EcFeature landFeature = EcQueryPickAll(cellIds, numCells, m_dictInfo,
+                                           "LNDARE", nullptr, ',',
+                                           point.lat, point.lon,
+                                           0.01, // Small pick radius ~60 meters
+                                           &landFindInfo, True,
+                                           &centerLat, &centerLon);
+
+    if (landFeature.id != EC_NOCELLID) {
+        // Found land area at this position
+        if (foundDepth) *foundDepth = -999.0; // Indicate land
+        return false;
+    }
+
+    // Check depth if shallow water avoidance is enabled
+    if (options.avoidShallowWater || options.considerUKC) {
+        double requiredDepth = options.minDepth;
+        if (options.considerUKC) {
+            requiredDepth = qMax(requiredDepth, options.minDepth + options.minUKC);
+        }
+
+        // Query depth area (DEPARE) at this position
+        EcFindInfo depthFindInfo;
+        depthFindInfo.v[0] = 0; // Initialize
+
+        EcFeature depthFeature = EcQueryPickAll(cellIds, numCells, m_dictInfo,
+                                                "DEPARE", nullptr, ',',
+                                                point.lat, point.lon,
+                                                0.01,
+                                                &depthFindInfo, True,
+                                                &centerLat, &centerLon);
+
+        if (depthFeature.id != EC_NOCELLID) {
+            // Get DRVAL1 and DRVAL2 attributes (depth range values)
+            char attrStr[1024];
+            EcFindInfo attrFindInfo;
+            attrFindInfo.v[0] = 0;
+
+            Bool result = EcFeatureGetAttributes(depthFeature, m_dictInfo, &attrFindInfo, EC_FIRST, attrStr, sizeof(attrStr));
+
+            double drval1 = -1.0, drval2 = -1.0;
+
+            while (result) {
+                // Parse attribute string "ATTR=VALUE"
+                QString attrLine(attrStr);
+                if (attrLine.startsWith("DRVAL1=")) {
+                    QString valStr = attrLine.mid(7).trimmed();
+                    bool ok = false;
+                    double val = valStr.toDouble(&ok);
+                    if (ok) {
+                        drval1 = val;
+                        if (foundDepth && (drval2 < 0.0 || drval1 < drval2)) {
+                            *foundDepth = drval1;
+                        }
+                    }
+                } else if (attrLine.startsWith("DRVAL2=")) {
+                    QString valStr = attrLine.mid(7).trimmed();
+                    bool ok = false;
+                    double val = valStr.toDouble(&ok);
+                    if (ok) {
+                        drval2 = val;
+                        if (foundDepth) {
+                            *foundDepth = drval2; // Use max depth in range
+                        }
+                    }
+                }
+
+                result = EcFeatureGetAttributes(depthFeature, m_dictInfo, &attrFindInfo, EC_NEXT, attrStr, sizeof(attrStr));
+            }
+
+            // Check if depth is sufficient
+            // Use minimum depth if both values are present
+            double minDepthFound = (drval1 >= 0.0 && drval2 >= 0.0) ? qMin(drval1, drval2) : qMax(drval1, drval2);
+
+            if (minDepthFound >= 0.0 && minDepthFound < requiredDepth) {
+                return false; // Too shallow
+            }
+        }
+    }
+
+    return true; // Position is safe
+}
+
+bool AutoRoutePlanner::checkLineSegmentSafety(const GeoPoint& start,
+                                              const GeoPoint& end,
+                                              const AutoRouteOptions& options,
+                                              int numSamples) const
+{
+    if (numSamples < 2) numSamples = 2;
+
+    for (int i = 0; i <= numSamples; ++i) {
+        double fraction = static_cast<double>(i) / static_cast<double>(numSamples);
+
+        GeoPoint samplePoint;
+        samplePoint.lat = start.lat + fraction * (end.lat - start.lat);
+        samplePoint.lon = start.lon + fraction * (end.lon - start.lon);
+
+        if (!isPositionSafe(samplePoint, options)) {
+            return false; // Found unsafe position along the segment
+        }
+    }
+
+    return true; // All sampled positions are safe
+}
+
+GeoPoint AutoRoutePlanner::findSafeAlternative(const GeoPoint& unsafePoint,
+                                                const GeoPoint& previousPoint,
+                                                const GeoPoint& targetPoint,
+                                                const AutoRouteOptions& options,
+                                                double searchRadiusNm) const
+{
+    // Try offsets in different directions to find safe water
+    const int numDirections = 8;
+    const double angleStep = 360.0 / numDirections;
+
+    // Calculate the general direction towards target for prioritization
+    double targetBearing = 0.0;
+    computeRhumbDistance(previousPoint, targetPoint, &targetBearing);
+
+    for (int radiusStep = 1; radiusStep <= 3; ++radiusStep) {
+        double currentRadius = searchRadiusNm * radiusStep / 3.0;
+
+        // Try directions, prioritizing those towards the target
+        for (int i = 0; i < numDirections; ++i) {
+            // Alternate between forward and side directions
+            double angle = targetBearing + ((i % 2 == 0 ? 1 : -1) * (i / 2) * angleStep);
+            angle = degNormalize(angle);
+
+            GeoPoint candidatePoint = applyLateralOffset(unsafePoint, angle, currentRadius);
+
+            if (isPositionSafe(candidatePoint, options)) {
+                return candidatePoint;
+            }
+        }
+    }
+
+    // If no safe alternative found, return original point (will be filtered out later)
+    return unsafePoint;
+}
+
+QStringList AutoRoutePlanner::buildWarnings(const AutoRouteResult& result,
+                                            const AutoRouteOptions& options) const
+{
+    QStringList warnings;
+
+    if (!result.success) {
+        return warnings;
+    }
+
+    if (options.plannedSpeed <= 0.0) {
+        warnings << QObject::tr("Planned speed is zero. ETA cannot be computed.");
+    } else if (options.plannedSpeed < 3.0 && options.optimization == RouteOptimization::FASTEST_TIME) {
+        warnings << QObject::tr("Fastest time selected, but planned speed is below 3 knots. Consider increasing speed.");
+    }
+
+    if (options.avoidShallowWater) {
+        double currentSafetyDepth = EcChartGetSafetyDepth(m_view);
+        if (currentSafetyDepth + 1e-3 < options.minDepth) {
+            warnings << QObject::tr("Increase chart safety contour to at least %1 m to honour shallow-water avoidance.")
+                        .arg(options.minDepth, 0, 'f', 1);
+        }
+    }
+
+    if (options.considerUKC && options.minUKC > 0.0) {
+        warnings << QObject::tr("Under Keel Clearance enforced at %1 m. Verify latest tide and draft information.")
+                    .arg(options.minUKC, 0, 'f', 1);
+    }
+
+    if (options.avoidHazards) {
+        warnings << QObject::tr("Hazard avoidance requested. Review charted dangers along the suggested legs.");
+    }
+
+    if (result.totalDistanceNm > 150.0) {
+        warnings << QObject::tr("Route length exceeds 150 NM. Validate fuel and crew readiness.");
+    }
+
+    warnings << QObject::tr("IMPORTANT: Route is marked as INACTIVE. Review all waypoints before activation.");
+
+    return warnings;
+}
+
+// ========== A* PATHFINDING IMPLEMENTATION ==========
+
+QVector<GeoPoint> AutoRoutePlanner::findSafePathAStar(const GeoPoint& start,
+                                                       const GeoPoint& target,
+                                                       const AutoRouteOptions& options) const
+{
+    QVector<GeoPoint> path;
+
+    // Calculate grid resolution based on distance
+    double distance = haversineDistanceNm(start, target);
+    double gridStepNm = qMax(0.5, distance / 50.0); // At least 50 grid cells, min 0.5 NM per cell
+
+    qDebug() << "[A*] Distance:" << distance << "NM, Grid step:" << gridStepNm << "NM";
+
+    // Create bounding box
+    double minLat = qMin(start.lat, target.lat) - 0.5;
+    double maxLat = qMax(start.lat, target.lat) + 0.5;
+    double minLon = qMin(start.lon, target.lon) - 0.5;
+    double maxLon = qMax(start.lon, target.lon) + 0.5;
+
+    // Calculate grid size
+    double latRangeNm = haversineDistanceNm(GeoPoint{minLat, start.lon}, GeoPoint{maxLat, start.lon});
+    double lonRangeNm = haversineDistanceNm(GeoPoint{start.lat, minLon}, GeoPoint{start.lat, maxLon});
+
+    int gridHeight = qMax(10, static_cast<int>(latRangeNm / gridStepNm));
+    int gridWidth = qMax(10, static_cast<int>(lonRangeNm / gridStepNm));
+
+    // Limit grid size for performance
+    if (gridHeight > 100) gridHeight = 100;
+    if (gridWidth > 100) gridWidth = 100;
+
+    qDebug() << "[A*] Grid size:" << gridWidth << "x" << gridHeight;
+
+    // Create grid
+    QVector<QVector<GridNode*>> grid(gridHeight);
+    for (int i = 0; i < gridHeight; ++i) {
+        grid[i].resize(gridWidth);
+        for (int j = 0; j < gridWidth; ++j) {
+            GridNode* node = new GridNode();
+            node->lat = minLat + (maxLat - minLat) * i / (gridHeight - 1);
+            node->lon = minLon + (maxLon - minLon) * j / (gridWidth - 1);
+
+            // Check if position is safe
+            GeoPoint pos{node->lat, node->lon};
+            node->isSafe = isPositionSafe(pos, options);
+
+            grid[i][j] = node;
+        }
+    }
+
+    // Find start and target nodes
+    GridNode* startNode = nullptr;
+    GridNode* targetNode = nullptr;
+    double minStartDist = 999999;
+    double minTargetDist = 999999;
+
+    for (int i = 0; i < gridHeight; ++i) {
+        for (int j = 0; j < gridWidth; ++j) {
+            GridNode* node = grid[i][j];
+            double distToStart = haversineDistanceNm(GeoPoint{node->lat, node->lon}, start);
+            double distToTarget = haversineDistanceNm(GeoPoint{node->lat, node->lon}, target);
+
+            if (distToStart < minStartDist) {
+                minStartDist = distToStart;
+                startNode = node;
+            }
+            if (distToTarget < minTargetDist) {
+                minTargetDist = distToTarget;
+                targetNode = node;
+            }
+        }
+    }
+
+    if (!startNode || !targetNode) {
+        qDebug() << "[A*] ERROR: Could not find start or target node";
+        // Cleanup
+        for (auto& row : grid) {
+            for (auto node : row) delete node;
+        }
+        return path;
+    }
+
+    qDebug() << "[A*] Start node:" << startNode->lat << startNode->lon << "safe:" << startNode->isSafe;
+    qDebug() << "[A*] Target node:" << targetNode->lat << targetNode->lon << "safe:" << targetNode->isSafe;
+
+    // A* algorithm
+    QVector<GridNode*> openSet;
+    startNode->gCost = 0;
+    startNode->hCost = haversineDistanceNm(GeoPoint{startNode->lat, startNode->lon},
+                                            GeoPoint{targetNode->lat, targetNode->lon});
+    startNode->inOpenSet = true;
+    openSet.append(startNode);
+
+    GridNode* currentNode = nullptr;
+    int iterations = 0;
+    const int maxIterations = gridWidth * gridHeight * 2;
+
+    while (!openSet.isEmpty() && iterations < maxIterations) {
+        ++iterations;
+
+        // Find node with lowest fCost
+        int lowestIndex = 0;
+        for (int i = 1; i < openSet.size(); ++i) {
+            if (openSet[i]->fCost() < openSet[lowestIndex]->fCost()) {
+                lowestIndex = i;
+            }
+        }
+
+        currentNode = openSet[lowestIndex];
+        openSet.removeAt(lowestIndex);
+        currentNode->inOpenSet = false;
+        currentNode->inClosedSet = true;
+
+        // Check if reached target
+        if (currentNode == targetNode) {
+            qDebug() << "[A*] Path found after" << iterations << "iterations";
+            break;
+        }
+
+        // Check neighbors
+        QVector<GridNode*> neighbors = getNeighbors(currentNode, grid, gridWidth, gridHeight);
+        for (GridNode* neighbor : neighbors) {
+            if (!neighbor->isSafe || neighbor->inClosedSet) {
+                continue;
+            }
+
+            double tentativeGCost = currentNode->gCost +
+                                    haversineDistanceNm(GeoPoint{currentNode->lat, currentNode->lon},
+                                                       GeoPoint{neighbor->lat, neighbor->lon});
+
+            if (!neighbor->inOpenSet) {
+                neighbor->inOpenSet = true;
+                openSet.append(neighbor);
+            } else if (tentativeGCost >= neighbor->gCost) {
+                continue;
+            }
+
+            neighbor->parent = currentNode;
+            neighbor->gCost = tentativeGCost;
+            neighbor->hCost = haversineDistanceNm(GeoPoint{neighbor->lat, neighbor->lon},
+                                                  GeoPoint{targetNode->lat, targetNode->lon});
+        }
+    }
+
+    // Reconstruct path
+    if (currentNode == targetNode) {
+        GridNode* node = targetNode;
+        while (node != nullptr) {
+            path.prepend(GeoPoint{node->lat, node->lon});
+            node = node->parent;
+        }
+
+        qDebug() << "[A*] Reconstructed path with" << path.size() << "nodes";
+
+        // Simplify path (Douglas-Peucker-like simplification)
+        QVector<GeoPoint> simplifiedPath;
+        if (!path.isEmpty()) {
+            simplifiedPath.append(path.first());
+
+            for (int i = 1; i < path.size() - 1; i += 2) { // Take every 2nd point
+                simplifiedPath.append(path[i]);
+            }
+
+            simplifiedPath.append(path.last());
+        }
+
+        path = simplifiedPath;
+        qDebug() << "[A*] Simplified path to" << path.size() << "waypoints";
+    } else {
+        qDebug() << "[A*] No path found after" << iterations << "iterations";
+    }
+
+    // Cleanup
+    for (auto& row : grid) {
+        for (auto node : row) delete node;
+    }
+
+    return path;
+}
+
+QVector<AutoRoutePlanner::GridNode*> AutoRoutePlanner::getNeighbors(GridNode* node,
+                                                                     QVector<QVector<GridNode*>>& grid,
+                                                                     int gridWidth, int gridHeight) const
+{
+    QVector<GridNode*> neighbors;
+
+    // Find node position in grid
+    int nodeRow = -1, nodeCol = -1;
+    for (int i = 0; i < gridHeight; ++i) {
+        for (int j = 0; j < gridWidth; ++j) {
+            if (grid[i][j] == node) {
+                nodeRow = i;
+                nodeCol = j;
+                break;
+            }
+        }
+        if (nodeRow >= 0) break;
+    }
+
+    if (nodeRow < 0 || nodeCol < 0) return neighbors;
+
+    // 8-direction neighbors
+    const int dx[] = {-1, 0, 1, -1, 1, -1, 0, 1};
+    const int dy[] = {-1, -1, -1, 0, 0, 1, 1, 1};
+
+    for (int i = 0; i < 8; ++i) {
+        int newRow = nodeRow + dy[i];
+        int newCol = nodeCol + dx[i];
+
+        if (newRow >= 0 && newRow < gridHeight && newCol >= 0 && newCol < gridWidth) {
+            neighbors.append(grid[newRow][newCol]);
+        }
+    }
+
+    return neighbors;
+}

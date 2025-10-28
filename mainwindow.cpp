@@ -2558,6 +2558,9 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
 
         // Create Route option
         contextMenu.addAction(ecchart->createRouteAction);
+        if (ecchart->goHereAutoRouteAction) {
+            contextMenu.addAction(ecchart->goHereAutoRouteAction);
+        }
         contextMenu.addSeparator();
         contextMenu.addAction(ecchart->pickInfoAction);
         contextMenu.addAction(ecchart->warningInfoAction);
@@ -2576,6 +2579,9 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
             routesStatusText->setText(tr("Route Mode: Click to add waypoints. Press ESC or right-click to end route creation"));
 
             qDebug() << "[CONTEXT-MENU] Create Route mode started";
+        }
+        else if (selectedAction == ecchart->goHereAutoRouteAction) {
+            ecchart->startAutoRouteWorkflow(pos);
         }
         else if (selectedAction == ecchart->pickInfoAction){
             EcCoordinate lat, lon;

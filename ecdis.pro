@@ -75,6 +75,9 @@ HEADERS += mainwindow.h ecwidget.h pickwindow.h ais.h \
     routesafetyfeature.h \
     routedeviationdetector.h \
     eblvrm.h \
+    autoroutedialog.h \
+    autorouteplanner.h \
+    autoroutestartdialog.h \
 
 SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     AISSubscriber.cpp \
@@ -111,6 +114,9 @@ SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     routesafetyfeature.cpp \
     routedeviationdetector.cpp \
     eblvrm.cpp \
+    autoroutedialog.cpp \
+    autorouteplanner.cpp \
+    autoroutestartdialog.cpp \
 
 RESOURCES += \
     resources.qrc
