@@ -812,6 +812,32 @@ bool EcWidget::LatLonToXy (EcCoordinate lat, EcCoordinate lon, int & x, int & y)
 
 /*---------------------------------------------------------------------------*/
 
+bool EcWidget::latLonToWidgetPoint(double lat, double lon, QPoint& out)
+{
+  int x = 0, y = 0;
+  if (!LatLonToXy(lat, lon, x, y))
+    return false;
+
+  // In drag mode, the painter translates the scene by a center offset
+  // so convert map-space XY into widget-space by applying the same offset.
+  if (dragMode) {
+    int cx = 0, cy = 0;
+    // currentLat/currentLon center position in map-space
+    if (LatLonToXy(currentLat, currentLon, cx, cy)) {
+      QPoint centerOffset = QPoint(width()/2, height()/2) - QPoint(cx, cy);
+      if (isDragging)
+        centerOffset += tempOffset; // live-drag translation
+      out = centerOffset + QPoint(x, y);
+      return true;
+    }
+  }
+  // Fallback: no drag translation applied
+  out = QPoint(x, y);
+  return true;
+}
+
+/*---------------------------------------------------------------------------*/
+
 bool EcWidget::CreateDENC(const QString & dp, bool updateCatalog)
 {
   dencPath = dp;
@@ -5222,29 +5248,26 @@ void EcWidget::slotRefreshChartDisplay( double lat, double lon, double head )
             }
             else if (centering == AutoRecenter)
             {
-                int x, y;
-                if (LatLonToXy(lat, lon, x, y))
+                // Calculate on-screen position that matches what user sees (accounts for drag translate)
+                QPoint shipWidgetPos;
+                if (latLonToWidgetPoint(lat, lon, shipWidgetPos))
                 {
-                    // Ambil ukuran tampilan layar saat ini
                     QRect visibleRect = GetVisibleMapRect();
-
-                    // Tentukan margin minimum (misal 10% dari ukuran layar)
                     int marginX = visibleRect.width() * 0.1;
                     int marginY = visibleRect.height() * 0.1;
-
-                    // Buat area aman (safe area) di tengah layar
                     QRect safeRect(
                         visibleRect.left() + marginX,
                         visibleRect.top() + marginY,
                         visibleRect.width() - 2 * marginX,
                         visibleRect.height() - 2 * marginY
                     );
-
-                    // Jika kapal berada di luar area aman, lakukan recenter
-                    if (!safeRect.contains(x, y))
+                    if (!safeRect.contains(shipWidgetPos))
                     {
                         SetCenter(lat, lon);
                     }
+                } else {
+                    // If conversion failed (off-screen), force recenter to bring ship into view
+                    SetCenter(lat, lon);
                 }
             }
 
@@ -5383,8 +5406,8 @@ void EcWidget::slotRefreshChartDisplayThread(double lat, double lon, double head
                 }
                 else if (centering == AutoRecenter)
                 {
-                    int x, y;
-                    if (LatLonToXy(snapshot.lat, snapshot.lon, x, y))
+                    QPoint shipWidgetPos;
+                    if (latLonToWidgetPoint(snapshot.lat, snapshot.lon, shipWidgetPos))
                     {
                         QRect visibleRect = GetVisibleMapRect();
                         int marginX = visibleRect.width() * 0.1;
@@ -5395,8 +5418,11 @@ void EcWidget::slotRefreshChartDisplayThread(double lat, double lon, double head
                             visibleRect.width() - 2 * marginX,
                             visibleRect.height() - 2 * marginY
                         );
-                        if (!safeRect.contains(x, y))
+                        if (!safeRect.contains(shipWidgetPos))
                             SetCenter(snapshot.lat, snapshot.lon);
+                    } else {
+                        // If conversion failed (off-screen), force recenter
+                        SetCenter(snapshot.lat, snapshot.lon);
                     }
                 }
             }

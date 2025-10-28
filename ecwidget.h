@@ -1449,6 +1449,8 @@ private:
 
   // AUTO RECENTER
   QRect GetVisibleMapRect();
+  // Convert geographic to on-screen widget point, respecting drag translation
+  bool latLonToWidgetPoint(double lat, double lon, QPoint& out);
 
   // DISPLAY VAR
   int displayCategory;
