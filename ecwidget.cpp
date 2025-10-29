@@ -930,24 +930,52 @@ bool EcWidget::ImportS63Permits(const QString & s63Permits)
 {
     QByteArray tmp;
 
-    // Before new data are loaded all cells should be removed from the view
-    EcChartUnloadView(view);
+    // Safety: ensure S-63 is initialized
+    if (!s63HwId) {
+        qCritical() << "[S-63] HWID is not initialized. Call InitS63() before importing permits.";
+        return false;
+    }
+
+    // Safety: ensure permit list exists
+    if (!permitList) {
+        permitList = EcChartPermitListCreate();
+        if (!permitList) {
+            qCritical() << "[S-63] Failed to create permit list.";
+            return false;
+        }
+    }
 
     QFile s63PermitFile(s63Permits);
-    if( s63PermitFile.exists() && s63PermitFile.size() > 0 )
+    if (s63PermitFile.exists() && s63PermitFile.size() > 0)
     {
-        // release the Kernel internal permit list
-        EcCellSetChartPermitList (NULL);
+        // Do NOT unload the view during permit import to avoid reentrancy/render state issues
+        // EcChartUnloadView(view);
+
+        // Release the Kernel internal permit list temporarily
+        EcCellSetChartPermitList(NULL);
+
         tmp = s63Permits.toLatin1();
         int ret = EcS63ReadCellPermitsIntoPermitList(permitList, tmp.constBegin(), s63HwId, True, NULL, NULL);
-        if(ret != 0)
+        if (ret != 0) {
+            qCritical() << "[S-63] EcS63ReadCellPermitsIntoPermitList failed with code:" << ret;
+            // Reactivate existing permit list to keep kernel in a valid state
+            EcCellSetChartPermitList(permitList);
             return false;
-        // Update the overall S-63 permit file with the new permits, i.e. write the permit list to a file
+        }
+
+        // Update the overall S-63 permit file with the new permits
         tmp = s63permitFileName.toLatin1();
         EcS63WriteCellPermitsToFile(permitList, tmp.constBegin());
+
         // Activate the Kernel internal permit list again
-        EcCellSetChartPermitList (permitList);
+        EcCellSetChartPermitList(permitList);
+
+        qDebug() << "[S-63] Permits successfully imported from" << s63Permits;
+    } else {
+        qWarning() << "[S-63] Permit file missing or empty:" << s63Permits;
+        return false;
     }
+
     return true;
 }
 

@@ -2187,14 +2187,36 @@ void MainWindow::onImportS63Permits()
         impPath = QFileInfo(names[0]).absolutePath();
         QStringListIterator iT(names);
         QApplication::setOverrideCursor(Qt::WaitCursor);
+
+        // Avoid showing message boxes inside the loop to prevent reentrancy during kernel state changes
+        bool anySuccess = false;
+        QStringList failedFiles;
+
+        // Temporarily disable widget updates during batch import
+        bool prevUpdates = ecchart->updatesEnabled();
+        ecchart->setUpdatesEnabled(false);
+
         while (iT.hasNext())
         {
-            if(ecchart->ImportS63Permits(iT.next()))
-                QMessageBox::information(this, "S-63 Import", "Permits sucessfully read");
-            else
-                QMessageBox::critical(this, "S-63 Import", "Reading permits failed");
+            const QString file = iT.next();
+            if (ecchart->ImportS63Permits(file)) {
+                anySuccess = true;
+            } else {
+                failedFiles << QFileInfo(file).fileName();
+            }
         }
+
+        // Re-enable updates
+        ecchart->setUpdatesEnabled(prevUpdates);
         QApplication::restoreOverrideCursor();
+
+        // Show a single summary message
+        if (!failedFiles.isEmpty()) {
+            QMessageBox::critical(this, "S-63 Import",
+                                  tr("Some permits failed to import:\n%1").arg(failedFiles.join("\n")));
+        } else if (anySuccess) {
+            QMessageBox::information(this, "S-63 Import", tr("Permits successfully imported."));
+        }
     }
     DrawChart();
 }
