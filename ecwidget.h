@@ -1592,6 +1592,15 @@ private:
   QPoint tempOffset;   // offset sementara saat drag
   QPoint totalOffset;  // offset akumulasi pan
 
+  // Max-zoom drag guard: prevent dragging to top boundary when fully zoomed out
+  bool maxZoomDragActive = false;
+  bool maxZoomTriedUpDrag = false;
+  double savedCenterLat = 0.0;
+  double savedCenterLon = 0.0;
+
+  // Teardown guard to avoid event handling during shutdown
+  bool shuttingDown = false;
+
   void recalcView(const QPoint& offset);
   QPoint mapToScene(const QPoint &widgetPos) const;
 

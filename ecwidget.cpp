@@ -466,6 +466,11 @@ void EcWidget::setEblVrmFixedTarget(double lat, double lon)
 
 EcWidget::~EcWidget ()
 {
+  // Prevent input handlers from doing work during teardown
+  shuttingDown = true;
+  isDragging = false;
+  maxZoomDragActive = false;
+  maxZoomTriedUpDrag = false;
 
   // Simulasi Guardzone
     if (simulationTimer) {
@@ -3458,6 +3463,17 @@ void EcWidget::waypointLeftClick(QMouseEvent *e){
                     lastPanPoint = e->pos();
                     tempOffset = QPoint(0,0);
 
+                    // Activate max-zoom drag guard if already at max zoom
+                    if (GetScale() >= maxScale) {
+                        maxZoomDragActive = true;
+                        maxZoomTriedUpDrag = false;
+                        savedCenterLat = currentLat;
+                        savedCenterLon = currentLon;
+                    } else {
+                        maxZoomDragActive = false;
+                        maxZoomTriedUpDrag = false;
+                    }
+
                     setCursor(Qt::OpenHandCursor);
 
                     QResizeEvent ev(size(), size());  // oldSize = newSize
@@ -3481,6 +3497,7 @@ void EcWidget::waypointLeftClick(QMouseEvent *e){
 
 void EcWidget::mouseMoveEvent(QMouseEvent *e)
 {
+    if (shuttingDown || view == nullptr) { QWidget::mouseMoveEvent(e); return; }
     // Simpan posisi mouse terakhir
     lastMousePos = e->pos();
 
@@ -3651,6 +3668,12 @@ void EcWidget::mouseMoveEvent(QMouseEvent *e)
         // Default offset by pixel delta
         QPoint proposedOffset = e->pos() - lastPanPoint;
 
+        // If fully zoomed out, block vertical drag entirely and mark attempt
+        if (maxZoomDragActive && GetScale() >= maxScale) {
+            maxZoomTriedUpDrag = true;
+            proposedOffset.setY(0); // lock vertical movement at max zoom
+        }
+
         // Hindari kalkulasi geo saat belum siap (awal startup)
         if (initialized) {
             // Cegah menembus atas/bawah: hitung pusat baru (calon) dalam koordinat geo,
@@ -3697,6 +3720,7 @@ void EcWidget::mouseMoveEvent(QMouseEvent *e)
 
 void EcWidget::mouseReleaseEvent(QMouseEvent *e)
 {
+    if (shuttingDown || view == nullptr) { QWidget::mouseReleaseEvent(e); return; }
     if (editingAOI) {
         if (e->button() == Qt::LeftButton) {
             // Commit ghost move if active
@@ -3740,6 +3764,18 @@ void EcWidget::mouseReleaseEvent(QMouseEvent *e)
 
         QPoint releasePos = e->pos();
 
+        // If max zoom guard is active, always snap back to saved center on release
+        if (maxZoomDragActive && GetScale() >= maxScale) {
+            SetCenter(savedCenterLat, savedCenterLon);
+            tempOffset = QPoint();
+            unsetCursor();
+            maxZoomDragActive = false;
+            maxZoomTriedUpDrag = false;
+            Draw();
+            QWidget::mouseReleaseEvent(e);
+            return;
+        }
+
         // --- ambil geo dari titik press & release ---
         EcCoordinate pressLat, pressLon;
         EcCoordinate releaseLat, releaseLon;
@@ -3781,6 +3817,7 @@ void EcWidget::mouseReleaseEvent(QMouseEvent *e)
 
 void EcWidget::wheelEvent  (QWheelEvent *e)
 {
+  if (shuttingDown || view == nullptr) { e->accept(); return; }
   if (e->delta() > 0)
   {
     SetScale(GetScale()/1.2);
