@@ -1955,8 +1955,9 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL){
   ecchart->InitS63();
 
   // Initialize the viewport settings
-  ecchart->SetCenter(-7.18551, 112.78012);
-  ecchart->SetScale(80000);
+  // SELAT MADURA
+  ecchart->SetCenter(-7.171151, 112.686167);
+  ecchart->SetScale(60000);
   ecchart->SetProjection(EcWidget::MercatorProjection);
 
   // Initialize the chart display settings which can be set by the user
