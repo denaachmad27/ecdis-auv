@@ -6,6 +6,8 @@
 #include "ais.h"
 #include "appconfig.h"
 #include "SettingsManager.h"
+#include <QScrollBar>
+#include <QSignalBlocker>
 
 CPATCPAPanel::CPATCPAPanel(QWidget *parent)
     : QWidget(parent)
@@ -16,16 +18,11 @@ CPATCPAPanel::CPATCPAPanel(QWidget *parent)
 {   
     setupUI();
 
-    // Setup refresh timer dengan syntax lama
-    refreshTimer = new QTimer();  // Ganti nama
+    // Setup refresh timer (disabled; we'll sync to EcWidget 1 Hz tick)
+    refreshTimer = new QTimer();
     refreshTimer->setParent(this);
-    connect(refreshTimer, SIGNAL(timeout()), this, SLOT(onTimerTimeout()));  // Ganti nama
-
-    // Update setiap interval detik
-    CPATCPASettings& settings = CPATCPASettings::instance();
-    //refreshTimer->start(settings.getAlarmUpdateInterval() * 1000);
-
-    refreshTimer->start(1000);
+    connect(refreshTimer, SIGNAL(timeout()), this, SLOT(onTimerTimeout()));
+    // refreshTimer->start(1000);
 
     if (AppConfig::isDevelopment()){
         // Add tooltips
@@ -189,6 +186,25 @@ void CPATCPAPanel::onTimerTimeout()
 void CPATCPAPanel::setEcWidget(EcWidget* widget)
 {
     ecWidget = widget;
+    if (!ecWidget) return;
+
+    // Sync selection when tracking target changes from chart
+    connect(ecWidget, &EcWidget::trackTargetChanged, this, [this](const QString& mmsi){
+        if (!targetsTable) return;
+        if (mmsi.isEmpty()) {
+            // Clear selection if tracking cleared from chart
+            targetsTable->clearSelection();
+            selectedMmsi.clear();
+            scrollToTrackedOnNextRefresh = false;
+            return;
+        }
+        selectedMmsi = mmsi;
+        scrollToTrackedOnNextRefresh = true; // scroll once on next refresh
+    });
+
+    // Sync refresh to EcWidget 1 Hz tick; stop local timer
+    connect(ecWidget, SIGNAL(tickPerSecond()), this, SLOT(refreshData()));
+    if (refreshTimer) refreshTimer->stop();
 }
 
 void CPATCPAPanel::refreshData()
@@ -277,19 +293,23 @@ void CPATCPAPanel::refreshData()
 
 void CPATCPAPanel::updateTargetsDisplay()
 {
-    ecWidget->clearDangerousAISList();
-
+    isRefreshing = true;
+    QSignalBlocker blocker(targetsTable);
     if (!ecWidget || !targetsTable) return;
 
-    // Simpan MMSI dari baris yang sedang terseleksi
-    QString selectedMmsi;
+    // Simpan MMSI dari baris yang sedang terseleksi (gunakan var lokal berbeda agar tidak shadow member)
+    QString currentSelectedMmsi;
     QItemSelectionModel *selectionModel = targetsTable->selectionModel();
     if (selectionModel->hasSelection()) {
         int selectedRow = selectionModel->selectedRows().first().row();
         QTableWidgetItem *mmsiItem = targetsTable->item(selectedRow, 0);
         if (mmsiItem)
-            selectedMmsi = mmsiItem->text();
+            currentSelectedMmsi = mmsiItem->text();
     }
+
+    // Simpan posisi scroll agar tidak lompat saat refresh
+    int vScroll = targetsTable->verticalScrollBar()->value();
+    int hScroll = targetsTable->horizontalScrollBar()->value();
 
     // Bersihkan tabel
     targetsTable->setSortingEnabled(false);
@@ -316,6 +336,10 @@ void CPATCPAPanel::updateTargetsDisplay()
     AISTargetData closestAIS;
     AISTargetData dangerousAIS;
 
+    // Ambil daftar bahaya yang dihitung EcWidget pada tick yang sama
+    QSet<QString> dangerousSet;
+    for (const auto &d : ecWidget->getDangerousAISList()) dangerousSet.insert(d.mmsi);
+
     QList<TargetWithResult> sortedList;
     for (const auto &target : targets) {
         //if (target.mmsi != "367159080" && target.mmsi != "366973590" && target.mmsi != "366996240") continue;
@@ -336,20 +360,9 @@ void CPATCPAPanel::updateTargetsDisplay()
         CPATCPACalculator calculator;
         CPATCPAResult result = calculator.calculateCPATCPA(ownShip, targetVessel);
 
-        bool isDangerous = false;
-        CPATCPASettings& settings = CPATCPASettings::instance();
-        EcAISTrackingStatus aisTrkStatusManual;
-
-        if (result.isValid && result.currentRange < 0.5 &&
-            ((settings.isCPAAlarmEnabled() && result.cpa < SettingsManager::instance().data().cpaThreshold ) ||
-             (settings.isTCPAAlarmEnabled() && result.tcpa > 0 && result.tcpa < SettingsManager::instance().data().tcpaThreshold))) {
-            isDangerous = true;
-            dangerousCount++;
-            aisTrkStatusManual = aisIntruder;
-        }
-        else {
-            aisTrkStatusManual = aisInformationAvailable;
-        }
+        bool isDangerous = dangerousSet.contains(target.mmsi);
+        EcAISTrackingStatus aisTrkStatusManual = isDangerous ? aisIntruder : aisInformationAvailable;
+        if (isDangerous) dangerousCount++;
 
         if (isDangerous){
             dangerousAIS.mmsi = target.mmsi;
@@ -394,11 +407,29 @@ void CPATCPAPanel::updateTargetsDisplay()
         for (int row = 0; row < targetsTable->rowCount(); ++row) {
             QTableWidgetItem *item = targetsTable->item(row, 0); // Kolom MMSI
             if (item && item->text() == selectedMmsi) {
-                targetsTable->setCurrentItem(item);
-                targetsTable->selectRow(row);
+                // Jika diminta scroll (akibat trackTargetChanged), lakukan sekali
+                if (scrollToTrackedOnNextRefresh) {
+                    targetsTable->setCurrentItem(item);
+                    targetsTable->selectRow(row);
+                    targetsTable->scrollToItem(item, QAbstractItemView::PositionAtCenter);
+                    scrollToTrackedOnNextRefresh = false;
+                } else {
+                    // Pilih tanpa mengubah current item agar tidak memicu scroll otomatis
+                    QItemSelectionModel* sel = targetsTable->selectionModel();
+                    if (sel) {
+                        QModelIndex idx = targetsTable->model()->index(row, 0);
+                        sel->select(idx, QItemSelectionModel::Select | QItemSelectionModel::Rows);
+                    }
+                }
                 break;
             }
         }
+    }
+
+    // Pulihkan posisi scroll agar tidak mengganggu user saat melihat data lain
+    if (!scrollToTrackedOnNextRefresh) {
+        targetsTable->verticalScrollBar()->setValue(vScroll);
+        targetsTable->horizontalScrollBar()->setValue(hScroll);
     }
 
     // Update label status
@@ -410,6 +441,8 @@ void CPATCPAPanel::updateTargetsDisplay()
     if (closestCPA < 999.0) {
         systemStatusLabel->setText(QString("System: <font color='green'>ACTIVE</font> | Closest CPA: %1").arg(formatDistance(closestCPA)));
     }
+
+    isRefreshing = false;
 }
 
 void CPATCPAPanel::updateTargetRow(int row, const AISTargetData& target, const CPATCPAResult& result)
@@ -503,6 +536,7 @@ void CPATCPAPanel::updateOwnShipInfo(double lat, double lon, double sog, double 
 
 void CPATCPAPanel::onTargetSelected()
 {
+    if (isRefreshing) return;
     // int row = targetsTable->currentRow();
     // if (row >= 0 && targetsTable->item(row, 0)) {
     //     QString mmsi = targetsTable->item(row, 0)->text();
@@ -512,6 +546,26 @@ void CPATCPAPanel::onTargetSelected()
     QList<QTableWidgetItem*> selectedItems = targetsTable->selectedItems();
     if (!selectedItems.isEmpty()) {
         selectedMmsi = selectedItems.first()->text();  // Kolom MMSI harus kolom 0
+
+        // Trigger chart tracking same as right-click on chart
+        if (ecWidget && !selectedMmsi.isEmpty()) {
+            // Get latest coords from cache
+            QMap<unsigned int, AISTargetData>& targets = Ais::instance()->getTargetMap();
+            unsigned int mmsiInt = selectedMmsi.toUInt();
+            if (targets.contains(mmsiInt)) {
+                const AISTargetData& td = targets[mmsiInt];
+                AISTargetData track;
+                track.mmsi = selectedMmsi;
+                track.lat = td.lat;
+                track.lon = td.lon;
+                ecWidget->setAISTrack(track);
+            }
+            ecWidget->TrackTarget(selectedMmsi);
+        }
+    } else {
+        // No selection (clicked empty area) -> stop tracking on chart
+        selectedMmsi.clear();
+        if (ecWidget) ecWidget->TrackTarget("");
     }
 }
 

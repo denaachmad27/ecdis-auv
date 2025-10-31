@@ -30,6 +30,8 @@
 #include "aivdoencoder.h"
 #include "appconfig.h"
 #include "editwaypointdialog.h"
+#include "cpatcpacalculator.h"
+#include "cpatcpasettings.h"
 
 #include <QTime>
 #include <QMessageBox>
@@ -792,6 +794,13 @@ void EcWidget::ShowAIS(bool on)
 
 void EcWidget::TrackTarget(QString mmsi){
     trackTarget = mmsi;
+    // Clear AIS panel if tracking is cleared
+    if (trackTarget.isEmpty()) {
+        if (aisText) {
+            aisText->setHtml("");
+        }
+    }
+    emit trackTargetChanged(trackTarget);
 }
 
 bool EcWidget::isTrackTarget(){
@@ -4809,6 +4818,25 @@ void EcWidget::allFunctionPerTime(PickWindow *pickWindow){
         if (subscriber->hasData()){
             // DRAW PER TIME
             if (!isDragging) {
+                // Update dangerous AIS list in the same tick before drawing
+                clearDangerousAISList();
+                {
+                    QMap<unsigned int, AISTargetData> targets = Ais::instance()->getTargetMap();
+                    AISTargetData own = Ais::instance()->getOwnShipVar();
+                    CPATCPASettings& settings = CPATCPASettings::instance();
+
+                    for (const auto &entry : targets) {
+                        VesselState ownShip; ownShip.lat = own.lat; ownShip.lon = own.lon; ownShip.sog = own.sog; ownShip.cog = own.cog;
+                        VesselState targetVessel; targetVessel.lat = entry.lat; targetVessel.lon = entry.lon; targetVessel.sog = entry.sog; targetVessel.cog = entry.cog;
+                        CPATCPACalculator calc; CPATCPAResult res = calc.calculateCPATCPA(ownShip, targetVessel);
+                        bool isDanger = false;
+                        if (res.isValid && res.currentRange < 0.5) {
+                            if (settings.isCPAAlarmEnabled() && res.cpa < SettingsManager::instance().data().cpaThreshold) isDanger = true;
+                            if (settings.isTCPAAlarmEnabled() && res.tcpa > 0 && res.tcpa < SettingsManager::instance().data().tcpaThreshold) isDanger = true;
+                        }
+                        if (isDanger) addDangerousAISTarget(entry);
+                    }
+                }
                 draw(true);
                 slotUpdateAISTargets(true);
             }
@@ -4851,6 +4879,9 @@ void EcWidget::allFunctionPerTime(PickWindow *pickWindow){
                     }
                 }
             }
+
+            // 1 Hz tick for panels to update in sync with draw
+            emit tickPerSecond();
 
             // start countdown
             canWork = false;
@@ -6597,7 +6628,12 @@ int EcWidget::getNextAvailableRouteId() const
 
 void EcWidget::forceRedraw()
 {
-    // Force complete chart redraw
+    // Force complete chart redraw (throttled to 1 Hz)
+    QDateTime now = QDateTime::currentDateTime();
+    if (lastRedrawTime.isValid() && lastRedrawTime.msecsTo(now) < 1000) {
+        return;
+    }
+    lastRedrawTime = now;
     draw(true);
     update();
     repaint();
@@ -6605,7 +6641,12 @@ void EcWidget::forceRedraw()
 
 void EcWidget::immediateRedraw()
 {
-    // Immediate redraw for route selection
+    // Immediate redraw for UI updates (throttled to 1 Hz)
+    QDateTime now = QDateTime::currentDateTime();
+    if (lastRedrawTime.isValid() && lastRedrawTime.msecsTo(now) < 1000) {
+        return;
+    }
+    lastRedrawTime = now;
     qDebug() << "[REDRAW] Starting immediate redraw";
     draw(true);
     draw(false);

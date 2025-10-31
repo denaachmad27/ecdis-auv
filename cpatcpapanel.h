@@ -93,6 +93,9 @@ private:
 
     // SELECTION
     QString selectedMmsi;
+    bool scrollToTrackedOnNextRefresh = false; // request scrolling once to tracked row
+    bool preserveScrollOnRefresh = true;       // preserve user scroll position on periodic refresh
+    bool isRefreshing = false;                 // guard to ignore selection changes during refresh
 };
 
 #endif // CPATCPAPANEL_H

@@ -901,6 +901,7 @@ public:
 
   //
   int rangeNM = 0;
+  QDateTime lastRedrawTime; // throttle external redraws
 
   void defaultSettingsStartUp();
 
@@ -920,6 +921,8 @@ public slots:
   bool deleteRoute(int routeId);
   void forceRedraw();
   void immediateRedraw(); // Immediate redraw for UI updates
+  // 1 Hz tick to sync panels
+
   void setRouteVisibility(int routeId, bool visible);
   bool isRouteVisible(int routeId) const;
   void setRouteAttachedToShip(int routeId, bool attached);
@@ -953,6 +956,8 @@ signals:
 
   // Waypoint Signals
   void waypointCreated();
+  // 1 Hz tick to sync panels
+  void tickPerSecond();
 
   // GuardZone Signals
   void statusMessage(const QString &message);
@@ -979,6 +984,9 @@ signals:
 
   // ROUTE
   void updateEta();
+
+  // Tracking
+  void trackTargetChanged(const QString& mmsi);
 
   void ownshipCache(bool cache);
 
@@ -1611,3 +1619,4 @@ private:
 }; // EcWidget
 
 #endif // _ec_widget_h_
+

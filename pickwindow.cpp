@@ -123,9 +123,9 @@ QString PickWindow::buildAisHtml(EcFeature feature,
   }
 
   // Append additional navigation info: LAT, LONG, Range, Bearing (relative to ownship)
-  ais.append(QString("<tr><td>LAT</td><td><b>%1 °</b></td></tr>")
+  ais.append(QString("<tr><td>Latitude</td><td><b>%1 °</b></td></tr>")
                  .arg(lat, 0, 'f', 6));
-  ais.append(QString("<tr><td>LONG</td><td><b>%1 °</b></td></tr>")
+  ais.append(QString("<tr><td>Longitude</td><td><b>%1 °</b></td></tr>")
                  .arg(lon, 0, 'f', 6));
   ais.append(QString("<tr><td>Range</td><td><b>%1 NM</b></td></tr>")
                  .arg(rangeNm, 0, 'f', 2));
