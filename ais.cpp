@@ -887,6 +887,44 @@ void Ais::clearTargetData()
     }
 }
 
+// Recreate SevenCs transponder cleanly (used on reconnect)
+Bool Ais::recreateTransponder()
+{
+  if (_transponder) {
+    EcAISDeleteTransponder(&_transponder);
+    _transponder = NULL;
+  }
+
+  if (EcAISNewTransponder(&_transponder,
+                          _sAisLib.toLatin1(),
+                          _bInternalGPS ? eGPSt_internalGPS : eGPSt_externalGPS) == False) {
+    if (_transponder) {
+      EcAISDeleteTransponder(&_transponder);
+      _transponder = NULL;
+    }
+    addLogFileEntry(QString("recreateTransponder(): EcAISNewTransponder failed"));
+    return False;
+  }
+
+  EcAISSetTargetUpdateCallBack(_transponder, AISTargetUpdateCallbackThread);
+  return True;
+}
+
+// Clear SevenCs transponder targets but preserve in-memory target map to continue context after reconnect
+void Ais::resetTransponderPreserveTargets()
+{
+    // Invalidate feature handles so UI code won't touch stale features
+    for (auto it = _aisTargetMap.begin(); it != _aisTargetMap.end(); ++it) {
+        it.value().feat.id = EC_NOCELLID; // mark invalid
+        it.value().feat.offset = 0;
+        // ensure dictInfo set for rebuilds if needed
+        it.value()._dictInfo = _dictInfo;
+    }
+
+    // Do not clear transponder targets here to avoid library-side race during reconnect.
+    // We rely on incoming AIVDM to refresh existing targets in place.
+}
+
 // Read AIS variable.
 ////////////////////
 void Ais::readAISVariable( const QStringList &dataLines )

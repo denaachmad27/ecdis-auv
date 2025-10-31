@@ -4327,7 +4327,7 @@ void EcWidget::ReadAISLogfile( const QString &aisLogFile )
   //createAISCell();
 
   clearOwnShipTrail();
-  _aisObj->clearTargetData();
+  _aisObj->resetTransponderPreserveTargets();
   _aisObj->setAISCell( aisCellId );
   _aisObj->readAISLogfile( aisLogFile );
 }
@@ -4346,7 +4346,7 @@ void EcWidget::createDvrRead(){
     }
 
     clearOwnShipTrail();
-    _aisObj->clearTargetData();
+    _aisObj->resetTransponderPreserveTargets();
     _aisObj->setAISCell( aisCellId );
 }
 
@@ -4396,7 +4396,7 @@ void EcWidget::ReadAISVariable( const QStringList &aisDataLines )
     }
 
     clearOwnShipTrail();
-    _aisObj->clearTargetData();
+    _aisObj->resetTransponderPreserveTargets();
     _aisObj->setAISCell( aisCellId );
     _aisObj->readAISVariable( aisDataLines );
 }
@@ -4412,7 +4412,7 @@ void EcWidget::startAISSubscribe() {
         return;
     }
 
-    _aisObj->clearTargetData();
+    _aisObj->resetTransponderPreserveTargets();
     _aisObj->setAISCell(aisCellId);
     startAISConnection();
 }
@@ -4539,7 +4539,7 @@ void EcWidget::startAISConnection()
     EcDictInfo *dictInfo = nullptr;
     QWidget *parentWidget = nullptr;
 
-    PickWindow *pickWindow = new PickWindow(parentWidget, dictInfo, denc);
+    PickWindow *pickWindow = new PickWindow(this, dictInfo, denc);
 
     connect(_aisObj, &Ais::pickWindowOwnship, this, [=](){
         if (navShip.lat != 0 && ownShipText){
@@ -4547,6 +4547,9 @@ void EcWidget::startAISConnection()
             //_cpaPanel->updateOwnShipInfo(navShip.lat, navShip.lon, navShip.speed_og, navShip.heading_og);
         }
     });
+
+    // Panel AIS akan disegarkan per detik lewat allFunctionPerTime();
+    // Tidak perlu refresh tambahan pada setiap ownship/target update.
 
     /*
     // DRAW TIMER START
@@ -4632,17 +4635,14 @@ void EcWidget::startAISConnection()
 
 void EcWidget::startConnectionAgain()
 {
-    if (!deleteAISCell()) {
-        QMessageBox::warning(this, tr("ReadAISLogfile"), tr("Could not remove old AIS overlay cell. Please restart the program."));
-        return;
+    // On reconnect: recreate transponder to avoid stale state, preserve cache and AIS cell
+    if (_aisObj) {
+        _aisObj->resetTransponderPreserveTargets();
+        _aisObj->recreateTransponder();
+        if (aisCellId != EC_NOCELLID) {
+            _aisObj->setAISCell(aisCellId);
+        }
     }
-    if (!createAISCell()) {
-        QMessageBox::warning(this, tr("ReadAISLogfile"), tr("Could not create AIS overlay cell. Please restart the program."));
-        return;
-    }
-
-    _aisObj->clearTargetData();
-    _aisObj->setAISCell(aisCellId);
 
     if (subscriber) {
         QString sshIP = SettingsManager::instance().data().moosIp;
@@ -4803,6 +4803,7 @@ void EcWidget::drawPerTime(){
 }
 
 void EcWidget::allFunctionPerTime(PickWindow *pickWindow){
+    if (shuttingDown) { return; }
     if (!canWork) { return;}
     if (subscriber){
         if (subscriber->hasData()){

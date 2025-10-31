@@ -369,8 +369,10 @@ void CPATCPAPanel::updateTargetsDisplay()
 
         sortedList.append({target, result, isDangerous});
 
-        // Set the tracking status of the ais target feature
-        EcAISSetTargetTrackingStatus(target.feat, target._dictInfo, aisTrkStatusManual, NULL );
+        // Set the tracking status of the ais target feature (guard against invalid feature after reconnect)
+        if (ECOK(target.feat) && target._dictInfo) {
+            EcAISSetTargetTrackingStatus(target.feat, target._dictInfo, aisTrkStatusManual, NULL );
+        }
 
         //ecWidget->drawShipGuardianSquare(target.lat, target.lon);
     }

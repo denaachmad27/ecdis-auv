@@ -73,6 +73,10 @@ public:
 
     void extractNMEA(QString nmea);
     void clearTargetData();
+    // Reset only transponder/feature layer, keep target map in memory
+    void resetTransponderPreserveTargets();
+    // Fully recreate SevenCs transponder to ensure clean state after reconnect
+    Bool recreateTransponder();
 
     void connectToAISServer( const QString&, int port );
     EcCellId getAISCell();
