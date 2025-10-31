@@ -1416,6 +1416,7 @@ private:
   QLabel* tooltipTrackStatus;
   QLabel* tooltipListOfPorts;
   QLabel* tooltipAntennaLocation;
+  QLabel* tooltipRangeBearing;
 
   QTimer* aisTooltipUpdateTimer = nullptr;
   EcAISTargetInfo* currentTooltipTarget = nullptr;

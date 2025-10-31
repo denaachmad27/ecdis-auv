@@ -118,6 +118,7 @@ public:
     EcAISTargetInfo* getTargetInfo(unsigned int mmsi);
 
     void postTargetUpdate(const AISTargetData& info);
+    void setTargetManualStatus(unsigned int mmsi, EcAISTrackingStatus status);
 
 signals:
     void signalRefreshChartDisplay( double, double, double );
@@ -179,3 +180,4 @@ private:
 };
 
 #endif
+

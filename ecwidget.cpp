@@ -13228,6 +13228,7 @@ void EcWidget::createAISTooltip()
     tooltipCOG = new QLabel("COG: ", aisTooltip);
     tooltipSOG = new QLabel("SOG: ", aisTooltip);
     tooltipAntennaLocation = new QLabel("POS: ", aisTooltip);
+    tooltipRangeBearing = new QLabel("RNG/BRG: ", aisTooltip);
     //tooltipTypeOfShip = new QLabel("SHIP TYPE: ", aisTooltip);
     //tooltipTrackStatus = new QLabel("STATUS: ", aisTooltip);
     //tooltipShipBreadth = new QLabel("Ship breadth (beam): ", aisTooltip);
@@ -13243,7 +13244,8 @@ void EcWidget::createAISTooltip()
         tooltipObjectName,
         tooltipCOG,
         tooltipSOG,
-        tooltipAntennaLocation
+        tooltipAntennaLocation,
+        tooltipRangeBearing
         //tooltipTypeOfShip,
         //tooltipTrackStatus,
         //tooltipShipBreadth,
@@ -13313,6 +13315,19 @@ void EcWidget::updateAISTooltipContent(EcAISTargetInfo* ti)
     tooltipCOG->setText(QString("COG: %1").arg(cogValue));
     tooltipSOG->setText(QString("SOG: %1").arg(sogValue));
     tooltipAntennaLocation->setText(QString("POS: %1").arg(antennaLocation));
+
+    // Range & Bearing relative to ownship
+    double osLat = navShip.lat;
+    double osLon = navShip.lon;
+    if (!qIsNaN(osLat) && !qIsNaN(osLon) && (osLat != 0.0 || osLon != 0.0)) {
+        double distNm = 0.0, brgDeg = 0.0;
+        EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84, lat, lon, osLat, osLon, &distNm, &brgDeg);
+        tooltipRangeBearing->setText(QString("RNG/BRG: %1 NM / %2°").arg(distNm, 0, 'f', 2).arg(brgDeg, 0, 'f', 0));
+        tooltipRangeBearing->show();
+    } else {
+        tooltipRangeBearing->setText("RNG/BRG: --");
+        tooltipRangeBearing->show();
+    }
     //tooltipTypeOfShip->setText(QString("SHIP TYPE: %1").arg(typeOfShip));
     //tooltipTrackStatus->setText(QString("STATUS: %1").arg(trackStatus));
     //tooltipShipBreadth->setText(QString("Ship breadth (beam): %1").arg(shipBreadth));
@@ -18305,3 +18320,5 @@ void EcWidget::drawRouteDeviationIndicator(QPainter& painter)
 
     painter.restore();
 }
+
+

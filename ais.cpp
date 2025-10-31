@@ -593,6 +593,27 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
 void Ais::postTargetUpdate(const AISTargetData& info){
     emit targetUpdateReceived(info);
 }
+void Ais::setTargetManualStatus(unsigned int mmsi, EcAISTrackingStatus status)
+{
+    // Try to use cached feature first
+    if (_aisTargetMap.contains(mmsi)) {
+        AISTargetData &td = _aisTargetMap[mmsi];
+        if (ECOK(td.feat) && td._dictInfo) {
+            EcAISSetTargetTrackingStatus(td.feat, td._dictInfo, status, NULL);
+            return;
+        }
+    }
+    // Resolve via SevenCs API if cached feature invalid
+    EcAISTargetInfo* ti = getTargetInfo(mmsi);
+    if (!ti) return;
+    EcFeature feat = EcAISFindTargetObject(_cid, _dictInfo, ti);
+    if (ECOK(feat)) {
+        EcAISSetTargetTrackingStatus(feat, _dictInfo, status, NULL);
+        // Update cache
+        _aisTargetMap[mmsi].feat = feat;
+        _aisTargetMap[mmsi]._dictInfo = _dictInfo;
+    }
+}
 
 void Ais::emitSignal( double lat, double lon, double head )
 {
@@ -1330,3 +1351,4 @@ void Ais::deleteOldOwnShipFeature()
         qDebug() << "Old ownship feature deleted successfully";
     }
 }
+

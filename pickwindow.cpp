@@ -99,7 +99,7 @@ QString PickWindow::buildAisHtml(EcFeature feature,
             row = QString("");
           } else {
             if (QString(attrToken) == "cogcrs") {
-              row = QString("<tr><td>COG</td><td><b>%1 kn</b></td></tr>").arg(QString(attrText));
+              row = QString("<tr><td>COG</td><td><b>%1 °T</b></td></tr>").arg(QString(attrText));
             } else if (QString(attrToken) == "mmsino") {
               row = QString("<tr><td>MMSI</td><td><b>%1</b></td></tr>").arg(QString(attrText));
             } else if (QString(attrToken) == "roturn") {
@@ -107,7 +107,7 @@ QString PickWindow::buildAisHtml(EcFeature feature,
             } else if (QString(attrToken) == "headng") {
               row = QString("<tr><td>Heading</td><td><b>%1 °</b></td></tr>").arg(QString(attrText));
             } else if (QString(attrToken) == "sogspd") {
-              row = QString("<tr><td>SOG</td><td><b>%1 °</b></td></tr>").arg(QString(attrText));
+              row = QString("<tr><td>SOG</td><td><b>%1 kn</b></td></tr>").arg(QString(attrText));
             } else {
               row = QString("<tr><td>%1</td><td><b>%2</b></td></tr>").arg(QString(attrName)).arg(QString(attrText));
             }
@@ -314,7 +314,7 @@ void PickWindow::fill(QList<EcFeature> & pickFeatureList)
                     else {
                         if (QString(attrToken) == "cogcrs"){
                             //row = QString("COG:  %1 kn<br>").arg(QString(attrText));
-                            row = QString("<tr><td>COG</td><td><b>%1 kn</b></td></tr>").arg(QString(attrText));
+                            row = QString("<tr><td>COG</td><td><b>%1 °T</b></td></tr>").arg(QString(attrText));
                         }
                         else if (QString(attrToken) == "mmsino"){
                             //row = QString("MMSI:  %1<br>").arg(QString(attrText));
@@ -330,7 +330,7 @@ void PickWindow::fill(QList<EcFeature> & pickFeatureList)
                         }
                         else if (QString(attrToken) == "sogspd"){
                             //row = QString("SOG:  %1 °<br>").arg(QString(attrText));
-                            row = QString("<tr><td>SOG</td><td><b>%1 °</b></td></tr>").arg(QString(attrText));
+                            row = QString("<tr><td>SOG</td><td><b>%1 kn</b></td></tr>").arg(QString(attrText));
                         }
                         else {
                             //row = QString("%1 (%2):  %3<br>").arg(QString(attrName)).arg(QString(attrToken)).arg(QString(attrText));
