@@ -504,6 +504,12 @@ EcWidget::~EcWidget ()
         waypointAnimationTimer = nullptr;
     }
 
+    // Stop 1-second periodic timers to avoid callbacks during teardown
+    allTimer.stop();
+    dbTimer.stop();
+    timer.stop();
+    timerPublish.stop();
+
   // Release AIS object.
   if( _aisObj )
   {
@@ -4522,6 +4528,7 @@ void EcWidget::startAISConnection()
     connect(_aisObj, &Ais::nmeaTextAppend, this, [=](const QString &msg){ if (nmeaText) nmeaText->append(msg);});
 
     connect(_aisObj, &Ais::targetUpdateReceived, this, [=](AISTargetData info){
+        // Keep AIS target cache updated; UI refresh handled by 1s timer
         Ais::instance()->_aisTargetMap[info.mmsi.toInt()] = info;
     });
 
@@ -4818,6 +4825,31 @@ void EcWidget::allFunctionPerTime(PickWindow *pickWindow){
 
             // UPDATE OWNSHIP PANEL
             ownShipText->setText(pickWindow->ownShipAutoFill());
+
+            // UPDATE AIS PANEL (per detik) saat tracking target aktif
+            if (aisText && isTrackTarget()) {
+                QString mmsi = getTrackMMSI();
+                bool ok=false; unsigned int mmsiInt = mmsi.toUInt(&ok);
+                if (ok) {
+                    QMap<unsigned int, AISTargetData>& targets = Ais::instance()->getTargetMap();
+                    if (targets.contains(mmsiInt)) {
+                        const AISTargetData &td = targets[mmsiInt];
+                        if (ECOK(td.feat) && td._dictInfo != nullptr && navShip.lat != 0 && navShip.lon != 0) {
+                            double rangeNm = 0.0, bearDeg = 0.0;
+                            EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
+                                                                   td.lat, td.lon,
+                                                                   navShip.lat, navShip.lon,
+                                                                   &rangeNm, &bearDeg);
+                            QString html = pickWindow->buildAisHtml(td.feat, td._dictInfo,
+                                                                    td.lat, td.lon,
+                                                                    rangeNm, bearDeg);
+                            if (!html.trimmed().isEmpty()) {
+                                aisText->setHtml(html);
+                            }
+                        }
+                    }
+                }
+            }
 
             // start countdown
             canWork = false;

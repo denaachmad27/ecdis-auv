@@ -31,10 +31,18 @@ public:
     void fillWarningOnly(QList<EcFeature> & pickFeatureList, EcCoordinate lat, EcCoordinate lon);
 
     QString ownShipAutoFill();
-    QJsonObject fillJson(QList<EcFeature> & pickFeatureList);
-    QJsonObject fillJsonSubs(QList<EcFeature> & pickFeatureList);
+  QJsonObject fillJson(QList<EcFeature> & pickFeatureList);
+  QJsonObject fillJsonSubs(QList<EcFeature> & pickFeatureList);
 
-    QString parseTxtFile(const QString &filePath);
+  QString parseTxtFile(const QString &filePath);
+
+  // Build AIS HTML (same style as fill) and append LAT/LON/Range/Bearing
+  QString buildAisHtml(EcFeature feature,
+                       EcDictInfo* dictInfo,
+                       double lat,
+                       double lon,
+                       double rangeNm,
+                       double bearingDeg);
 
 private:
     QTextEdit  *textEdit;

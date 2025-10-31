@@ -34,6 +34,109 @@ PickWindow::PickWindow(QWidget *parent, EcDictInfo *dict, EcDENC *dc)
   longViewMode = SettingsManager::instance().data().longViewMode;
 }
 
+QString PickWindow::buildAisHtml(EcFeature feature,
+                       EcDictInfo* dictInfo,
+                       double lat,
+                       double lon,
+                       double rangeNm,
+                       double bearingDeg)
+{
+  EcFindInfo       fI;
+  EcClassToken     featToken;
+  EcAttributeToken attrToken;
+  EcAttributeType  attrType;
+  char             featName[1024];
+  char             attrStr[1024];
+  char             attrName[1024];
+  char             attrText[1024];
+  Bool             result;
+
+  QString          ais;
+  QString          row;
+
+  // Get feature class token and name
+  EcFeatureGetClass(feature, dictInfo, featToken, sizeof(featToken));
+  if (EcDictionaryTranslateObjectToken(dictInfo, featToken, featName, sizeof(featName)) != EC_DICT_OK)
+    strcpy(featName, "unknown");
+
+  row = QString("<br><b>%1 (%2)</b><br>").arg(QString(featName)).arg(QString(featToken));
+  ais.append(row);
+  ais.append("<table width='100%' cellspacing='0' cellpadding='2'>");
+
+  // Iterate attributes exactly like fill()
+  result = EcFeatureGetAttributes(feature, dictInfo, &fI, EC_FIRST, attrStr, sizeof(attrStr));
+  while (result) {
+    strncpy(attrToken, attrStr, EC_LENATRCODE);
+    attrToken[EC_LENATRCODE] = (char)0;
+
+    if (EcDictionaryTranslateAttributeToken(dictInfo, attrToken, attrName, sizeof(attrName))) {
+      if (EcDictionaryGetAttributeType(dictInfo, attrStr, &attrType) == EC_DICT_OK) {
+        if (attrType == EC_ATTR_ENUM || attrType == EC_ATTR_LIST) {
+          if (!EcDictionaryTranslateAttributeValue(dictInfo, attrStr, attrText, sizeof(attrText))) {
+            attrText[0] = (char)0;
+          }
+
+          if (QString(attrToken) == "trksta") {
+            row = QString("<tr><td>Track Status</td><td><b>%1</b></td></tr>").arg(attrText);
+          } else if (QString(attrToken) == "actsta") {
+            row = QString("<tr><td>Activation</td><td><b>%1</b></td></tr>").arg(attrText);
+          } else if (QString(attrToken) == "posint") {
+            row = QString("<tr><td>Pos Integrity</td><td><b>%1</b></td></tr>").arg(attrText);
+          } else if (QString(attrToken) == "navsta") {
+            row = QString("<tr><td>Nav Status</td><td><b>%1</b></td></tr>").arg(attrText);
+          } else {
+            row = QString("<tr><td>%1</td><td><b>%2</b></td></tr>").arg(QString(attrName)).arg(QString(attrText));
+          }
+        } else {
+          strcpy(attrText, &attrStr[EC_LENATRCODE]);
+
+          if (!strncmp(attrToken, "TXTDSC", 6) ||
+              !strncmp(attrToken, "NTXTDS", 6) ||
+              !strncmp(attrToken, "PICREP", 6) ||
+              !strncmp(attrToken, "comctn", 6) ||
+              !strncmp(attrToken, "schref", 6)) {
+            // Keep consistent with fill(); skip file links here
+            row = QString("");
+          } else {
+            if (QString(attrToken) == "cogcrs") {
+              row = QString("<tr><td>COG</td><td><b>%1 kn</b></td></tr>").arg(QString(attrText));
+            } else if (QString(attrToken) == "mmsino") {
+              row = QString("<tr><td>MMSI</td><td><b>%1</b></td></tr>").arg(QString(attrText));
+            } else if (QString(attrToken) == "roturn") {
+              row = QString("<tr><td>ROT</td><td><b>%1 deg/min</b></td></tr>").arg(QString(attrText));
+            } else if (QString(attrToken) == "headng") {
+              row = QString("<tr><td>Heading</td><td><b>%1 °</b></td></tr>").arg(QString(attrText));
+            } else if (QString(attrToken) == "sogspd") {
+              row = QString("<tr><td>SOG</td><td><b>%1 °</b></td></tr>").arg(QString(attrText));
+            } else {
+              row = QString("<tr><td>%1</td><td><b>%2</b></td></tr>").arg(QString(attrName)).arg(QString(attrText));
+            }
+          }
+        }
+
+        if (!row.isEmpty())
+          ais.append(row);
+      }
+    }
+
+    result = EcFeatureGetAttributes(feature, dictInfo, &fI, EC_NEXT, attrStr, sizeof(attrStr));
+  }
+
+  // Append additional navigation info: LAT, LONG, Range, Bearing (relative to ownship)
+  ais.append(QString("<tr><td>LAT</td><td><b>%1 °</b></td></tr>")
+                 .arg(lat, 0, 'f', 6));
+  ais.append(QString("<tr><td>LONG</td><td><b>%1 °</b></td></tr>")
+                 .arg(lon, 0, 'f', 6));
+  ais.append(QString("<tr><td>Range</td><td><b>%1 NM</b></td></tr>")
+                 .arg(rangeNm, 0, 'f', 2));
+  ais.append(QString("<tr><td>Bearing</td><td><b>%1 °</b></td></tr>")
+                 .arg(bearingDeg, 0, 'f', 1));
+
+  ais.append("</table>");
+
+  return ais;
+}
+
 void PickWindow::fill(QList<EcFeature> & pickFeatureList)
 {
   EcFeature        feature;

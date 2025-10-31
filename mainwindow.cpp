@@ -2548,8 +2548,34 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
         ecchart->GetPickedFeatures(pickedFeatureList);
         pickWindow->fill(pickedFeatureList);
 
-        if (!aisTemp->toPlainText().trimmed().isEmpty()){
-            aisText->setHtml(aisTemp->toHtml());
+        // Bangun HTML AIS dengan tambahan LAT/LON/Range/Bearing seperti diminta
+        // Cari feature "aistar" pada pickedFeatureList
+        EcFeature aistarFeat; bool hasAistar = false;
+        EcClassToken tok; char featName[1024];
+        for (auto it = pickedFeatureList.begin(); it != pickedFeatureList.end(); ++it) {
+            EcFeature f = *it;
+            EcFeatureGetClass(f, dict, tok, sizeof(tok));
+            if (QString(tok) == "aistar") { aistarFeat = f; hasAistar = true; break; }
+        }
+
+        if (hasAistar) {
+            double rangeNm = 0.0, bearDeg = 0.0;
+            EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84,
+                                                   ais.lat, ais.lon,
+                                                   navShip.lat, navShip.lon,
+                                                   &rangeNm, &bearDeg);
+
+            QString html = pickWindow->buildAisHtml(aistarFeat, dict,
+                                                    ais.lat, ais.lon,
+                                                    rangeNm, bearDeg);
+            if (!html.trimmed().isEmpty()) {
+                aisText->setHtml(html);
+            }
+        } else {
+            // Fallback ke hasil dari PickWindow::fill bila tidak ketemu aistar
+            if (!aisTemp->toPlainText().trimmed().isEmpty()){
+                aisText->setHtml(aisTemp->toHtml());
+            }
         }
 
         return;
