@@ -161,7 +161,7 @@ void PickWindow::fill(QList<EcFeature> & pickFeatureList)
   //2. all line features
   //3. all non meta area features
   //4. all meta feature (token starts with "M_"
-  
+
   QList<EcFeature>::Iterator iT;
   for (iT=pickFeatureList.begin(); iT!=pickFeatureList.end(); ++iT)
   {
@@ -904,11 +904,12 @@ QString PickWindow::ownShipAutoFill()
 
     // LAT
     QString degree = "";
-    if (latViewMode == "NAV_LAT"){
+    QString latMode = SettingsManager::instance().data().latViewMode;
+    if (latMode == "NAV_LAT"){
         navShip.slat = QString::number(navShip.lat);
         degree = "°";
     }
-    else if (latViewMode == "NAV_LAT_DMS"){
+    else if (latMode == "NAV_LAT_DMS"){
         navShip.slat = navShip.lat_dms;
     }
     else {
@@ -933,11 +934,13 @@ QString PickWindow::ownShipAutoFill()
     ownship.append(row);
 
     // LON
-    if (longViewMode == "NAV_LONG"){
+    QString lonMode = SettingsManager::instance().data().longViewMode;
+    degree = "";
+    if (lonMode == "NAV_LONG"){
         navShip.slon = QString::number(navShip.lon);
         degree = "°";
     }
-    else if (longViewMode == "NAV_LONG_DMS"){
+    else if (lonMode == "NAV_LONG_DMS"){
         navShip.slon = navShip.lon_dms;
     }
     else {
@@ -1327,4 +1330,5 @@ QJsonObject PickWindow::fillJsonSubs(QList<EcFeature> &pickFeatureList)
 
     return jsonOutput;
 }
+
 

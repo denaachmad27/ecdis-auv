@@ -132,7 +132,7 @@ void SettingsDialog::setupUI() {
     });
 
     // Data View
-    QGroupBox *dataViewGroup = new QGroupBox(tr("Data View (restart required)"));
+    QGroupBox *dataViewGroup = new QGroupBox(tr("Data View"));
     QFormLayout *dataViewForm = new QFormLayout(dataViewGroup);
 
     latViewCombo = new QComboBox;
