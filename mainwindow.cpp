@@ -1,5 +1,13 @@
 // #include <QtGui>
 #include <QtWidgets>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFormLayout>
+#include <QPlainTextEdit>
+#include <QComboBox>
+#include <QLineEdit>
+#include <QLabel>
+#include <cmath>
 
 #include <QPluginLoader>
 #include <QDir>
@@ -158,6 +166,13 @@ void MainWindow::createActions()
     connect(areaAct, SIGNAL(triggered()), this, SLOT(onOpenAOIPanel()));
     fileToolBar->addAction(areaAct);
     areaAct->setToolTip(tr("Area Tools Manager"));
+
+    const QIcon poiIcon = QIcon::fromTheme("import-poi", QIcon(":/icon/info.svg"));
+    poiAct = new QAction(poiIcon, tr("&poi"), this);
+    poiAct->setShortcuts(QKeySequence::New);
+    connect(poiAct, SIGNAL(triggered()), this, SLOT(onOpenPOIPanel()));
+    fileToolBar->addAction(poiAct);
+    poiAct->setToolTip(tr("Point of Interest Panel"));
 
     const QIcon connectIcon = QIcon::fromTheme("import-connect", QIcon(":/images/connect.png"));
     connectAct = new QAction(connectIcon, tr("&Connect"), this);
@@ -524,6 +539,7 @@ void MainWindow::createMenuBar(){
 
     // ================================== ROUTE MENU
     setupRoutePanel();
+    setupPOIPanel();
 
     // Route - Comprehensive navigation planning
     QMenu *routeMenu = navMenu->addMenu("&Routes");
@@ -571,6 +587,7 @@ void MainWindow::createMenuBar(){
     QMenu *aoiMenu = navMenu->addMenu("&Area Tools");
     aoiMenu->addAction("Create by Click", this, SLOT(onCreateAOIByClick()));
     aoiMenu->addAction("Open Area Panel", this, SLOT(onOpenAOIPanel()));
+    aoiMenu->addAction("Open Point of Interest Panel", this, SLOT(onOpenPOIPanel()));
     QAction* toggleAllLabels = aoiMenu->addAction("Show Labels");
     toggleAllLabels->setCheckable(true);
     toggleAllLabels->setChecked(true);
@@ -2602,7 +2619,7 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
         return;
     }
     else {
-        // ROUTE
+        // ROUTE / POI
         QMenu contextMenu(this);
 
         // Create Route option
@@ -2610,6 +2627,8 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
         if (ecchart->goHereAutoRouteAction) {
             contextMenu.addAction(ecchart->goHereAutoRouteAction);
         }
+        contextMenu.addSeparator();
+        QAction* addPoiAction = contextMenu.addAction(tr("Add POI..."));
         contextMenu.addSeparator();
         contextMenu.addAction(ecchart->pickInfoAction);
         contextMenu.addAction(ecchart->warningInfoAction);
@@ -2631,6 +2650,73 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
         }
         else if (selectedAction == ecchart->goHereAutoRouteAction) {
             ecchart->startAutoRouteWorkflow(pos);
+        }
+        else if (selectedAction == addPoiAction) {
+            EcCoordinate lat = 0.0;
+            EcCoordinate lon = 0.0;
+            if (!ecchart->XyToLatLon(pos.x(), pos.y(), lat, lon)) {
+                statusBar()->showMessage(tr("Unable to determine POI position"), 3000);
+                return;
+            }
+
+            const double depth = ecchart->estimateDepthAt(lat, lon);
+            const QString defaultName = QString("POI %1").arg(ecchart->poiEntries().size() + 1);
+
+            QDialog dialog(this);
+            dialog.setWindowTitle(tr("Add Point of Interest"));
+
+            QFormLayout form(&dialog);
+
+            QLineEdit* nameEdit = new QLineEdit(&dialog);
+            nameEdit->setText(defaultName);
+            form.addRow(tr("Name"), nameEdit);
+
+            QComboBox* categoryCombo = new QComboBox(&dialog);
+            categoryCombo->addItems({tr("Generic"), tr("Checkpoint"), tr("Hazard"), tr("Survey Target")});
+            form.addRow(tr("Category"), categoryCombo);
+
+            QPlainTextEdit* notesEdit = new QPlainTextEdit(&dialog);
+            notesEdit->setPlaceholderText(tr("Optional notes..."));
+            notesEdit->setMinimumHeight(60);
+            form.addRow(tr("Notes"), notesEdit);
+
+            QLabel* depthLabel = new QLabel(&dialog);
+            if (std::isfinite(depth)) {
+                depthLabel->setText(QString::number(depth, 'f', 1));
+            } else {
+                depthLabel->setText(tr("Not available"));
+            }
+            form.addRow(tr("Depth (m)"), depthLabel);
+
+            QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+            form.addRow(&buttons);
+            connect(&buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+            connect(&buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+            if (dialog.exec() != QDialog::Accepted) {
+                return;
+            }
+
+            PoiEntry poi;
+            poi.label = nameEdit->text().trimmed();
+            if (poi.label.isEmpty()) {
+                poi.label = defaultName;
+            }
+            poi.category = static_cast<EcPoiCategory>(categoryCombo->currentIndex());
+            poi.description = notesEdit->toPlainText().trimmed();
+            poi.latitude = lat;
+            poi.longitude = lon;
+            if (std::isfinite(depth)) {
+                poi.depth = depth;
+            }
+            poi.flags = EC_POI_FLAG_ACTIVE | EC_POI_FLAG_PERSISTENT | EC_POI_FLAG_USER_DEFINED;
+
+            const int poiId = ecchart->addPoi(poi);
+            if (poiId >= 0) {
+                statusBar()->showMessage(tr("POI \"%1\" added").arg(poi.label), 3000);
+            } else {
+                QMessageBox::warning(this, tr("Add POI"), tr("Failed to create POI."));
+            }
         }
         else if (selectedAction == ecchart->pickInfoAction){
             EcCoordinate lat, lon;
@@ -3667,6 +3753,54 @@ void MainWindow::setupGuardZonePanel()
     }
 }
 
+void MainWindow::setupPOIPanel()
+{
+    if (!ecchart || poiDock) {
+        return;
+    }
+
+    poiDock = new QDockWidget(tr("Points of Interest"), this);
+    poiDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    poiPanel = new POIPanel(ecchart, poiDock);
+    poiDock->setWidget(poiPanel);
+    addDockWidget(Qt::RightDockWidgetArea, poiDock);
+
+    const QList<QDockWidget*> candidateDocks = {
+        aoiDock,
+        routeDock,
+        aisTargetDock,
+        guardZoneDock,
+        obstacleDetectionDock,
+        m_cpatcpaDock
+    };
+    for (QDockWidget* candidate : candidateDocks) {
+        if (candidate) {
+            tabifyDockWidget(candidate, poiDock);
+            break;
+        }
+    }
+
+    connect(poiPanel, &POIPanel::statusMessage, this, [this](const QString& message) {
+        if (!message.isEmpty()) {
+            statusBar()->showMessage(message, 3000);
+        }
+    });
+
+    QMenu* sidebarMenu = nullptr;
+    const QList<QMenu*> menus = menuBar()->findChildren<QMenu*>();
+    for (QMenu* menu : menus) {
+        if (menu->title().contains("Sidebar") || menu->title().contains("&Sidebar")) {
+            sidebarMenu = menu;
+            break;
+        }
+    }
+    if (sidebarMenu) {
+        sidebarMenu->addAction(poiDock->toggleViewAction());
+    }
+
+    poiDock->setVisible(false);
+}
+
 void MainWindow::setupAOIPanel()
 {
     if (!ecchart) return;
@@ -3784,6 +3918,26 @@ void MainWindow::onOpenAOIPanel()
     aoiDock->raise(); // Fokus ke tab AOI
 
     aoiPanel->setAttachDetachButton(conn);
+}
+
+void MainWindow::onOpenPOIPanel()
+{
+    if (!ecchart) {
+        return;
+    }
+    if (!poiDock) {
+        setupPOIPanel();
+    }
+    if (!poiDock) {
+        return;
+    }
+
+    poiDock->setVisible(true);
+    poiDock->raise();
+
+    if (poiPanel) {
+        poiPanel->refreshList();
+    }
 }
 
 void MainWindow::onToggleAoiLabels(bool checked)

@@ -1,9 +1,11 @@
 // #include <QtGui>
 #include <QtWidgets>
+#include <QApplication>
 #include <QtWin>
 #include <QTimer>
 #include <QToolTip>
 #include <QVector>
+#include <QRegularExpression>
 #include <limits>
 #include <cmath>
 #include <algorithm>
@@ -1475,6 +1477,7 @@ void EcWidget::paintEvent (QPaintEvent *e)
 
   // Draw AOIs always on top of chart
   drawAOIs(painter);
+  drawPois(painter);
   // Draw GuardZones using the same painter
   drawGuardZone(painter);
   // Draw Route Deviation Indicator
@@ -2260,6 +2263,332 @@ void EcWidget::attachAOIToShip(int aoiId)
 bool EcWidget::isAOIAttachedToShip(int aoiId) const
 {
     return (aoiId >= 0) && (aoiId == attachedAoiId);
+}
+
+int EcWidget::findPoiIndex(int poiId) const
+{
+    for (int i = 0; i < poiList.size(); ++i) {
+        if (poiList[i].id == poiId) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+QVector<PoiEntry> EcWidget::poiEntries() const
+{
+    return poiList;
+}
+
+PoiEntry EcWidget::poiEntry(int poiId) const
+{
+    const int idx = findPoiIndex(poiId);
+    if (idx < 0) {
+        return PoiEntry{};
+    }
+    return poiList[idx];
+}
+
+int EcWidget::addPoi(const PoiEntry& poi)
+{
+    if (!std::isfinite(poi.latitude) || !std::isfinite(poi.longitude)) {
+        return -1;
+    }
+
+    PoiEntry copy = poi;
+    copy.id = nextPoiId++;
+    if (!copy.createdAt.isValid()) {
+        copy.createdAt = QDateTime::currentDateTimeUtc();
+    }
+    copy.updatedAt = copy.createdAt;
+    if (!(copy.flags & EC_POI_FLAG_ACTIVE)) {
+        copy.flags |= EC_POI_FLAG_ACTIVE;
+    }
+
+    poiList.append(copy);
+    highlightedPoiId = copy.id;
+
+    emit poiListChanged();
+    update();
+    return copy.id;
+}
+
+bool EcWidget::updatePoi(int poiId, const PoiEntry& poi)
+{
+    const int idx = findPoiIndex(poiId);
+    if (idx < 0) {
+        return false;
+    }
+    PoiEntry copy = poi;
+    copy.id = poiId;
+    copy.createdAt = poiList[idx].createdAt;
+    if (!copy.updatedAt.isValid()) {
+        copy.updatedAt = QDateTime::currentDateTimeUtc();
+    }
+    poiList[idx] = copy;
+    highlightedPoiId = poiId;
+
+    emit poiListChanged();
+    update();
+    return true;
+}
+
+bool EcWidget::removePoi(int poiId)
+{
+    const int idx = findPoiIndex(poiId);
+    if (idx < 0) {
+        return false;
+    }
+    poiList.removeAt(idx);
+    if (highlightedPoiId == poiId) {
+        highlightedPoiId = -1;
+    }
+    emit poiListChanged();
+    update();
+    return true;
+}
+
+bool EcWidget::setPoiActive(int poiId, bool active)
+{
+    const int idx = findPoiIndex(poiId);
+    if (idx < 0) {
+        return false;
+    }
+    UINT32& flags = poiList[idx].flags;
+    const bool currentlyActive = (flags & EC_POI_FLAG_ACTIVE) != 0;
+    if (currentlyActive == active) {
+        return true;
+    }
+    if (active) {
+        flags |= EC_POI_FLAG_ACTIVE;
+    } else {
+        flags &= ~EC_POI_FLAG_ACTIVE;
+    }
+    poiList[idx].updatedAt = QDateTime::currentDateTimeUtc();
+    emit poiListChanged();
+    update();
+    return true;
+}
+
+bool EcWidget::focusPoi(int poiId)
+{
+    const int idx = findPoiIndex(poiId);
+    if (idx < 0) {
+        return false;
+    }
+    const PoiEntry& poi = poiList[idx];
+    if (!std::isfinite(poi.latitude) || !std::isfinite(poi.longitude)) {
+        return false;
+    }
+    SetCenter(poi.latitude, poi.longitude);
+    highlightedPoiId = poiId;
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    Draw();
+    QApplication::restoreOverrideCursor();
+    update();
+    return true;
+}
+
+void EcWidget::drawPois(QPainter& painter)
+{
+    if (poiList.isEmpty()) {
+        return;
+    }
+    if (!initialized || !view) {
+        return;
+    }
+    if (!painter.isActive()) {
+        return;
+    }
+
+    const auto categoryColor = [](EcPoiCategory category) -> QColor {
+        switch (category) {
+        case EC_POI_CHECKPOINT: return QColor(30, 144, 255, 220);
+        case EC_POI_HAZARD: return QColor(220, 53, 69, 220);
+        case EC_POI_SURVEY_TARGET: return QColor(255, 165, 0, 220);
+        case EC_POI_GENERIC:
+        default:
+            return QColor(0, 200, 180, 220);
+        }
+    };
+
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    const QRect viewport = rect().adjusted(-40, -40, 40, 40);
+    QFont labelFont = painter.font();
+    QFontMetrics fm(labelFont);
+
+    for (const auto& poi : poiList) {
+        if (!std::isfinite(poi.latitude) || !std::isfinite(poi.longitude)) {
+            continue;
+        }
+        int x = 0;
+        int y = 0;
+        if (!LatLonToXy(poi.latitude, poi.longitude, x, y)) {
+            continue;
+        }
+        const QPoint screenPoint(x, y);
+        if (!viewport.contains(screenPoint)) {
+            continue;
+        }
+
+        QColor color = categoryColor(poi.category);
+        const bool active = (poi.flags & EC_POI_FLAG_ACTIVE) != 0;
+        if (!active) {
+            color.setAlpha(90);
+        }
+
+        const bool highlighted = (poi.id == highlightedPoiId);
+        const int radius = highlighted ? 7 : 5;
+
+        QPen pen(QColor(0, 0, 0, active ? 200 : 120));
+        pen.setWidth(highlighted ? 3 : 2);
+        pen.setCosmetic(true);
+        painter.setPen(pen);
+        painter.setBrush(color);
+        painter.drawEllipse(screenPoint, radius, radius);
+
+        const QString labelText = poi.label.isEmpty()
+                ? tr("POI %1").arg(poi.id)
+                : poi.label;
+
+        QRect textRect = fm.boundingRect(labelText);
+        textRect.adjust(-8, -4, 8, 4);
+        textRect.moveLeft(screenPoint.x() + radius + 10);
+        textRect.moveTop(screenPoint.y() - textRect.height() / 2);
+
+        QColor labelBg = QColor(20, 20, 20, active ? 170 : 110);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(labelBg);
+        painter.drawRoundedRect(textRect, 4, 4);
+
+        painter.setPen(Qt::white);
+        painter.drawText(textRect, Qt::AlignCenter, labelText);
+    }
+
+    painter.restore();
+}
+
+double EcWidget::estimateDepthAt(EcCoordinate lat, EcCoordinate lon)
+{
+    QList<EcFeature> pickedFeatureList;
+    GetPickedFeaturesSubs(pickedFeatureList, lat, lon);
+
+    double bestDepth = std::numeric_limits<double>::quiet_NaN();
+
+    auto considerDepth = [&](double candidate) {
+        if (!std::isfinite(candidate)) {
+            return;
+        }
+        if (!std::isfinite(bestDepth) || candidate < bestDepth) {
+            bestDepth = candidate;
+        }
+    };
+
+    char attrStr[1024];
+    EcFindInfo findInfo;
+    EcAttributeToken attrToken;
+    char attrName[1024];
+    char attrText[1024];
+    char featToken[EC_LENATRCODE + 1];
+
+    auto parseDepthString = [](const QString& text) -> double {
+        QString sanitized = text.trimmed();
+        if (sanitized.isEmpty()) {
+            return std::numeric_limits<double>::quiet_NaN();
+        }
+        sanitized.replace(',', '.');
+        bool ok = false;
+        double value = sanitized.toDouble(&ok);
+        if (ok) {
+            return value;
+        }
+        QRegularExpression re(QStringLiteral("(-?\\d+(?:[\\.,]\\d+)?)"));
+        const auto match = re.match(text);
+        if (match.hasMatch()) {
+            QString number = match.captured(1);
+            number.replace(',', '.');
+            value = number.toDouble(&ok);
+            if (ok) {
+                return value;
+            }
+        }
+        return std::numeric_limits<double>::quiet_NaN();
+    };
+
+    for (const EcFeature& feature : pickedFeatureList) {
+        featToken[0] = '\0';
+        EcFeatureGetClass(feature, dictInfo, featToken, sizeof(featToken));
+        const QString featureClass = QString::fromLatin1(featToken).toUpper();
+
+        if (featureClass == QLatin1String("SOUNDG")) {
+            EcFindInfo soundingInfo;
+            double zvalue = std::numeric_limits<double>::quiet_NaN();
+            Bool first = True;
+            EcNode node = EcQuerySounding(feature, &zvalue, &soundingInfo, first);
+            while (ECOK(node)) {
+                considerDepth(zvalue);
+                node = EcQuerySounding(feature, &zvalue, &soundingInfo, False);
+            }
+        }
+
+        Bool result = EcFeatureGetAttributes(feature, dictInfo, &findInfo, EC_FIRST, attrStr, sizeof(attrStr));
+        while (result) {
+            strncpy(attrToken, attrStr, EC_LENATRCODE);
+            attrToken[EC_LENATRCODE] = (char)0;
+
+            const QString attrCode = QString::fromLatin1(attrToken).toLower();
+
+            if (attrCode == QLatin1String("drval1") ||
+                attrCode == QLatin1String("valsou") ||
+                attrCode == QLatin1String("valdco") ||
+                attrCode == QLatin1String("drval2")) {
+                const QString valueString = QString::fromLatin1(attrStr);
+                const int eqPos = valueString.indexOf('=');
+                if (eqPos >= 0 && eqPos + 1 < valueString.length()) {
+                    bool ok = false;
+                    const double candidate = valueString.mid(eqPos + 1).toDouble(&ok);
+                    if (ok) {
+                        considerDepth(candidate);
+                    }
+                }
+            } else {
+                QString attrNameStr;
+                if (EcDictionaryTranslateAttributeToken(dictInfo, attrToken, attrName, sizeof(attrName))) {
+                    attrNameStr = QString::fromLatin1(attrName);
+                }
+
+                QString attrValueStr;
+                EcAttributeType attrType;
+                if (EcDictionaryGetAttributeType(dictInfo, attrStr, &attrType) == EC_DICT_OK) {
+                    if (attrType == EC_ATTR_ENUM || attrType == EC_ATTR_LIST) {
+                        if (!EcDictionaryTranslateAttributeValue(dictInfo, attrStr, attrText, sizeof(attrText))) {
+                            attrText[0] = '\0';
+                        }
+                        attrValueStr = QString::fromLatin1(attrText);
+                    } else {
+                        strcpy(attrText, &attrStr[EC_LENATRCODE]);
+                        attrValueStr = QString::fromLatin1(attrText);
+                    }
+                } else {
+                    attrValueStr = QString::fromLatin1(&attrStr[EC_LENATRCODE]);
+                }
+
+                if (!attrNameStr.isEmpty() && attrNameStr.contains(QStringLiteral("depth"), Qt::CaseInsensitive)) {
+                    const double candidate = parseDepthString(attrValueStr);
+                    considerDepth(candidate);
+                } else if (!attrValueStr.isEmpty() && attrCode.contains(QStringLiteral("depth"))) {
+                    const double candidate = parseDepthString(attrValueStr);
+                    considerDepth(candidate);
+                }
+            }
+
+            result = EcFeatureGetAttributes(feature, dictInfo, &findInfo, EC_NEXT, attrStr, sizeof(attrStr));
+        }
+    }
+
+    return bestDepth;
 }
 
 void EcWidget::startAOICreation(const QString& name, AOIType type)
