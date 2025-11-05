@@ -564,7 +564,7 @@ void SettingsDialog::setupUI() {
     tabWidget->addTab(ownShipTab, "Own Ship");
     tabWidget->addTab(shipDimensionsTab, "Ship Dimensions");
     tabWidget->addTab(displayTab, "Display");
-    tabWidget->addTab(cpatcpaTab, "CPA/TCPA");
+    tabWidget->addTab(cpatcpaTab, "AIS Targets");
 
     if (AppConfig::isDevelopment()){
         tabWidget->addTab(guardzoneTab, "GuardZone");
