@@ -740,8 +740,8 @@ void MainWindow::createMenuBar(){
     viewMenu->addAction(dock->toggleViewAction());
     dock->hide();
 
-    // AIS TARGET PANEL
-    dock = new QDockWidget(tr("AIS Target Panel"), this);
+    // AIS Target Detail
+    dock = new QDockWidget(tr("AIS Target Detail"), this);
     dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::TopDockWidgetArea | Qt::BottomDockWidgetArea);
     aisText = new QTextEdit(dock);
     aisText->setText("");
@@ -757,7 +757,7 @@ void MainWindow::createMenuBar(){
         ecchart->setCPAPanelToAIS(m_cpatcpaPanel);
     }
 
-    // Setup GuardZone and AIS Target panels for tabify integration
+    // Setup GuardZone and AIS Target Details for tabify integration
     if (AppConfig::isDevelopment()){
         setupGuardZonePanel();
         setupAISTargetPanel();
@@ -1018,7 +1018,7 @@ void MainWindow::createMenuBar(){
 
         cpaMenu->addSeparator();
 
-        QAction *showCPATargetsAction = cpaMenu->addAction("Show CPA/TCPA Monitor");
+        QAction *showCPATargetsAction = cpaMenu->addAction("Show AIS Target Manager");
         showCPATargetsAction->setCheckable(true);
         showCPATargetsAction->setChecked(false);
         connect(showCPATargetsAction, SIGNAL(triggered(bool)), this, SLOT(onShowCPATargets(bool)));
@@ -3970,16 +3970,16 @@ void MainWindow::onStartMeasure()
 }
 
 
-// ========== SETUP AIS TARGET PANEL ==========
+// ========== SETUP AIS Target Detail ==========
 void MainWindow::setupAISTargetPanel()
 {
     if (!ecchart) {
-        qDebug() << "Cannot setup AIS Target panel: ecchart is null";
+        qDebug() << "Cannot setup AIS Target Detail: ecchart is null";
         return;
     }
 
     try {
-        // Create AIS Target panel
+        // Create AIS Target Detail
         aisTargetPanel = new AISTargetPanel(ecchart, ecchart->getGuardZoneManager(), this);
 
         // Create dock widget
@@ -3996,13 +3996,13 @@ void MainWindow::setupAISTargetPanel()
         for (QAction* action : actions) {
             if (action->menu() && action->menu()->title() == tr("&Sidebar")) {
                 action->menu()->addAction(aisTargetDock->toggleViewAction());
-                qDebug() << "AIS Target Panel added to Sidebar menu successfully";
+                qDebug() << "AIS Target Detail added to Sidebar menu successfully";
                 sidebarFound = true;
                 break;
             }
         }
         if (!sidebarFound) {
-            qDebug() << "[MAIN] Warning: Sidebar menu not found for AIS Target Panel";
+            qDebug() << "[MAIN] Warning: Sidebar menu not found for AIS Target Detail";
         }
 
         // Signal connections
@@ -4030,7 +4030,7 @@ void MainWindow::setupAISTargetPanel()
         QTimer::singleShot(500, [this]() {
             if (aisTargetPanel) {
                 aisTargetPanel->refreshTargetList();
-                qDebug() << "AIS Target panel initial refresh completed";
+                qDebug() << "AIS Target Detail initial refresh completed";
             }
         });
 
@@ -4038,7 +4038,7 @@ void MainWindow::setupAISTargetPanel()
         if (guardZoneDock && aisTargetDock) {
             qDebug() << "[TABIFY] Creating tabbed interface for GuardZone and AIS Target";
             tabifyDockWidget(guardZoneDock, aisTargetDock);
-            qDebug() << "[TABIFY] ✅ Tabified GuardZone with AIS Target Panel";
+            qDebug() << "[TABIFY] ✅ Tabified GuardZone with AIS Target Detail";
             
             // Set GuardZone as active tab for this group
             guardZoneDock->raise();
@@ -4054,16 +4054,16 @@ void MainWindow::setupAISTargetPanel()
         // aisTargetDock->hide();
         // aisTargetPanel->hide();
 
-        qDebug() << "AIS Target panel setup completed successfully";
+        qDebug() << "AIS Target Detail setup completed successfully";
 
     } catch (const std::exception& e) {
-        qDebug() << "Critical error setting up AIS Target panel:" << e.what();
+        qDebug() << "Critical error setting up AIS Target Detail:" << e.what();
         QMessageBox::critical(this, tr("Setup Error"),
-                              tr("Failed to setup AIS Target panel: %1").arg(e.what()));
+                              tr("Failed to setup AIS Target Detail: %1").arg(e.what()));
     } catch (...) {
-        qDebug() << "Unknown critical error setting up AIS Target panel";
+        qDebug() << "Unknown critical error setting up AIS Target Detail";
         QMessageBox::critical(this, tr("Setup Error"),
-                              tr("Unknown error occurred while setting up AIS Target panel"));
+                              tr("Unknown error occurred while setting up AIS Target Detail"));
     }
 }
 
@@ -5291,14 +5291,14 @@ void MainWindow::setupCPATCPAPanel()
     m_cpatcpaPanel->setEcWidget(ecchart);
 
     // Create dock widget untuk panel
-    m_cpatcpaDock = new QDockWidget(tr("CPA/TCPA Monitor Panel"), this);
+    m_cpatcpaDock = new QDockWidget(tr("AIS Target Manager Panel"), this);
     m_cpatcpaDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     m_cpatcpaDock->setWidget(m_cpatcpaPanel);
 
     // Add dock to main window
     addDockWidget(Qt::RightDockWidgetArea, m_cpatcpaDock);
 
-    // Add CPA/TCPA Monitor to Sidebar menu
+    // Add AIS Target Manager to Sidebar menu
     QMenu* sidebarMenu = nullptr;
     QList<QMenu*> menus = menuBar()->findChildren<QMenu*>();
     for (QMenu* menu : menus) {
