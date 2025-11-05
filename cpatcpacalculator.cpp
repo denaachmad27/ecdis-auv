@@ -27,7 +27,7 @@ CPATCPAResult CPATCPACalculator::calculateCPATCPA(const VesselState& ownShip, co
 
     // Validate motion inputs (SOG/COG). AIS 'not available' mapped to negative values.
     auto invalidCog = [](double cog){ return (cog < 0 || cog >= 360 || std::isnan(cog)); };
-    auto invalidSog = [](double sog){ return (sog < 0 || sog > 100 || std::isnan(sog)); };
+    auto invalidSog = [](double sog){ return (sog < 0 || sog > 102.2 || std::isnan(sog)); };
     if (invalidCog(ownShip.cog) || invalidCog(target.cog) || invalidSog(ownShip.sog) || invalidSog(target.sog)) {
         result.isValid = false;
         result.status = CPATCPAResult::InvalidMotionData;
@@ -62,42 +62,51 @@ CPATCPAResult CPATCPACalculator::calculateCPATCPA(const VesselState& ownShip, co
 
 double CPATCPACalculator::calculateCPA(const VesselState& ownShip, const VesselState& target, double& tcpa)
 {
-    // Convert positions to Cartesian coordinates (simplified flat earth approximation for short distances)
-    double ownX = ownShip.lon * cos(degreesToRadians(ownShip.lat));
-    double ownY = ownShip.lat;
-    double targetX = target.lon * cos(degreesToRadians(target.lat));
-    double targetY = target.lat;
+    // Work consistently in nautical miles (NM) and minutes
+    // Position differences converted from degrees to NM using 1 deg = 60 NM and cos(latitude) for longitude
+    const double latMeanRad = degreesToRadians((ownShip.lat + target.lat) * 0.5);
+    double dLonDeg = target.lon - ownShip.lon;
+    // Normalize delta longitude to [-180, 180] to avoid wrap issues
+    dLonDeg = std::fmod(dLonDeg + 540.0, 360.0) - 180.0;
+    const double dLatDeg = target.lat - ownShip.lat;
 
-    // Convert COG to velocity components (knots to degrees per minute)
-    double ownVx = ownShip.sog * sin(degreesToRadians(ownShip.cog)) / 60.0 * cos(degreesToRadians(ownShip.lat));
-    double ownVy = ownShip.sog * cos(degreesToRadians(ownShip.cog)) / 60.0;
-    double targetVx = target.sog * sin(degreesToRadians(target.cog)) / 60.0 * cos(degreesToRadians(target.lat));
-    double targetVy = target.sog * cos(degreesToRadians(target.cog)) / 60.0;
+    const double deltaX_nm = dLonDeg * 60.0 * cos(latMeanRad); // Easting (NM)
+    const double deltaY_nm = dLatDeg * 60.0;                    // Northing (NM)
+
+    // Speeds: knots (NM/hour) -> NM/min
+    const double ownSpeed_nm_min = ownShip.sog / 60.0;
+    const double tgtSpeed_nm_min = target.sog / 60.0;
+
+    const double ownCogRad = degreesToRadians(ownShip.cog);
+    const double tgtCogRad = degreesToRadians(target.cog);
+
+    // Velocity components in NM/min (x=east, y=north)
+    const double ownVx = ownSpeed_nm_min * sin(ownCogRad);
+    const double ownVy = ownSpeed_nm_min * cos(ownCogRad);
+    const double tgtVx = tgtSpeed_nm_min * sin(tgtCogRad);
+    const double tgtVy = tgtSpeed_nm_min * cos(tgtCogRad);
 
     // Relative position and velocity
-    double deltaX = targetX - ownX;
-    double deltaY = targetY - ownY;
-    double deltaVx = targetVx - ownVx;
-    double deltaVy = targetVy - ownVy;
+    const double deltaVx = tgtVx - ownVx;
+    const double deltaVy = tgtVy - ownVy;
 
-    // If relative velocity is zero, vessels are not approaching/separating
-    double relativeSpeed = sqrt(deltaVx * deltaVx + deltaVy * deltaVy);
+    // If relative velocity is near zero, vessels are stationary relative to each other
+    const double relativeSpeed = sqrt(deltaVx * deltaVx + deltaVy * deltaVy); // NM/min
     if (relativeSpeed < (MIN_SOG_THRESHOLD / 60.0)) {
-        // Stationary relative: treat TCPA as N/A, CPA equals current separation
-        tcpa = -1;
-        return sqrt(deltaX * deltaX + deltaY * deltaY) * 60.0; // Current distance in NM
+        tcpa = -1; // N/A
+        // Current separation in NM
+        return sqrt(deltaX_nm * deltaX_nm + deltaY_nm * deltaY_nm);
     }
 
-    // Calculate TCPA using dot product
-    double dotProduct = -(deltaX * deltaVx + deltaY * deltaVy);
-    double relativeSpeedSquared = deltaVx * deltaVx + deltaVy * deltaVy;
+    // TCPA (minutes): minimize distance squared => tcpa = - (r·v) / |v|^2
+    const double dotProduct = -(deltaX_nm * deltaVx + deltaY_nm * deltaVy);
+    const double relSpeedSq = deltaVx * deltaVx + deltaVy * deltaVy;
+    tcpa = dotProduct / relSpeedSq; // minutes
 
-    tcpa = dotProduct / relativeSpeedSquared; // Time in minutes
-
-    // Calculate CPA
-    double cpaX = deltaX + deltaVx * tcpa;
-    double cpaY = deltaY + deltaVy * tcpa;
-    double cpa = sqrt(cpaX * cpaX + cpaY * cpaY) * 60.0; // Convert to nautical miles
+    // CPA distance at tcpa
+    const double cpaX = deltaX_nm + deltaVx * tcpa;
+    const double cpaY = deltaY_nm + deltaVy * tcpa;
+    const double cpa = sqrt(cpaX * cpaX + cpaY * cpaY); // NM
 
     return cpa;
 }
