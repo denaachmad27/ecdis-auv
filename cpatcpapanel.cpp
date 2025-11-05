@@ -200,8 +200,8 @@ void CPATCPAPanel::setupTargetsTable()
     modeBearingRangeButton->setChecked(true);
 
     modeLayout->addWidget(modeLabel);
-    modeLayout->addWidget(modeCpaTcpAButton);
     modeLayout->addWidget(modeBearingRangeButton);
+    modeLayout->addWidget(modeCpaTcpAButton);
     modeLayout->addStretch();
     tableLayout->addLayout(modeLayout);
 
