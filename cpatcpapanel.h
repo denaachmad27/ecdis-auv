@@ -13,6 +13,7 @@
 #include <QTimer>
 #include <QTime>
 #include <QAbstractItemView>
+#include <QRadioButton>
 
 #include "ecwidget.h"
 #include "cpatcpasettings.h"
@@ -43,6 +44,7 @@ public slots:
     void refreshData();
     void onSettingsClicked();
     void onClearAlarmsClicked();
+    void onTargetsContextMenuRequested(const QPoint& pos);
 
 private slots:
     void onTimerTimeout();  // Ganti nama dari updateTimer
@@ -56,6 +58,8 @@ private:
     void updateTargetRow(int row, const AISTargetData& target, const CPATCPAResult& result);
     QString formatTime(double minutes);
     QString formatDistance(double nauticalMiles);
+    void applyColumnVisibility();
+    void reorderColumns(const QList<int>& logicalOrder);
 
     // UI Components
     QVBoxLayout* mainLayout;
@@ -77,6 +81,8 @@ private:
 
     // Targets Table
     QTableWidget* targetsTable;
+    QRadioButton* modeCpaTcpAButton;
+    QRadioButton* modeBearingRangeButton;
 
     // Control Buttons
     QPushButton* refreshButton;
@@ -96,6 +102,9 @@ private:
     bool scrollToTrackedOnNextRefresh = false; // request scrolling once to tracked row
     bool preserveScrollOnRefresh = true;       // preserve user scroll position on periodic refresh
     bool isRefreshing = false;                 // guard to ignore selection changes during refresh
+
+    enum DisplayMode { ModeCpaTcpa, ModeBearingRange };
+    DisplayMode displayMode = ModeBearingRange;
 };
 
 #endif // CPATCPAPANEL_H

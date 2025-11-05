@@ -1,5 +1,8 @@
 #include <QDebug>
 #include <QHeaderView>
+#include <QStyledItemDelegate>
+#include <QStyleOptionViewItem>
+#include <QPainter>
 
 #include "cpatcpapanel.h"
 #include "cpatcpasettingsdialog.h"
@@ -8,6 +11,8 @@
 #include "SettingsManager.h"
 #include <QScrollBar>
 #include <QSignalBlocker>
+#include <QHBoxLayout>
+#include <QLabel>
 
 CPATCPAPanel::CPATCPAPanel(QWidget *parent)
     : QWidget(parent)
@@ -120,18 +125,22 @@ void CPATCPAPanel::setupTargetsTable()
     targetsGroup->setLayout(tableLayout);
 
     targetsTable = new QTableWidget();
-    targetsTable->setColumnCount(4);
+    // Columns: 0 MMSI, 1 CPA, 2 TCPA, 3 Bearing, 4 Range, 5 Age, 6 Ship Name, 7 Status
+    targetsTable->setColumnCount(8);
 
     QStringList headers;
-    //headers << "MMSI" << "Distance" << "Bearing" << "CPA" << "TCPA" << "COG" << "SOG" << "Status";
-    headers << "MMSI" << "CPA" << "TCPA" << "Status";
+    headers << "MMSI" << "CPA" << "TCPA" << "Bearing" << "Range" << "Age" << "Ship Name" << "Status";
     targetsTable->setHorizontalHeaderLabels(headers);
 
     // Set column widths - update untuk semua kolom
     targetsTable->setColumnWidth(0, 65);   // MMSI
     targetsTable->setColumnWidth(1, 60);   // CPA
     targetsTable->setColumnWidth(2, 55);   // TCPA
-    targetsTable->setColumnWidth(3, 95);   // Status
+    targetsTable->setColumnWidth(3, 70);   // Bearing
+    targetsTable->setColumnWidth(4, 70);   // Range
+    targetsTable->setColumnWidth(5, 55);   // Age
+    targetsTable->setColumnWidth(6, 140);  // Ship Name
+    targetsTable->setColumnWidth(7, 95);   // Status
 
     //targetsTable->setColumnWidth(4, 85);   // TCPA
     //targetsTable->setColumnWidth(5, 60);   // COG
@@ -143,17 +152,75 @@ void CPATCPAPanel::setupTargetsTable()
     targetsTable->setAlternatingRowColors(true);
     targetsTable->setSortingEnabled(true);
     targetsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    targetsTable->setWordWrap(false);
+    targetsTable->setTextElideMode(Qt::ElideRight);
 
     // Set minimum height untuk table
     targetsTable->setMinimumHeight(200);
-    targetsTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Fixed);
+    // Allow user-resizable columns
+    targetsTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
+    // We'll manage stretch per mode to auto-expand an appropriate column
     targetsTable->horizontalHeader()->setStretchLastSection(false);
 
     connect(targetsTable, SIGNAL(itemSelectionChanged()), this, SLOT(onTargetSelected()));
     connect(targetsTable->horizontalHeader(), &QHeaderView::sortIndicatorChanged,
             this, &CPATCPAPanel::onTableSorted);
 
+    // Right-click context menu for follow/unfollow
+    targetsTable->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(targetsTable, &QTableWidget::customContextMenuRequested,
+            this, &CPATCPAPanel::onTargetsContextMenuRequested);
+
     tableLayout->addWidget(targetsTable);
+
+    // Custom delegate for Ship Name to elide per-character on the right
+    class ShipNameElideDelegate : public QStyledItemDelegate {
+    public:
+        using QStyledItemDelegate::QStyledItemDelegate;
+        void paint(QPainter *painter, const QStyleOptionViewItem &option,
+                   const QModelIndex &index) const override {
+            QStyleOptionViewItem opt(option);
+            initStyleOption(&opt, index);
+            // Ensure single-line, elide-right behavior
+            opt.features &= ~QStyleOptionViewItem::WrapText;
+            QFontMetrics fm(opt.font);
+            opt.text = fm.elidedText(opt.text, Qt::ElideRight, opt.rect.width());
+            const QWidget *widget = opt.widget;
+            QStyle *style = widget ? widget->style() : QApplication::style();
+            style->drawControl(QStyle::CE_ItemViewItem, &opt, painter, widget);
+        }
+    };
+    targetsTable->setItemDelegateForColumn(6, new ShipNameElideDelegate(targetsTable));
+
+    // Toggle mode di bawah tabel
+    QHBoxLayout* modeLayout = new QHBoxLayout();
+    QLabel* modeLabel = new QLabel("Mode:");
+    modeCpaTcpAButton = new QRadioButton("CPA/TCPA");
+    modeBearingRangeButton = new QRadioButton("Bearing/Range");
+    modeBearingRangeButton->setChecked(true);
+
+    modeLayout->addWidget(modeLabel);
+    modeLayout->addWidget(modeCpaTcpAButton);
+    modeLayout->addWidget(modeBearingRangeButton);
+    modeLayout->addStretch();
+    tableLayout->addLayout(modeLayout);
+
+    connect(modeCpaTcpAButton, &QRadioButton::toggled, this, [this](bool checked){
+        if (checked) {
+            displayMode = ModeCpaTcpa;
+            applyColumnVisibility();
+            refreshData();
+        }
+    });
+    connect(modeBearingRangeButton, &QRadioButton::toggled, this, [this](bool checked){
+        if (checked) {
+            displayMode = ModeBearingRange;
+            applyColumnVisibility();
+            refreshData();
+        }
+    });
+
+    applyColumnVisibility();
 }
 
 void CPATCPAPanel::onTableSorted(int column, Qt::SortOrder order)
@@ -459,14 +526,50 @@ void CPATCPAPanel::updateTargetRow(int row, const AISTargetData& target, const C
         if (settings.isTCPAAlarmEnabled() && result.tcpa > 0 && result.tcpa < SettingsManager::instance().data().tcpaThreshold) isDangerous = true;
     }
 
+    auto formatBearing = [](double deg){ return QString("%1°").arg(deg, 0, 'f', 1); };
+    auto formatAge = [](const QDateTime& last){
+        if (!last.isValid()) return QString("--:--");
+        qint64 secs = last.secsTo(QDateTime::currentDateTime());
+        if (secs < 0) secs = 0;
+        qint64 m = secs / 60;
+        qint64 s = secs % 60;
+        return QString("%1:%2")
+            .arg(m, 2, 10, QLatin1Char('0'))
+            .arg(s, 2, 10, QLatin1Char('0'));
+    };
+
     QStringList values;
+    QString shipName = QString(target.rawInfo.shipName).trimmed();
+    if (shipName.isEmpty()) shipName = target.mmsi;
+    QString statusText;
+    if (isDangerous) {
+        statusText = "⚠ DANGEROUS";
+    } else {
+        switch (result.status) {
+            case CPATCPAResult::Valid: statusText = "Tracking"; break;
+            case CPATCPAResult::StationaryRelative: statusText = "Stationary"; break;
+            case CPATCPAResult::Diverging: statusText = "Diverging"; break;
+            case CPATCPAResult::OutOfRange: statusText = "Out of Range"; break;
+            case CPATCPAResult::InvalidMotionData:
+            default: statusText = "No Data"; break;
+        }
+    }
+
     values << target.mmsi
            << formatDistance(result.cpa)
            << formatTime(result.tcpa)
-           << (isDangerous ? "⚠ DANGEROUS" : (result.isValid ? "Tracking" : "No Data"));
+           << formatBearing(result.relativeBearing)
+           << formatDistance(result.currentRange)
+           << formatAge(target.lastUpdate)
+           << shipName
+           << statusText;
 
     for (int col = 0; col < values.size(); ++col) {
         QTableWidgetItem* item = new QTableWidgetItem(values[col]);
+        if (col == 6) {
+            // Tooltip with full ship name (not elided)
+            item->setToolTip(shipName);
+        }
 
         // Warna merah untuk dangerous
         if (isDangerous) {
@@ -487,7 +590,7 @@ void CPATCPAPanel::updateTargetRow(int row, const AISTargetData& target, const C
         }
 
         // Highlight status
-        if (col == 3) {
+        if (col == 7) {
             if (isDangerous) {
                 item->setBackgroundColor(QColor(255, 100, 100));
                 item->setTextColor(Qt::white);
@@ -499,6 +602,73 @@ void CPATCPAPanel::updateTargetRow(int row, const AISTargetData& target, const C
         }
 
         targetsTable->setItem(row, col, item);
+    }
+}
+
+void CPATCPAPanel::applyColumnVisibility()
+{
+    if (!targetsTable) return;
+
+    // Columns: 0 MMSI, 1 CPA, 2 TCPA, 3 Bearing, 4 Range, 5 Age, 6 Ship Name, 7 Status
+    const bool isCpaMode = (displayMode == ModeCpaTcpa);
+    // CPA/TCPA mode shows MMSI, CPA, TCPA, Status
+    targetsTable->setColumnHidden(0, !isCpaMode); // MMSI visible only in CPA mode
+    targetsTable->setColumnHidden(1, !isCpaMode);
+    targetsTable->setColumnHidden(2, !isCpaMode);
+    targetsTable->setColumnHidden(7, !isCpaMode);
+    // Hide Bearing/Range/Age/Ship Name in CPA mode
+    targetsTable->setColumnHidden(3, isCpaMode);
+    targetsTable->setColumnHidden(4, isCpaMode);
+    targetsTable->setColumnHidden(5, isCpaMode);
+    targetsTable->setColumnHidden(6, isCpaMode);
+
+    // Bearing & Range mode shows Ship Name, Bearing, Range, Age (no MMSI)
+    if (!isCpaMode) {
+        targetsTable->setColumnHidden(0, true);   // hide MMSI in this mode
+        targetsTable->setColumnHidden(3, false);
+        targetsTable->setColumnHidden(4, false);
+        targetsTable->setColumnHidden(5, false);
+        targetsTable->setColumnHidden(6, false);
+        // Hide CPA/TCPA/Status
+        targetsTable->setColumnHidden(1, true);
+        targetsTable->setColumnHidden(2, true);
+        targetsTable->setColumnHidden(7, true);
+    }
+
+    // Apply visual order per mode
+    if (isCpaMode) {
+        // MMSI, CPA, TCPA, Status
+        reorderColumns({0,1,2,7});
+        // Stretch Status to fill space
+        QHeaderView* header = targetsTable->horizontalHeader();
+        header->setSectionResizeMode(QHeaderView::Interactive);
+        header->setSectionResizeMode(7, QHeaderView::Stretch);
+        header->setSectionResizeMode(0, QHeaderView::Interactive);
+        header->setSectionResizeMode(1, QHeaderView::Interactive);
+        header->setSectionResizeMode(2, QHeaderView::Interactive);
+    } else {
+        // Ship Name, Bearing, Range, Age (MMSI hidden)
+        reorderColumns({6,3,4,5});
+        // Stretch Ship Name to fill space
+        QHeaderView* header = targetsTable->horizontalHeader();
+        header->setSectionResizeMode(QHeaderView::Interactive);
+        header->setSectionResizeMode(6, QHeaderView::Stretch);
+        header->setSectionResizeMode(3, QHeaderView::Interactive);
+        header->setSectionResizeMode(4, QHeaderView::Interactive);
+        header->setSectionResizeMode(5, QHeaderView::Interactive);
+    }
+}
+
+void CPATCPAPanel::reorderColumns(const QList<int>& logicalOrder)
+{
+    if (!targetsTable) return;
+    QHeaderView* header = targetsTable->horizontalHeader();
+    for (int visualIndex = 0; visualIndex < logicalOrder.size(); ++visualIndex) {
+        int logical = logicalOrder[visualIndex];
+        int currentVisual = header->visualIndex(logical);
+        if (currentVisual != visualIndex) {
+            header->moveSection(currentVisual, visualIndex);
+        }
     }
 }
 
@@ -536,35 +706,55 @@ void CPATCPAPanel::updateOwnShipInfo(double lat, double lon, double sog, double 
 void CPATCPAPanel::onTargetSelected()
 {
     if (isRefreshing) return;
-    // int row = targetsTable->currentRow();
-    // if (row >= 0 && targetsTable->item(row, 0)) {
-    //     QString mmsi = targetsTable->item(row, 0)->text();
-    //     //qDebug() << "Selected target MMSI:" << mmsi;
-    // }
 
-    QList<QTableWidgetItem*> selectedItems = targetsTable->selectedItems();
-    if (!selectedItems.isEmpty()) {
-        selectedMmsi = selectedItems.first()->text();  // Kolom MMSI harus kolom 0
-
-        // Trigger chart tracking same as right-click on chart
-        if (ecWidget && !selectedMmsi.isEmpty()) {
-            // Get latest coords from cache
-            QMap<unsigned int, AISTargetData>& targets = Ais::instance()->getTargetMap();
-            unsigned int mmsiInt = selectedMmsi.toUInt();
-            if (targets.contains(mmsiInt)) {
-                const AISTargetData& td = targets[mmsiInt];
-                AISTargetData track;
-                track.mmsi = selectedMmsi;
-                track.lat = td.lat;
-                track.lon = td.lon;
-                ecWidget->setAISTrack(track);
-            }
-            ecWidget->TrackTarget(selectedMmsi);
-        }
+    int row = targetsTable->currentRow();
+    if (row >= 0) {
+        QTableWidgetItem* mmsiItem = targetsTable->item(row, 0);
+        selectedMmsi = mmsiItem ? mmsiItem->text() : QString();
+        // Do not auto-follow on selection; follow via context menu
     } else {
         // No selection (clicked empty area) -> stop tracking on chart
         selectedMmsi.clear();
-        if (ecWidget) ecWidget->TrackTarget("");
+        // Do not auto-unfollow on deselect; keep current follow state until user chooses
+    }
+}
+
+void CPATCPAPanel::onTargetsContextMenuRequested(const QPoint& pos)
+{
+    if (!ecWidget) return;
+    QModelIndex idx = targetsTable->indexAt(pos);
+    if (!idx.isValid()) return;
+
+    int row = idx.row();
+    QTableWidgetItem* mmsiItem = targetsTable->item(row, 0);
+    if (!mmsiItem) return;
+    QString mmsi = mmsiItem->text();
+    if (mmsi.isEmpty()) return;
+
+    QMenu menu(this);
+    bool isTracking = ecWidget->isTrackTarget() && (ecWidget->getTrackMMSI() == mmsi);
+    QAction* followAction = nullptr;
+    if (isTracking) {
+        followAction = menu.addAction(tr("Unfollow"));
+    } else {
+        followAction = menu.addAction(tr("Follow"));
+    }
+
+    QAction* chosen = menu.exec(targetsTable->viewport()->mapToGlobal(pos));
+    if (chosen == followAction) {
+        if (isTracking) {
+            ecWidget->TrackTarget("");
+        } else {
+            // Set track target and optionally seed last known position
+            QMap<unsigned int, AISTargetData>& targets = Ais::instance()->getTargetMap();
+            unsigned int mmsiInt = mmsi.toUInt();
+            if (targets.contains(mmsiInt)) {
+                const AISTargetData& td = targets[mmsiInt];
+                AISTargetData track; track.mmsi = mmsi; track.lat = td.lat; track.lon = td.lon;
+                ecWidget->setAISTrack(track);
+            }
+            ecWidget->TrackTarget(mmsi);
+        }
     }
 }
 

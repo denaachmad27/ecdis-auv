@@ -16,31 +16,44 @@ CPATCPAResult CPATCPACalculator::calculateCPATCPA(const VesselState& ownShip, co
     CPATCPAResult result;
     result.calculatedAt = QDateTime::currentDateTime();
 
-    // Validate input data
+    // Validate positions only first (so we can still return range/bearing when motion invalid)
     if (!isValidForCalculation(ownShip) || !isValidForCalculation(target)) {
-        // DEBUG COMMENT TEMP
-        //qDebug() << "Invalid vessel data for CPA/TCPA calculation";
         return result;
     }
 
-    // Calculate current range
+    // Always compute current range and bearing from positions
     result.currentRange = calculateDistance(ownShip.lat, ownShip.lon, target.lat, target.lon);
-
-    // Calculate relative bearing
     result.relativeBearing = calculateBearing(ownShip.lat, ownShip.lon, target.lat, target.lon);
+
+    // Validate motion inputs (SOG/COG). AIS 'not available' mapped to negative values.
+    auto invalidCog = [](double cog){ return (cog < 0 || cog >= 360 || std::isnan(cog)); };
+    auto invalidSog = [](double sog){ return (sog < 0 || sog > 100 || std::isnan(sog)); };
+    if (invalidCog(ownShip.cog) || invalidCog(target.cog) || invalidSog(ownShip.sog) || invalidSog(target.sog)) {
+        result.isValid = false;
+        result.status = CPATCPAResult::InvalidMotionData;
+        result.tcpa = -1;                // indicate N/A
+        result.cpa = result.currentRange; // best we can say
+        return result;
+    }
 
     // Calculate CPA and TCPA
     double tcpa = 0;
     result.cpa = calculateCPA(ownShip, target, tcpa);
     result.tcpa = tcpa;
 
-    // Check if TCPA is within reasonable limits
-    if (tcpa < 0 || tcpa > (MAX_TCPA_HOURS * 60)) {
+    // Check if TCPA is within reasonable limits and set status
+    if (tcpa == -1) {
         result.isValid = false;
-        //qDebug() << "TCPA out of range:" << tcpa << "minutes";
-    }
-    else {
+        result.status = CPATCPAResult::StationaryRelative;
+    } else if (tcpa < 0) {
+        result.isValid = false;
+        result.status = CPATCPAResult::Diverging;
+    } else if (tcpa > (MAX_TCPA_HOURS * 60)) {
+        result.isValid = false;
+        result.status = CPATCPAResult::OutOfRange;
+    } else {
         result.isValid = true;
+        result.status = CPATCPAResult::Valid;
     }
 
     return result;
@@ -70,7 +83,8 @@ double CPATCPACalculator::calculateCPA(const VesselState& ownShip, const VesselS
     // If relative velocity is zero, vessels are not approaching/separating
     double relativeSpeed = sqrt(deltaVx * deltaVx + deltaVy * deltaVy);
     if (relativeSpeed < (MIN_SOG_THRESHOLD / 60.0)) {
-        tcpa = 0;
+        // Stationary relative: treat TCPA as N/A, CPA equals current separation
+        tcpa = -1;
         return sqrt(deltaX * deltaX + deltaY * deltaY) * 60.0; // Current distance in NM
     }
 
@@ -127,16 +141,9 @@ QPointF CPATCPACalculator::predictPosition(double lat, double lon, double cog, d
 
 bool CPATCPACalculator::isValidForCalculation(const VesselState& vessel)
 {
-    // Check for valid coordinates
+    // Only validate positional coordinates here; motion validity handled in caller
     if (vessel.lat < -90 || vessel.lat > 90) return false;
     if (vessel.lon < -180 || vessel.lon > 180) return false;
-
-    // Check for valid COG
-    if (vessel.cog < 0 || vessel.cog >= 360) return false;
-
-    // Check for valid SOG
-    if (vessel.sog < 0 || vessel.sog > 100) return false; // Max 100 knots
-
     return true;
 }
 

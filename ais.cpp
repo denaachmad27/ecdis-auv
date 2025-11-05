@@ -239,8 +239,17 @@ void Ais::AISTargetUpdateCallbackOld( EcAISTargetInfo *ti )
           data.mmsi = QString::number(ti->mmsi);
           data.lat = lat;
           data.lon = lon;
-          data.cog = ti->cog / 10.0;
-          data.sog = ti->sog;
+          // Scale AIS motion fields and handle 'not available' sentinels
+          if (ti->sog >= 1023) {
+              data.sog = -1;
+          } else {
+              data.sog = ti->sog / 10.0;
+          }
+          if (ti->cog >= 3600) {
+              data.cog = -1;
+          } else {
+              data.cog = ti->cog / 10.0;
+          }
           //data.cpa = ti->cpa;
           //data.tcpa = ti->tcpa;
           //data.isDangerous = (ti->status == eAIS_dangerous);
@@ -559,8 +568,19 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
                 data.mmsi = QString::number(ti->mmsi);
                 data.lat = lat;
                 data.lon = lon;
-                data.cog = ti->cog / 10.0;
-                data.sog = ti->sog;
+                // Scale AIS motion fields and handle 'not available' sentinels
+                // SOG: 0.1 kt units, 1023 = not available
+                if (ti->sog >= 1023) {
+                    data.sog = -1; // mark invalid
+                } else {
+                    data.sog = ti->sog / 10.0;
+                }
+                // COG: 0.1 deg units, 3600 = not available
+                if (ti->cog >= 3600) {
+                    data.cog = -1; // mark invalid
+                } else {
+                    data.cog = ti->cog / 10.0;
+                }
                 data.lastUpdate = QDateTime::currentDateTime();
                 data.currentRange = dist;
                 data.relativeBearing = bear;
