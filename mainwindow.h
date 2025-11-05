@@ -9,6 +9,7 @@
 #include "ecwidget.h"
 #include "guardzonepanel.h"
 #include "aoipanel.h"
+#include "poipanel.h"
 #include "alertpanel.h"
 #include "alertsystem.h"
 #include "aistargetpanel.h"
@@ -206,6 +207,7 @@ protected slots:
     // AOI
     void onCreateAOIByClick();
     void onOpenAOIPanel();
+    void onOpenPOIPanel();
     void onToggleAoiLabels(bool checked);
     // EBL/VRM
     void onToggleEBL(bool checked);
@@ -362,9 +364,14 @@ private:
     RoutePanel* routePanel;
     QDockWidget* routeDock;
 
+    // POI Panel
+    POIPanel* poiPanel = nullptr;
+    QDockWidget* poiDock = nullptr;
+
     // Helper methods untuk CPA/TCPA
     void setupCPATCPAPanel();
     void setupRoutePanel();
+    void setupPOIPanel();
 
     // Connection status bar
     QLabel *moosStatusLabel;
@@ -382,6 +389,7 @@ private:
     QAction *settingAct;
     QAction *routeAct;
     QAction *areaAct;
+    QAction *poiAct;
 
     // BAR BAR
     void createStatusBar();

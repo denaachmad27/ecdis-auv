@@ -13,6 +13,7 @@
 #include <QMenu>
 #include <QAction>
 #include <QMap>
+#include <QVector>
 
 // SevenCs Kernel EC2007
 #ifdef _WIN32
@@ -33,6 +34,7 @@
 #include "AISSubscriber.h"
 #include "autorouteplanner.h"
 #include "autoroutedialog.h"
+#include "poi.h"
 
 //popup
 #include <QLabel>
@@ -428,6 +430,16 @@ public:
   void saveAOIs();
   void loadAOIs();
   QString getAOIFilePath() const;
+
+  // POI management
+  int addPoi(const PoiEntry& poi);
+  bool updatePoi(int poiId, const PoiEntry& poi);
+  bool removePoi(int poiId);
+  bool setPoiActive(int poiId, bool active);
+  QVector<PoiEntry> poiEntries() const;
+  PoiEntry poiEntry(int poiId) const;
+  bool focusPoi(int poiId);
+  double estimateDepthAt(EcCoordinate lat, EcCoordinate lon);
 
   DisplayOrientationMode displayOrientation = NorthUp;
   OSCenteringMode osCentering = Centered;
@@ -940,6 +952,7 @@ public slots:
   void setGuardZoneCheckInterval(int intervalMs);
 
 signals:
+  void poiListChanged();
   // Drawing signals
   void mouseMove(EcCoordinate, EcCoordinate);
   void mouseRightClick(QPoint);
@@ -1187,6 +1200,11 @@ public:
   bool enableAoiSegmentLabels = false; // safety default: off
   bool showAoiLabels = true;           // master toggle for AOI labels
 
+  // POI store
+  QVector<PoiEntry> poiList;
+  int nextPoiId = 1;
+  int highlightedPoiId = -1;
+
   AOI *lastAoiList;
   int lastBestSeg;
   EcCoordinate lastLat, lastLon;
@@ -1219,6 +1237,7 @@ private:
   bool createOverlayCellinRam();
   bool createAISCell();
   bool deleteAISCell();
+  int findPoiIndex(int poiId) const;
 
   bool ensureAISCellEx();
   bool deleteAISCellEx();
@@ -1308,6 +1327,7 @@ private:
 
   // Methods untuk feedback
   void drawFeedbackOverlay(QPainter& painter);
+  void drawPois(QPainter& painter);
 
   void createCircularGuardZoneNew(double centerLat, double centerLon, double radiusNM);
   void createPolygonGuardZoneNew();
