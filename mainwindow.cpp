@@ -167,12 +167,14 @@ void MainWindow::createActions()
     fileToolBar->addAction(areaAct);
     areaAct->setToolTip(tr("Area Tools Manager"));
 
-    const QIcon poiIcon = QIcon::fromTheme("import-poi", QIcon(":/icon/info.svg"));
-    poiAct = new QAction(poiIcon, tr("&poi"), this);
-    poiAct->setShortcuts(QKeySequence::New);
-    connect(poiAct, SIGNAL(triggered()), this, SLOT(onOpenPOIPanel()));
-    fileToolBar->addAction(poiAct);
-    poiAct->setToolTip(tr("Point of Interest Panel"));
+    if (AppConfig::isBeta()){
+        const QIcon poiIcon = QIcon::fromTheme("import-poi", QIcon(":/icon/info.svg"));
+        poiAct = new QAction(poiIcon, tr("&poi"), this);
+        poiAct->setShortcuts(QKeySequence::New);
+        connect(poiAct, SIGNAL(triggered()), this, SLOT(onOpenPOIPanel()));
+        fileToolBar->addAction(poiAct);
+        poiAct->setToolTip(tr("Point of Interest Panel"));
+    }
 
     const QIcon connectIcon = QIcon::fromTheme("import-connect", QIcon(":/images/connect.png"));
     connectAct = new QAction(connectIcon, tr("&Connect"), this);
@@ -197,6 +199,8 @@ void MainWindow::createActions()
     connect(settingAct, SIGNAL(triggered()), this, SLOT(openSettingsDialog()));
     fileToolBar->addAction(settingAct);
     settingAct->setToolTip(tr("Settings Manager"));
+
+    addPoiAction = new QAction(tr("Add Point of Interest"), this);
 
     // const QIcon saveIcon = QIcon::fromTheme("document-save", QIcon(":/images/save.png"));
     // QAction *saveAct = new QAction(saveIcon, tr("&Save..."), this);
@@ -539,7 +543,7 @@ void MainWindow::createMenuBar(){
 
     // ================================== ROUTE MENU
     setupRoutePanel();
-    setupPOIPanel();
+    //setupPOIPanel();
 
     // Route - Comprehensive navigation planning
     QMenu *routeMenu = navMenu->addMenu("&Routes");
@@ -587,7 +591,9 @@ void MainWindow::createMenuBar(){
     QMenu *aoiMenu = navMenu->addMenu("&Area Tools");
     aoiMenu->addAction("Create by Click", this, SLOT(onCreateAOIByClick()));
     aoiMenu->addAction("Open Area Panel", this, SLOT(onOpenAOIPanel()));
-    aoiMenu->addAction("Open Point of Interest Panel", this, SLOT(onOpenPOIPanel()));
+    if (AppConfig::isBeta()){
+        aoiMenu->addAction("Open Point of Interest Panel", this, SLOT(onOpenPOIPanel()));
+    }
     QAction* toggleAllLabels = aoiMenu->addAction("Show Labels");
     toggleAllLabels->setCheckable(true);
     toggleAllLabels->setChecked(true);
@@ -1973,8 +1979,8 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL){
 
   // Initialize the viewport settings
   // SELAT MADURA
-  ecchart->SetCenter(-7.171151, 112.686167);
-  ecchart->SetScale(60000);
+  ecchart->SetCenter(-7.18551, 112.78012);
+  ecchart->SetScale(80000);
   ecchart->SetProjection(EcWidget::MercatorProjection);
 
   // Initialize the chart display settings which can be set by the user
@@ -2598,7 +2604,7 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
         return;
     }
 
-    if (ecchart->isTrackTarget()){
+    if (ecchart->isTrackTarget() && false){
         AISTargetData ais;
 
         ais.mmsi = "";
@@ -2628,8 +2634,13 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
             contextMenu.addAction(ecchart->goHereAutoRouteAction);
         }
         contextMenu.addSeparator();
-        QAction* addPoiAction = contextMenu.addAction(tr("Add POI..."));
-        contextMenu.addSeparator();
+
+        const QIcon addPoiIcon = QIcon::fromTheme("add-poi", QIcon(":/icon/create_route.svg"));
+
+        if (AppConfig::isBeta()){
+            contextMenu.addAction(addPoiAction);
+            contextMenu.addSeparator();
+        }
         contextMenu.addAction(ecchart->pickInfoAction);
         contextMenu.addAction(ecchart->warningInfoAction);
         contextMenu.addSeparator();
@@ -5686,6 +5697,10 @@ void MainWindow::updateIcon(bool dark){
         settingAct->setIcon(QIcon(":/images/setting-white.png"));
         routeAct->setIcon(QIcon(":/images/route-white.png"));
         areaAct->setIcon(QIcon(":/images/area-white.svg"));
+        if (AppConfig::isBeta()){
+            poiAct->setIcon(QIcon(":/icon/info_white.svg"));
+            addPoiAction->setIcon(QIcon(":/icon/create_route_white.svg"));
+        }
 
         if (m_playerState == PlayerState::Playing){
             m_playPauseButton->setIcon(QIcon(":/icon/pause_white.svg"));
@@ -5707,6 +5722,10 @@ void MainWindow::updateIcon(bool dark){
         settingAct->setIcon(QIcon(":/images/setting.png"));
         routeAct->setIcon(QIcon(":/images/route.png"));
         areaAct->setIcon(QIcon(":/images/area.svg"));
+        if (AppConfig::isBeta()){
+            poiAct->setIcon(QIcon(":/icon/info.svg"));
+            addPoiAction->setIcon(QIcon(":/icon/create_route.svg"));
+        }
 
         if (m_playerState == PlayerState::Playing){
             m_playPauseButton->setIcon(QIcon(":/icon/pause.svg"));
