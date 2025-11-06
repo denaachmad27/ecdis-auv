@@ -204,6 +204,7 @@ private:
 protected:
     void mousePressEvent(QMouseEvent* event) override;
     QString formatDistance(double distanceNM);
+    QString formatDistance(double distanceNM, bool showNm, bool showYard, bool showKm, bool showMiles);
     QString formatTime(double hours);
     void updateRouteInfoDisplay(const RouteInfo& info);
     void clearRouteInfoDisplay();
@@ -232,6 +233,12 @@ protected:
     QAction* exportRouteAction;
     QAction* changeColorAction;
     QAction* reverseRouteAction;
+
+    // Distance unit actions
+    QAction* routeShowNmAction;
+    QAction* routeShowYardAction;
+    QAction* routeShowKmAction;
+    QAction* routeShowMilesAction;
     
     // Waypoint context menu actions
     QAction* editWaypointAction;

@@ -3737,8 +3737,8 @@ void EcWidget::waypointRightClick(QMouseEvent *e){
         int leglineDistance = findLeglineAt(e->x(), e->y(), leglineRouteId, leglineSegmentIndex);
 
         if (leglineDistance != -1) {
-            createLeglineToolbox(e->pos(), leglineRouteId, leglineSegmentIndex);
-            // showLeglineContextMenu(e->pos(), leglineRouteId, leglineSegmentIndex);
+            // createLeglineToolbox(e->pos(), leglineRouteId, leglineSegmentIndex);
+            showLeglineContextMenu(e->pos(), leglineRouteId, leglineSegmentIndex);
             return; // Return early - jangan lanjut ke normal right click
         }
 
@@ -7925,13 +7925,91 @@ void EcWidget::hideToolbox()
     }
 }
 
+QString EcWidget::formatRouteDistance(double nm, bool showNm, bool showYard, bool showKm, bool showMiles)
+{
+    QStringList parts;
+    if (showNm) {
+        parts << QString("%1 NM").arg(QString::number(nm, 'f', 1));
+    }
+    if (showYard) {
+        const double yards = nm * 1852.0 / 0.9144; // 1 NM = 1852 m, 1 yd = 0.9144 m
+        parts << QString("%1 yd").arg(QString::number(yards, 'f', 0));
+    }
+    if (showKm) {
+        const double km = nm * 1.852; // 1 NM = 1.852 km
+        parts << QString("%1 km").arg(QString::number(km, 'f', 2));
+    }
+    if (showMiles) {
+        const double miles = nm * 1.15078; // 1 NM = 1.15078 statute miles
+        parts << QString("%1 mi").arg(QString::number(miles, 'f', 2));
+    }
+    return parts.join(" / ");
+}
+
+void EcWidget::updateRouteDistanceUnit(int routeId, const QString& unit, bool enabled)
+{
+    for (int i = 0; i < routeList.size(); ++i) {
+        if (routeList[i].routeId == routeId) {
+            if (unit == "NM") {
+                routeList[i].showNmUnit = enabled;
+            } else if (unit == "Yard") {
+                routeList[i].showYardUnit = enabled;
+            } else if (unit == "Km") {
+                routeList[i].showKmUnit = enabled;
+            } else if (unit == "Miles") {
+                routeList[i].showMilesUnit = enabled;
+            }
+
+            // Update the route's modified date
+            routeList[i].modifiedDate = QDateTime::currentDateTime();
+
+            // Save the changes
+            saveRoutes();
+
+            qDebug() << "[ROUTE] Updated distance unit for route" << routeId << ":" << unit << "=" << enabled;
+            break;
+        }
+    }
+}
+
 void EcWidget::showLeglineContextMenu(const QPoint& pos, int routeId, int segmentIndex)
 {
     if (routeId <= 0) return;
 
     QMenu contextMenu(this);
 
+    // Find the route to get current distance unit settings
+    bool showNm = true, showYard = true, showKm = true, showMiles = false;
+    for (const Route& route : routeList) {
+        if (route.routeId == routeId) {
+            showNm = route.showNmUnit;
+            showYard = route.showYardUnit;
+            showKm = route.showKmUnit;
+            showMiles = route.showMilesUnit;
+            break;
+        }
+    }
+
     contextMenu.addAction(insertWaypointAction);
+    contextMenu.addSeparator();
+
+    // Add distance unit checkboxes
+    QAction* actNm = contextMenu.addAction(tr("Show NM Unit"));
+    actNm->setCheckable(true);
+    actNm->setChecked(showNm);
+
+    QAction* actYd = contextMenu.addAction(tr("Show Yard Unit"));
+    actYd->setCheckable(true);
+    actYd->setChecked(showYard);
+
+    QAction* actKm = contextMenu.addAction(tr("Show Kilometer Unit"));
+    actKm->setCheckable(true);
+    actKm->setChecked(showKm);
+
+    QAction* actMiles = contextMenu.addAction(tr("Show Miles Unit"));
+    actMiles->setCheckable(true);
+    actMiles->setChecked(showMiles);
+
     contextMenu.addSeparator();
     contextMenu.addAction(deleteRouteAction);
 
@@ -7956,6 +8034,54 @@ void EcWidget::showLeglineContextMenu(const QPoint& pos, int routeId, int segmen
             }
 
             qDebug() << "[CONTEXT-MENU] Insert waypoint at" << lat << lon << "in route" << routeId;
+        }
+    }
+    else if (selectedAction == actNm) {
+        // Update NM unit visibility
+        for (int i = 0; i < routeList.size(); ++i) {
+            if (routeList[i].routeId == routeId) {
+                routeList[i].showNmUnit = actNm->isChecked();
+                routeList[i].modifiedDate = QDateTime::currentDateTime();
+                saveRoutes();
+                update();
+                return;
+            }
+        }
+    }
+    else if (selectedAction == actYd) {
+        // Update Yard unit visibility
+        for (int i = 0; i < routeList.size(); ++i) {
+            if (routeList[i].routeId == routeId) {
+                routeList[i].showYardUnit = actYd->isChecked();
+                routeList[i].modifiedDate = QDateTime::currentDateTime();
+                saveRoutes();
+                update();
+                return;
+            }
+        }
+    }
+    else if (selectedAction == actKm) {
+        // Update Kilometer unit visibility
+        for (int i = 0; i < routeList.size(); ++i) {
+            if (routeList[i].routeId == routeId) {
+                routeList[i].showKmUnit = actKm->isChecked();
+                routeList[i].modifiedDate = QDateTime::currentDateTime();
+                saveRoutes();
+                update();
+                return;
+            }
+        }
+    }
+    else if (selectedAction == actMiles) {
+        // Update Miles unit visibility
+        for (int i = 0; i < routeList.size(); ++i) {
+            if (routeList[i].routeId == routeId) {
+                routeList[i].showMilesUnit = actMiles->isChecked();
+                routeList[i].modifiedDate = QDateTime::currentDateTime();
+                saveRoutes();
+                update();
+                return;
+            }
         }
     }
     else if (selectedAction == deleteRouteAction) {
@@ -8999,6 +9125,18 @@ void EcWidget::drawLeglineLabels()
             }
         }
 
+        // Get distance unit settings for this route
+        bool showNm = true, showYard = true, showKm = true, showMiles = false;
+        for (const Route& route : routeList) {
+            if (route.routeId == routeId) {
+                showNm = route.showNmUnit;
+                showYard = route.showYardUnit;
+                showKm = route.showKmUnit;
+                showMiles = route.showMilesUnit;
+                break;
+            }
+        }
+
         // Draw labels between consecutive ACTIVE waypoints only
         for (int i = 0; i < activeIndices.size() - 1; ++i) {
             int idx1 = activeIndices[i];
@@ -9034,8 +9172,9 @@ void EcWidget::drawLeglineLabels()
                 int midY = (y1 + y2) / 2;
 
                 QString degree = QString::fromUtf8("\u00B0"); // simbol derajat
-                QString text = QString("%1 NM @ %2%3")
-                                   .arg(QString::number(dist, 'f', 1))
+                QString distanceText = formatRouteDistance(dist, showNm, showYard, showKm, showMiles);
+                QString text = QString("%1 @ %2%3")
+                                   .arg(distanceText)
                                    .arg(QString::number(bearing, 'f', 0))
                                    .arg(degree);
 

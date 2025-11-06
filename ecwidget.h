@@ -275,6 +275,12 @@ public:
       int activeWaypointIndex;   // Index of target waypoint (0 = first WP)
       double arrivalRadius;      // Radius in NM to consider waypoint "reached"
 
+      // Distance unit visibility controls (default: all shown)
+      bool showNmUnit = true;
+      bool showYardUnit = true;
+      bool showKmUnit = true;
+      bool showMilesUnit = false;
+
       Route() : routeId(0), totalDistance(0.0), estimatedTime(0.0), attachedToShip(false),
                 activeWaypointIndex(0), arrivalRadius(0.1) {
           createdDate = QDateTime::currentDateTime();
@@ -319,6 +325,8 @@ public:
   int findWaypointAt(int x, int y);
   int findLeglineAt(int x, int y, int& routeId, int& segmentIndex);
   void showWaypointContextMenu(const QPoint& pos, int waypointIndex);
+  QString formatRouteDistance(double nm, bool showNm, bool showYard, bool showKm, bool showMiles);
+  void updateRouteDistanceUnit(int routeId, const QString& unit, bool enabled);
   void showLeglineContextMenu(const QPoint& pos, int routeId, int segmentIndex);
   void showMapContextMenu(const QPoint& pos);
   bool resetWaypointCell();

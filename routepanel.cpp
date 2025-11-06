@@ -592,6 +592,25 @@ void RoutePanel::setupUI()
     routeContextMenu->addSeparator();
     toggleVisibilityAction = routeContextMenu->addAction("Toggle Visibility");
     routeContextMenu->addSeparator();
+
+    // Distance unit menu items
+    routeShowNmAction = routeContextMenu->addAction("Show NM Unit");
+    routeShowNmAction->setCheckable(true);
+    routeShowNmAction->setChecked(true);
+
+    routeShowYardAction = routeContextMenu->addAction("Show Yard Unit");
+    routeShowYardAction->setCheckable(true);
+    routeShowYardAction->setChecked(true);
+
+    routeShowKmAction = routeContextMenu->addAction("Show Kilometer Unit");
+    routeShowKmAction->setCheckable(true);
+    routeShowKmAction->setChecked(true);
+
+    routeShowMilesAction = routeContextMenu->addAction("Show Miles Unit");
+    routeShowMilesAction->setCheckable(true);
+    routeShowMilesAction->setChecked(false);
+
+    routeContextMenu->addSeparator();
     deleteRouteAction = routeContextMenu->addAction("Delete Route");
     routePropertiesAction = routeContextMenu->addAction("Properties");
     
@@ -766,7 +785,33 @@ void RoutePanel::setupConnections()
     connect(routePropertiesAction, &QAction::triggered, this, &RoutePanel::onRouteProperties);
     connect(changeColorAction, &QAction::triggered, this, &RoutePanel::onChangeRouteColor);
     connect(reverseRouteAction, &QAction::triggered, this, &RoutePanel::onReverseRoute);
-    
+
+    // Distance unit connections
+    connect(routeShowNmAction, &QAction::triggered, [this]() {
+        if (selectedRouteId > 0 && ecWidget) {
+            ecWidget->updateRouteDistanceUnit(selectedRouteId, "NM", routeShowNmAction->isChecked());
+            ecWidget->Draw(); // Redraw to update labels
+        }
+    });
+    connect(routeShowYardAction, &QAction::triggered, [this]() {
+        if (selectedRouteId > 0 && ecWidget) {
+            ecWidget->updateRouteDistanceUnit(selectedRouteId, "Yard", routeShowYardAction->isChecked());
+            ecWidget->Draw(); // Redraw to update labels
+        }
+    });
+    connect(routeShowKmAction, &QAction::triggered, [this]() {
+        if (selectedRouteId > 0 && ecWidget) {
+            ecWidget->updateRouteDistanceUnit(selectedRouteId, "Km", routeShowKmAction->isChecked());
+            ecWidget->Draw(); // Redraw to update labels
+        }
+    });
+    connect(routeShowMilesAction, &QAction::triggered, [this]() {
+        if (selectedRouteId > 0 && ecWidget) {
+            ecWidget->updateRouteDistanceUnit(selectedRouteId, "Miles", routeShowMilesAction->isChecked());
+            ecWidget->Draw(); // Redraw to update labels
+        }
+    });
+
     // Waypoint Context menu connections
     connect(editWaypointAction, &QAction::triggered, this, &RoutePanel::onEditWaypointFromContext);
     connect(duplicateWaypointAction, &QAction::triggered, this, &RoutePanel::onDuplicateWaypointFromContext);
@@ -1030,6 +1075,27 @@ void RoutePanel::publishToMOOSDB(){
 QString RoutePanel::formatDistance(double distanceNM)
 {
     return QString("%1 NM").arg(distanceNM, 0, 'f', 1);
+}
+
+QString RoutePanel::formatDistance(double distanceNM, bool showNm, bool showYard, bool showKm, bool showMiles)
+{
+    QStringList parts;
+    if (showNm) {
+        parts << QString("%1 NM").arg(QString::number(distanceNM, 'f', 1));
+    }
+    if (showYard) {
+        const double yards = distanceNM * 1852.0 / 0.9144; // 1 NM = 1852 m, 1 yd = 0.9144 m
+        parts << QString("%1 yd").arg(QString::number(yards, 'f', 0));
+    }
+    if (showKm) {
+        const double km = distanceNM * 1.852; // 1 NM = 1.852 km
+        parts << QString("%1 km").arg(QString::number(km, 'f', 2));
+    }
+    if (showMiles) {
+        const double miles = distanceNM * 1.15078; // 1 NM = 1.15078 statute miles
+        parts << QString("%1 mi").arg(QString::number(miles, 'f', 2));
+    }
+    return parts.join(" / ");
 }
 
 QString RoutePanel::formatTime(double hours)
@@ -1436,6 +1502,27 @@ void RoutePanel::onShowContextMenu(const QPoint& pos)
         // Check if route is attached to ship
         bool isAttached = ecWidget ? ecWidget->isRouteAttachedToShip(selectedRouteId) : false;
 
+        // Get current distance unit settings for this route
+        bool showNm = true, showYard = true, showKm = true, showMiles = false;
+        if (ecWidget) {
+            auto routes = ecWidget->getRoutes();
+            for (const auto& route : routes) {
+                if (route.routeId == selectedRouteId) {
+                    showNm = route.showNmUnit;
+                    showYard = route.showYardUnit;
+                    showKm = route.showKmUnit;
+                    showMiles = route.showMilesUnit;
+                    break;
+                }
+            }
+        }
+
+        // Update distance unit checkboxes to reflect current state
+        routeShowNmAction->setChecked(showNm);
+        routeShowYardAction->setChecked(showYard);
+        routeShowKmAction->setChecked(showKm);
+        routeShowMilesAction->setChecked(showMiles);
+
         // Disable modification actions for attached routes
         renameRouteAction->setEnabled(!isAttached);
         deleteRouteAction->setEnabled(!isAttached);
@@ -1444,9 +1531,13 @@ void RoutePanel::onShowContextMenu(const QPoint& pos)
         changeColorAction->setEnabled(!isAttached);
         exportRouteAction->setEnabled(!isAttached);
 
-        // Allow visibility and properties for all routes
+        // Allow visibility, properties, and distance units for all routes
         toggleVisibilityAction->setEnabled(true);
         routePropertiesAction->setEnabled(true);
+        routeShowNmAction->setEnabled(true);
+        routeShowYardAction->setEnabled(true);
+        routeShowKmAction->setEnabled(true);
+        routeShowMilesAction->setEnabled(true);
 
         routeContextMenu->exec(routeTreeWidget->mapToGlobal(pos));
     } else if (dynamic_cast<WaypointTreeItem*>(item)) {
