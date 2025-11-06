@@ -15,7 +15,15 @@ struct CPATCPAResult {
     bool isValid;         // Whether calculation is valid
     QDateTime calculatedAt; // When calculation was performed
 
-    CPATCPAResult() : cpa(0), tcpa(0), currentRange(0), relativeBearing(0), isValid(false) {}
+    enum MotionStatus {
+        Valid,              // TCPA within range and positive
+        InvalidMotionData,  // Missing/invalid SOG/COG
+        StationaryRelative, // Relative speed ~ 0
+        Diverging,          // TCPA negative (moving away)
+        OutOfRange          // TCPA beyond max horizon
+    } status;
+
+    CPATCPAResult() : cpa(0), tcpa(0), currentRange(0), relativeBearing(0), isValid(false), status(InvalidMotionData) {}
 };
 
 struct VesselState {

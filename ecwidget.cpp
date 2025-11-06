@@ -3241,6 +3241,31 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
 
     // EBL/VRM delete menu on right-click near line or ring (works also during measure)
     else if (e->button() == Qt::RightButton) {
+        // First: if right-clicking an AIS target, show Follow/Unfollow
+        if (displayCategory != EC_DISPLAYBASE) {
+            EcAISTargetInfo* ti = findAISTargetInfoAtPosition(e->pos());
+            if (ti && ti->mmsi != 0) {
+                QString mmsi = QString::number(ti->mmsi);
+                QMenu menu(this);
+                bool currentlyTracking = isTrackTarget() && (getTrackMMSI() == mmsi);
+                QAction* act = menu.addAction(currentlyTracking ? tr("Unfollow") : tr("Follow"));
+                QAction* chosen = menu.exec(mapToGlobal(e->pos()));
+                if (chosen == act) {
+                    if (currentlyTracking) {
+                        TrackTarget("");
+                    } else {
+                        // Seed track with current position
+                        AISTargetData track; track.mmsi = mmsi;
+                        track.lat = ((double)ti->latitude / 10000.0) / 60.0;
+                        track.lon = ((double)ti->longitude / 10000.0) / 60.0;
+                        setAISTrack(track);
+                        TrackTarget(mmsi);
+                    }
+                }
+                return; // consume right-click on AIS
+            }
+        }
+
         bool hitEbl = false, hitVrm = false;
         const int hitTolPx = 8;
 
