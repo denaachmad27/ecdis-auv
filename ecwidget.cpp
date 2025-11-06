@@ -8043,7 +8043,7 @@ void EcWidget::showLeglineContextMenu(const QPoint& pos, int routeId, int segmen
                 routeList[i].showNmUnit = actNm->isChecked();
                 routeList[i].modifiedDate = QDateTime::currentDateTime();
                 saveRoutes();
-                update();
+                Draw();
                 return;
             }
         }
@@ -8055,7 +8055,7 @@ void EcWidget::showLeglineContextMenu(const QPoint& pos, int routeId, int segmen
                 routeList[i].showYardUnit = actYd->isChecked();
                 routeList[i].modifiedDate = QDateTime::currentDateTime();
                 saveRoutes();
-                update();
+                Draw();
                 return;
             }
         }
@@ -8067,7 +8067,7 @@ void EcWidget::showLeglineContextMenu(const QPoint& pos, int routeId, int segmen
                 routeList[i].showKmUnit = actKm->isChecked();
                 routeList[i].modifiedDate = QDateTime::currentDateTime();
                 saveRoutes();
-                update();
+                Draw();
                 return;
             }
         }
@@ -8079,7 +8079,7 @@ void EcWidget::showLeglineContextMenu(const QPoint& pos, int routeId, int segmen
                 routeList[i].showMilesUnit = actMiles->isChecked();
                 routeList[i].modifiedDate = QDateTime::currentDateTime();
                 saveRoutes();
-                update();
+                Draw();
                 return;
             }
         }
