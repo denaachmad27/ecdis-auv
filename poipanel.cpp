@@ -100,6 +100,9 @@ void POIPanel::populateTree()
 
     const auto pois = ecWidget->poiEntries();
     for (const auto& poi : pois) {
+        // Only add POIs with valid IDs
+        if (poi.id <= 0) continue;
+
         auto* item = new QTreeWidgetItem(tree);
         item->setText(kColumnName, poi.label);
         item->setFlags(item->flags() | Qt::ItemIsUserCheckable | Qt::ItemIsSelectable | Qt::ItemIsEnabled);
@@ -124,7 +127,8 @@ int POIPanel::currentPoiId() const
 {
     auto* item = tree->currentItem();
     if (!item) return -1;
-    return item->data(kColumnName, Qt::UserRole).toInt();
+    const int poiId = item->data(kColumnName, Qt::UserRole).toInt();
+    return (poiId > 0) ? poiId : -1;
 }
 
 void POIPanel::onSelectionChanged()
@@ -357,7 +361,16 @@ void POIPanel::onItemChanged(QTreeWidgetItem* item, int column)
     if (column != kColumnName) return;
 
     const int poiId = item->data(kColumnName, Qt::UserRole).toInt();
+
+    // Validate POI ID before processing
+    if (poiId <= 0) return;
+
     const bool active = item->checkState(kColumnName) == Qt::Checked;
+
+    // Check if POI still exists before trying to modify it
+    PoiEntry existingPoi = ecWidget->poiEntry(poiId);
+    if (existingPoi.id != poiId) return;
+
     ecWidget->setPoiActive(poiId, active);
 }
 
