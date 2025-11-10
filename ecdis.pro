@@ -34,6 +34,7 @@ unix:DEFINES += _LINUX_SOURCE
 
 # Input
 HEADERS += mainwindow.h ecwidget.h pickwindow.h ais.h \
+    chartmanagerpanel.h \
     AISSubscriber.h \
     IAisDvrPlugin.h \
     IndexerWorker.h \
@@ -82,6 +83,7 @@ HEADERS += mainwindow.h ecwidget.h pickwindow.h ais.h \
     autoroutestartdialog.h \
 
 SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
+    chartmanagerpanel.cpp \
     AISSubscriber.cpp \
     IndexerWorker.cpp \
     PluginManager.cpp \

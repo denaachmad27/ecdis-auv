@@ -651,6 +651,8 @@ public:
 
   // Imports S-63 Exchange Set
   bool ImportS63ExchangeSet(const QString & dir);
+  // Import S-63 Exchange Set using a specific permit file (filtered entries)
+  bool ImportS63ExchangeSetWithPermitFile(const QString & dir, const QString & permitFilePath);
 
   // Sets the S-63 Manufacturer Key
   bool SetS63MKey(const int s63mkey);
@@ -1632,6 +1634,24 @@ private:
   // Max-zoom drag guard: prevent dragging to top boundary when fully zoomed out
   bool maxZoomDragActive = false;
   bool maxZoomTriedUpDrag = false;
+
+public:
+  // Chart Manager helper: focus viewport to a tile/cell by ID (e.g., "ID300081").
+  // Returns true on success, false if extent cannot be determined.
+  bool focusTileById(const QString& cellId);
+  // Focus by explicitly provided Exchange Set root (directory containing CATALOG.031)
+  // Returns true on success.
+  bool focusTileByIdFromCatalog(const QString& cellId, const QString& catalogRootDir);
+
+  // Chart maintenance helpers to safely modify/delete chart files on disk
+  void beginChartMaintenance();
+  void endChartMaintenance();
+
+  // Rescan and reload DENC catalogue from current dencPath
+  void rescanDenc();
+  // Stronger maintenance helpers: fully close and reopen DENC to release file locks
+  void closeDencForMaintenance();
+  bool reopenDenc();
   double savedCenterLat = 0.0;
   double savedCenterLon = 0.0;
 

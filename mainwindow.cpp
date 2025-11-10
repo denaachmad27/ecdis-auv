@@ -31,6 +31,7 @@
 #include "cpatcpasettingsdialog.h"
 #include "cpatcpasettings.h"
 #include "ecwidget.h"
+#include "chartmanagerpanel.h"
 
 #include "aisdecoder.h"
 #include "aivdoencoder.h"
@@ -432,6 +433,10 @@ void MainWindow::createMenuBar(){
 
     dencActionGroup->setEnabled(!dencPath.isEmpty());
 
+    // Charts submenu (Chart Manager panel toggle will be added after panel creation)
+    QMenu *chartsMenu = fileMenu->addMenu("&Charts");
+    chartManagerAct = nullptr;
+
     //fileMenu->addAction("Refresh Chart", this, SLOT(onReload()));
     fileMenu->addAction("Restart", this, SLOT(restartApplication()));
     fileMenu->addAction("Exit", this, SLOT(close()));
@@ -770,6 +775,10 @@ void MainWindow::createMenuBar(){
         setupObstacleDetectionPanel(); // Also setup obstacle detection for additional tabify
         //setupAOIPanel(); // lazy-create via menu
     }
+
+    // Ensure Chart Manager panel is available regardless of dev mode
+    setupChartManagerPanel();
+    
 
     qDebug() << "[TABIFY] Setup panels for tab integration - GuardZone, AIS Target, Route, Obstacle Detection";
 
@@ -5337,6 +5346,50 @@ void MainWindow::setupCPATCPAPanel()
     }
 }
 
+
+void MainWindow::setupChartManagerPanel()
+{
+    if (chartManagerDock) return; // already created
+    if (!ecchart) return;
+
+    chartManagerPanel = new ChartManagerPanel(ecchart, dencPath, this);
+    chartManagerDock = new QDockWidget(tr("Chart Manager"), this);
+    chartManagerDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    chartManagerDock->setWidget(chartManagerPanel);
+    addDockWidget(Qt::RightDockWidgetArea, chartManagerDock);
+
+    // Add toggle under File -> Charts submenu if available; else put under Sidebar
+    QMenu* chartsMenu = nullptr;
+    // Find File menu
+    QMenu* fileMenu = nullptr;
+    for (QAction* action : menuBar()->actions()) {
+        if (action->menu() && (action->menu()->title().contains("&File") || action->menu()->title().contains("File"))) {
+            fileMenu = action->menu();
+            break;
+        }
+    }
+    if (fileMenu) {
+        for (QAction* a : fileMenu->actions()) {
+            if (a->menu() && (a->menu()->title().contains("&Charts") || a->menu()->title().contains("Charts"))) {
+                chartsMenu = a->menu();
+                break;
+            }
+        }
+    }
+    if (chartsMenu) {
+        chartsMenu->addAction(chartManagerDock->toggleViewAction());
+    } else {
+        // Fallback: Sidebar menu
+        for (QAction* action : menuBar()->actions()) {
+            if (action->menu() && (action->menu()->title().contains("&Sidebar") || action->menu()->title().contains("Sidebar"))) {
+                action->menu()->addAction(chartManagerDock->toggleViewAction());
+                break;
+            }
+        }
+    }
+
+    chartManagerDock->setVisible(false);
+}
 void MainWindow::setupRoutePanel()
 {
     // Create Route panel

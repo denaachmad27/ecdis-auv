@@ -391,6 +391,11 @@ private:
     QAction *areaAct;
     QAction *poiAct;
     QAction *addPoiAction;
+    QAction *chartManagerAct;
+    // Chart Manager Panel
+    class ChartManagerPanel* chartManagerPanel = nullptr;
+    QDockWidget* chartManagerDock = nullptr;
+    void setupChartManagerPanel();
 
     // BAR BAR
     void createStatusBar();
