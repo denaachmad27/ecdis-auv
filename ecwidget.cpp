@@ -670,6 +670,13 @@ void EcWidget::SetHeading (double newHeading)
 
 /*---------------------------------------------------------------------------*/
 
+#include <QFile>
+#include <QDir>
+#include <QDirIterator>
+#include <QTextStream>
+#include <QRegularExpression>
+#include <QtMath>
+
 void EcWidget::SetProjection (ProjectionMode p)
 {
   projectionMode = p;
@@ -711,6 +718,301 @@ void EcWidget::SetProjection (ProjectionMode p)
 }
 
 /*---------------------------------------------------------------------------*/
+
+// Focus viewport to a given ENC cell ID.
+// Best-effort: if catalogue/extent not available, return false.
+bool EcWidget::focusTileById(const QString& cellId)
+{
+  if (!initialized || !view || cellId.isEmpty())
+    return false;
+
+  auto parseCatalogForId = [&](const QString& catalogPath,
+                               double& south, double& west, double& north, double& east) -> bool {
+    QFile f(catalogPath);
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return false;
+    QTextStream ts(&f);
+    ts.setCodec("UTF-8");
+    QString content = ts.readAll();
+    f.close();
+
+    // Normalize newlines for robust regex scanning
+    content.replace("\r\n", "\n");
+
+    // Many vendors provide ASCII CATALOG.031 with keys like DSNM, WEST, EAST, NORTH, SOUTH
+    // Try ASCII style DSNM and WEST/EAST/NORTH/SOUTH keys first
+    QRegularExpression dsnmRe(QString("(?i)DSNM\\s*=\\s*['\"]?%1(?:\\.000)?['\"]?").arg(cellId));
+    QRegularExpressionMatch m = dsnmRe.match(content);
+    int pos = -1;
+    QString block;
+    if (m.hasMatch()) {
+      pos = m.capturedStart();
+      QRegularExpressionMatch m2 = dsnmRe.match(content, pos + 1);
+      int endPos = m2.hasMatch() ? m2.capturedStart() : content.size();
+      block = content.mid(pos, endPos - pos);
+
+      auto rx = [&](const char* key) {
+        return QRegularExpression(QString("(?i)%1\\s*=\\s*([-+]?\\d+(?:\\.\\d+)?)").arg(key));
+      };
+
+      auto cap = [&](const QRegularExpression& re, double& out) -> bool {
+        auto mm = re.match(block);
+        if (!mm.hasMatch()) return false;
+        bool ok=false; double v = mm.captured(1).toDouble(&ok);
+        if (!ok) return false; out = v; return true;
+      };
+
+      double S=0,W=0,N=0,E=0; bool okS=false, okW=false, okN=false, okE=false;
+      okW = cap(rx("WEST"), W) || cap(rx("W_LONG"), W) || cap(rx("W_LON"), W);
+      okE = cap(rx("EAST"), E) || cap(rx("E_LONG"), E) || cap(rx("E_LON"), E);
+      okN = cap(rx("NORTH"), N) || cap(rx("N_LAT"), N);
+      okS = cap(rx("SOUTH"), S) || cap(rx("S_LAT"), S);
+      if (okS && okW && okN && okE) { south=S; west=W; north=N; east=E; return true; }
+    }
+
+    // Fallback for ISO8211-like CATALOG.031 without DSNM key.
+    // Search for dataset path occurrences containing the ID (e.g., "/ID300082/" or "ID300082.000").
+    QRegularExpression idRe(QString("(?i)(/%1/|%1\\.000)").arg(cellId));
+    QRegularExpressionMatch idMatch = idRe.match(content);
+    if (!idMatch.hasMatch()) return false;
+    pos = idMatch.capturedStart();
+    int endPos = qMin(content.size(), pos + 1200); // scan forward window
+    block = content.mid(pos, endPos - pos);
+
+    // Extract numeric tokens (decimals only) and pick first plausible [lat, lon, lat, lon]
+    QRegularExpression numRe("[-+]?\\d+\\.\\d+");
+    auto nit = numRe.globalMatch(block);
+    QVector<double> nums; nums.reserve(64);
+    while (nit.hasNext()) { auto mm = nit.next(); bool ok=false; double v = mm.captured(0).toDouble(&ok); if (ok) nums.push_back(v); }
+    auto isLat=[&](double v){ return v>=-90.0 && v<=90.0; };
+    auto isLon=[&](double v){ return v>=-180.0 && v<=180.0; };
+    for (int i=0; i+3 < nums.size(); ++i) {
+      double a=nums[i], b=nums[i+1], c=nums[i+2], d=nums[i+3];
+      if (isLat(a) && isLon(b) && isLat(c) && isLon(d)) {
+        south = qMin(a,c); north = qMax(a,c);
+        west  = b; east   = d;
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // 1) Try local CATALOG.031 near DENC path
+  double south=0, west=0, north=0, east=0;
+  bool found=false;
+  {
+    QDirIterator it(dencPath, QStringList() << "CATALOG.031", QDir::Files, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+      const QString cat = it.next();
+      if (parseCatalogForId(cat, south, west, north, east)) { found = true; break; }
+    }
+  }
+
+  if (!found) return false;
+
+  // Compute center and required range
+  auto normLon = [](double lon){
+    // normalize to [-180, 180]
+    double L = fmod(lon + 180.0, 360.0);
+    if (L < 0) L += 360.0;
+    return L - 180.0;
+  };
+
+  // Handle dateline wrap and compute center robustly on normalized longitudes
+  double w = normLon(west), e = normLon(east);
+  double lonSpan = e - w; if (lonSpan < 0) lonSpan += 360.0; if (lonSpan > 360.0) lonSpan = fmod(lonSpan, 360.0);
+  // Prefer the smaller arc (for dateline crossing)
+  if (lonSpan > 180.0) lonSpan = 360.0 - lonSpan;
+
+  double latSpan = qAbs(north - south);
+  double cLat = (north + south) / 2.0;
+  // Center longitude on normalized arc
+  double cLon = normLon(w + lonSpan / 2.0);
+
+  // Convert spans to NM
+  double latNM = latSpan * 60.0;
+  double lonNM = lonSpan * 60.0 * qMax(0.1, qCos(qDegreesToRadians(cLat))); // guard against poles
+
+  // Required half-range in NM to fit bbox in view
+  double h = height() > 0 ? height() : 1;
+  double wpx = width() > 0 ? width() : 1;
+  double aspect = h / qMax(1.0, wpx);
+  double reqHalfRange = qMax(latNM / 2.0, (lonNM / 2.0) * aspect) * 1.2; // 20% margin
+
+  // Find a scale whose range >= reqHalfRange with minimal overshoot
+  auto findScaleForRange = [&](double targetHalfRangeNM) -> int {
+    int s = GetScale();
+    double r = GetRange(s);
+    if (r < targetHalfRangeNM) {
+      int low = s, high = s;
+      double rlow = r, rhigh = r;
+      while (rhigh < targetHalfRangeNM && high < 10000000) { high = qMax(high+1, high*2); rhigh = GetRange(high); }
+      // binary search
+      for (int i=0;i<24;i++) { // sufficient iterations
+        int mid = low + (high - low)/2;
+        double rm = GetRange(mid);
+        if (rm < targetHalfRangeNM) { low = mid + 1; rlow = rm; }
+        else { high = mid; rhigh = rm; }
+      }
+      return high;
+    } else {
+      int low = 1, high = s;
+      // shrink down to just fit
+      for (int i=0;i<24;i++) {
+        int mid = qMax(1, low + (high - low)/2);
+        double rm = GetRange(mid);
+        if (rm >= targetHalfRangeNM) { high = mid; }
+        else { low = mid + 1; }
+      }
+      return high;
+    }
+  };
+
+  int newScale = findScaleForRange(reqHalfRange);
+  SetCenter(cLat, cLon);
+  SetScale(newScale);
+  draw(true);
+  return true;
+}
+
+/*---------------------------------------------------------------------------*/
+
+bool EcWidget::focusTileByIdFromCatalog(const QString& cellId, const QString& catalogRootDir)
+{
+  if (!initialized || !view || cellId.isEmpty())
+    return false;
+  if (catalogRootDir.isEmpty())
+    return false;
+
+  auto parseCatalogForId = [&](const QString& catalogPath,
+                               double& south, double& west, double& north, double& east) -> bool {
+    QFile f(catalogPath);
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return false;
+    QTextStream ts(&f);
+    ts.setCodec("UTF-8");
+    QString content = ts.readAll();
+    f.close();
+
+    // Normalize newlines for robust regex scanning
+    content.replace("\r\n", "\n");
+
+    // Try ASCII DSNM and WEST/EAST/NORTH/SOUTH keys first
+    QRegularExpression dsnmRe(QString("(?i)DSNM\\s*=\\s*['\"]?%1(?:\\.000)?['\"]?").arg(cellId));
+    QRegularExpressionMatch m = dsnmRe.match(content);
+    int pos = -1; QString block;
+    if (m.hasMatch()) {
+      pos = m.capturedStart();
+      QRegularExpressionMatch m2 = dsnmRe.match(content, pos + 1);
+      int endPos = m2.hasMatch() ? m2.capturedStart() : content.size();
+      block = content.mid(pos, endPos - pos);
+      auto rx = [&](const char* key) { return QRegularExpression(QString("(?i)%1\\s*=\\s*([-+]?\\d+(?:\\.\\d+)?)").arg(key)); };
+      auto cap = [&](const QRegularExpression& re, double& out) -> bool { auto mm = re.match(block); if (!mm.hasMatch()) return false; bool ok=false; double v = mm.captured(1).toDouble(&ok); if (!ok) return false; out = v; return true; };
+      double S=0,W=0,N=0,E=0; bool okS=false, okW=false, okN=false, okE=false;
+      okW = cap(rx("WEST"), W) || cap(rx("W_LONG"), W) || cap(rx("W_LON"), W);
+      okE = cap(rx("EAST"), E) || cap(rx("E_LONG"), E) || cap(rx("E_LON"), E);
+      okN = cap(rx("NORTH"), N) || cap(rx("N_LAT"), N);
+      okS = cap(rx("SOUTH"), S) || cap(rx("S_LAT"), S);
+      if (okS && okW && okN && okE) { south=S; west=W; north=N; east=E; return true; }
+    }
+
+    // Fallback for ISO8211-like: search by dataset path and parse first plausible 4 numbers
+    QRegularExpression idRe(QString("(?i)(/%1/|%1\\.000)").arg(cellId));
+    QRegularExpressionMatch idMatch = idRe.match(content);
+    if (!idMatch.hasMatch()) return false;
+    pos = idMatch.capturedStart();
+    int endPos2 = qMin(content.size(), pos + 1200);
+    block = content.mid(pos, endPos2 - pos);
+    QRegularExpression numRe("[-+]?\\d+\\.\\d+");
+    auto nit = numRe.globalMatch(block);
+    QVector<double> nums; nums.reserve(64);
+    while (nit.hasNext()) { auto mm = nit.next(); bool ok=false; double v = mm.captured(0).toDouble(&ok); if (ok) nums.push_back(v); }
+    auto isLat=[&](double v){ return v>=-90.0 && v<=90.0; };
+    auto isLon=[&](double v){ return v>=-180.0 && v<=180.0; };
+    for (int i=0; i+3 < nums.size(); ++i) {
+      double a=nums[i], b=nums[i+1], c=nums[i+2], d=nums[i+3];
+      if (isLat(a) && isLon(b) && isLat(c) && isLon(d)) { south=qMin(a,c); north=qMax(a,c); west=b; east=d; return true; }
+    }
+    return false;
+  };
+
+  double south=0, west=0, north=0, east=0;
+  bool found=false;
+  QDirIterator it(catalogRootDir, QStringList() << "CATALOG.031", QDir::Files, QDirIterator::Subdirectories);
+  while (it.hasNext()) {
+    const QString cat = it.next();
+    if (parseCatalogForId(cat, south, west, north, east)) { found = true; break; }
+  }
+  if (!found) return false;
+
+  auto normLon = [](double lon){ double L = fmod(lon + 180.0, 360.0); if (L < 0) L += 360.0; return L - 180.0; };
+  double w = normLon(west), e = normLon(east);
+  double lonSpan = e - w; if (lonSpan < 0) lonSpan += 360.0; if (lonSpan > 360.0) lonSpan = fmod(lonSpan, 360.0);
+  if (lonSpan > 180.0) lonSpan = 360.0 - lonSpan;
+  double latSpan = qAbs(north - south);
+  double cLat = (north + south) / 2.0;
+  double cLon = normLon(w + lonSpan / 2.0);
+  double latNM = latSpan * 60.0;
+  double lonNM = lonSpan * 60.0 * qMax(0.1, qCos(qDegreesToRadians(cLat)));
+  double h = height() > 0 ? height() : 1;
+  double wpx = width() > 0 ? width() : 1;
+  double aspect = h / qMax(1.0, wpx);
+  double reqHalfRange = qMax(latNM / 2.0, (lonNM / 2.0) * aspect) * 1.2;
+  auto findScaleForRange = [&](double targetHalfRangeNM) -> int {
+    int s = GetScale(); double r = GetRange(s);
+    if (r < targetHalfRangeNM) { int low = s, high = s; double rhigh = r; while (rhigh < targetHalfRangeNM && high < 10000000) { high = qMax(high+1, high*2); rhigh = GetRange(high);} for(int i=0;i<24;i++){ int mid=low+(high-low)/2; double rm=GetRange(mid); if(rm<targetHalfRangeNM){low=mid+1;} else {high=mid;}} return high; }
+    else { int low=1, high=s; for(int i=0;i<24;i++){ int mid=qMax(1, low+(high-low)/2); double rm=GetRange(mid); if(rm>=targetHalfRangeNM){high=mid;} else {low=mid+1;}} return high; }
+  };
+  int newScale = findScaleForRange(reqHalfRange);
+  SetCenter(cLat, cLon);
+  SetScale(newScale);
+  draw(true);
+  return true;
+}
+
+void EcWidget::beginChartMaintenance()
+{
+  if (!view) return;
+  // Unload all mapped cells from the view and flush drawing cache to release file handles
+  EcChartUnloadView(view);
+  EcDrawFlushCache(view);
+}
+
+void EcWidget::endChartMaintenance()
+{
+  // No-op: caller decides when to ApplyUpdate() and redraw
+}
+
+void EcWidget::rescanDenc()
+{
+  if (!denc) return;
+  // Re-import tree from the existing DENC path to refresh catalogue after file changes
+  ImportTree(dencPath);
+  Draw();
+}
+
+void EcWidget::closeDencForMaintenance()
+{
+  // Stronger release to drop file locks held by the kernel
+  if (view) {
+    EcChartUnloadView(view);
+    EcDrawFlushCache(view);
+  }
+  if (denc) {
+    EcDENCDelete(denc);
+    denc = NULL;
+  }
+}
+
+bool EcWidget::reopenDenc()
+{
+  if (denc) return true; // already open
+  if (dencPath.isEmpty()) return false;
+  // Recreate DENC and reload catalogue
+  if (!CreateDENC(dencPath, true)) return false;
+  ImportTree(dencPath);
+  Draw();
+  return true;
+}
+
 
 void EcWidget::SetColorScheme (int newScheme, bool greyMode, int brightness)
 {
@@ -1051,6 +1353,54 @@ bool EcWidget::ImportS63ExchangeSet(const QString & dir)
 }
 /*---------------------------------------------------------------------------*/
 
+bool EcWidget::ImportS63ExchangeSetWithPermitFile(const QString & dir, const QString & permitFilePath)
+{
+    QFile tmpFile;
+
+    // Check CATALOG.031
+    QString catalogue = dir + "/CATALOG.031";
+    tmpFile.setFileName(catalogue);
+    if(!tmpFile.exists())
+    {
+        QString hlpStr = QString("No CATALOG.031 file found in %1").arg(dir);
+        QMessageBox::critical(this, "showDENC - S-63", hlpStr);
+        return false;
+    }
+
+    // Check filtered permits file
+    tmpFile.setFileName(permitFilePath);
+    if(!tmpFile.exists())
+    {
+        QString hlpStr = QString("Filtered S-63 permits not found: %1").arg(permitFilePath);
+        QMessageBox::critical(this, "showDENC - S-63", hlpStr);
+        return false;
+    }
+
+    // Check certificate
+    tmpFile.setFileName(certificateFileName);
+    if(!tmpFile.exists())
+    {
+        QString hlpStr = QString("No IHO.CRT file found in %1").arg(dencPath);
+        QMessageBox::critical(this, "showDENC - S-63", hlpStr);
+        return false;
+    }
+
+    QByteArray tmp1 = dir.toLatin1();
+    QByteArray tmp2 = permitFilePath.toLatin1();
+    QByteArray tmp3 = certificateFileName.toLatin1();
+    int errNo = 0;
+
+    if (!EcS63ImportExt(denc, dictInfo, s63HwId, tmp1.constBegin(), tmp2.constBegin(), tmp3.constBegin(), True, NULL, &errNo, False))
+    {
+        QString hlpStr = QString("Import of S-63 Exhange Set failed (error = %1)").arg(errNo);
+        QMessageBox::critical(this, "showDENC - S-63", hlpStr);
+        return false;
+    }
+
+    return true;
+}
+/*---------------------------------------------------------------------------*/
+
 int EcWidget::ApplyUpdate()
 {
   if (denc == NULL) return -1;
@@ -1247,7 +1597,6 @@ void EcWidget::draw(bool upd)
 
 
 /*---------------------------------------------------------------------------*/
-
 void EcWidget::Draw()
 {
     // Clear label collision tracking at start of new draw
