@@ -9,11 +9,14 @@
 #include <limits>
 #include <cmath>
 #include <algorithm>
+#include <cstring>
 #ifndef _WIN32
 #include <QX11Info>
 #endif
 
 #include "ecwidget.h"
+#include "cpatcpacalculator.h"
+#include "ais.h"
 #include "waypointdialog.h"
 #include "routeformdialog.h"
 #include "routequickformdialog.h"
@@ -451,6 +454,16 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
 
   // SETTINGS STARTUP
   defaultSettingsStartUp();
+
+  // Setup AI Target Tracker update timer
+  QTimer* aiTargetUpdateTimer = new QTimer(this);
+  connect(aiTargetUpdateTimer, &QTimer::timeout, this, [this]() {
+      if (aiTargetTracker.trackingEnabled && !qIsNaN(navShip.lat) && !qIsNaN(navShip.lon)) {
+          aiTargetTracker.updateOwnShipPosition(navShip.lat, navShip.lon, navShip.heading, navShip.sog);
+          update(); // Trigger redraw to show updated target line
+      }
+  });
+  aiTargetUpdateTimer->start(100); // Update every 100ms for smooth real-time tracking
 }
 
 void EcWidget::setEblVrmFixedTarget(double lat, double lon)
@@ -466,13 +479,91 @@ void EcWidget::setEblVrmFixedTarget(double lat, double lon)
     update();
 }
 
+// AI Target Tracker Methods
+void EcWidget::setAITarget(const QString& mmsi, const QString& name)
+{
+    aiTargetTracker.setTarget(mmsi, name);
+    emit statusMessage(tr("AI Target Tracking: %1").arg(aiTargetTracker.getTargetInfo()));
+    update();
+}
+
+void EcWidget::clearAITarget()
+{
+    aiTargetTracker.clearTarget();
+    emit statusMessage(tr("AI Target Tracking cleared"));
+    update();
+}
+
+void EcWidget::updateAITargetData(const QString& mmsi, const AISTargetData& target)
+{
+    bool updated = false;
+
+    // Update target data if this is our tracked target
+    if (aiTargetTracker.trackingEnabled &&
+        (aiTargetTracker.targetMMSI == mmsi || aiTargetTracker.targetMMSI == QString::number(mmsi.toUInt()))) {
+        qDebug() << "[EcWidget] Updating AI Target" << mmsi
+                 << "at" << target.lat << "," << target.lon
+                 << "COG:" << target.cog << "SOG:" << target.sog;
+
+        aiTargetTracker.updateTargetPosition(target.lat, target.lon, target.cog, target.sog);
+        updated = true;
+    }
+
+    // Update ownship position continuously
+    if (!qIsNaN(navShip.lat) && !qIsNaN(navShip.lon)) {
+        aiTargetTracker.updateOwnShipPosition(navShip.lat, navShip.lon, navShip.heading, navShip.sog);
+        updated = true;
+    }
+
+    // Trigger update if any data changed
+    if (updated) {
+        update();
+    }
+}
+
+bool EcWidget::isPointNearAITargetLine(const QPoint& clickPos, int tolerance)
+{
+    if (!aiTargetTracker.trackingEnabled || !isReady()) {
+        return false;
+    }
+
+    // Get screen coordinates for ownship and target
+    int ownshipX = 0, ownshipY = 0, targetX = 0, targetY = 0;
+    QPointF targetPos = aiTargetTracker.getTargetPosition();
+
+    if (!LatLonToXy(navShip.lat, navShip.lon, ownshipX, ownshipY) ||
+        !LatLonToXy(targetPos.x(), targetPos.y(), targetX, targetY)) {
+        return false;
+    }
+
+    // Calculate distance from point to line using point-to-line distance formula
+    // Line equation: Ax + By + C = 0
+    double A = static_cast<double>(targetY - ownshipY);
+    double B = static_cast<double>(ownshipX - targetX);
+    double C = static_cast<double>(targetX * ownshipY - ownshipX * targetY);
+
+    double distance = qAbs(A * clickPos.x() + B * clickPos.y() + C) / qSqrt(A * A + B * B);
+
+    // Check if click is within line bounds (extended bounding box)
+    int minX = qMin(ownshipX, targetX) - tolerance;
+    int maxX = qMax(ownshipX, targetX) + tolerance;
+    int minY = qMin(ownshipY, targetY) - tolerance;
+    int maxY = qMax(ownshipY, targetY) + tolerance;
+
+    bool withinBounds = (clickPos.x() >= minX && clickPos.x() <= maxX &&
+                        clickPos.y() >= minY && clickPos.y() <= maxY);
+
+    return (distance <= tolerance) && withinBounds;
+}
+
 /*---------------------------------------------------------------------------*/
 
 EcWidget::~EcWidget ()
 {
   // Prevent input handlers from doing work during teardown
   shuttingDown = true;
-  isDragging = false;
+
+    isDragging = false;
   maxZoomDragActive = false;
   maxZoomTriedUpDrag = false;
 
@@ -1833,6 +1924,8 @@ void EcWidget::paintEvent (QPaintEvent *e)
   drawRouteDeviationIndicator(painter);
   // Draw EBL/VRM overlays
   eblvrm.draw(this, painter);
+  // Draw AI Target Tracker
+  aiTargetTracker.draw(this, painter);
   // Draw ship dot if enabled (debug/utility)
   drawShipDot(painter);
   // Draw AOI creation preview (including first-point ghost)
@@ -3388,6 +3481,7 @@ void EcWidget::resizeEvent (QResizeEvent *event)
       drawPixmap = QPixmap(wi, hei);
   }
 
+  
   initialized = true;
 
 #ifdef _WIN32
@@ -3590,16 +3684,46 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
 
     // EBL/VRM delete menu on right-click near line or ring (works also during measure)
     else if (e->button() == Qt::RightButton) {
-        // First: if right-clicking an AIS target, show Follow/Unfollow
+        // First: if right-clicking an AIS target, show Follow/Unfollow and Add Target
         if (displayCategory != EC_DISPLAYBASE) {
             EcAISTargetInfo* ti = findAISTargetInfoAtPosition(e->pos());
             if (ti && ti->mmsi != 0) {
                 QString mmsi = QString::number(ti->mmsi);
+                QString targetName = QString("AIS %1").arg(mmsi);
+
+                // Try to get ship name from AIS data
+                if (strlen(ti->shipName) > 0) {
+                    targetName = QString::fromLatin1(ti->shipName).trimmed();
+                    if (targetName.isEmpty()) {
+                        targetName = QString("AIS %1").arg(mmsi);
+                    }
+                } else if (strlen(ti->navName) > 0) {
+                    targetName = QString::fromLatin1(ti->navName).trimmed();
+                    if (targetName.isEmpty()) {
+                        targetName = QString("AIS %1").arg(mmsi);
+                    }
+                }
+
                 QMenu menu(this);
                 bool currentlyTracking = isTrackTarget() && (getTrackMMSI() == mmsi);
-                QAction* act = menu.addAction(currentlyTracking ? tr("Unfollow") : tr("Follow"));
+                bool currentlyAITargeting = aiTargetTracker.targetMMSI == mmsi && aiTargetTracker.trackingEnabled;
+
+                // Add Follow/Unfollow action
+                QAction* followAct = menu.addAction(currentlyTracking ? tr("Unfollow") : tr("Follow"));
+
+                // Add Target/Remove Target action
+                QString targetText = currentlyAITargeting ? tr("Remove Target") : tr("Add Target");
+                QAction* targetAct = menu.addAction(targetText);
+
+                // Add separator
+                menu.addSeparator();
+
+                // Add target info
+                QAction* infoAct = menu.addAction(tr("Target Info"));
+                infoAct->setEnabled(false); // Just for display
+
                 QAction* chosen = menu.exec(mapToGlobal(e->pos()));
-                if (chosen == act) {
+                if (chosen == followAct) {
                     if (currentlyTracking) {
                         TrackTarget("");
                     } else {
@@ -3610,8 +3734,46 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
                         setAISTrack(track);
                         TrackTarget(mmsi);
                     }
+                } else if (chosen == targetAct) {
+                    if (currentlyAITargeting) {
+                        clearAITarget();
+                    } else {
+                        // Set as AI target for missile targeting
+                        setAITarget(mmsi, targetName);
+
+                        // Also update with current position data
+                        AISTargetData targetData;
+                        targetData.mmsi = mmsi;
+                        targetData.lat = ((double)ti->latitude / 10000.0) / 60.0;
+                        targetData.lon = ((double)ti->longitude / 10000.0) / 60.0;
+                        targetData.cog = ti->cog / 10.0;  // Convert from 1/10 degrees to degrees
+                        targetData.sog = ti->sog / 10.0;   // Convert from 1/10 knots to knots
+                        updateAITargetData(mmsi, targetData);
+                    }
                 }
                 return; // consume right-click on AIS
+            }
+        }
+
+        // --- AI Target Tracker hit test ---
+        if (aiTargetTracker.trackingEnabled && isPointNearAITargetLine(e->pos())) {
+            // Show context menu for AI Target Tracker
+            QMenu targetMenu(this);
+            QAction* removeAct = targetMenu.addAction(tr("Remove Target Line"));
+            QAction* infoAct = targetMenu.addAction(tr("Target Info"));
+            infoAct->setEnabled(false); // Display only
+
+            // Add target info to menu
+            QString infoText = QString("Target: %1  |  Distance: %2  |  MMSI: %3")
+                              .arg(aiTargetTracker.targetName)
+                              .arg(aiTargetTracker.formatDistance(aiTargetTracker.currentDistanceNM))
+                              .arg(aiTargetTracker.targetMMSI);
+            infoAct->setText(infoText);
+
+            QAction* chosen = targetMenu.exec(mapToGlobal(e->pos()));
+            if (chosen == removeAct) {
+                clearAITarget();
+                return; // consume right-click on AI target line
             }
         }
 
@@ -4429,6 +4591,15 @@ void EcWidget::mouseMoveEvent(QMouseEvent *e)
         update();
     }
 
+    // Update cursor based on AI Target Tracker hover
+    if (!isDragging && aiTargetTracker.trackingEnabled) {
+        if (isPointNearAITargetLine(e->pos(), 12)) {
+            setCursor(Qt::PointingHandCursor);
+        } else {
+            setCursor(Qt::ArrowCursor);
+        }
+    }
+
 }
 
 
@@ -5153,6 +5324,13 @@ void EcWidget::startAISConnection()
         // QString slat = latLonToDegMin(lat, true);
         // navShip.slat = slat;
         updateAttachedGuardZoneFromNavShip();
+
+        // Update AI Target Tracker
+        if (aiTargetTracker.trackingEnabled && !qIsNaN(navShip.lat) && !qIsNaN(navShip.lon)) {
+            aiTargetTracker.updateOwnShipPosition(navShip.lat, navShip.lon, navShip.heading, navShip.sog);
+            update(); // Trigger redraw to show updated target line
+        }
+
         if (!showCustomOwnShip && navShip.lat != 0.0 && navShip.lon != 0.0) {
             showCustomOwnShip = true;
         }
@@ -5164,6 +5342,13 @@ void EcWidget::startAISConnection()
         // QString slon = latLonToDegMin(lon, false);
         // navShip.slon = slon;
         updateAttachedGuardZoneFromNavShip();
+
+        // Update AI Target Tracker
+        if (aiTargetTracker.trackingEnabled && !qIsNaN(navShip.lat) && !qIsNaN(navShip.lon)) {
+            aiTargetTracker.updateOwnShipPosition(navShip.lat, navShip.lon, navShip.heading, navShip.sog);
+            update(); // Trigger redraw to show updated target line
+        }
+
         if (!showCustomOwnShip && navShip.lat != 0.0 && navShip.lon != 0.0) {
             showCustomOwnShip = true;
         }
@@ -5179,6 +5364,12 @@ void EcWidget::startAISConnection()
             mainWindow->setCompassHeading(hdg);
         }
         updateAttachedGuardZoneFromNavShip();
+
+        // Update AI Target Tracker
+        if (aiTargetTracker.trackingEnabled && !qIsNaN(navShip.lat) && !qIsNaN(navShip.lon)) {
+            aiTargetTracker.updateOwnShipPosition(navShip.lat, navShip.lon, navShip.heading, navShip.sog);
+            update(); // Trigger redraw to show updated target line
+        }
     });
 
     connect(subscriber, &AISSubscriber::navHeadingOGReceived, this, [=](double hog) { navShip.heading_og = hog;});
@@ -5199,8 +5390,22 @@ void EcWidget::startAISConnection()
     connect(subscriber, &AISSubscriber::navLatDmmReceived, this, [=](const QString &v) { navShip.lat_dmm = v;});
     connect(subscriber, &AISSubscriber::navLongDmmReceived, this, [=](const QString &v) { navShip.lon_dmm = v;});
 
-    connect(subscriber, &AISSubscriber::navSpeedOGReceived, this, [=](double speed_og) { navShip.speed_og = speed_og;});
-    connect(subscriber, &AISSubscriber::navSOGReceived, this, [=](double sog) { navShip.sog = sog;});
+    connect(subscriber, &AISSubscriber::navSpeedOGReceived, this, [=](double speed_og) {
+        navShip.speed_og = speed_og;
+        // Update AI Target Tracker
+        if (aiTargetTracker.trackingEnabled && !qIsNaN(navShip.lat) && !qIsNaN(navShip.lon)) {
+            aiTargetTracker.updateOwnShipPosition(navShip.lat, navShip.lon, navShip.heading, navShip.sog);
+            update(); // Trigger redraw to show updated target line
+        }
+    });
+    connect(subscriber, &AISSubscriber::navSOGReceived, this, [=](double sog) {
+        navShip.sog = sog;
+        // Update AI Target Tracker
+        if (aiTargetTracker.trackingEnabled && !qIsNaN(navShip.lat) && !qIsNaN(navShip.lon)) {
+            aiTargetTracker.updateOwnShipPosition(navShip.lat, navShip.lon, navShip.heading, navShip.sog);
+            update(); // Trigger redraw to show updated target line
+        }
+    });
     connect(subscriber, &AISSubscriber::navSpeedReceived, this, [=](double spe) { navShip.speed = spe;});
     connect(subscriber, &AISSubscriber::navYawReceived, this, [=](double yaw) { navShip.yaw = yaw;});
     connect(subscriber, &AISSubscriber::navZReceived, this, [=](double z) { navShip.z = z;});
@@ -5882,6 +6087,60 @@ void EcWidget::slotUpdateAISTargets( Bool bSymbolize )
     drawAISCell();
   qApp->processEvents( QEventLoop::ExcludeSocketNotifiers );
 
+  // Update AI Target Tracker with latest AIS data
+  if (aiTargetTracker.trackingEnabled && Ais::instance()) {
+      QMap<unsigned int, AISTargetData>& aisTargetMap = Ais::instance()->getTargetMap();
+      QString targetMMSI = aiTargetTracker.targetMMSI;
+
+      qDebug() << "[slotUpdateAISTargets] Available AIS targets:" << aisTargetMap.size()
+               << "Looking for MMSI:" << targetMMSI;
+
+      if (!targetMMSI.isEmpty()) {
+          bool targetFound = false;
+          unsigned int targetMMSIUInt = targetMMSI.toUInt();
+
+          // Try to find the target in the AIS map
+          if (aisTargetMap.contains(targetMMSIUInt)) {
+              const AISTargetData& aisTarget = aisTargetMap.value(targetMMSIUInt);
+              if (!aisTarget.mmsi.isEmpty() && aisTarget.lat != 0.0 && aisTarget.lon != 0.0) {
+                  qDebug() << "[slotUpdateAISTargets] Found target" << aisTarget.mmsi
+                           << "at" << aisTarget.lat << "," << aisTarget.lon;
+                  updateAITargetData(aisTarget.mmsi, aisTarget);
+                  targetFound = true;
+              } else {
+                  qDebug() << "[slotUpdateAISTargets] Target data invalid for MMSI:" << targetMMSI;
+              }
+          }
+
+          // If not found by exact match, try searching through all targets
+          if (!targetFound) {
+              qDebug() << "[slotUpdateAISTargets] Target not found by key, searching all targets...";
+              for (auto it = aisTargetMap.begin(); it != aisTargetMap.end(); ++it) {
+                  const AISTargetData& aisTarget = it.value();
+                  if (aisTarget.mmsi == targetMMSI) {
+                      qDebug() << "[slotUpdateAISTargets] Found target by string match" << aisTarget.mmsi
+                               << "at" << aisTarget.lat << "," << aisTarget.lon;
+                      if (!aisTarget.mmsi.isEmpty() && aisTarget.lat != 0.0 && aisTarget.lon != 0.0) {
+                          updateAITargetData(aisTarget.mmsi, aisTarget);
+                          targetFound = true;
+                      }
+                      break;
+                  }
+              }
+          }
+
+          if (!targetFound) {
+              qDebug() << "[slotUpdateAISTargets] Target NOT FOUND in AIS map for MMSI:" << targetMMSI;
+              qDebug() << "[slotUpdateAISTargets] Available MMSIs:";
+              for (auto it = aisTargetMap.begin(); it != aisTargetMap.end(); ++it) {
+                  qDebug() << "  Key:" << it.key() << "MMSI:" << it.value().mmsi;
+              }
+          }
+      } else {
+          qDebug() << "[slotUpdateAISTargets] No target MMSI set in AI tracker";
+      }
+  }
+
   //draw(true);
 }
 
@@ -5981,8 +6240,11 @@ void EcWidget::ownShipDraw(){
                 // GAMBAR TURNING PREDICTION (menggunakan data navShip untuk ROT)
                 // Gunakan heading dan cog absolut (belum dikurangi GetHeading) untuk kalkulasi kernel
                 drawTurningPrediction(painter, ownShipData.lat, ownShipData.lon,
-                                    ownShipData.heading, ownShipData.cog,
-                                    ownShipData.sog, navShip.rot);
+                       ownShipData.heading, ownShipData.cog,
+                       ownShipData.sog, navShip.rot);
+
+                // GAMBAR CPA/TCPA VISUAL INDICATORS
+                drawCPATCPAIndicators(painter);
 
                 // AOI EXIT PULSE: If ownship attached to an AOI and outside its area, draw pulsing red ring
                 if (attachedAoiId >= 0) {
@@ -11531,6 +11793,9 @@ bool EcWidget::checkTargetsInGuardZone()
         if (aisTarget.mmsi.isEmpty() || aisTarget.lat == 0.0 || aisTarget.lon == 0.0) {
             continue;
         }
+
+        // Update AI Target Tracker if this is our tracked target
+        updateAITargetData(aisTarget.mmsi, aisTarget);
 
         qDebug() << "[REAL-AIS-CHECK] Checking target" << aisTarget.mmsi
                  << "at" << aisTarget.lat << "," << aisTarget.lon;
@@ -19163,4 +19428,151 @@ void EcWidget::drawRouteDeviationIndicator(QPainter& painter)
     painter.restore();
 }
 
+
+
+// Visual indicators for CPA/TCPA warnings
+
+void EcWidget::drawCPATCPAIndicators(QPainter& painter)
+{
+    // Get all AIS targets and calculate CPA/TCPA for each
+    QMap<unsigned int, AISTargetData> targets = Ais::instance()->getTargetMap();
+
+    if (targets.isEmpty()) {
+        return;
+    }
+
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    // Get own ship data
+    AISTargetData ownShip = Ais::instance()->getOwnShipVar();
+    VesselState ownVessel;
+    ownVessel.lat = ownShip.lat;
+    ownVessel.lon = ownShip.lon;
+    ownVessel.sog = ownShip.sog;
+    ownVessel.cog = ownShip.cog;
+
+    for (const auto& target : targets) {
+        // Skip invalid targets
+        if (target.lat == 0.0 || target.lon == 0.0) {
+            continue;
+        }
+
+        // Convert target position to screen coordinates
+        int x, y;
+        if (!LatLonToXy(target.lat, target.lon, x, y)) {
+            continue;
+        }
+
+        // Calculate CPA/TCPA for this target
+        VesselState targetVessel;
+        targetVessel.lat = target.lat;
+        targetVessel.lon = target.lon;
+        targetVessel.sog = target.sog;
+        targetVessel.cog = target.cog;
+
+        CPATCPACalculator calculator;
+        CPATCPAResult result = calculator.calculateCPATCPA(ownVessel, targetVessel);
+
+        // Only show indicators for valid results and risky targets
+        if (!result.isValid || result.status == CPATCPAResult::Diverging) {
+            continue;
+        }
+
+        // Determine risk level based on calculated CPA/TCPA
+        QColor riskColor;
+        int symbolSize;
+        bool pulsing = false;
+
+        if (result.cpa <= 0.1 && result.tcpa <= 2.0) {  // Critical: <0.1 NM, <2 min
+            riskColor = QColor(255, 0, 0, 200);     // Red
+            symbolSize = 20;
+            pulsing = true;
+        } else if (result.cpa <= 0.25 && result.tcpa <= 5.0) {  // High: <0.25 NM, <5 min
+            riskColor = QColor(255, 69, 0, 180);     // Orange-Red
+            symbolSize = 18;
+        } else if (result.cpa <= 0.5 && result.tcpa <= 10.0) {  // Medium: <0.5 NM, <10 min
+            riskColor = QColor(255, 165, 0, 160);    // Orange
+            symbolSize = 16;
+        } else if (result.cpa <= 1.0 && result.tcpa <= 15.0) {  // Low: <1.0 NM, <15 min
+            riskColor = QColor(255, 255, 0, 140);    // Yellow
+            symbolSize = 14;
+        } else {
+            continue; // Skip non-risky targets
+        }
+
+        // Draw pulsing effect for critical risks
+        if (pulsing) {
+            drawPulsingWarning(painter, x, y, riskColor, symbolSize);
+        }
+
+        // Draw warning triangle
+        drawWarningTriangle(painter, x, y, symbolSize, riskColor);
+
+        // Draw target information with calculated CPA/TCPA
+        painter.setPen(QPen(QColor(255, 255, 255, 200), 1));
+        QFont font = painter.font();
+        font.setPixelSize(9);
+        painter.setFont(font);
+
+        QString info = QString("%1\nCPA: %2 NM\nTCPA: %3 min")
+                       .arg(target.mmsi)
+                       .arg(result.cpa, 0, 'f', 2)
+                       .arg(result.tcpa, 0, 'f', 1);
+
+        // Draw text background
+        QFontMetrics fm(font);
+        QRect textRect = fm.boundingRect(QRect(x + symbolSize + 5, y - 15, 120, 50),
+                                       Qt::AlignLeft | Qt::TextWordWrap, info);
+        textRect.adjust(-3, -3, 3, 3);
+
+        painter.fillRect(textRect, QColor(0, 0, 0, 150));
+        painter.drawText(textRect, Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap, info);
+    }
+
+    painter.restore();
+}
+
+void EcWidget::drawPulsingWarning(QPainter& painter, int x, int y, const QColor& baseColor, int size)
+{
+    static int pulsePhase = 0;
+    pulsePhase = (pulsePhase + 1) % 20; // Complete cycle every 20 frames
+
+    double pulseIntensity = 0.5 + 0.5 * qSin(pulsePhase * M_PI / 10.0);
+    int pulseSize = size + static_cast<int>(pulseIntensity * 10);
+
+    QColor pulseColor = baseColor;
+    pulseColor.setAlphaF(0.3 * pulseIntensity);
+
+    // Draw pulsing circle
+    painter.setPen(QPen(pulseColor, 3));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawEllipse(QPoint(x, y), pulseSize, pulseSize);
+}
+
+void EcWidget::drawWarningTriangle(QPainter& painter, int x, int y, int size, const QColor& color)
+{
+    painter.save();
+
+    // Draw triangle
+    QPen pen(color, 3);
+    painter.setPen(pen);
+    painter.setBrush(QBrush(color.lighter(120)));
+
+    QPolygonF triangle;
+    triangle << QPointF(x, y - size/2)           // Top
+             << QPointF(x - size/2, y + size/2)  // Bottom left
+             << QPointF(x + size/2, y + size/2); // Bottom right
+    painter.drawPolygon(triangle);
+
+    // Draw exclamation mark
+    painter.setPen(QPen(Qt::white, 2));
+    QFont font = painter.font();
+    font.setBold(true);
+    font.setPixelSize(size * 0.6);
+    painter.setFont(font);
+    painter.drawText(QRect(x - size/2, y - size/2, size, size), Qt::AlignCenter, "!");
+
+    painter.restore();
+}
 

@@ -109,6 +109,18 @@ private:
     QComboBox *predictionDensityCombo;
     QLabel *predictionDensityLabel;
 
+    // COLLISION RISK
+    QCheckBox *enableCollisionRiskCheckBox;
+    QCheckBox *showRiskSymbolsCheckBox;
+    QCheckBox *enableAudioAlertsCheckBox;
+    QCheckBox *enablePulsingWarningsCheckBox;
+    QDoubleSpinBox *criticalRiskDistanceSpin;
+    QDoubleSpinBox *highRiskDistanceSpin;
+    QDoubleSpinBox *mediumRiskDistanceSpin;
+    QDoubleSpinBox *lowRiskDistanceSpin;
+    QDoubleSpinBox *criticalTimeSpin;
+    QDoubleSpinBox *highTimeSpin;
+
     // Navigation Safety Variables (for MOOSDB integration)
     QDoubleSpinBox *navDepthSpin;
     QDoubleSpinBox *navDraftSpin;

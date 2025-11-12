@@ -15,6 +15,7 @@
 #include <QMap>
 #include <QVector>
 
+
 // SevenCs Kernel EC2007
 #ifdef _WIN32
 #include <windows.h>
@@ -163,6 +164,7 @@ class RouteDeviationDetector; // Forward declaration
 #include <QJsonArray>
 #include <QElapsedTimer>
 #include "eblvrm.h"
+#include "aitargettracker.h"
 
 // forward declerations1
 class PickWindow;
@@ -1079,6 +1081,13 @@ public:
   void setEblEnabled(bool on) { eblvrm.setEblEnabled(on); update(); }
   void setVrmEnabled(bool on) { eblvrm.setVrmEnabled(on); update(); }
   void setEblVrmMeasureMode(bool on) { eblvrm.setMeasureMode(on); update(); }
+
+  // AI Target Tracker
+  void setAITarget(const QString& mmsi, const QString& name = "");
+  void clearAITarget();
+  void updateAITargetData(const QString& mmsi, const AISTargetData& target);
+  bool isAITargetTracking() const { return aiTargetTracker.trackingEnabled; }
+  bool isPointNearAITargetLine(const QPoint& clickPos, int tolerance = 10);
   void setShipDotEnabled(bool on) { shipDotEnabled = on; update(); }
 
   // Red Dot Tracker variables
@@ -1139,6 +1148,9 @@ public:
 
   // EBL/VRM manager
   EblVrm eblvrm;
+
+  // AI Target Tracker for missile targeting
+  AITargetTracker aiTargetTracker;
 
   // PROJECTION MODE AND TYPE 
   ProjectionMode   projectionMode;
@@ -1491,6 +1503,12 @@ private:
   void drawOwnShipVectors(QPainter& painter, int x, int y, double cog, double heading, double sog, double actualLength, bool actualSize);
   void drawTurningPrediction(QPainter& painter, double shipLat, double shipLon, double heading, double cog, double sog, double rot);
   void drawShipOutlineAt(QPainter& painter, int x, int y, double heading, double alpha = 100.0);
+
+  // Visual indicators for CPA/TCPA warnings
+  void drawPulsingWarning(QPainter& painter, int x, int y, const QColor& color, int size);
+  void drawWarningTriangle(QPainter& painter, int x, int y, int size, const QColor& color);
+  void drawCPATCPAIndicators(QPainter& painter);
+
   AISTargetData ownShipData;
   bool showCustomOwnShip = false; // Mulai tersembunyi sampai posisi ownship valid
   bool showOwnShipTrail;
@@ -1665,6 +1683,8 @@ public:
 
   // Compute dynamic pan margin based on current scale
   int effectivePanMargin() const;
+
+  
 }; // EcWidget
 
 #endif // _ec_widget_h_

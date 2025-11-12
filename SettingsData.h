@@ -47,6 +47,18 @@ struct SettingsData {
     int predictionTimeMinutes;     // Prediction time in minutes (default: 3)
     int predictionDensity;         // Density of ship outlines: 1=Low (20s), 2=Medium (10s), 3=High (5s)
 
+    // COLLISION RISK SETTINGS
+    bool enableCollisionRisk;      // Enable/disable collision risk detection
+    double criticalRiskDistance;   // Critical distance threshold (NM)
+    double highRiskDistance;       // High risk distance threshold (NM)
+    double mediumRiskDistance;     // Medium risk distance threshold (NM)
+    double lowRiskDistance;        // Low risk distance threshold (NM)
+    double criticalRiskTime;       // Critical time threshold (minutes)
+    double highRiskTime;           // High risk time threshold (minutes)
+    bool showRiskSymbols;          // Show visual risk symbols
+    bool enableAudioAlerts;        // Enable audio alerts for risks
+    bool enablePulsingWarnings;    // Enable pulsing warnings for critical risks
+
     // ALERT SETTINGS
     bool visualFlashingEnabled;
     QString soundAlarmFile;

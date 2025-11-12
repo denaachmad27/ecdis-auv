@@ -275,6 +275,63 @@ void SettingsDialog::setupUI() {
 
     shipDimensionsLayout->addWidget(dimensionsGroup);
     shipDimensionsLayout->addWidget(turningPredictionGroup);
+
+    // Collision Risk Group
+    QGroupBox *collisionRiskGroup = new QGroupBox(tr("Collision Risk Indication"));
+    QFormLayout *collisionRiskForm = new QFormLayout(collisionRiskGroup);
+
+    enableCollisionRiskCheckBox = new QCheckBox(tr("Enable Collision Risk Detection"));
+    enableCollisionRiskCheckBox->setChecked(true);
+    enableCollisionRiskCheckBox->setToolTip(tr("Display collision risk warnings during navigation"));
+    collisionRiskForm->addRow("", enableCollisionRiskCheckBox);
+
+    showRiskSymbolsCheckBox = new QCheckBox(tr("Show Risk Warning Symbols"));
+    showRiskSymbolsCheckBox->setChecked(true);
+    collisionRiskForm->addRow("", showRiskSymbolsCheckBox);
+
+    enableAudioAlertsCheckBox = new QCheckBox(tr("Enable Audio Alerts"));
+    enableAudioAlertsCheckBox->setChecked(false);
+    collisionRiskForm->addRow("", enableAudioAlertsCheckBox);
+
+    enablePulsingWarningsCheckBox = new QCheckBox(tr("Enable Pulsing Warnings"));
+    enablePulsingWarningsCheckBox->setChecked(true);
+    collisionRiskForm->addRow("", enablePulsingWarningsCheckBox);
+
+    criticalRiskDistanceSpin = new QDoubleSpinBox;
+    criticalRiskDistanceSpin->setRange(0.01, 1.0);
+    criticalRiskDistanceSpin->setDecimals(2);
+    criticalRiskDistanceSpin->setSingleStep(0.01);
+    criticalRiskDistanceSpin->setValue(0.1);
+    criticalRiskDistanceSpin->setSuffix(" NM");
+    collisionRiskForm->addRow(tr("Critical Distance:"), criticalRiskDistanceSpin);
+
+    highRiskDistanceSpin = new QDoubleSpinBox;
+    highRiskDistanceSpin->setRange(0.1, 2.0);
+    highRiskDistanceSpin->setDecimals(2);
+    highRiskDistanceSpin->setSingleStep(0.05);
+    highRiskDistanceSpin->setValue(0.25);
+    highRiskDistanceSpin->setSuffix(" NM");
+    collisionRiskForm->addRow(tr("High Risk Distance:"), highRiskDistanceSpin);
+
+    criticalTimeSpin = new QDoubleSpinBox;
+    criticalTimeSpin->setRange(0.5, 10.0);
+    criticalTimeSpin->setDecimals(1);
+    criticalTimeSpin->setSingleStep(0.5);
+    criticalTimeSpin->setValue(2.0);
+    criticalTimeSpin->setSuffix(" min");
+    collisionRiskForm->addRow(tr("Critical Time:"), criticalTimeSpin);
+
+    // Connect collision risk signals
+    connect(enableCollisionRiskCheckBox, &QCheckBox::toggled, this, [=](bool enabled) {
+        showRiskSymbolsCheckBox->setEnabled(enabled);
+        enableAudioAlertsCheckBox->setEnabled(enabled);
+        enablePulsingWarningsCheckBox->setEnabled(enabled);
+        criticalRiskDistanceSpin->setEnabled(enabled);
+        highRiskDistanceSpin->setEnabled(enabled);
+        criticalTimeSpin->setEnabled(enabled);
+    });
+
+    shipDimensionsLayout->addWidget(collisionRiskGroup);
     shipDimensionsLayout->addWidget(navSafetyGroup);
     shipDimensionsLayout->addWidget(gpsGroup);
 
