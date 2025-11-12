@@ -168,14 +168,12 @@ void MainWindow::createActions()
     fileToolBar->addAction(areaAct);
     areaAct->setToolTip(tr("Area Tools Manager"));
 
-    if (AppConfig::isBeta()){
-        const QIcon poiIcon = QIcon::fromTheme("import-poi", QIcon(":/icon/info.svg"));
-        poiAct = new QAction(poiIcon, tr("&poi"), this);
-        poiAct->setShortcuts(QKeySequence::New);
-        connect(poiAct, SIGNAL(triggered()), this, SLOT(onOpenPOIPanel()));
-        fileToolBar->addAction(poiAct);
-        poiAct->setToolTip(tr("Point of Interest Panel"));
-    }
+    const QIcon poiIcon = QIcon::fromTheme("import-poi", QIcon(":/icon/info.svg"));
+    poiAct = new QAction(poiIcon, tr("&poi"), this);
+    poiAct->setShortcuts(QKeySequence::New);
+    connect(poiAct, SIGNAL(triggered()), this, SLOT(onOpenPOIPanel()));
+    fileToolBar->addAction(poiAct);
+    poiAct->setToolTip(tr("Point of Interest Panel"));
 
     const QIcon connectIcon = QIcon::fromTheme("import-connect", QIcon(":/images/connect.png"));
     connectAct = new QAction(connectIcon, tr("&Connect"), this);
@@ -596,9 +594,7 @@ void MainWindow::createMenuBar(){
     QMenu *aoiMenu = navMenu->addMenu("&Area Tools");
     aoiMenu->addAction("Create by Click", this, SLOT(onCreateAOIByClick()));
     aoiMenu->addAction("Open Area Panel", this, SLOT(onOpenAOIPanel()));
-    if (AppConfig::isBeta()){
-        aoiMenu->addAction("Open Point of Interest Panel", this, SLOT(onOpenPOIPanel()));
-    }
+    aoiMenu->addAction("Open Point of Interest Panel", this, SLOT(onOpenPOIPanel()));
     QAction* toggleAllLabels = aoiMenu->addAction("Show Labels");
     toggleAllLabels->setCheckable(true);
     toggleAllLabels->setChecked(true);
@@ -1008,15 +1004,13 @@ void MainWindow::createMenuBar(){
     // connect(autoCheckAction, SIGNAL(toggled(bool)), this, SLOT(onAutoCheckGuardZone(bool)));
 
     // ================================== AIS DVR MENU
-    if (AppConfig::isBeta()){
-        QMenu *dvrMenu = menuBar()->addMenu("&AIS DVR");
+    QMenu *dvrMenu = menuBar()->addMenu("&AIS DVR");
 
-        startAisRecAction = dvrMenu->addAction("Start Record", this, SLOT(startAisRecord()) );
-        stopAisRecAction = dvrMenu->addAction("Stop Record", this, SLOT(stopAisRecord()) );
+    startAisRecAction = dvrMenu->addAction("Start Record", this, SLOT(startAisRecord()) );
+    stopAisRecAction = dvrMenu->addAction("Stop Record", this, SLOT(stopAisRecord()) );
 
-        startAisRecAction->setEnabled(true);
-        stopAisRecAction->setEnabled(false);
-    }
+    startAisRecAction->setEnabled(true);
+    stopAisRecAction->setEnabled(false);
 
     if (AppConfig::isDevelopment()) {
         QMenu *debugMenu = menuBar()->addMenu("&Debug");
@@ -2646,10 +2640,8 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
 
         const QIcon addPoiIcon = QIcon::fromTheme("add-poi", QIcon(":/icon/create_route.svg"));
 
-        if (AppConfig::isBeta()){
-            contextMenu.addAction(addPoiAction);
-            contextMenu.addSeparator();
-        }
+        contextMenu.addAction(addPoiAction);
+        contextMenu.addSeparator();
         contextMenu.addAction(ecchart->pickInfoAction);
         contextMenu.addAction(ecchart->warningInfoAction);
         contextMenu.addSeparator();
@@ -5750,10 +5742,8 @@ void MainWindow::updateIcon(bool dark){
         settingAct->setIcon(QIcon(":/images/setting-white.png"));
         routeAct->setIcon(QIcon(":/images/route-white.png"));
         areaAct->setIcon(QIcon(":/images/area-white.svg"));
-        if (AppConfig::isBeta()){
-            poiAct->setIcon(QIcon(":/icon/info_white.svg"));
-            addPoiAction->setIcon(QIcon(":/icon/create_route_white.svg"));
-        }
+        poiAct->setIcon(QIcon(":/icon/info_white.svg"));
+        addPoiAction->setIcon(QIcon(":/icon/create_route_white.svg"));
 
         if (m_playerState == PlayerState::Playing){
             m_playPauseButton->setIcon(QIcon(":/icon/pause_white.svg"));
@@ -5775,10 +5765,8 @@ void MainWindow::updateIcon(bool dark){
         settingAct->setIcon(QIcon(":/images/setting.png"));
         routeAct->setIcon(QIcon(":/images/route.png"));
         areaAct->setIcon(QIcon(":/images/area.svg"));
-        if (AppConfig::isBeta()){
-            poiAct->setIcon(QIcon(":/icon/info.svg"));
-            addPoiAction->setIcon(QIcon(":/icon/create_route.svg"));
-        }
+        poiAct->setIcon(QIcon(":/icon/info.svg"));
+        addPoiAction->setIcon(QIcon(":/icon/create_route.svg"));
 
         if (m_playerState == PlayerState::Playing){
             m_playPauseButton->setIcon(QIcon(":/icon/pause.svg"));
