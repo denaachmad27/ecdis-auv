@@ -159,7 +159,7 @@ void SettingsDialog::setupUI() {
     QVBoxLayout *shipDimensionsLayout = new QVBoxLayout(shipDimensionsTab);
 
     // Ship Dimensions Group
-    QGroupBox *dimensionsGroup = new QGroupBox(tr("Vessel Dimensions (restart required)"));
+    QGroupBox *dimensionsGroup = new QGroupBox(tr("Vessel Dimensions"));
     QFormLayout *dimensionsForm = new QFormLayout(dimensionsGroup);
     shipLengthSpin = new QDoubleSpinBox;
     shipLengthSpin->setRange(1.0, 2000.0); shipLengthSpin->setSuffix(" m");
@@ -178,7 +178,7 @@ void SettingsDialog::setupUI() {
     QLabel *turningHeaderLabel = new QLabel(tr("Turning Radius Prediction"));
     QFont turningHeaderFont = turningHeaderLabel->font();
     turningHeaderLabel->setFont(turningHeaderFont);
-    showTurningPredictionCheckBox = new QCheckBox(tr("Activate"));
+    showTurningPredictionCheckBox = new QCheckBox(tr("Enable"));
     turningHeaderLayout->addWidget(turningHeaderLabel);
     turningHeaderLayout->addStretch();
     turningHeaderLayout->addWidget(showTurningPredictionCheckBox);
@@ -226,7 +226,7 @@ void SettingsDialog::setupUI() {
     // Navigation Safety group removed as requested
 
     // GPS Configuration Group
-    QGroupBox *gpsGroup = new QGroupBox(tr("GPS Antenna Positions (restart required)"));
+    QGroupBox *gpsGroup = new QGroupBox(tr("GPS Antenna Positions"));
     QVBoxLayout *gpsLayout = new QVBoxLayout(gpsGroup);
     gpsTableWidget = new QTableWidget;
     gpsTableWidget->setColumnCount(3);
@@ -259,13 +259,27 @@ void SettingsDialog::setupUI() {
     // Move Track Line group into Ownship (Ship Dimensions) after Turning Radius
     shipDimensionsLayout->addWidget(trackLineGroup);
 
-    // Collision Risk Group
-    QGroupBox *collisionRiskGroup = new QGroupBox(tr("Collision Risk Indication"));
-    QFormLayout *collisionRiskForm = new QFormLayout(collisionRiskGroup);
+    // Collision Risk header (title left, enable checkbox right)
+    QWidget *collisionHeaderWidget = new QWidget;
+    QHBoxLayout *collisionHeaderLayout = new QHBoxLayout(collisionHeaderWidget);
+    collisionHeaderLayout->setContentsMargins(0, 0, 0, 0);
+    QLabel *collisionHeaderLabel = new QLabel(tr("Collision Risk Indication"));
+    QFont collisionHeaderFont = collisionHeaderLabel->font();
+    collisionHeaderLabel->setFont(collisionHeaderFont);
 
     enableCollisionRiskCheckBox = new QCheckBox(tr("Enable Collision Risk Detection"));
     enableCollisionRiskCheckBox->setChecked(true);
     enableCollisionRiskCheckBox->setToolTip(tr("Display collision risk warnings during navigation"));
+    collisionHeaderLayout->addWidget(collisionHeaderLabel);
+    collisionHeaderLayout->addStretch();
+    collisionHeaderLayout->addWidget(enableCollisionRiskCheckBox);
+
+    // Collision Risk content
+    QGroupBox *collisionRiskGroup = new QGroupBox("");
+    QFormLayout *collisionRiskForm = new QFormLayout(collisionRiskGroup);
+    int crLeft, crTop, crRight, crBottom;
+    collisionRiskForm->getContentsMargins(&crLeft, &crTop, &crRight, &crBottom);
+    collisionRiskForm->setContentsMargins(crLeft, 0, crRight, crBottom);
 
     showRiskSymbolsCheckBox = new QCheckBox(tr("Show Risk Warning Symbols"));
     showRiskSymbolsCheckBox->setChecked(true);
@@ -275,25 +289,6 @@ void SettingsDialog::setupUI() {
 
     enablePulsingWarningsCheckBox = new QCheckBox(tr("Enable Pulsing Warnings"));
     enablePulsingWarningsCheckBox->setChecked(true);
-
-    // Arrange checkboxes into 2 aligned columns (grid)
-    QWidget *riskChecksWidget = new QWidget;
-    QGridLayout *riskChecksGrid = new QGridLayout(riskChecksWidget);
-    riskChecksGrid->setContentsMargins(0, 0, 0, 0);
-    riskChecksGrid->setHorizontalSpacing(16);
-
-    // Row 0
-    riskChecksGrid->addWidget(enableCollisionRiskCheckBox, 0, 0, Qt::AlignLeft);
-    riskChecksGrid->addWidget(showRiskSymbolsCheckBox,     0, 1, Qt::AlignLeft);
-    // Row 1
-    riskChecksGrid->addWidget(enableAudioAlertsCheckBox,   1, 0, Qt::AlignLeft);
-    riskChecksGrid->addWidget(enablePulsingWarningsCheckBox,1, 1, Qt::AlignLeft);
-
-    // Make columns share space evenly and stay aligned
-    riskChecksGrid->setColumnStretch(0, 1);
-    riskChecksGrid->setColumnStretch(1, 1);
-
-    collisionRiskForm->addRow("", riskChecksWidget);
 
     criticalRiskDistanceSpin = new QDoubleSpinBox;
     criticalRiskDistanceSpin->setRange(0.01, 1.0);
@@ -328,6 +323,16 @@ void SettingsDialog::setupUI() {
         highRiskDistanceSpin->setEnabled(enabled);
         criticalTimeSpin->setEnabled(enabled);
     });
+
+    // Place remaining checkboxes at the bottom (three rows)
+    QWidget *riskBottomWidget = new QWidget;
+    QVBoxLayout *riskBottomLayout = new QVBoxLayout(riskBottomWidget);
+    riskBottomLayout->setContentsMargins(0, 0, 0, 0);
+    riskBottomLayout->setSpacing(4);
+    riskBottomLayout->addWidget(showRiskSymbolsCheckBox);
+    riskBottomLayout->addWidget(enableAudioAlertsCheckBox);
+    riskBottomLayout->addWidget(enablePulsingWarningsCheckBox);
+    collisionRiskForm->addRow("", riskBottomWidget);
 
     // Place groups into appropriate tabs
     // CollisionRisk moved to AIS Target tab below
@@ -620,8 +625,14 @@ void SettingsDialog::setupUI() {
 
     cpatcpaLayout->addRow(cpaTcpaGroup);
 
-    // Add Collision Risk group into AIS Target tab
-    cpatcpaLayout->addRow(collisionRiskGroup);
+    // Add Collision Risk header + group into AIS Target tab with tight spacing
+    QWidget *collisionContainer = new QWidget;
+    QVBoxLayout *collisionContainerLayout = new QVBoxLayout(collisionContainer);
+    collisionContainerLayout->setContentsMargins(0, 0, 0, 0);
+    collisionContainerLayout->setSpacing(0);
+    collisionContainerLayout->addWidget(collisionHeaderWidget);
+    collisionContainerLayout->addWidget(collisionRiskGroup);
+    cpatcpaLayout->addRow(collisionContainer);
     cpatcpaTab->setLayout(cpatcpaLayout);
 
 
