@@ -19434,6 +19434,11 @@ void EcWidget::drawRouteDeviationIndicator(QPainter& painter)
 
 void EcWidget::drawCPATCPAIndicators(QPainter& painter)
 {
+    const SettingsData& s = SettingsManager::instance().data();
+    // Respect Collision Risk settings: allow user to disable these visual warnings
+    if (!s.enableCollisionRisk) {
+        return;
+    }
     // Get all AIS targets and calculate CPA/TCPA for each
     QMap<unsigned int, AISTargetData> targets = Ais::instance()->getTargetMap();
 
@@ -19501,13 +19506,15 @@ void EcWidget::drawCPATCPAIndicators(QPainter& painter)
             continue; // Skip non-risky targets
         }
 
-        // Draw pulsing effect for critical risks
-        if (pulsing) {
+        // Draw pulsing effect for critical risks if enabled
+        if (pulsing && s.enablePulsingWarnings) {
             drawPulsingWarning(painter, x, y, riskColor, symbolSize);
         }
 
-        // Draw warning triangle
-        drawWarningTriangle(painter, x, y, symbolSize, riskColor);
+        // Draw warning triangle only if risk symbols are enabled
+        if (s.showRiskSymbols) {
+            drawWarningTriangle(painter, x, y, symbolSize, riskColor);
+        }
 
         // Draw target information with calculated CPA/TCPA
         painter.setPen(QPen(QColor(255, 255, 255, 200), 1));

@@ -77,6 +77,12 @@ void SettingsManager::load() {
     m_data.cpaThreshold = settings.value("CPA-TCPA/cpa_threshold", 0.2).toDouble();
     m_data.tcpaThreshold = settings.value("CPA-TCPA/tcpa_threshold", 1).toDouble();
 
+    // Collision Risk
+    m_data.enableCollisionRisk = settings.value("CollisionRisk/enabled", false).toBool();
+    m_data.criticalRiskDistance = settings.value("CollisionRisk/critical_distance_nm", 0.1).toDouble();
+    m_data.highRiskDistance = settings.value("CollisionRisk/high_distance_nm", 0.25).toDouble();
+    m_data.criticalRiskTime = settings.value("CollisionRisk/critical_time_min", 2.0).toDouble();
+
     // Ship Dimensions
     m_data.shipLength = settings.value("ShipDimensions/length", 170.0).toDouble();
     m_data.shipBeam = settings.value("ShipDimensions/beam", 13.0).toDouble();
@@ -168,6 +174,12 @@ void SettingsManager::save(const SettingsData& data) {
     // CPA/TCPA
     settings.setValue("CPA-TCPA/cpa_threshold", data.cpaThreshold);
     settings.setValue("CPA-TCPA/tcpa_threshold", data.tcpaThreshold);
+
+    // Collision Risk
+    settings.setValue("CollisionRisk/enabled", data.enableCollisionRisk);
+    settings.setValue("CollisionRisk/critical_distance_nm", data.criticalRiskDistance);
+    settings.setValue("CollisionRisk/high_distance_nm", data.highRiskDistance);
+    settings.setValue("CollisionRisk/critical_time_min", data.criticalRiskTime);
 
     // Ship Dimensions
     settings.setValue("ShipDimensions/length", data.shipLength);

@@ -41,6 +41,9 @@ void SettingsDialog::setupUI() {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
     QTabWidget *tabWidget = new QTabWidget(this);
 
+    // Make all QGroupBox titles bold without affecting child widget fonts
+    this->setStyleSheet("QGroupBox::title { font-weight: bold; }");
+
     // =========== MOOSDB TAB =========== //
     QWidget *moosTab = new QWidget;
     QFormLayout *moosLayout = new QFormLayout;
@@ -177,7 +180,9 @@ void SettingsDialog::setupUI() {
     turningHeaderLayout->setContentsMargins(0, 0, 0, 0);
     QLabel *turningHeaderLabel = new QLabel(tr("Turning Radius Prediction"));
     QFont turningHeaderFont = turningHeaderLabel->font();
+    turningHeaderFont.setBold(true);
     turningHeaderLabel->setFont(turningHeaderFont);
+    turningHeaderLabel->setStyleSheet("font-weight: bold;");
     showTurningPredictionCheckBox = new QCheckBox(tr("Enable"));
     turningHeaderLayout->addWidget(turningHeaderLabel);
     turningHeaderLayout->addStretch();
@@ -231,6 +236,9 @@ void SettingsDialog::setupUI() {
     gpsTableWidget = new QTableWidget;
     gpsTableWidget->setColumnCount(3);
     gpsTableWidget->setHorizontalHeaderLabels({"Name", "Offset X (Centerline)", "Offset Y (Bow)"});
+    // Ensure "Offset X (Centerline)" header is fully visible when dialog opens
+    QHeaderView *gpsHeaderView = gpsTableWidget->horizontalHeader();
+    gpsHeaderView->setSectionResizeMode(1, QHeaderView::ResizeToContents);
     gpsTableWidget->horizontalHeader()->setStretchLastSection(true);
     QHBoxLayout *gpsButtons = new QHBoxLayout;
     QPushButton *addGpsButton = new QPushButton(tr("Add GPS"));
@@ -247,7 +255,37 @@ void SettingsDialog::setupUI() {
     gpsLayout->addWidget(gpsTableWidget);
     gpsLayout->addLayout(gpsButtons);
 
+    // Align Ownship fields so inputs start at the same x as the
+    // "Primary Reference (CCRP)" input by giving all forms' labels
+    // the same minimum width as the Primary Reference label.
+    {
+        int refWidth = 0;
+        if (QLayoutItem* primaryLabelItem = primaryGpsForm->itemAt(0, QFormLayout::LabelRole)) {
+            if (QWidget* primaryLabel = primaryLabelItem->widget()) refWidth = primaryLabel->sizeHint().width();
+        }
+        if (refWidth == 0) {
+            QFontMetrics fm(dimensionsGroup->font());
+            refWidth = fm.horizontalAdvance(tr("Primary Reference (CCRP):"));
+        }
+
+        auto applyLabelWidth = [&](QFormLayout* form) {
+            if (!form) return;
+            for (int i = 0; i < form->rowCount(); ++i) {
+                if (QLayoutItem* li = form->itemAt(i, QFormLayout::LabelRole)) {
+                    if (QWidget* w = li->widget()) w->setMinimumWidth(refWidth);
+                }
+            }
+        };
+
+        applyLabelWidth(dimensionsForm);
+        applyLabelWidth(turningPredictionForm);
+        applyLabelWidth(trackLineForm);
+        applyLabelWidth(primaryGpsForm);
+    }
+
+    // Ownship tab section order: Vessel Dimensions, Track Line, Turning Prediction, GPS
     shipDimensionsLayout->addWidget(dimensionsGroup);
+    shipDimensionsLayout->addWidget(trackLineGroup);
     // Container to tightly couple header and group with minimal spacing
     QWidget *turningContainer = new QWidget;
     QVBoxLayout *turningContainerLayout = new QVBoxLayout(turningContainer);
@@ -256,8 +294,6 @@ void SettingsDialog::setupUI() {
     turningContainerLayout->addWidget(turningHeaderWidget);
     turningContainerLayout->addWidget(turningPredictionGroup);
     shipDimensionsLayout->addWidget(turningContainer);
-    // Move Track Line group into Ownship (Ship Dimensions) after Turning Radius
-    shipDimensionsLayout->addWidget(trackLineGroup);
 
     // Collision Risk header (title left, enable checkbox right)
     QWidget *collisionHeaderWidget = new QWidget;
@@ -265,10 +301,12 @@ void SettingsDialog::setupUI() {
     collisionHeaderLayout->setContentsMargins(0, 0, 0, 0);
     QLabel *collisionHeaderLabel = new QLabel(tr("Collision Risk Indication"));
     QFont collisionHeaderFont = collisionHeaderLabel->font();
+    collisionHeaderFont.setBold(true);
     collisionHeaderLabel->setFont(collisionHeaderFont);
+    collisionHeaderLabel->setStyleSheet("font-weight: bold;");
 
-    enableCollisionRiskCheckBox = new QCheckBox(tr("Enable Collision Risk Detection"));
-    enableCollisionRiskCheckBox->setChecked(true);
+    enableCollisionRiskCheckBox = new QCheckBox(tr("Enable"));
+    enableCollisionRiskCheckBox->setChecked(false);
     enableCollisionRiskCheckBox->setToolTip(tr("Display collision risk warnings during navigation"));
     collisionHeaderLayout->addWidget(collisionHeaderLabel);
     collisionHeaderLayout->addStretch();
@@ -469,10 +507,37 @@ void SettingsDialog::setupUI() {
     chartCombo->addItem("Pan", "Pan");
     chartDisplayForm->addRow(tr("Chart Move Mode:"), chartCombo);
 
-    displayLayout->addRow(themeGroup);
+    // Display tab section order: Navigation Mode, Data View Format, Theme
     displayLayout->addRow(chartDisplayGroup);
     // Add Data View Format group to Display tab
     displayLayout->addRow(dataViewGroup);
+    displayLayout->addRow(themeGroup);
+
+    // Align Display tab fields so inputs start at the same x as
+    // the "Default Chart Theme:" input by normalizing label widths
+    {
+        int refWidth = 0;
+        if (QLayoutItem* lblItem = themeForm->itemAt(0, QFormLayout::LabelRole)) {
+            if (QWidget* lbl = lblItem->widget()) refWidth = lbl->sizeHint().width();
+        }
+        if (refWidth == 0) {
+            QFontMetrics fm(themeGroup->font());
+            refWidth = fm.horizontalAdvance(tr("Default Chart Theme:"));
+        }
+
+        auto applyLabelWidth = [&](QFormLayout* form) {
+            if (!form) return;
+            for (int i = 0; i < form->rowCount(); ++i) {
+                if (QLayoutItem* li = form->itemAt(i, QFormLayout::LabelRole)) {
+                    if (QWidget* w = li->widget()) w->setMinimumWidth(refWidth);
+                }
+            }
+        };
+
+        applyLabelWidth(themeForm);
+        applyLabelWidth(chartDisplayForm);
+        applyLabelWidth(dataViewForm);
+    }
     displayTab->setLayout(displayLayout);
 
     // ================= SHIP DIMENSION TAB ====================== //
@@ -633,6 +698,39 @@ void SettingsDialog::setupUI() {
     collisionContainerLayout->addWidget(collisionHeaderWidget);
     collisionContainerLayout->addWidget(collisionRiskGroup);
     cpatcpaLayout->addRow(collisionContainer);
+
+    // Align AIS Target tab fields so inputs start at the same x as
+    // the "High Risk Distance:" input by normalizing label widths
+    {
+        int refWidth = 0;
+        // Prefer the actual label widget for "High Risk Distance:" inside collisionRiskForm
+        for (int i = 0; i < collisionRiskForm->rowCount(); ++i) {
+            if (QLayoutItem* li = collisionRiskForm->itemAt(i, QFormLayout::LabelRole)) {
+                if (QLabel* lbl = qobject_cast<QLabel*>(li->widget())) {
+                    if (lbl->text() == tr("High Risk Distance:")) {
+                        refWidth = lbl->sizeHint().width();
+                        break;
+                    }
+                }
+            }
+        }
+        if (refWidth == 0) {
+            QFontMetrics fm(cpaTcpaGroup->font());
+            refWidth = fm.horizontalAdvance(tr("High Risk Distance:"));
+        }
+
+        auto applyLabelWidth = [&](QFormLayout* form) {
+            if (!form) return;
+            for (int i = 0; i < form->rowCount(); ++i) {
+                if (QLayoutItem* li = form->itemAt(i, QFormLayout::LabelRole)) {
+                    if (QWidget* w = li->widget()) w->setMinimumWidth(refWidth);
+                }
+            }
+        };
+
+        applyLabelWidth(cpaTcpaForm);
+        applyLabelWidth(collisionRiskForm);
+    }
     cpatcpaTab->setLayout(cpatcpaLayout);
 
 
@@ -652,6 +750,13 @@ void SettingsDialog::setupUI() {
     }
 
     mainLayout->addWidget(tabWidget);
+
+    // Ensure all group titles render bold regardless of platform style
+    const auto groups = this->findChildren<QGroupBox*>();
+    for (QGroupBox* gb : groups) {
+        if (!gb) continue;
+        gb->setStyleSheet("QGroupBox { font-weight: bold; } QGroupBox * { font-weight: normal; }");
+    }
 
 
     // ================ BUTTON CONNECT ================= //
@@ -820,6 +925,25 @@ void SettingsDialog::loadSettings() {
     cpaSpin->setValue(settings.value("CPA-TCPA/cpa_threshold", 0.2).toDouble());
     tcpaSpin->setValue(settings.value("CPA-TCPA/tcpa_threshold", 1).toDouble());
 
+    // Collision Risk (load settings)
+    enableCollisionRiskCheckBox->setChecked(settings.value("CollisionRisk/enabled", false).toBool());
+    showRiskSymbolsCheckBox->setChecked(settings.value("CollisionRisk/show_symbols", true).toBool());
+    enableAudioAlertsCheckBox->setChecked(settings.value("CollisionRisk/audio_alerts", false).toBool());
+    enablePulsingWarningsCheckBox->setChecked(settings.value("CollisionRisk/pulsing_warnings", true).toBool());
+    criticalRiskDistanceSpin->setValue(settings.value("CollisionRisk/critical_distance_nm", 0.1).toDouble());
+    highRiskDistanceSpin->setValue(settings.value("CollisionRisk/high_distance_nm", 0.25).toDouble());
+    criticalTimeSpin->setValue(settings.value("CollisionRisk/critical_time_min", 2.0).toDouble());
+    // Apply initial enabled state
+    {
+        bool enabled = enableCollisionRiskCheckBox->isChecked();
+        showRiskSymbolsCheckBox->setEnabled(enabled);
+        enableAudioAlertsCheckBox->setEnabled(enabled);
+        enablePulsingWarningsCheckBox->setEnabled(enabled);
+        criticalRiskDistanceSpin->setEnabled(enabled);
+        highRiskDistanceSpin->setEnabled(enabled);
+        criticalTimeSpin->setEnabled(enabled);
+    }
+
     // Ship Dimensions
     shipLengthSpin->setValue(settings.value("ShipDimensions/length", 170.0).toDouble());
     shipBeamSpin->setValue(settings.value("ShipDimensions/beam", 13.0).toDouble());
@@ -934,6 +1058,15 @@ void SettingsDialog::saveSettings() {
     // CPA/TCPA
     settings.setValue("CPA-TCPA/cpa_threshold", cpaSpin->value());
     settings.setValue("CPA-TCPA/tcpa_threshold", tcpaSpin->value());
+
+    // Collision Risk (save settings)
+    settings.setValue("CollisionRisk/enabled", enableCollisionRiskCheckBox->isChecked());
+    settings.setValue("CollisionRisk/show_symbols", showRiskSymbolsCheckBox->isChecked());
+    settings.setValue("CollisionRisk/audio_alerts", enableAudioAlertsCheckBox->isChecked());
+    settings.setValue("CollisionRisk/pulsing_warnings", enablePulsingWarningsCheckBox->isChecked());
+    settings.setValue("CollisionRisk/critical_distance_nm", criticalRiskDistanceSpin->value());
+    settings.setValue("CollisionRisk/high_distance_nm", highRiskDistanceSpin->value());
+    settings.setValue("CollisionRisk/critical_time_min", criticalTimeSpin->value());
 
     // Turning Prediction
     settings.setValue("TurningPrediction/enabled", showTurningPredictionCheckBox->isChecked());
@@ -1081,6 +1214,15 @@ void SettingsDialog::accept() {
     data.showTurningPrediction = showTurningPredictionCheckBox->isChecked();
     data.predictionTimeMinutes = predictionTimeSpin->value();
     data.predictionDensity = predictionDensityCombo->currentData().toInt();
+
+    // Collision Risk
+    data.enableCollisionRisk = enableCollisionRiskCheckBox->isChecked();
+    data.criticalRiskDistance = criticalRiskDistanceSpin->value();
+    data.highRiskDistance = highRiskDistanceSpin->value();
+    data.criticalRiskTime = criticalTimeSpin->value();
+    data.showRiskSymbols = showRiskSymbolsCheckBox->isChecked();
+    data.enableAudioAlerts = enableAudioAlertsCheckBox->isChecked();
+    data.enablePulsingWarnings = enablePulsingWarningsCheckBox->isChecked();
 
     // GPS Positions
     data.gpsPositions.clear();
