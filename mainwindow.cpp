@@ -1,4 +1,4 @@
-// #include <QtGui>
+﻿// #include <QtGui>
 #include <QtWidgets>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -1056,7 +1056,7 @@ void MainWindow::createMenuBar(){
     aboutMenu->addAction("Release Notes", this, SLOT(openReleaseNotesDialog()) );
     //aboutMenu->addAction("Debug", this, SLOT(fetchNmea()) );
 
-    // Set default → dark
+    // Set default â†’ dark
     if (AppConfig::isDark()){
         darkAction->setChecked(true);
         setDarkMode();
@@ -1738,61 +1738,61 @@ void MainWindow::openReleaseNotesDialog() {
         <h3><b>ECDIS v1.4 Changelog</b></h3>
 
         <h3>New Features</h3>
-        <div style="font-size: 14px; margin-left: 0;">• Dead Reckoning</div>
-        <div style="font-size: 14px; margin-left: 0;">• Drag Mode on Chart View</div>
-        <div style="font-size: 14px; margin-left: 0;">• Ownship Actual Size</div>
+        <div style="font-size: 14px; margin-left: 0;">- Dead Reckoning</div>
+        <div style="font-size: 14px; margin-left: 0;">- Drag Mode on Chart View</div>
+        <div style="font-size: 14px; margin-left: 0;">- Ownship Actual Size</div>
 
         <h3>Enhancements</h3>
-        <div style="font-size: 14px; margin-left: 0;">• Bug Fixing</div>
-        <div style="font-size: 14px; margin-left: 0;">• UI Refinements</div>
-        <div style="font-size: 14px; margin-left: 0;">• Routes Reverse</div>
-        <div style="font-size: 14px; margin-left: 0;">• Area Tools Shortcut</div>
+        <div style="font-size: 14px; margin-left: 0;">- Bug Fixing</div>
+        <div style="font-size: 14px; margin-left: 0;">- UI Refinements</div>
+        <div style="font-size: 14px; margin-left: 0;">- Routes Reverse</div>
+        <div style="font-size: 14px; margin-left: 0;">- Area Tools Shortcut</div>
 
         <hr>
 
         <h3><b>ECDIS v1.3 Changelog</b></h3>
 
         <h3>New Features</h3>
-        <div style="font-size: 14px; margin-left: 0;">• Area Tools</div>
-        <div style="font-size: 14px; margin-left: 0;">• Measurements</div>
+        <div style="font-size: 14px; margin-left: 0;">- Area Tools</div>
+        <div style="font-size: 14px; margin-left: 0;">- Measurements</div>
 
         <h3>Enhancements</h3>
-        <div style="font-size: 14px; margin-left: 0;">• Bug Fixing</div>
-        <div style="font-size: 14px; margin-left: 0;">• UI Refinements</div>
-        <div style="font-size: 14px; margin-left: 0;">• Routes Management</div>
-        <div style="font-size: 14px; margin-left: 0;">• Menu Bar</div>
-        <div style="font-size: 14px; margin-left: 0;">• MOOSDB Connection</div>
-        <div style="font-size: 14px; margin-left: 0;">• Auto Draw and Publish</div>
+        <div style="font-size: 14px; margin-left: 0;">- Bug Fixing</div>
+        <div style="font-size: 14px; margin-left: 0;">- UI Refinements</div>
+        <div style="font-size: 14px; margin-left: 0;">- Routes Management</div>
+        <div style="font-size: 14px; margin-left: 0;">- Menu Bar</div>
+        <div style="font-size: 14px; margin-left: 0;">- MOOSDB Connection</div>
+        <div style="font-size: 14px; margin-left: 0;">- Auto Draw and Publish</div>
 
         <hr>
 
         <h3><b>ECDIS v1.2 Changelog</b></h3>
 
         <h3>New Features</h3>
-        <div style="font-size: 14px; margin-left: 0;">• Route Management</div>
+        <div style="font-size: 14px; margin-left: 0;">- Route Management</div>
 
         <h3>Enhancements</h3>
-        <div style="font-size: 14px; margin-left: 0;">• Bug Fixing</div>
-        <div style="font-size: 14px; margin-left: 0;">• UI Refinements</div>
-        <div style="font-size: 14px; margin-left: 0;">• MOOSDB Autoconnect</div>
-        <div style="font-size: 14px; margin-left: 0;">• TCP Subscribe and Publish</div>
-        <div style="font-size: 14px; margin-left: 0;">• Logging Management</div>
+        <div style="font-size: 14px; margin-left: 0;">- Bug Fixing</div>
+        <div style="font-size: 14px; margin-left: 0;">- UI Refinements</div>
+        <div style="font-size: 14px; margin-left: 0;">- MOOSDB Autoconnect</div>
+        <div style="font-size: 14px; margin-left: 0;">- TCP Subscribe and Publish</div>
+        <div style="font-size: 14px; margin-left: 0;">- Logging Management</div>
 
         <hr>
         <h3><b>ECDIS v1.1</b></h3>
 
         <h3>New Features</h3>
-        <div style="font-size: 14px; margin-left: 0;">• Vertical Action Bar</div>
-        <div style="font-size: 14px; margin-left: 0;">• Sidebar Modules</div>
-        <div style="font-size: 14px; margin-left: 0;">• Settings Manager</div>
-        <div style="font-size: 14px; margin-left: 0;">• Route and Waypoint Management</div>
-        <div style="font-size: 14px; margin-left: 0;">• CPA/TCPA Calculation</div>
-        <div style="font-size: 14px; margin-left: 0;">• AIS Target Display</div>
+        <div style="font-size: 14px; margin-left: 0;">- Vertical Action Bar</div>
+        <div style="font-size: 14px; margin-left: 0;">- Sidebar Modules</div>
+        <div style="font-size: 14px; margin-left: 0;">- Settings Manager</div>
+        <div style="font-size: 14px; margin-left: 0;">- Route and Waypoint Management</div>
+        <div style="font-size: 14px; margin-left: 0;">- CPA/TCPA Calculation</div>
+        <div style="font-size: 14px; margin-left: 0;">- AIS Target Display</div>
 
         <h3>Enhancements</h3>
-        <div style="font-size: 14px; margin-left: 0;">• MOOSDB Connection Stability</div>
-        <div style="font-size: 14px; margin-left: 0;">• UI Refinements</div>
-        <div style="font-size: 14px; margin-left: 0;">• TCP Subscribe and Publish</div>
+        <div style="font-size: 14px; margin-left: 0;">- MOOSDB Connection Stability</div>
+        <div style="font-size: 14px; margin-left: 0;">- UI Refinements</div>
+        <div style="font-size: 14px; margin-left: 0;">- TCP Subscribe and Publish</div>
         )");
 
     layout->addWidget(textEdit);
@@ -2084,7 +2084,7 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL){
   QTimer *timer = new QTimer(this);
   connect(timer, &QTimer::timeout, [=]() {
       QDateTime now = QDateTime::currentDateTime(); // otomatis jam lokal
-      QString text = now.toString("dd MMM yyyy — HH:mm:ss");
+      QString text = now.toString("dd MMM yyyy - HH:mm:ss");
       clockEdit->setText(text);
   });
   timer->start(1000); // update tiap 1 detik
@@ -2266,6 +2266,67 @@ void MainWindow::onImportS63()
             QMessageBox::information(this, "S-63 Import", "S-63 Exhange Set sucessfully imported");
             // Apply any S-57 update files if exist
             ecchart->ApplyUpdate();
+            // After S-63 import, attach the same CATALOG.031 to every tile found in this exchange set
+            // and stamp each tile's last update time to now so Chart Manager reflects it immediately.
+            {
+                // Find CATALOG.031 within selected exchange set directory (root or subdirs)
+                QString srcCatalog;
+                QFileInfo direct(dir + "/CATALOG.031");
+                if (direct.exists()) {
+                    srcCatalog = direct.absoluteFilePath();
+                } else {
+                    QDirIterator it(dir, QStringList() << "CATALOG.031", QDir::Files, QDirIterator::Subdirectories);
+                    if (it.hasNext()) srcCatalog = it.next();
+                }
+                if (!srcCatalog.isEmpty()) {
+                    // Ensure catalogs root exists
+                    QDir catalogsRoot(dencPath + "/CATALOGS");
+                    if (!catalogsRoot.exists()) catalogsRoot.mkpath(".");
+
+                    // Load existing tile update log
+                    QMap<QString,QDateTime> updates;
+                    QFile f(dencPath + "/tile_updates.json");
+                    if (f.exists() && f.open(QIODevice::ReadOnly)) {
+                        const auto doc = QJsonDocument::fromJson(f.readAll());
+                        f.close();
+                        if (doc.isObject()) {
+                            const auto obj = doc.object();
+                            for (auto it = obj.begin(); it != obj.end(); ++it) {
+                                updates.insert(it.key(), QDateTime::fromString(it.value().toString(), Qt::ISODate));
+                            }
+                        }
+                    }
+
+                    // Copy catalog to each tile folder and stamp last update time
+                    QSet<QString> seen;
+                    QDirIterator cellIt(dir, QStringList() << "*.000", QDir::Files, QDirIterator::Subdirectories);
+                    const QDateTime now = QDateTime::currentDateTime();
+                    while (cellIt.hasNext()) {
+                        QFileInfo fi(cellIt.next());
+                        const QString tileId = fi.completeBaseName();
+                        if (seen.contains(tileId)) continue;
+                        QDir tileDir(catalogsRoot.filePath(tileId));
+                        if (!tileDir.exists()) catalogsRoot.mkpath(tileId);
+                        const QString targetCat = tileDir.filePath("CATALOG.031");
+                        if (QFile::exists(targetCat)) QFile::remove(targetCat);
+                        QFile::copy(srcCatalog, targetCat);
+                        updates.insert(tileId, now);
+                        seen.insert(tileId);
+                    }
+
+                    // Persist update log
+                    QJsonObject out;
+                    for (auto it = updates.constBegin(); it != updates.constEnd(); ++it) {
+                        out.insert(it.key(), it.value().toString(Qt::ISODate));
+                    }
+                    QJsonDocument outDoc(out);
+                    QFile wf(dencPath + "/tile_updates.json");
+                    if (wf.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                        wf.write(outDoc.toJson(QJsonDocument::Compact));
+                        wf.close();
+                    }
+                }
+            }
             QApplication::restoreOverrideCursor();
             DrawChart();
         }
@@ -2340,7 +2401,7 @@ void MainWindow::onRotateCW()
   hdg += 10;
   if (hdg >= 360) hdg -= 360.0;
   ecchart->SetHeading(hdg);
-  oriEdit->setText(QString("%1°").arg(hdg));
+  oriEdit->setText(QString("%1Â°").arg(hdg));
 
   // COMPASS
   if (compass != nullptr){
@@ -2352,7 +2413,7 @@ void MainWindow::onRotateCW()
 }
 
 void MainWindow::oriEditSetText(const double &txt){
-    oriEdit->setText(QString("%1°").arg(txt));
+    oriEdit->setText(QString("%1Â°").arg(txt));
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2363,7 +2424,7 @@ void MainWindow::onRotateCCW()
   hdg -= 10;
   if (hdg < 0) hdg += 360.0;
   ecchart->SetHeading(hdg);
-  oriEdit->setText(QString("%1°").arg(hdg));
+  oriEdit->setText(QString("%1Â°").arg(hdg));
 
   // COMPASS
   if (compass != nullptr){
@@ -4050,7 +4111,7 @@ void MainWindow::setupAISTargetPanel()
         if (guardZoneDock && aisTargetDock) {
             qDebug() << "[TABIFY] Creating tabbed interface for GuardZone and AIS Target";
             tabifyDockWidget(guardZoneDock, aisTargetDock);
-            qDebug() << "[TABIFY] ✅ Tabified GuardZone with AIS Target Detail";
+            qDebug() << "[TABIFY] âœ… Tabified GuardZone with AIS Target Detail";
             
             // Set GuardZone as active tab for this group
             guardZoneDock->raise();
@@ -4218,8 +4279,8 @@ void MainWindow::setupTestingMenu()
         if (ecchart) {
             bool isValid = ecchart->validateGuardZoneSystem();
             QString message = isValid ?
-                                  tr("✓ GuardZone system validation passed") :
-                                  tr("✗ GuardZone system validation failed - check debug output");
+                                  tr("âœ“ GuardZone system validation passed") :
+                                  tr("âœ— GuardZone system validation failed - check debug output");
 
             QMessageBox::information(this, tr("System Validation"), message);
         }
@@ -4274,25 +4335,25 @@ void MainWindow::setupTestingMenu()
 
     // ========== ALERT SYSTEM TESTING ==========
     debugMenu->addSeparator();
-    debugMenu->addAction("🔊 Test Low Priority Alert", [this]() {
+    debugMenu->addAction("ðŸ”Š Test Low Priority Alert", [this]() {
         if (ecchart) {
             ecchart->triggerNavigationAlert("Test low priority navigation alert", 1);
         }
     });
 
-    debugMenu->addAction("🟡 Test Medium Priority Alert", [this]() {
+    debugMenu->addAction("ðŸŸ¡ Test Medium Priority Alert", [this]() {
         if (ecchart) {
             ecchart->triggerNavigationAlert("Test medium priority navigation alert", 2);
         }
     });
 
-    debugMenu->addAction("🟠 Test High Priority Alert", [this]() {
+    debugMenu->addAction("ðŸŸ  Test High Priority Alert", [this]() {
         if (ecchart) {
             ecchart->triggerNavigationAlert("Test high priority navigation alert", 3);
         }
     });
 
-    debugMenu->addAction("🚨 Test Critical Alert", [this]() {
+    debugMenu->addAction("ðŸš¨ Test Critical Alert", [this]() {
         if (ecchart) {
             ecchart->triggerNavigationAlert("CRITICAL: Test critical priority alert", 4);
         }
@@ -4300,14 +4361,14 @@ void MainWindow::setupTestingMenu()
 
     debugMenu->addSeparator();
 
-    debugMenu->addAction("💧 Test Depth Alert", [this]() {
+    debugMenu->addAction("ðŸ’§ Test Depth Alert", [this]() {
         if (ecchart) {
             // Simulate shallow water alert
             ecchart->triggerDepthAlert(3.5, 5.0, true); // current: 3.5m, threshold: 5.0m, shallow: true
         }
     });
 
-    debugMenu->addAction("⚠️ Test GuardZone Alert", [this]() {
+    debugMenu->addAction("âš ï¸ Test GuardZone Alert", [this]() {
         if (ecchart) {
             ecchart->triggerGuardZoneAlert(1, "AIS target detected within GuardZone boundaries");
         }
@@ -4315,7 +4376,7 @@ void MainWindow::setupTestingMenu()
 
     debugMenu->addSeparator();
 
-    debugMenu->addAction("📊 Show Alert Statistics", [this]() {
+    debugMenu->addAction("ðŸ“Š Show Alert Statistics", [this]() {
         if (alertPanel) {
             alertPanel->showAlertStatistics();
         } else {
@@ -4323,20 +4384,20 @@ void MainWindow::setupTestingMenu()
         }
     });
 
-    debugMenu->addAction("🔄 Refresh Alert Panel", [this]() {
+    debugMenu->addAction("ðŸ”„ Refresh Alert Panel", [this]() {
         if (alertPanel) {
             alertPanel->refreshAlertList();
             statusBar()->showMessage("Alert panel refreshed", 2000);
         }
     });
 
-    debugMenu->addAction("✅ Test Alert Acknowledge/Resolve", [this]() {
+    debugMenu->addAction("âœ… Test Alert Acknowledge/Resolve", [this]() {
         testAlertWorkflow();
     });
 
     // ==========================================
 
-    debugMenu->addAction("🔄 Force Refresh Alert Panel", [this]() {
+    debugMenu->addAction("ðŸ”„ Force Refresh Alert Panel", [this]() {
         if (alertPanel) {
             qDebug() << "[MAIN] Forcing alert panel refresh...";
             alertPanel->refreshAlertList();
@@ -4355,7 +4416,7 @@ void MainWindow::setupTestingMenu()
         }
     });
 
-    debugMenu->addAction("📝 Create Test Alert Directly", [this]() {
+    debugMenu->addAction("ðŸ“ Create Test Alert Directly", [this]() {
         if (alertPanel && ecchart) {
             AlertSystem* alertSystem = ecchart->getAlertSystem();
             if (alertSystem) {
@@ -4381,7 +4442,7 @@ void MainWindow::setupTestingMenu()
         }
     });
 
-    debugMenu->addAction("➕ Manual Add Alert to Panel", [this]() {
+    debugMenu->addAction("âž• Manual Add Alert to Panel", [this]() {
         if (!alertPanel) {
             QMessageBox::warning(this, "Error", "Alert Panel not available");
             return;
@@ -4438,7 +4499,7 @@ void MainWindow::setupTestingMenu()
         }
     });
 
-    debugMenu->addAction("🔍 Debug Alert System State", [this]() {
+    debugMenu->addAction("ðŸ” Debug Alert System State", [this]() {
         QString debug;
 
         if (ecchart) {
@@ -4467,7 +4528,7 @@ void MainWindow::setupTestingMenu()
         QMessageBox::information(this, "Debug State", debug);
     });
 
-    debugMenu->addAction("🛡️ Safe Panel Test", [this]() {
+    debugMenu->addAction("ðŸ›¡ï¸ Safe Panel Test", [this]() {
         if (alertPanel) {
             // Test basic panel functionality
             alertPanel->updateAlertCounts();
@@ -4534,7 +4595,7 @@ void MainWindow::showSystemStatistics()
 
     // Validation
     bool isValid = ecchart->validateGuardZoneSystem();
-    stats += tr("\nSystem Validation: %1\n").arg(isValid ? "✓ PASSED" : "✗ FAILED");
+    stats += tr("\nSystem Validation: %1\n").arg(isValid ? "âœ“ PASSED" : "âœ— FAILED");
 
     QMessageBox msgBox(this);
     msgBox.setWindowTitle(tr("GuardZone System Statistics"));
@@ -4748,7 +4809,7 @@ void MainWindow::setupAlertPanel()
                                  alertPanel, &AlertPanel::onAlertSystemStatusChanged,
                                  Qt::QueuedConnection);
 
-            qDebug() << "[MAIN] Direct AlertSystem→Panel connections:" << conn4 << conn5;
+            qDebug() << "[MAIN] Direct AlertSystemâ†’Panel connections:" << conn4 << conn5;
 
         } else {
             qDebug() << "[MAIN] AlertSystem is null - limited signal connections";
@@ -4883,7 +4944,7 @@ void MainWindow::onCriticalAlertTriggered(const AlertData& alert)
 
     // Update status bar with critical styling
     statusBar()->setStyleSheet("QStatusBar { background-color: red; color: white; font-weight: bold; }");
-    statusBar()->showMessage(QString("🚨 CRITICAL ALERT: %1").arg(alert.title), 15000);
+    statusBar()->showMessage(QString("ðŸš¨ CRITICAL ALERT: %1").arg(alert.title), 15000);
 
     // Reset status bar style after delay
     QTimer::singleShot(15000, [this]() {
@@ -5196,7 +5257,7 @@ void MainWindow::checkCPATCPAAlarms()
 
 void MainWindow::logCPATCPAInfo(const QString& mmsi, const CPATCPAResult& result)
 {
-    QString logText = QString("MMSI %1: CPA=%.2f NM, TCPA=%.1f min, Range=%.2f NM, Bearing=%.0f°")
+    QString logText = QString("MMSI %1: CPA=%.2f NM, TCPA=%.1f min, Range=%.2f NM, Bearing=%.0fÂ°")
                           .arg(mmsi)
                           .arg(result.cpa)
                           .arg(result.tcpa)
@@ -5241,7 +5302,7 @@ void MainWindow::processTestTarget(const VesselState& ownShip)
         }
 
         if (isDangerous) {
-            QString alarmText = "⚠️ CPA/TCPA ALARM: Test target is dangerous!";
+            QString alarmText = "âš ï¸ CPA/TCPA ALARM: Test target is dangerous!";
             addTextToBar(alarmText);
             statusBar()->showMessage(alarmText, 5000);
         }
@@ -5284,7 +5345,7 @@ void MainWindow::processAISTarget(const VesselState& ownShip, const AISTargetDat
         }
 
         if (isDangerous) {
-            QString alarmText = QString("⚠️ CPA/TCPA ALARM: AIS Target %1 is dangerous! CPA=%.2f NM, TCPA=%.1f min")
+            QString alarmText = QString("âš ï¸ CPA/TCPA ALARM: AIS Target %1 is dangerous! CPA=%.2f NM, TCPA=%.1f min")
                                     .arg(target.mmsi)
                                     .arg(result.cpa)
                                     .arg(result.tcpa);
@@ -5332,9 +5393,9 @@ void MainWindow::setupCPATCPAPanel()
         qDebug() << "[SETUP-CPA] Attempting to tabify CPA/TCPA with Route Panel";
         tabifyDockWidget(routeDock, m_cpatcpaDock);
         m_cpatcpaDock->raise(); // Make CPA/TCPA the active tab
-        qDebug() << "[SETUP-CPA] ✅ CPA/TCPA tabified with Route Panel";
+        qDebug() << "[SETUP-CPA] âœ… CPA/TCPA tabified with Route Panel";
     } else {
-        qDebug() << "[SETUP-CPA] ❌ Route Panel not available for tabify";
+        qDebug() << "[SETUP-CPA] âŒ Route Panel not available for tabify";
     }
 }
 
@@ -5779,3 +5840,4 @@ void MainWindow::updateIcon(bool dark){
         m_refreshButton->setIcon(QIcon(":/icon/refresh.svg"));
     }
 }
+

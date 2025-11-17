@@ -656,6 +656,10 @@ public:
   // Import S-63 Exchange Set using a specific permit file (filtered entries)
   bool ImportS63ExchangeSetWithPermitFile(const QString & dir, const QString & permitFilePath);
 
+  // Thread-friendly versions (no UI interaction); return false and set error on failure
+  bool ImportS63ExchangeSetSilent(const QString & dir, QString* errorOut);
+  bool ImportS63ExchangeSetWithPermitFileSilent(const QString & dir, const QString & permitFilePath, QString* errorOut);
+
   // Sets the S-63 Manufacturer Key
   bool SetS63MKey(const int s63mkey);
 

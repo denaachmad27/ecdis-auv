@@ -1492,6 +1492,79 @@ bool EcWidget::ImportS63ExchangeSetWithPermitFile(const QString & dir, const QSt
 }
 /*---------------------------------------------------------------------------*/
 
+bool EcWidget::ImportS63ExchangeSetSilent(const QString & dir, QString* errorOut)
+{
+    QFile tmpFile;
+    QString err;
+
+    QString catalogue = dir + "/CATALOG.031";
+    tmpFile.setFileName(catalogue);
+    if(!tmpFile.exists()) {
+        err = QString("No CATALOG.031 file found in %1").arg(dir);
+        if (errorOut) *errorOut = err; return false;
+    }
+
+    tmpFile.setFileName(s63permitFileName);
+    if(!tmpFile.exists()) {
+        err = QString("No S-63 permits (%1) found").arg(dencPath);
+        if (errorOut) *errorOut = err; return false;
+    }
+
+    tmpFile.setFileName(certificateFileName);
+    if(!tmpFile.exists()) {
+        err = QString("No IHO.CRT file found in %1").arg(dencPath);
+        if (errorOut) *errorOut = err; return false;
+    }
+
+    QByteArray tmp1 = dir.toLatin1();
+    QByteArray tmp2 = s63permitFileName.toLatin1();
+    QByteArray tmp3 = certificateFileName.toLatin1();
+    int errNo = 0;
+
+    if (!EcS63ImportExt(denc, dictInfo, s63HwId, tmp1.constBegin(), tmp2.constBegin(), tmp3.constBegin(), True, NULL, &errNo, False)) {
+        err = QString("Import of S-63 Exhange Set failed (error = %1)").arg(errNo);
+        if (errorOut) *errorOut = err; return false;
+    }
+    return true;
+}
+/*---------------------------------------------------------------------------*/
+
+bool EcWidget::ImportS63ExchangeSetWithPermitFileSilent(const QString & dir, const QString & permitFilePath, QString* errorOut)
+{
+    QFile tmpFile;
+    QString err;
+
+    QString catalogue = dir + "/CATALOG.031";
+    tmpFile.setFileName(catalogue);
+    if(!tmpFile.exists()) {
+        err = QString("No CATALOG.031 file found in %1").arg(dir);
+        if (errorOut) *errorOut = err; return false;
+    }
+
+    tmpFile.setFileName(permitFilePath);
+    if(!tmpFile.exists()) {
+        err = QString("Filtered S-63 permits not found: %1").arg(permitFilePath);
+        if (errorOut) *errorOut = err; return false;
+    }
+
+    tmpFile.setFileName(certificateFileName);
+    if(!tmpFile.exists()) {
+        err = QString("No IHO.CRT file found in %1").arg(dencPath);
+        if (errorOut) *errorOut = err; return false;
+    }
+
+    QByteArray tmp1 = dir.toLatin1();
+    QByteArray tmp2 = permitFilePath.toLatin1();
+    QByteArray tmp3 = certificateFileName.toLatin1();
+    int errNo = 0;
+
+    if (!EcS63ImportExt(denc, dictInfo, s63HwId, tmp1.constBegin(), tmp2.constBegin(), tmp3.constBegin(), True, NULL, &errNo, False)) {
+        err = QString("Import of S-63 Exhange Set failed (error = %1)").arg(errNo);
+        if (errorOut) *errorOut = err; return false;
+    }
+    return true;
+}
+
 int EcWidget::ApplyUpdate()
 {
   if (denc == NULL) return -1;
