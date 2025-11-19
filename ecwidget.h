@@ -1099,6 +1099,7 @@ public:
   void updateAITargetData(const QString& mmsi, const AISTargetData& target);
   bool isAITargetTracking() const { return aiTargetTracker.trackingEnabled; }
   bool isPointNearAITargetLine(const QPoint& clickPos, int tolerance = 10);
+  void toggleInterceptVisualization();
   void setShipDotEnabled(bool on) { shipDotEnabled = on; update(); }
 
   // Red Dot Tracker variables

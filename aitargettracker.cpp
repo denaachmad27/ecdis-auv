@@ -22,6 +22,9 @@
 AITargetTracker::AITargetTracker(QObject* parent)
     : QObject(parent)
 {
+    // Always show prediction line for intercept visualization
+    showPredictionLine = true;
+
     updateTimer = new QTimer(this);
     connect(updateTimer, &QTimer::timeout, this, &AITargetTracker::onTrackingUpdate);
     updateTimer->start(100); // Update every 100ms for real-time tracking
@@ -248,20 +251,65 @@ void AITargetTracker::draw(EcWidget* w, QPainter& p)
         p.drawPolygon(arrow);
     }
 
-    // Draw prediction line if enabled
-    if (showPredictionLine && hasInterceptSolution) {
+    // Draw fire control solution line (ownship to intercept point) jika ada intercept solution
+    if (hasInterceptSolution) {
         int interceptX = 0, interceptY = 0;
         if (w->LatLonToXy(interceptPoint.x(), interceptPoint.y(), interceptX, interceptY)) {
-            QPen predictionPen(QColor(255, 165, 0)); // Orange for prediction
-            predictionPen.setWidth(2);
-            predictionPen.setStyle(Qt::DashLine);
-            p.setPen(predictionPen);
+            // Draw fire control solution line dari ownship ke intercept point
+            QPen fireControlPen(QColor(255, 0, 0)); // Red for fire control
+            fireControlPen.setWidth(1);
+            fireControlPen.setStyle(Qt::DotLine); // Dotted line
+            fireControlPen.setDashPattern({2, 3}); // Small dots
+            p.setPen(fireControlPen);
+            p.drawLine(ownshipX, ownshipY, interceptX, interceptY);
+
+            // Draw small circle di ownship untuk menunjukkan fire control origin
+            p.setBrush(Qt::NoBrush);
+            p.setPen(QColor(255, 0, 0));
+            p.drawEllipse(ownshipX, ownshipY, 12, 12);
+        }
+    }
+
+    // Draw intercept point line (always show when has intercept solution)
+    if (hasInterceptSolution) {
+        int interceptX = 0, interceptY = 0;
+        if (w->LatLonToXy(interceptPoint.x(), interceptPoint.y(), interceptX, interceptY)) {
+            // Draw intercept prediction line dari target ke intercept point
+            QPen interceptPen(QColor(255, 0, 0)); // Red for intercept
+            interceptPen.setWidth(2);
+            interceptPen.setStyle(Qt::DashLine);
+            interceptPen.setDashPattern({8, 4}); // Custom dash pattern: 8px dash, 4px gap
+            p.setPen(interceptPen);
             p.drawLine(targetX, targetY, interceptX, interceptY);
 
-            // Draw intercept point
-            p.setBrush(QColor(255, 165, 0));
+            // Draw intercept point dengan warna merah
+            p.setBrush(QColor(255, 0, 0));
+            p.setPen(QColor(255, 0, 0)); // Red border
+            p.drawEllipse(interceptX, interceptY, 8, 8); // Slightly larger
+
+            // Draw center dot untuk better visibility
+            p.setBrush(Qt::white);
             p.setPen(Qt::NoPen);
-            p.drawEllipse(interceptX, interceptY, 6, 6);
+            p.drawEllipse(interceptX, interceptY, 3, 3);
+
+            // Add "INTERCEPT" label
+            QFont labelFont("Arial", 9, QFont::Bold);
+            p.setFont(labelFont);
+            QFontMetrics labelFm(labelFont);
+            QString interceptLabel = QString("INTERCEPT");
+            int labelWidth = labelFm.horizontalAdvance(interceptLabel);
+            int labelHeight = labelFm.height();
+
+            // Background untuk label
+            QRect labelRect(interceptX - labelWidth/2 - 4, interceptY + 12, labelWidth + 8, labelHeight + 4);
+            QColor labelBg = QColor(255, 0, 0, 180); // Semi-transparent red
+            p.setPen(Qt::NoPen);
+            p.setBrush(labelBg);
+            p.drawRoundedRect(labelRect, 3, 3);
+
+            // Text label
+            p.setPen(Qt::white);
+            p.drawText(labelRect, Qt::AlignCenter, interceptLabel);
         }
     }
 

@@ -523,6 +523,14 @@ void EcWidget::updateAITargetData(const QString& mmsi, const AISTargetData& targ
     }
 }
 
+void EcWidget::toggleInterceptVisualization()
+{
+    aiTargetTracker.showPredictionLine = !aiTargetTracker.showPredictionLine;
+    QString status = aiTargetTracker.showPredictionLine ? tr("Intercept visualization enabled") : tr("Intercept visualization disabled");
+    emit statusMessage(status);
+    update();
+}
+
 bool EcWidget::isPointNearAITargetLine(const QPoint& clickPos, int tolerance)
 {
     if (!aiTargetTracker.trackingEnabled || !isReady()) {
@@ -4011,6 +4019,8 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
             // Show context menu for AI Target Tracker
             QMenu targetMenu(this);
             QAction* removeAct = targetMenu.addAction(tr("Remove Target Line"));
+            QAction* toggleInterceptAct = targetMenu.addAction(aiTargetTracker.showPredictionLine ? tr("Hide Intercept") : tr("Show Intercept"));
+            targetMenu.addSeparator();
             QAction* infoAct = targetMenu.addAction(tr("Target Info"));
             infoAct->setEnabled(false); // Display only
 
@@ -4024,6 +4034,9 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
             QAction* chosen = targetMenu.exec(mapToGlobal(e->pos()));
             if (chosen == removeAct) {
                 clearAITarget();
+                return; // consume right-click on AI target line
+            } else if (chosen == toggleInterceptAct) {
+                toggleInterceptVisualization();
                 return; // consume right-click on AI target line
             }
         }
