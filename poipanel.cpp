@@ -13,16 +13,17 @@
 #include <limits>
 #include <cmath>
 #include <QHeaderView>
+#include <QTimer>
 
 #include "ecwidget.h"
 
 namespace {
 constexpr int kColumnName = 0;
 constexpr int kColumnCategory = 1;
-constexpr int kColumnLatitude = 2;
-constexpr int kColumnLongitude = 3;
-constexpr int kColumnDepth = 4;
-constexpr int kColumnNotes = 5;
+constexpr int kColumnDepth = 2;
+constexpr int kColumnNotes = 3;
+constexpr int kColumnShow = 4;
+constexpr int kColumnLabel = 5;
 }
 
 POIPanel::POIPanel(EcWidget* ecWidget, QWidget* parent)
@@ -33,14 +34,14 @@ POIPanel::POIPanel(EcWidget* ecWidget, QWidget* parent)
     layout->setContentsMargins(4, 4, 4, 4);
     layout->setSpacing(6);
 
-    auto* headline = new QLabel(tr("Points of Interest help track critical mission spots."));
+    auto* headline = new QLabel(tr("Point Objects help track critical mission spots."));
     headline->setWordWrap(true);
     layout->addWidget(headline);
 
     tree = new QTreeWidget(this);
     tree->setColumnCount(6);
     QStringList headers;
-    headers << tr("POI") << tr("Category") << tr("Latitude") << tr("Longitude") << tr("Depth (m)") << tr("Notes");
+    headers << tr("Name") << tr("Category") << tr("Depth (m)") << tr("Notes") << tr("Show") << tr("Label");
     tree->setHeaderLabels(headers);
     tree->setRootIsDecorated(false);
     tree->setAlternatingRowColors(true);
@@ -78,7 +79,10 @@ POIPanel::POIPanel(EcWidget* ecWidget, QWidget* parent)
     setButtonsEnabled(false);
 
     if (ecWidget) {
-        connect(ecWidget, &EcWidget::poiListChanged, this, &POIPanel::refreshList);
+        // Defer refresh to avoid re-entrant updates while handling itemChanged
+        connect(ecWidget, &EcWidget::poiListChanged, this, [this]() {
+            QTimer::singleShot(0, this, &POIPanel::refreshList);
+        });
         refreshList();
     }
 }
@@ -90,6 +94,7 @@ void POIPanel::refreshList()
 
 void POIPanel::populateTree()
 {
+    populating = true;
     tree->blockSignals(true);
     tree->clear();
 
@@ -105,13 +110,16 @@ void POIPanel::populateTree()
 
         auto* item = new QTreeWidgetItem(tree);
         item->setText(kColumnName, poi.label);
-        item->setFlags(item->flags() | Qt::ItemIsUserCheckable | Qt::ItemIsSelectable | Qt::ItemIsEnabled);
-        item->setCheckState(kColumnName, (poi.flags & EC_POI_FLAG_ACTIVE) ? Qt::Checked : Qt::Unchecked);
+        // Do not make the name column user-checkable (checkbox removed)
+        item->setFlags(item->flags() | Qt::ItemIsSelectable | Qt::ItemIsEnabled);
         item->setText(kColumnCategory, categoryToString(poi.category));
-        item->setText(kColumnLatitude, formatCoordinate(poi.latitude, true));
-        item->setText(kColumnLongitude, formatCoordinate(poi.longitude, false));
         item->setText(kColumnDepth, formatDepth(poi.depth));
         item->setText(kColumnNotes, poi.description);
+        // Show/Label checkboxes
+        item->setCheckState(kColumnShow, (poi.flags & EC_POI_FLAG_ACTIVE) ? Qt::Checked : Qt::Unchecked);
+        item->setText(kColumnShow, "");
+        item->setCheckState(kColumnLabel, poi.showLabel ? Qt::Checked : Qt::Unchecked);
+        item->setText(kColumnLabel, "");
         item->setData(kColumnName, Qt::UserRole, poi.id);
     }
 
@@ -120,6 +128,7 @@ void POIPanel::populateTree()
     }
 
     tree->blockSignals(false);
+    populating = false;
     onSelectionChanged();
 }
 
@@ -185,7 +194,7 @@ EcPoiCategory POIPanel::categoryFromIndex(int index) const
 bool POIPanel::showPoiDialog(PoiEntry& inOutPoi, bool isEdit)
 {
     QDialog dialog(this);
-    dialog.setWindowTitle(isEdit ? tr("Edit Point of Interest") : tr("Add Point of Interest"));
+    dialog.setWindowTitle(isEdit ? tr("Edit Point Object") : tr("Add Point Object"));
 
     auto* formLayout = new QFormLayout(&dialog);
 
@@ -288,11 +297,11 @@ void POIPanel::onAddPoi()
 
     const int poiId = ecWidget->addPoi(newPoi);
     if (poiId < 0) {
-        QMessageBox::warning(this, tr("Add POI"), tr("Failed to create POI."));
+        QMessageBox::warning(this, tr("Add Point Object"), tr("Failed to create Point Object."));
         return;
     }
 
-    emit statusMessage(tr("POI \"%1\" added").arg(newPoi.label));
+    emit statusMessage(tr("Point Object \"%1\" added").arg(newPoi.label));
 }
 
 void POIPanel::onEditPoi()
@@ -309,7 +318,7 @@ void POIPanel::onEditPoi()
     }
 
     if (!ecWidget->updatePoi(poiId, poi)) {
-        QMessageBox::warning(this, tr("Edit POI"), tr("Failed to update POI."));
+        QMessageBox::warning(this, tr("Edit Point Object"), tr("Failed to update Point Object."));
         return;
     }
 
@@ -323,19 +332,19 @@ void POIPanel::onDeletePoi()
     if (poiId < 0) return;
 
     auto response = QMessageBox::question(this,
-                                          tr("Remove POI"),
-                                          tr("Remove selected POI?"),
+                                          tr("Remove Point Object"),
+                                          tr("Remove selected Point Object?"),
                                           QMessageBox::Yes | QMessageBox::No);
     if (response != QMessageBox::Yes) {
         return;
     }
 
     if (!ecWidget->removePoi(poiId)) {
-        QMessageBox::warning(this, tr("Remove POI"), tr("Failed to remove POI."));
+        QMessageBox::warning(this, tr("Remove Point Object"), tr("Failed to remove Point Object."));
         return;
     }
 
-    emit statusMessage(tr("POI removed"));
+    emit statusMessage(tr("Point Object removed"));
 }
 
 void POIPanel::onFocusPoi()
@@ -345,7 +354,7 @@ void POIPanel::onFocusPoi()
     if (poiId < 0) return;
 
     if (!ecWidget->focusPoi(poiId)) {
-        QMessageBox::warning(this, tr("Focus POI"), tr("Unable to center map on POI."));
+        QMessageBox::warning(this, tr("Focus Point Object"), tr("Unable to center map on Point Object."));
         return;
     }
 
@@ -358,20 +367,18 @@ void POIPanel::onFocusPoi()
 void POIPanel::onItemChanged(QTreeWidgetItem* item, int column)
 {
     if (!item || !ecWidget) return;
-    if (column != kColumnName) return;
+    if (populating) return;
 
     const int poiId = item->data(kColumnName, Qt::UserRole).toInt();
-
-    // Validate POI ID before processing
     if (poiId <= 0) return;
 
-    const bool active = item->checkState(kColumnName) == Qt::Checked;
-
-    // Check if POI still exists before trying to modify it
-    PoiEntry existingPoi = ecWidget->poiEntry(poiId);
-    if (existingPoi.id != poiId) return;
-
-    ecWidget->setPoiActive(poiId, active);
+    if (column == kColumnShow) {
+        const bool visible = (item->checkState(kColumnShow) == Qt::Checked);
+        ecWidget->setPoiActive(poiId, visible);
+    } else if (column == kColumnLabel) {
+        const bool showLabel = (item->checkState(kColumnLabel) == Qt::Checked);
+        ecWidget->setPoiLabelVisible(poiId, showLabel);
+    }
 }
 
 void POIPanel::onItemDoubleClicked(QTreeWidgetItem* item, int column)

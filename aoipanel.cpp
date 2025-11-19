@@ -14,7 +14,7 @@ AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
 {
     QVBoxLayout* main = new QVBoxLayout(this);
 
-    QGroupBox* group = new QGroupBox("Area Management");
+    QGroupBox* group = new QGroupBox("Area Object Management");
     QVBoxLayout* v = new QVBoxLayout(group);
 
     tree = new QTreeWidget(this);
@@ -89,7 +89,7 @@ AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
         if (!item || !this->ecWidget) return;
         int id = item->data(0, Qt::UserRole).toInt();
         this->ecWidget->startEditAOI(id);
-        emit statusMessage("Edit Area: drag vertices; right-click handle for Move/Delete; right-click edge to add; click to drop; ESC to finish");
+        emit statusMessage("Edit Area Object: drag vertices; right-click handle for Move/Delete; right-click edge to add; click to drop; ESC to finish");
     });
 
     refreshList();
@@ -144,7 +144,7 @@ void AOIPanel::onAddAOI()
     if (!ecWidget) return;
 
     QDialog dlg(this);
-    dlg.setWindowTitle("Add Area");
+    dlg.setWindowTitle("Add Area Object");
     QFormLayout* form = new QFormLayout(&dlg);
     QLineEdit* nameEdit = new QLineEdit();
     QComboBox* typeCombo = new QComboBox();
@@ -206,7 +206,7 @@ void AOIPanel::onAddAOI()
     ecWidget->addAOI(aoi);
     refreshList();
     ecWidget->update();
-    emit statusMessage(QString("Area '%1' created (%2 points)").arg(aoi.name).arg(aoi.vertices.size()));
+    emit statusMessage(QString("Area Object '%1' created (%2 points)").arg(aoi.name).arg(aoi.vertices.size()));
 }
 
 void AOIPanel::onDeleteAOI()

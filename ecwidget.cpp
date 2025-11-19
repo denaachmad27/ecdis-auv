@@ -403,6 +403,8 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
 
   // AOIs
   loadAOIs(); // Muat AOI dari file JSON
+  // POIs
+  loadPois(); // Muat POI dari file JSON
 
   // Convert legacy single waypoints to routes for compatibility
   convertSingleWaypointsToRoutes();
@@ -1991,6 +1993,10 @@ void EcWidget::paintEvent (QPaintEvent *e)
   // Draw AOIs always on top of chart
   drawAOIs(painter);
   drawPois(painter);
+  // Draw waypoints live during drag so they don't disappear until release
+  if (dragMode) {
+      drawWaypointsOverlay(painter);
+  }
   // Draw GuardZones using the same painter
   drawGuardZone(painter);
   // Draw Route Deviation Indicator
@@ -2824,6 +2830,7 @@ int EcWidget::addPoi(const PoiEntry& poi)
     highlightedPoiId = copy.id;
 
     emit poiListChanged();
+    savePois();
     update();
     return copy.id;
 }
@@ -2844,6 +2851,7 @@ bool EcWidget::updatePoi(int poiId, const PoiEntry& poi)
     highlightedPoiId = poiId;
 
     emit poiListChanged();
+    savePois();
     update();
     return true;
 }
@@ -2859,6 +2867,7 @@ bool EcWidget::removePoi(int poiId)
         highlightedPoiId = -1;
     }
     emit poiListChanged();
+    savePois();
     update();
     return true;
 }
@@ -2881,6 +2890,24 @@ bool EcWidget::setPoiActive(int poiId, bool active)
     }
     poiList[idx].updatedAt = QDateTime::currentDateTimeUtc();
     emit poiListChanged();
+    savePois();
+    update();
+    return true;
+}
+
+bool EcWidget::setPoiLabelVisible(int poiId, bool show)
+{
+    const int idx = findPoiIndex(poiId);
+    if (idx < 0) return false;
+    // Add per-POI label visibility using existing structure via a helper flag in description? Better: extend PoiEntry.
+    // We extended PoiEntry to carry showLabel via persistence layer; here we toggle it.
+    poiList[idx].updatedAt = QDateTime::currentDateTimeUtc();
+    // Ensure field exists; if not, we emulate via description tag (backward-compat). But since struct has field, just set via QVariant hack not needed.
+    // Using a temporary struct copy not necessary; directly set assumed field via reference.
+    // Note: The struct definition includes 'showLabel' field added for UI control.
+    poiList[idx].showLabel = show;
+    emit poiListChanged();
+    savePois();
     update();
     return true;
 }
@@ -2930,7 +2957,15 @@ void EcWidget::drawPois(QPainter& painter)
     painter.save();
     painter.setRenderHint(QPainter::Antialiasing, true);
 
-    const QRect viewport = rect().adjusted(-40, -40, 40, 40);
+    // Compute viewport in the same coordinate space as screenPoint.
+    // When dragging, painter is translated; adjust culling rectangle accordingly
+    QRect viewport = rect().adjusted(-40, -40, 40, 40);
+    const QTransform xf = painter.worldTransform();
+    if (!xf.isIdentity()) {
+        // Map painter-space origin to widget-space to get translation
+        const QPoint t = xf.map(QPoint(0,0));
+        viewport.translate(-t.x(), -t.y());
+    }
     QFont labelFont = painter.font();
     QFontMetrics fm(labelFont);
 
@@ -2948,11 +2983,11 @@ void EcWidget::drawPois(QPainter& painter)
             continue;
         }
 
-        QColor color = categoryColor(poi.category);
         const bool active = (poi.flags & EC_POI_FLAG_ACTIVE) != 0;
         if (!active) {
-            color.setAlpha(90);
+            continue; // Completely hide POI when not shown
         }
+        QColor color = categoryColor(poi.category);
 
         const bool highlighted = (poi.id == highlightedPoiId);
         const int radius = highlighted ? 7 : 5;
@@ -2964,25 +2999,168 @@ void EcWidget::drawPois(QPainter& painter)
         painter.setBrush(color);
         painter.drawEllipse(screenPoint, radius, radius);
 
-        const QString labelText = poi.label.isEmpty()
-                ? tr("POI %1").arg(poi.id)
-                : poi.label;
+        if (showPoiLabels && poi.showLabel) {
+            const QString labelText = poi.label.isEmpty()
+                    ? tr("Point Object %1").arg(poi.id)
+                    : poi.label;
 
-        QRect textRect = fm.boundingRect(labelText);
-        textRect.adjust(-8, -4, 8, 4);
-        textRect.moveLeft(screenPoint.x() + radius + 10);
-        textRect.moveTop(screenPoint.y() - textRect.height() / 2);
+            QRect textRect = fm.boundingRect(labelText);
+            textRect.adjust(-8, -4, 8, 4);
+            textRect.moveLeft(screenPoint.x() + radius + 10);
+            textRect.moveTop(screenPoint.y() - textRect.height() / 2);
 
-        QColor labelBg = QColor(20, 20, 20, active ? 170 : 110);
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(labelBg);
-        painter.drawRoundedRect(textRect, 4, 4);
+            QColor labelBg = QColor(20, 20, 20, active ? 170 : 110);
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(labelBg);
+            painter.drawRoundedRect(textRect, 4, 4);
 
-        painter.setPen(Qt::white);
-        painter.drawText(textRect, Qt::AlignCenter, labelText);
+            painter.setPen(Qt::white);
+            painter.drawText(textRect, Qt::AlignCenter, labelText);
+        }
     }
 
     painter.restore();
+}
+
+void EcWidget::drawWaypointsOverlay(QPainter& painter)
+{
+    // Live overlay of waypoints and labels using the translated painter during drag
+    if (waypointList.isEmpty()) return;
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    // Compute viewport adjusted for painter transform so culling matches translated space
+    QRect viewport = rect().adjusted(-60, -60, 60, 60);
+    const QTransform xf = painter.worldTransform();
+    if (!xf.isIdentity()) {
+        const QPoint t = xf.map(QPoint(0,0));
+        viewport.translate(-t.x(), -t.y());
+    }
+
+    // Decide label density based on range (mirror logic from waypointDraw)
+    int currentScale = GetScale();
+    double currentRange = GetRange(currentScale);
+    bool showRouteNamesOnly = (currentRange >= 123.0);
+
+    QFont labelFont("Arial", 9, QFont::Bold);
+    QFontMetrics fm(labelFont);
+
+    for (const Waypoint &wp : waypointList) {
+        if (wp.routeId > 0 && !isRouteVisible(wp.routeId)) continue;
+        int x=0, y=0; if (!LatLonToXy(wp.lat, wp.lon, x, y)) continue;
+        if (!viewport.contains(x, y)) continue;
+
+        QColor waypointColor = wp.active ? getRouteColor(wp.routeId) : QColor(128,128,128);
+        QPen pen(waypointColor); pen.setWidth(2); painter.setPen(pen); painter.setBrush(Qt::NoBrush);
+        painter.drawEllipse(QPoint(x,y), 8, 8);
+
+        // Avoid double labels during dragging: only draw markers here, labels remain from base pixmap
+    }
+
+    painter.restore();
+}
+void EcWidget::savePois()
+{
+    QJsonArray poiArray;
+    for (const PoiEntry& p : poiList) {
+        if (p.id <= 0) continue;
+        QJsonObject o;
+        o["id"] = p.id;
+        o["label"] = p.label;
+        o["description"] = p.description;
+        o["category"] = static_cast<int>(p.category);
+        o["latitude"] = p.latitude;
+        o["longitude"] = p.longitude;
+        if (std::isfinite(p.depth)) o["depth"] = p.depth; else o["depth"] = QJsonValue();
+        o["flags"] = static_cast<int>(p.flags);
+        o["createdAt"] = p.createdAt.toString(Qt::ISODate);
+        o["updatedAt"] = p.updatedAt.toString(Qt::ISODate);
+        o["showLabel"] = p.showLabel;
+        poiArray.append(o);
+    }
+
+    QJsonObject root; root["pois"] = poiArray;
+    QJsonDocument doc(root);
+
+    QString filePath = getPOIFilePath();
+    QDir dir = QFileInfo(filePath).dir();
+    if (!dir.exists()) {
+        if (!dir.mkpath(".")) {
+            qDebug() << "[ERROR] Could not create directory for POIs:" << dir.path();
+            filePath = "pois.json"; // fallback
+        }
+    }
+
+    QFile file(filePath);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        file.write(doc.toJson(QJsonDocument::Indented));
+        file.close();
+        qDebug() << "[INFO] POIs saved to" << filePath;
+    } else {
+        qDebug() << "[ERROR] Failed to save POIs to" << filePath << ":" << file.errorString();
+        QFile fallback("pois.json");
+        if (fallback.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            fallback.write(doc.toJson(QJsonDocument::Indented));
+            fallback.close();
+            qDebug() << "[INFO] POIs saved to fallback location: pois.json";
+        }
+    }
+}
+
+void EcWidget::loadPois()
+{
+    QString filePath = getPOIFilePath();
+    QFile file(filePath);
+    if (!file.exists()) {
+        qDebug() << "[INFO] POI file not found. Starting with empty POI list.";
+        return;
+    }
+    if (!file.open(QIODevice::ReadOnly)) {
+        qDebug() << "[ERROR] Failed to open POI file:" << filePath;
+        return;
+    }
+    QByteArray data = file.readAll(); file.close();
+    QJsonDocument doc = QJsonDocument::fromJson(data);
+    if (!doc.isObject()) return;
+    QJsonArray arr = doc.object().value("pois").toArray();
+    poiList.clear();
+    int maxId = 0;
+    for (const auto& v : arr) {
+        QJsonObject o = v.toObject();
+        PoiEntry p;
+        p.id = o.value("id").toInt(-1);
+        p.label = o.value("label").toString();
+        p.description = o.value("description").toString();
+        p.category = static_cast<EcPoiCategory>(o.value("category").toInt(EC_POI_GENERIC));
+        p.latitude = o.value("latitude").toDouble(std::numeric_limits<double>::quiet_NaN());
+        p.longitude = o.value("longitude").toDouble(std::numeric_limits<double>::quiet_NaN());
+        if (o.contains("depth") && !o.value("depth").isNull()) p.depth = o.value("depth").toDouble(std::numeric_limits<double>::quiet_NaN());
+        p.flags = static_cast<UINT32>(o.value("flags").toInt(EC_POI_FLAG_ACTIVE | EC_POI_FLAG_PERSISTENT));
+        p.createdAt = QDateTime::fromString(o.value("createdAt").toString(), Qt::ISODate);
+        p.updatedAt = QDateTime::fromString(o.value("updatedAt").toString(), Qt::ISODate);
+        p.showLabel = o.contains("showLabel") ? o.value("showLabel").toBool(true) : true;
+        poiList.append(p);
+        if (p.id > maxId) maxId = p.id;
+    }
+    nextPoiId = qMax(nextPoiId, maxId + 1);
+    emit poiListChanged();
+    qDebug() << "[INFO] Loaded" << poiList.size() << "POIs from" << filePath;
+}
+
+QString EcWidget::getPOIFilePath() const
+{
+    QString basePath;
+#ifdef _WIN32
+    if (EcKernelGetEnv("APPDATA"))
+        basePath = QString(EcKernelGetEnv("APPDATA")) + "/SevenCs/EC2007/DENC";
+#else
+    if (EcKernelGetEnv("HOME"))
+        basePath = QString(EcKernelGetEnv("HOME")) + "/SevenCs/EC2007/DENC";
+#endif
+    if (basePath.isEmpty())
+        return "pois.json";
+    else
+        return basePath + "/pois.json";
 }
 
 double EcWidget::estimateDepthAt(EcCoordinate lat, EcCoordinate lon)
@@ -6948,7 +7126,7 @@ void EcWidget::buttonInit(){
     publishAction = new QAction(tr("Publish Waypoint"), this);
     insertWaypointAction = new QAction(tr("Insert Waypoint"), this);
     createRouteAction = new QAction(tr("Create Route"), this);
-    goHereAutoRouteAction = new QAction(tr("Go Here (Auto Route)"), this);
+    goHereAutoRouteAction = new QAction(tr("Auto Route to Here"), this);
     pickInfoAction = new QAction(tr("Map Information"), this);
     warningInfoAction = new QAction(tr("Caution and Restricted Info"), this);
     measureEblVrmAction = new QAction(tr("Measure Here"), this);
@@ -9880,7 +10058,7 @@ void EcWidget::iconUpdate(bool dark){
         insertWaypointAction->setIcon(QIcon(":/icon/create_wp_white.svg"));
         createRouteAction->setIcon(QIcon(":/icon/create_route_white.svg"));
         pickInfoAction->setIcon(QIcon(":/icon/info_white.svg"));
-        goHereAutoRouteAction->setIcon(QIcon(":/icon/create_route_white.svg"));
+        goHereAutoRouteAction->setIcon(QIcon(":/icon/auto_route_white.svg"));
         warningInfoAction->setIcon(QIcon(":/icon/warning_white.svg"));
         measureEblVrmAction->setIcon(QIcon(":/icon/measure_white.svg"));
 
@@ -9920,7 +10098,7 @@ void EcWidget::iconUpdate(bool dark){
         insertWaypointAction->setIcon(QIcon(":/icon/create_wp.svg"));
         createRouteAction->setIcon(QIcon(":/icon/create_route.svg"));
         pickInfoAction->setIcon(QIcon(":/icon/info.svg"));
-        goHereAutoRouteAction->setIcon(QIcon(":/icon/create_route.svg"));
+        goHereAutoRouteAction->setIcon(QIcon(":/icon/auto_route.svg"));
         warningInfoAction->setIcon(QIcon(":/icon/warning.svg"));
         measureEblVrmAction->setIcon(QIcon(":/icon/measure.svg"));
 

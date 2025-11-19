@@ -40,7 +40,7 @@ class QFile;
 // data server id
 
 #define DSID "0"
-#define APP_TITLE "ECDIS AUV v1.44"
+#define APP_TITLE "ECDIS AUV v1.45"
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20

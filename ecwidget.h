@@ -446,9 +446,16 @@ public:
   bool updatePoi(int poiId, const PoiEntry& poi);
   bool removePoi(int poiId);
   bool setPoiActive(int poiId, bool active);
+  bool setPoiLabelVisible(int poiId, bool show);
   QVector<PoiEntry> poiEntries() const;
   PoiEntry poiEntry(int poiId) const;
   bool focusPoi(int poiId);
+  void setShowPoiLabels(bool on) { showPoiLabels = on; update(); }
+  bool getShowPoiLabels() const { return showPoiLabels; }
+  // POI persistence
+  void savePois();
+  void loadPois();
+  QString getPOIFilePath() const;
   double estimateDepthAt(EcCoordinate lat, EcCoordinate lon);
 
   DisplayOrientationMode displayOrientation = NorthUp;
@@ -1115,6 +1122,7 @@ public:
 
   // Route Deviation Detector
   void drawRouteDeviationIndicator(QPainter& painter);
+  void drawWaypointsOverlay(QPainter& painter);
   void initializeRouteDeviationDetector();
   void createCircularGuardZone(EcCoordinate lat, EcCoordinate lon, double radius);
   void createPolygonGuardZone();
@@ -1230,6 +1238,7 @@ public:
   QVector<PoiEntry> poiList;
   int nextPoiId = 1;
   int highlightedPoiId = -1;
+  bool showPoiLabels = true;
 
   AOI *lastAoiList;
   int lastBestSeg;

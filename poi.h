@@ -134,6 +134,7 @@ struct PoiEntry
     EcPoiHandle handle = nullptr;
     QDateTime createdAt = QDateTime::currentDateTimeUtc();
     QDateTime updatedAt = createdAt;
+    bool showLabel = true;
 };
 
 #endif // POI_H

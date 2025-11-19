@@ -37,6 +37,7 @@
 #include "aivdoencoder.h"
 #include "appconfig.h"
 #include "compasswidget.h"
+#include "aoi.h"
 
 #include <dwmapi.h>
 #pragma comment(lib, "Dwmapi.lib")
@@ -161,19 +162,19 @@ void MainWindow::createActions()
     routeAct->setToolTip(tr("Routes Manager"));
 
     const QIcon areaIcon = QIcon::fromTheme("import-area", QIcon(":/images/area.svg"));
-    areaAct = new QAction(areaIcon, tr("&area"), this);
+    areaAct = new QAction(areaIcon, tr("&Area Object"), this);
     areaAct->setShortcuts(QKeySequence::New);
     //areaAct->setStatusTip(tr("route MOOSDB"));
     connect(areaAct, SIGNAL(triggered()), this, SLOT(onOpenAOIPanel()));
     fileToolBar->addAction(areaAct);
-    areaAct->setToolTip(tr("Area Tools Manager"));
+    areaAct->setToolTip(tr("Feature Objects Tools Manager"));
 
     const QIcon poiIcon = QIcon::fromTheme("import-poi", QIcon(":/icon/info.svg"));
-    poiAct = new QAction(poiIcon, tr("&poi"), this);
+    poiAct = new QAction(poiIcon, tr("&Point Object"), this);
     poiAct->setShortcuts(QKeySequence::New);
     connect(poiAct, SIGNAL(triggered()), this, SLOT(onOpenPOIPanel()));
     fileToolBar->addAction(poiAct);
-    poiAct->setToolTip(tr("Point of Interest Panel"));
+    poiAct->setToolTip(tr("Point Object Panel"));
 
     const QIcon connectIcon = QIcon::fromTheme("import-connect", QIcon(":/images/connect.png"));
     connectAct = new QAction(connectIcon, tr("&Connect"), this);
@@ -199,7 +200,7 @@ void MainWindow::createActions()
     fileToolBar->addAction(settingAct);
     settingAct->setToolTip(tr("Settings Manager"));
 
-    addPoiAction = new QAction(tr("Add Point of Interest"), this);
+    addPoiAction = new QAction(tr("Add Point Object"), this);
 
     // const QIcon saveIcon = QIcon::fromTheme("document-save", QIcon(":/images/save.png"));
     // QAction *saveAct = new QAction(saveIcon, tr("&Save..."), this);
@@ -590,11 +591,10 @@ void MainWindow::createMenuBar(){
         }
     });
 
-    // ================================== AOI MENU
-    QMenu *aoiMenu = navMenu->addMenu("&Area Tools");
-    aoiMenu->addAction("Create by Click", this, SLOT(onCreateAOIByClick()));
-    aoiMenu->addAction("Open Area Panel", this, SLOT(onOpenAOIPanel()));
-    aoiMenu->addAction("Open Point of Interest Panel", this, SLOT(onOpenPOIPanel()));
+    // ================================== Area/Point Objects MENU
+    QMenu *aoiMenu = navMenu->addMenu("&Feature Objects Tools");
+    aoiMenu->addAction("Open Area Object Panel", this, SLOT(onOpenAOIPanel()));
+    aoiMenu->addAction("Open Point Object Panel", this, SLOT(onOpenPOIPanel()));
     QAction* toggleAllLabels = aoiMenu->addAction("Show Labels");
     toggleAllLabels->setCheckable(true);
     toggleAllLabels->setChecked(true);
@@ -1056,7 +1056,7 @@ void MainWindow::createMenuBar(){
     aboutMenu->addAction("Release Notes", this, SLOT(openReleaseNotesDialog()) );
     //aboutMenu->addAction("Debug", this, SLOT(fetchNmea()) );
 
-    // Set default â†’ dark
+    // Set default dark
     if (AppConfig::isDark()){
         darkAction->setChecked(true);
         setDarkMode();
@@ -2401,7 +2401,7 @@ void MainWindow::onRotateCW()
   hdg += 10;
   if (hdg >= 360) hdg -= 360.0;
   ecchart->SetHeading(hdg);
-  oriEdit->setText(QString("%1Â°").arg(hdg));
+  oriEdit->setText(QString("%1°").arg(hdg));
 
   // COMPASS
   if (compass != nullptr){
@@ -2413,7 +2413,7 @@ void MainWindow::onRotateCW()
 }
 
 void MainWindow::oriEditSetText(const double &txt){
-    oriEdit->setText(QString("%1Â°").arg(txt));
+    oriEdit->setText(QString("%1°").arg(txt));
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2424,7 +2424,7 @@ void MainWindow::onRotateCCW()
   hdg -= 10;
   if (hdg < 0) hdg += 360.0;
   ecchart->SetHeading(hdg);
-  oriEdit->setText(QString("%1Â°").arg(hdg));
+  oriEdit->setText(QString("%1°").arg(hdg));
 
   // COMPASS
   if (compass != nullptr){
@@ -2699,8 +2699,10 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
         }
         contextMenu.addSeparator();
 
-        const QIcon addPoiIcon = QIcon::fromTheme("add-poi", QIcon(":/icon/create_route.svg"));
+        const QIcon addAreaIcon = QIcon(AppConfig::isDark() ? ":/icon/add_area_white.svg" : ":/icon/add_area.svg");
+        QAction* addAreaAction = contextMenu.addAction(addAreaIcon, tr("Add Area Object"));
 
+        const QIcon addPoiIcon = QIcon::fromTheme("add-poi", QIcon(":/icon/add_poi.svg"));
         contextMenu.addAction(addPoiAction);
         contextMenu.addSeparator();
         contextMenu.addAction(ecchart->pickInfoAction);
@@ -2724,19 +2726,50 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
         else if (selectedAction == ecchart->goHereAutoRouteAction) {
             ecchart->startAutoRouteWorkflow(pos);
         }
+        else if (selectedAction == addAreaAction) {
+            QDialog dialog(this);
+            dialog.setWindowTitle(tr("Add Area Object"));
+
+            QFormLayout form(&dialog);
+            QLineEdit* nameEdit = new QLineEdit(&dialog);
+            nameEdit->setText(QString("Area Object %1").arg(ecchart->getNextAoiId()));
+            QComboBox* colorCombo = new QComboBox(&dialog);
+            colorCombo->addItem("🔴 Red", "Red");
+            colorCombo->addItem("🔵 Blue", "Blue");
+            colorCombo->addItem("🟢 Green", "Green");
+            colorCombo->addItem("🟡 Yellow", "Yellow");
+            colorCombo->addItem("🟠 Orange", "Orange");
+            form.addRow(tr("Name"), nameEdit);
+            form.addRow(tr("Color"), colorCombo);
+
+            QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+            form.addRow(&buttons);
+            connect(&buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+            connect(&buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+            if (dialog.exec() != QDialog::Accepted) {
+                return;
+            }
+
+            QString name = nameEdit->text().trimmed();
+            if (name.isEmpty()) name = "Area";
+            AOIColorChoice choice = aoiColorChoiceFromString(colorCombo->currentData().toString());
+            ecchart->startAOICreationWithColor(name, choice);
+            statusBar()->showMessage(tr("Area Object mode: Left-click to add points, Right-click to finish (min 3 points)"), 4000);
+        }
         else if (selectedAction == addPoiAction) {
             EcCoordinate lat = 0.0;
             EcCoordinate lon = 0.0;
             if (!ecchart->XyToLatLon(pos.x(), pos.y(), lat, lon)) {
-                statusBar()->showMessage(tr("Unable to determine POI position"), 3000);
+                statusBar()->showMessage(tr("Unable to determine Point Object position"), 3000);
                 return;
             }
 
             const double depth = ecchart->estimateDepthAt(lat, lon);
-            const QString defaultName = QString("POI %1").arg(ecchart->poiEntries().size() + 1);
+            const QString defaultName = QString("Point Object %1").arg(ecchart->poiEntries().size() + 1);
 
             QDialog dialog(this);
-            dialog.setWindowTitle(tr("Add Point of Interest"));
+            dialog.setWindowTitle(tr("Add Point Object"));
 
             QFormLayout form(&dialog);
 
@@ -2786,9 +2819,9 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
 
             const int poiId = ecchart->addPoi(poi);
             if (poiId >= 0) {
-                statusBar()->showMessage(tr("POI \"%1\" added").arg(poi.label), 3000);
+                statusBar()->showMessage(tr("Point Object \"%1\" added").arg(poi.label), 3000);
             } else {
-                QMessageBox::warning(this, tr("Add POI"), tr("Failed to create POI."));
+                QMessageBox::warning(this, tr("Add Point Object"), tr("Failed to create Point Object."));
             }
         }
         else if (selectedAction == ecchart->pickInfoAction){
@@ -3832,7 +3865,7 @@ void MainWindow::setupPOIPanel()
         return;
     }
 
-    poiDock = new QDockWidget(tr("Points of Interest"), this);
+    poiDock = new QDockWidget(tr("Point Objects"), this);
     poiDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     poiPanel = new POIPanel(ecchart, poiDock);
     poiDock->setWidget(poiPanel);
@@ -3940,7 +3973,7 @@ void MainWindow::onCreateAOIByClick()
     QObject::connect(ok, &QPushButton::clicked, &dlg, &QDialog::accept);
     QObject::connect(cancel, &QPushButton::clicked, &dlg, &QDialog::reject);
     if (dlg.exec() != QDialog::Accepted) return;
-    QString name = nameEdit->text().trimmed(); if (name.isEmpty()) name = "Area";
+    QString name = nameEdit->text().trimmed(); if (name.isEmpty()) name = "Area Objects";
     AOIType type = aoiTypeFromString(typeCombo->currentData().toString());
     ecchart->startAOICreation(name, type);
 }
@@ -3952,7 +3985,7 @@ void MainWindow::onOpenAOIPanel()
         if (!ecchart) return;
 
         // AOI panel parent = aoiDock, bukan MainWindow (lebih aman)
-        aoiDock = new QDockWidget(tr("Area"), this);
+        aoiDock = new QDockWidget(tr("Area Objects"), this);
         aoiPanel = new AOIPanel(ecchart, aoiDock);
         aoiDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
         aoiDock->setWidget(aoiPanel);
@@ -4017,6 +4050,7 @@ void MainWindow::onToggleAoiLabels(bool checked)
 {
     if (!ecchart) return;
     ecchart->setShowAoiLabels(checked);
+    ecchart->setShowPoiLabels(checked);
 }
 
 
@@ -4111,7 +4145,7 @@ void MainWindow::setupAISTargetPanel()
         if (guardZoneDock && aisTargetDock) {
             qDebug() << "[TABIFY] Creating tabbed interface for GuardZone and AIS Target";
             tabifyDockWidget(guardZoneDock, aisTargetDock);
-            qDebug() << "[TABIFY] âœ… Tabified GuardZone with AIS Target Detail";
+            qDebug() << "[TABIFY] Tabified GuardZone with AIS Target Detail";
             
             // Set GuardZone as active tab for this group
             guardZoneDock->raise();
@@ -4279,8 +4313,8 @@ void MainWindow::setupTestingMenu()
         if (ecchart) {
             bool isValid = ecchart->validateGuardZoneSystem();
             QString message = isValid ?
-                                  tr("âœ“ GuardZone system validation passed") :
-                                  tr("âœ— GuardZone system validation failed - check debug output");
+                                  tr("GuardZone system validation passed") :
+                                  tr("GuardZone system validation failed - check debug output");
 
             QMessageBox::information(this, tr("System Validation"), message);
         }
@@ -4368,7 +4402,7 @@ void MainWindow::setupTestingMenu()
         }
     });
 
-    debugMenu->addAction("âš ï¸ Test GuardZone Alert", [this]() {
+    debugMenu->addAction("Test GuardZone Alert", [this]() {
         if (ecchart) {
             ecchart->triggerGuardZoneAlert(1, "AIS target detected within GuardZone boundaries");
         }
@@ -4391,7 +4425,7 @@ void MainWindow::setupTestingMenu()
         }
     });
 
-    debugMenu->addAction("âœ… Test Alert Acknowledge/Resolve", [this]() {
+    debugMenu->addAction("Test Alert Acknowledge/Resolve", [this]() {
         testAlertWorkflow();
     });
 
@@ -4442,7 +4476,7 @@ void MainWindow::setupTestingMenu()
         }
     });
 
-    debugMenu->addAction("âž• Manual Add Alert to Panel", [this]() {
+    debugMenu->addAction("Manual Add Alert to Panel", [this]() {
         if (!alertPanel) {
             QMessageBox::warning(this, "Error", "Alert Panel not available");
             return;
@@ -4595,7 +4629,7 @@ void MainWindow::showSystemStatistics()
 
     // Validation
     bool isValid = ecchart->validateGuardZoneSystem();
-    stats += tr("\nSystem Validation: %1\n").arg(isValid ? "âœ“ PASSED" : "âœ— FAILED");
+    stats += tr("\nSystem Validation: %1\n").arg(isValid ? "PASSED" : "FAILED");
 
     QMessageBox msgBox(this);
     msgBox.setWindowTitle(tr("GuardZone System Statistics"));
@@ -4809,7 +4843,7 @@ void MainWindow::setupAlertPanel()
                                  alertPanel, &AlertPanel::onAlertSystemStatusChanged,
                                  Qt::QueuedConnection);
 
-            qDebug() << "[MAIN] Direct AlertSystemâ†’Panel connections:" << conn4 << conn5;
+            qDebug() << "[MAIN] Direct AlertSystem - Panel connections:" << conn4 << conn5;
 
         } else {
             qDebug() << "[MAIN] AlertSystem is null - limited signal connections";
@@ -5257,7 +5291,7 @@ void MainWindow::checkCPATCPAAlarms()
 
 void MainWindow::logCPATCPAInfo(const QString& mmsi, const CPATCPAResult& result)
 {
-    QString logText = QString("MMSI %1: CPA=%.2f NM, TCPA=%.1f min, Range=%.2f NM, Bearing=%.0fÂ°")
+    QString logText = QString("MMSI %1: CPA=%.2f NM, TCPA=%.1f min, Range=%.2f NM, Bearing=%.0f°")
                           .arg(mmsi)
                           .arg(result.cpa)
                           .arg(result.tcpa)
@@ -5302,7 +5336,7 @@ void MainWindow::processTestTarget(const VesselState& ownShip)
         }
 
         if (isDangerous) {
-            QString alarmText = "âš ï¸ CPA/TCPA ALARM: Test target is dangerous!";
+            QString alarmText = "CPA/TCPA ALARM: Test target is dangerous!";
             addTextToBar(alarmText);
             statusBar()->showMessage(alarmText, 5000);
         }
@@ -5345,7 +5379,7 @@ void MainWindow::processAISTarget(const VesselState& ownShip, const AISTargetDat
         }
 
         if (isDangerous) {
-            QString alarmText = QString("âš ï¸ CPA/TCPA ALARM: AIS Target %1 is dangerous! CPA=%.2f NM, TCPA=%.1f min")
+            QString alarmText = QString("CPA/TCPA ALARM: AIS Target %1 is dangerous! CPA=%.2f NM, TCPA=%.1f min")
                                     .arg(target.mmsi)
                                     .arg(result.cpa)
                                     .arg(result.tcpa);
@@ -5393,9 +5427,9 @@ void MainWindow::setupCPATCPAPanel()
         qDebug() << "[SETUP-CPA] Attempting to tabify CPA/TCPA with Route Panel";
         tabifyDockWidget(routeDock, m_cpatcpaDock);
         m_cpatcpaDock->raise(); // Make CPA/TCPA the active tab
-        qDebug() << "[SETUP-CPA] âœ… CPA/TCPA tabified with Route Panel";
+        qDebug() << "[SETUP-CPA] CPA/TCPA tabified with Route Panel";
     } else {
-        qDebug() << "[SETUP-CPA] âŒ Route Panel not available for tabify";
+        qDebug() << "[SETUP-CPA] Route Panel not available for tabify";
     }
 }
 
@@ -5803,8 +5837,8 @@ void MainWindow::updateIcon(bool dark){
         settingAct->setIcon(QIcon(":/images/setting-white.png"));
         routeAct->setIcon(QIcon(":/images/route-white.png"));
         areaAct->setIcon(QIcon(":/images/area-white.svg"));
-        poiAct->setIcon(QIcon(":/icon/info_white.svg"));
-        addPoiAction->setIcon(QIcon(":/icon/create_route_white.svg"));
+        poiAct->setIcon(QIcon(":/icon/poi_white.svg"));
+        addPoiAction->setIcon(QIcon(":/icon/add_poi_white.svg"));
 
         if (m_playerState == PlayerState::Playing){
             m_playPauseButton->setIcon(QIcon(":/icon/pause_white.svg"));
@@ -5826,8 +5860,8 @@ void MainWindow::updateIcon(bool dark){
         settingAct->setIcon(QIcon(":/images/setting.png"));
         routeAct->setIcon(QIcon(":/images/route.png"));
         areaAct->setIcon(QIcon(":/images/area.svg"));
-        poiAct->setIcon(QIcon(":/icon/info.svg"));
-        addPoiAction->setIcon(QIcon(":/icon/create_route.svg"));
+        poiAct->setIcon(QIcon(":/icon/poi.svg"));
+        addPoiAction->setIcon(QIcon(":/icon/add_poi.svg"));
 
         if (m_playerState == PlayerState::Playing){
             m_playPauseButton->setIcon(QIcon(":/icon/pause.svg"));

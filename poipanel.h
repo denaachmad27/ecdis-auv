@@ -39,6 +39,7 @@ private:
     QPushButton* editBtn = nullptr;
     QPushButton* deleteBtn = nullptr;
     QPushButton* focusBtn = nullptr;
+    bool populating = false;
 
     int currentPoiId() const;
     void populateTree();

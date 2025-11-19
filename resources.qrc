@@ -68,5 +68,13 @@
         <file>icon/play.svg</file>
         <file>icon/refresh_white.svg</file>
         <file>icon/refresh.svg</file>
+        <file>icon/auto_route.svg</file>
+        <file>icon/auto_route_white.svg</file>
+        <file>icon/add_poi.svg</file>
+        <file>icon/add_poi_white.svg</file>
+        <file>icon/poi.svg</file>
+        <file>icon/poi_white.svg</file>
+        <file>icon/add_area_white.svg</file>
+        <file>icon/add_area.svg</file>
     </qresource>
 </RCC>
