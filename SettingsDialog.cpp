@@ -11,6 +11,7 @@
 #include <QFileDialog>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
+#include <QGridLayout>
 #include <QFormLayout>
 #include <QDialogButtonBox>
 #include <QSettings>
@@ -40,6 +41,9 @@ void SettingsDialog::setupUI() {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
     QTabWidget *tabWidget = new QTabWidget(this);
 
+    // Make all QGroupBox titles bold without affecting child widget fonts
+    this->setStyleSheet("QGroupBox::title { font-weight: bold; }");
+
     // =========== MOOSDB TAB =========== //
     QWidget *moosTab = new QWidget;
     QFormLayout *moosLayout = new QFormLayout;
@@ -56,7 +60,7 @@ void SettingsDialog::setupUI() {
     QVBoxLayout *ownShipLayout = new QVBoxLayout(ownShipTab);
 
     // Chart Display
-    QGroupBox *chartDisplayGroup = new QGroupBox(tr("Chart Display Mode"));
+    QGroupBox *chartDisplayGroup = new QGroupBox(tr("Navigation Mode"));
     QFormLayout *chartDisplayForm = new QFormLayout(chartDisplayGroup);
 
     centeringCombo = new QComboBox;
@@ -132,7 +136,7 @@ void SettingsDialog::setupUI() {
     });
 
     // Data View
-    QGroupBox *dataViewGroup = new QGroupBox(tr("Data View"));
+    QGroupBox *dataViewGroup = new QGroupBox(tr("Data View Format"));
     QFormLayout *dataViewForm = new QFormLayout(dataViewGroup);
 
     latViewCombo = new QComboBox;
@@ -150,19 +154,15 @@ void SettingsDialog::setupUI() {
     //
 
     //ownShipTab->setLayout(ownShipLayout);
-    ownShipLayout->addWidget(chartDisplayGroup);
-    ownShipLayout->addWidget(trackLineGroup);
-    ownShipLayout->addWidget(dataViewGroup);
-
+    // Navigation Mode moved to Display tab; Track Line to Ownship (Ship Dimensions); Data View to Display
     ownShipLayout->setSpacing(10);
-    ownShipLayout->addStretch();
 
     // =========== SHIP DIMENSION TAB =========== //
     QWidget *shipDimensionsTab = new QWidget;
     QVBoxLayout *shipDimensionsLayout = new QVBoxLayout(shipDimensionsTab);
 
     // Ship Dimensions Group
-    QGroupBox *dimensionsGroup = new QGroupBox(tr("Vessel Dimensions (restart required)"));
+    QGroupBox *dimensionsGroup = new QGroupBox(tr("Vessel Dimensions"));
     QFormLayout *dimensionsForm = new QFormLayout(dimensionsGroup);
     shipLengthSpin = new QDoubleSpinBox;
     shipLengthSpin->setRange(1.0, 2000.0); shipLengthSpin->setSuffix(" m");
@@ -174,14 +174,28 @@ void SettingsDialog::setupUI() {
     dimensionsForm->addRow(tr("Beam (meters):"), shipBeamSpin);
     dimensionsForm->addRow(tr("Overall Height (meters):"), shipHeightSpin);
 
-    // Turning Prediction Group
-    QGroupBox *turningPredictionGroup = new QGroupBox(tr("Turning Radius Prediction"));
-    QFormLayout *turningPredictionForm = new QFormLayout(turningPredictionGroup);
+    // Turning Prediction header (title left, checkbox right)
+    QWidget *turningHeaderWidget = new QWidget;
+    QHBoxLayout *turningHeaderLayout = new QHBoxLayout(turningHeaderWidget);
+    turningHeaderLayout->setContentsMargins(0, 0, 0, 0);
+    QLabel *turningHeaderLabel = new QLabel(tr("Turning Radius Prediction"));
+    QFont turningHeaderFont = turningHeaderLabel->font();
+    turningHeaderFont.setBold(true);
+    turningHeaderLabel->setFont(turningHeaderFont);
+    turningHeaderLabel->setStyleSheet("font-weight: bold;");
+    showTurningPredictionCheckBox = new QCheckBox(tr("Enable"));
+    turningHeaderLayout->addWidget(turningHeaderLabel);
+    turningHeaderLayout->addStretch();
+    turningHeaderLayout->addWidget(showTurningPredictionCheckBox);
 
-    showTurningPredictionCheckBox = new QCheckBox(tr("Show Turning Prediction"));
-    showTurningPredictionCheckBox->setChecked(false); // Default disabled
-    showTurningPredictionCheckBox->setToolTip(tr("Display predicted ship path when turning (requires ROT data)"));
-    turningPredictionForm->addRow("", showTurningPredictionCheckBox);
+    // Group content without title
+    turningPredictionGroup = new QGroupBox("");
+    turningPredictionGroup->setObjectName("turningPredictionContent");
+    turningPredictionGroup->setStyleSheet("QGroupBox#turningPredictionContent { padding-top: 15px; margin-top: 0px; }");
+    QFormLayout *turningPredictionForm = new QFormLayout(turningPredictionGroup);
+    int tpLeft, tpTop, tpRight, tpBottom;
+    turningPredictionForm->getContentsMargins(&tpLeft, &tpTop, &tpRight, &tpBottom);
+    turningPredictionForm->setContentsMargins(tpLeft, 0, tpRight, tpBottom);
 
     predictionTimeLabel = new QLabel(tr("Prediction Time:"));
     predictionTimeSpin = new QSpinBox;
@@ -214,49 +228,17 @@ void SettingsDialog::setupUI() {
     predictionDensityLabel->setEnabled(showTurningPredictionCheckBox->isChecked());
     predictionDensityCombo->setEnabled(showTurningPredictionCheckBox->isChecked());
 
-    // Navigation Safety Variables Group
-    QGroupBox *navSafetyGroup = new QGroupBox(tr("Navigation Safety Parameters (restart required)"));
-    QFormLayout *navSafetyForm = new QFormLayout(navSafetyGroup);
-
-    navDepthSpin = new QDoubleSpinBox;
-    navDepthSpin->setRange(0.0, 500.0);
-    navDepthSpin->setDecimals(2);
-    navDepthSpin->setSingleStep(0.5);
-    navDepthSpin->setSuffix(" m");
-    navDepthSpin->setToolTip(tr("Current water depth (NAV_DEPTH from MOOSDB)"));
-
-    navDraftSpin = new QDoubleSpinBox;
-    navDraftSpin->setRange(0.0, 50.0);
-    navDraftSpin->setDecimals(2);
-    navDraftSpin->setSingleStep(0.1);
-    navDraftSpin->setSuffix(" m");
-    navDraftSpin->setToolTip(tr("Ship draft - deepest part below waterline (NAV_DRAFT)"));
-
-    navDraftBelowKeelSpin = new QDoubleSpinBox;
-    navDraftBelowKeelSpin->setRange(0.0, 20.0);
-    navDraftBelowKeelSpin->setDecimals(2);
-    navDraftBelowKeelSpin->setSingleStep(0.1);
-    navDraftBelowKeelSpin->setSuffix(" m");
-    navDraftBelowKeelSpin->setToolTip(tr("Desired minimum clearance below keel (NAV_DRAFT_BELOW_KEEL)"));
-
-    navSafetyForm->addRow(tr("NAV_DEPTH (Water Depth):"), navDepthSpin);
-    navSafetyForm->addRow(tr("NAV_DRAFT (Ship Draft):"), navDraftSpin);
-    navSafetyForm->addRow(tr("NAV_DRAFT_BELOW_KEEL (Clearance):"), navDraftBelowKeelSpin);
-
-    // Connect to update RouteSafetyFeature when values change
-    connect(navDepthSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-            this, &SettingsDialog::onNavDepthChanged);
-    connect(navDraftSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-            this, &SettingsDialog::onNavDraftChanged);
-    connect(navDraftBelowKeelSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-            this, &SettingsDialog::onNavDraftBelowKeelChanged);
+    // Navigation Safety group removed as requested
 
     // GPS Configuration Group
-    QGroupBox *gpsGroup = new QGroupBox(tr("GPS Antenna Positions (restart required)"));
+    QGroupBox *gpsGroup = new QGroupBox(tr("GPS Antenna Positions"));
     QVBoxLayout *gpsLayout = new QVBoxLayout(gpsGroup);
     gpsTableWidget = new QTableWidget;
     gpsTableWidget->setColumnCount(3);
     gpsTableWidget->setHorizontalHeaderLabels({"Name", "Offset X (Centerline)", "Offset Y (Bow)"});
+    // Ensure "Offset X (Centerline)" header is fully visible when dialog opens
+    QHeaderView *gpsHeaderView = gpsTableWidget->horizontalHeader();
+    gpsHeaderView->setSectionResizeMode(1, QHeaderView::ResizeToContents);
     gpsTableWidget->horizontalHeader()->setStretchLastSection(true);
     QHBoxLayout *gpsButtons = new QHBoxLayout;
     QPushButton *addGpsButton = new QPushButton(tr("Add GPS"));
@@ -273,29 +255,78 @@ void SettingsDialog::setupUI() {
     gpsLayout->addWidget(gpsTableWidget);
     gpsLayout->addLayout(gpsButtons);
 
+    // Align Ownship fields so inputs start at the same x as the
+    // "Primary Reference (CCRP)" input by giving all forms' labels
+    // the same minimum width as the Primary Reference label.
+    {
+        int refWidth = 0;
+        if (QLayoutItem* primaryLabelItem = primaryGpsForm->itemAt(0, QFormLayout::LabelRole)) {
+            if (QWidget* primaryLabel = primaryLabelItem->widget()) refWidth = primaryLabel->sizeHint().width();
+        }
+        if (refWidth == 0) {
+            QFontMetrics fm(dimensionsGroup->font());
+            refWidth = fm.horizontalAdvance(tr("Primary Reference (CCRP):"));
+        }
+
+        auto applyLabelWidth = [&](QFormLayout* form) {
+            if (!form) return;
+            for (int i = 0; i < form->rowCount(); ++i) {
+                if (QLayoutItem* li = form->itemAt(i, QFormLayout::LabelRole)) {
+                    if (QWidget* w = li->widget()) w->setMinimumWidth(refWidth);
+                }
+            }
+        };
+
+        applyLabelWidth(dimensionsForm);
+        applyLabelWidth(turningPredictionForm);
+        applyLabelWidth(trackLineForm);
+        applyLabelWidth(primaryGpsForm);
+    }
+
+    // Ownship tab section order: Vessel Dimensions, Track Line, Turning Prediction, GPS
     shipDimensionsLayout->addWidget(dimensionsGroup);
-    shipDimensionsLayout->addWidget(turningPredictionGroup);
+    shipDimensionsLayout->addWidget(trackLineGroup);
+    // Container to tightly couple header and group with minimal spacing
+    QWidget *turningContainer = new QWidget;
+    QVBoxLayout *turningContainerLayout = new QVBoxLayout(turningContainer);
+    turningContainerLayout->setContentsMargins(0, 0, 0, 0);
+    turningContainerLayout->setSpacing(0); // reduce gap between title and group border
+    turningContainerLayout->addWidget(turningHeaderWidget);
+    turningContainerLayout->addWidget(turningPredictionGroup);
+    shipDimensionsLayout->addWidget(turningContainer);
 
-    // Collision Risk Group
-    QGroupBox *collisionRiskGroup = new QGroupBox(tr("Collision Risk Indication"));
-    QFormLayout *collisionRiskForm = new QFormLayout(collisionRiskGroup);
+    // Collision Risk header (title left, enable checkbox right)
+    QWidget *collisionHeaderWidget = new QWidget;
+    QHBoxLayout *collisionHeaderLayout = new QHBoxLayout(collisionHeaderWidget);
+    collisionHeaderLayout->setContentsMargins(0, 0, 0, 0);
+    QLabel *collisionHeaderLabel = new QLabel(tr("Collision Risk Indication"));
+    QFont collisionHeaderFont = collisionHeaderLabel->font();
+    collisionHeaderFont.setBold(true);
+    collisionHeaderLabel->setFont(collisionHeaderFont);
+    collisionHeaderLabel->setStyleSheet("font-weight: bold;");
 
-    enableCollisionRiskCheckBox = new QCheckBox(tr("Enable Collision Risk Detection"));
-    enableCollisionRiskCheckBox->setChecked(true);
+    enableCollisionRiskCheckBox = new QCheckBox(tr("Enable"));
+    enableCollisionRiskCheckBox->setChecked(false);
     enableCollisionRiskCheckBox->setToolTip(tr("Display collision risk warnings during navigation"));
-    collisionRiskForm->addRow("", enableCollisionRiskCheckBox);
+    collisionHeaderLayout->addWidget(collisionHeaderLabel);
+    collisionHeaderLayout->addStretch();
+    collisionHeaderLayout->addWidget(enableCollisionRiskCheckBox);
+
+    // Collision Risk content
+    QGroupBox *collisionRiskGroup = new QGroupBox("");
+    QFormLayout *collisionRiskForm = new QFormLayout(collisionRiskGroup);
+    int crLeft, crTop, crRight, crBottom;
+    collisionRiskForm->getContentsMargins(&crLeft, &crTop, &crRight, &crBottom);
+    collisionRiskForm->setContentsMargins(crLeft, 0, crRight, crBottom);
 
     showRiskSymbolsCheckBox = new QCheckBox(tr("Show Risk Warning Symbols"));
     showRiskSymbolsCheckBox->setChecked(true);
-    collisionRiskForm->addRow("", showRiskSymbolsCheckBox);
 
     enableAudioAlertsCheckBox = new QCheckBox(tr("Enable Audio Alerts"));
     enableAudioAlertsCheckBox->setChecked(false);
-    collisionRiskForm->addRow("", enableAudioAlertsCheckBox);
 
     enablePulsingWarningsCheckBox = new QCheckBox(tr("Enable Pulsing Warnings"));
     enablePulsingWarningsCheckBox->setChecked(true);
-    collisionRiskForm->addRow("", enablePulsingWarningsCheckBox);
 
     criticalRiskDistanceSpin = new QDoubleSpinBox;
     criticalRiskDistanceSpin->setRange(0.01, 1.0);
@@ -331,8 +362,18 @@ void SettingsDialog::setupUI() {
         criticalTimeSpin->setEnabled(enabled);
     });
 
-    shipDimensionsLayout->addWidget(collisionRiskGroup);
-    shipDimensionsLayout->addWidget(navSafetyGroup);
+    // Place remaining checkboxes at the bottom (three rows)
+    QWidget *riskBottomWidget = new QWidget;
+    QVBoxLayout *riskBottomLayout = new QVBoxLayout(riskBottomWidget);
+    riskBottomLayout->setContentsMargins(0, 0, 0, 0);
+    riskBottomLayout->setSpacing(4);
+    riskBottomLayout->addWidget(showRiskSymbolsCheckBox);
+    riskBottomLayout->addWidget(enableAudioAlertsCheckBox);
+    riskBottomLayout->addWidget(enablePulsingWarningsCheckBox);
+    collisionRiskForm->addRow("", riskBottomWidget);
+
+    // Place groups into appropriate tabs
+    // CollisionRisk moved to AIS Target tab below
     shipDimensionsLayout->addWidget(gpsGroup);
 
     if (AppConfig::isDevelopment()){
@@ -448,18 +489,55 @@ void SettingsDialog::setupUI() {
     // ================ DISPLAY TAB ======================
     QWidget *displayTab = new QWidget;
     QFormLayout *displayLayout = new QFormLayout;
+
+    // Theme group
+    QGroupBox *themeGroup = new QGroupBox(tr("Theme"));
+    QFormLayout *themeForm = new QFormLayout(themeGroup);
     displayModeCombo = new QComboBox;
     displayModeCombo->addItems({"Day", "Dusk", "Night"});
-    displayLayout->addRow("Default Chart Theme:", displayModeCombo);
+    themeForm->addRow(tr("Default Chart Theme:"), displayModeCombo);
 
     themeModeCombo = new QComboBox;
     themeModeCombo->addItems({"Light", "Dim", "Dark"});
-    displayLayout->addRow("Default UI Theme:", themeModeCombo);
+    themeForm->addRow(tr("Default UI Theme:"), themeModeCombo);
 
+    // Merge Navigation Mode from Own Ship with Chart Move Mode
     chartCombo = new QComboBox;
     chartCombo->addItem("Drag", "Drag");
     chartCombo->addItem("Pan", "Pan");
-    displayLayout->addRow("Chart Move Mode:", chartCombo);
+    chartDisplayForm->addRow(tr("Chart Move Mode:"), chartCombo);
+
+    // Display tab section order: Navigation Mode, Data View Format, Theme
+    displayLayout->addRow(chartDisplayGroup);
+    // Add Data View Format group to Display tab
+    displayLayout->addRow(dataViewGroup);
+    displayLayout->addRow(themeGroup);
+
+    // Align Display tab fields so inputs start at the same x as
+    // the "Default Chart Theme:" input by normalizing label widths
+    {
+        int refWidth = 0;
+        if (QLayoutItem* lblItem = themeForm->itemAt(0, QFormLayout::LabelRole)) {
+            if (QWidget* lbl = lblItem->widget()) refWidth = lbl->sizeHint().width();
+        }
+        if (refWidth == 0) {
+            QFontMetrics fm(themeGroup->font());
+            refWidth = fm.horizontalAdvance(tr("Default Chart Theme:"));
+        }
+
+        auto applyLabelWidth = [&](QFormLayout* form) {
+            if (!form) return;
+            for (int i = 0; i < form->rowCount(); ++i) {
+                if (QLayoutItem* li = form->itemAt(i, QFormLayout::LabelRole)) {
+                    if (QWidget* w = li->widget()) w->setMinimumWidth(refWidth);
+                }
+            }
+        };
+
+        applyLabelWidth(themeForm);
+        applyLabelWidth(chartDisplayForm);
+        applyLabelWidth(dataViewForm);
+    }
     displayTab->setLayout(displayLayout);
 
     // ================= SHIP DIMENSION TAB ====================== //
@@ -481,7 +559,7 @@ void SettingsDialog::setupUI() {
     QRadioButton *shipMilitaryRadio = new QRadioButton(tr("Military Vessels"));
     QRadioButton *shipPleasureRadio = new QRadioButton(tr("Pleasure Craft"));
     QRadioButton *shipOtherRadio = new QRadioButton(tr("Other Vessels"));
-    
+
     shipTypeButtonGroup->addButton(shipAllRadio, 0);
     shipTypeButtonGroup->addButton(shipCargoRadio, 1);
     shipTypeButtonGroup->addButton(shipTankerRadio, 2);
@@ -490,7 +568,7 @@ void SettingsDialog::setupUI() {
     shipTypeButtonGroup->addButton(shipMilitaryRadio, 5);
     shipTypeButtonGroup->addButton(shipPleasureRadio, 6);
     shipTypeButtonGroup->addButton(shipOtherRadio, 7);
-    
+
     shipTypeLayout->addWidget(shipAllRadio);
     shipTypeLayout->addWidget(shipCargoRadio);
     shipTypeLayout->addWidget(shipTankerRadio);
@@ -500,26 +578,26 @@ void SettingsDialog::setupUI() {
     shipTypeLayout->addWidget(shipPleasureRadio);
     shipTypeLayout->addWidget(shipOtherRadio);
     shipTypeGroup->setLayout(shipTypeLayout);
-    
+
     // Alert Direction Group
     QGroupBox *alertDirectionGroup = new QGroupBox(tr("Alert Direction"));
     QVBoxLayout *alertDirectionLayout = new QVBoxLayout;
-    
+
     alertDirectionButtonGroup = new QButtonGroup(this);
-    
+
     QRadioButton *alertBothRadio = new QRadioButton(tr("Alert In & Out"));
     QRadioButton *alertInRadio = new QRadioButton(tr("Alert In Only"));
     QRadioButton *alertOutRadio = new QRadioButton(tr("Alert Out Only"));
-    
+
     alertDirectionButtonGroup->addButton(alertBothRadio, 0);
     alertDirectionButtonGroup->addButton(alertInRadio, 1);
     alertDirectionButtonGroup->addButton(alertOutRadio, 2);
-    
+
     alertDirectionLayout->addWidget(alertBothRadio);
     alertDirectionLayout->addWidget(alertInRadio);
     alertDirectionLayout->addWidget(alertOutRadio);
     alertDirectionGroup->setLayout(alertDirectionLayout);
-    
+
     guardzoneLayout->addWidget(shipTypeGroup);
     guardzoneLayout->addWidget(alertDirectionGroup);
     guardzoneLayout->addStretch();
@@ -528,24 +606,24 @@ void SettingsDialog::setupUI() {
     // --- Alert Tab ---
     QWidget *alertTab = new QWidget;
     QVBoxLayout *alertLayout = new QVBoxLayout;
-    
+
     // Visual Alert Group
     QGroupBox *visualAlertGroup = new QGroupBox(tr("Visual Alert Settings"));
     QVBoxLayout *visualAlertLayout = new QVBoxLayout;
-    
+
     visualFlashingCheckBox = new QCheckBox(tr("Enable Flashing Alert"));
     visualFlashingCheckBox->setChecked(true); // Default enabled
     visualAlertLayout->addWidget(visualFlashingCheckBox);
     visualAlertGroup->setLayout(visualAlertLayout);
-    
+
     // Sound Alert Group
     QGroupBox *soundAlertGroup = new QGroupBox(tr("Sound Alert Settings"));
     QFormLayout *soundAlertLayout = new QFormLayout;
-    
+
     soundAlarmEnabledCheckBox = new QCheckBox(tr("Enable Sound Alarm"));
     soundAlarmEnabledCheckBox->setChecked(true); // Default enabled
     soundAlertLayout->addRow("Sound:", soundAlarmEnabledCheckBox);
-    
+
     soundAlarmCombo = new QComboBox;
     // Populate with available sound files
     QDir soundDir("alarm_sound");
@@ -555,73 +633,116 @@ void SettingsDialog::setupUI() {
     }
     soundAlarmCombo->addItems(soundFiles);
     soundAlertLayout->addRow("Alarm Sound:", soundAlarmCombo);
-    
+
     soundVolumeSlider = new QSlider(Qt::Horizontal);
     soundVolumeSlider->setRange(0, 100);
     soundVolumeSlider->setValue(80); // Default 80%
     soundVolumeLabel = new QLabel("80%");
-    
+
     QHBoxLayout *volumeLayout = new QHBoxLayout;
     volumeLayout->addWidget(soundVolumeSlider);
     volumeLayout->addWidget(soundVolumeLabel);
-    
+
     QWidget *volumeWidget = new QWidget;
     volumeWidget->setLayout(volumeLayout);
     soundAlertLayout->addRow("Volume:", volumeWidget);
-    
+
     // Connect volume slider to label update
     connect(soundVolumeSlider, &QSlider::valueChanged, this, [=](int value) {
         soundVolumeLabel->setText(QString("%1%").arg(value));
     });
-    
+
     // Connect sound enabled checkbox to disable/enable sound controls
     connect(soundAlarmEnabledCheckBox, &QCheckBox::toggled, this, [=](bool enabled) {
         soundAlarmCombo->setEnabled(enabled);
         soundVolumeSlider->setEnabled(enabled);
         soundVolumeLabel->setEnabled(enabled);
     });
-    
+
     soundAlertGroup->setLayout(soundAlertLayout);
-    
+
     alertLayout->addWidget(visualAlertGroup);
     alertLayout->addWidget(soundAlertGroup);
     alertLayout->addStretch();
     alertTab->setLayout(alertLayout);
 
-    // CPA/TCPA
+    // AIS Target
     QWidget *cpatcpaTab = new QWidget;
     QFormLayout *cpatcpaLayout = new QFormLayout;
 
+    // CPA/TCPA Threshold group
+    QGroupBox *cpaTcpaGroup = new QGroupBox(tr("CPA/TCPA Threshold"));
+    QFormLayout *cpaTcpaForm = new QFormLayout(cpaTcpaGroup);
+
     cpaSpin = new QDoubleSpinBox;
     cpaSpin->setRange(0.1, 5.0);
-    cpaSpin->setSuffix(" NM");
     cpaSpin->setDecimals(1);
     cpaSpin->setSingleStep(0.1);
     cpaSpin->setSuffix(" NM");
-
-    cpatcpaLayout->addRow("CPA Threshold:", cpaSpin);
-    cpatcpaTab->setLayout(cpatcpaLayout);
-
+    cpaTcpaForm->addRow(tr("CPA Threshold:"), cpaSpin);
 
     tcpaSpin = new QDoubleSpinBox;
     tcpaSpin->setRange(1, 20);
-    tcpaSpin->setSuffix(" NM");
     tcpaSpin->setDecimals(0);
     tcpaSpin->setSingleStep(1);
     tcpaSpin->setSuffix(" min");
+    cpaTcpaForm->addRow(tr("TCPA Threshold:"), tcpaSpin);
 
-    cpatcpaLayout->addRow("TCPA Threshold:", tcpaSpin);
+    cpatcpaLayout->addRow(cpaTcpaGroup);
+
+    // Add Collision Risk header + group into AIS Target tab with tight spacing
+    QWidget *collisionContainer = new QWidget;
+    QVBoxLayout *collisionContainerLayout = new QVBoxLayout(collisionContainer);
+    collisionContainerLayout->setContentsMargins(0, 0, 0, 0);
+    collisionContainerLayout->setSpacing(0);
+    collisionContainerLayout->addWidget(collisionHeaderWidget);
+    collisionContainerLayout->addWidget(collisionRiskGroup);
+    cpatcpaLayout->addRow(collisionContainer);
+
+    // Align AIS Target tab fields so inputs start at the same x as
+    // the "High Risk Distance:" input by normalizing label widths
+    {
+        int refWidth = 0;
+        // Prefer the actual label widget for "High Risk Distance:" inside collisionRiskForm
+        for (int i = 0; i < collisionRiskForm->rowCount(); ++i) {
+            if (QLayoutItem* li = collisionRiskForm->itemAt(i, QFormLayout::LabelRole)) {
+                if (QLabel* lbl = qobject_cast<QLabel*>(li->widget())) {
+                    if (lbl->text() == tr("High Risk Distance:")) {
+                        refWidth = lbl->sizeHint().width();
+                        break;
+                    }
+                }
+            }
+        }
+        if (refWidth == 0) {
+            QFontMetrics fm(cpaTcpaGroup->font());
+            refWidth = fm.horizontalAdvance(tr("High Risk Distance:"));
+        }
+
+        auto applyLabelWidth = [&](QFormLayout* form) {
+            if (!form) return;
+            for (int i = 0; i < form->rowCount(); ++i) {
+                if (QLayoutItem* li = form->itemAt(i, QFormLayout::LabelRole)) {
+                    if (QWidget* w = li->widget()) w->setMinimumWidth(refWidth);
+                }
+            }
+        };
+
+        applyLabelWidth(cpaTcpaForm);
+        applyLabelWidth(collisionRiskForm);
+    }
     cpatcpaTab->setLayout(cpatcpaLayout);
 
 
 
     // ================================================= //
 
-    tabWidget->addTab(moosTab, "MOOSDB");
-    tabWidget->addTab(ownShipTab, "Own Ship");
-    tabWidget->addTab(shipDimensionsTab, "Ship Dimensions");
+    // Reorder tabs: Own Ship, Ship Dimension, AIS Target, Display, MOOSDB
+    // Remove Own Ship tab; rename Ship Dimensions tab to Ownship
+    tabWidget->addTab(shipDimensionsTab, "Ownship");
+    tabWidget->addTab(cpatcpaTab, "AIS Target");
     tabWidget->addTab(displayTab, "Display");
-    tabWidget->addTab(cpatcpaTab, "AIS Targets");
+    tabWidget->addTab(moosTab, "MOOSDB");
 
     if (AppConfig::isDevelopment()){
         tabWidget->addTab(guardzoneTab, "GuardZone");
@@ -629,6 +750,13 @@ void SettingsDialog::setupUI() {
     }
 
     mainLayout->addWidget(tabWidget);
+
+    // Ensure all group titles render bold regardless of platform style
+    const auto groups = this->findChildren<QGroupBox*>();
+    for (QGroupBox* gb : groups) {
+        if (!gb) continue;
+        gb->setStyleSheet("QGroupBox { font-weight: bold; } QGroupBox * { font-weight: normal; }");
+    }
 
 
     // ================ BUTTON CONNECT ================= //
@@ -759,7 +887,7 @@ void SettingsDialog::loadSettings() {
     // Alert Settings
     visualFlashingCheckBox->setChecked(settings.value("Alert/visual_flashing", true).toBool());
     soundAlarmEnabledCheckBox->setChecked(settings.value("Alert/sound_enabled", true).toBool());
-    
+
     QString soundFile = settings.value("Alert/sound_file", "critical-alarm.wav").toString();
     int soundIndex = soundAlarmCombo->findText(soundFile);
     if (soundIndex >= 0) {
@@ -767,11 +895,11 @@ void SettingsDialog::loadSettings() {
     } else {
         soundAlarmCombo->setCurrentIndex(0);
     }
-    
+
     int volume = settings.value("Alert/sound_volume", 80).toInt();
     soundVolumeSlider->setValue(volume);
     soundVolumeLabel->setText(QString("%1%").arg(volume));
-    
+
     // Update sound controls state based on enabled checkbox
     bool soundEnabled = soundAlarmEnabledCheckBox->isChecked();
     soundAlarmCombo->setEnabled(soundEnabled);
@@ -797,6 +925,25 @@ void SettingsDialog::loadSettings() {
     cpaSpin->setValue(settings.value("CPA-TCPA/cpa_threshold", 0.2).toDouble());
     tcpaSpin->setValue(settings.value("CPA-TCPA/tcpa_threshold", 1).toDouble());
 
+    // Collision Risk (load settings)
+    enableCollisionRiskCheckBox->setChecked(settings.value("CollisionRisk/enabled", false).toBool());
+    showRiskSymbolsCheckBox->setChecked(settings.value("CollisionRisk/show_symbols", true).toBool());
+    enableAudioAlertsCheckBox->setChecked(settings.value("CollisionRisk/audio_alerts", false).toBool());
+    enablePulsingWarningsCheckBox->setChecked(settings.value("CollisionRisk/pulsing_warnings", true).toBool());
+    criticalRiskDistanceSpin->setValue(settings.value("CollisionRisk/critical_distance_nm", 0.1).toDouble());
+    highRiskDistanceSpin->setValue(settings.value("CollisionRisk/high_distance_nm", 0.25).toDouble());
+    criticalTimeSpin->setValue(settings.value("CollisionRisk/critical_time_min", 2.0).toDouble());
+    // Apply initial enabled state
+    {
+        bool enabled = enableCollisionRiskCheckBox->isChecked();
+        showRiskSymbolsCheckBox->setEnabled(enabled);
+        enableAudioAlertsCheckBox->setEnabled(enabled);
+        enablePulsingWarningsCheckBox->setEnabled(enabled);
+        criticalRiskDistanceSpin->setEnabled(enabled);
+        highRiskDistanceSpin->setEnabled(enabled);
+        criticalTimeSpin->setEnabled(enabled);
+    }
+
     // Ship Dimensions
     shipLengthSpin->setValue(settings.value("ShipDimensions/length", 170.0).toDouble());
     shipBeamSpin->setValue(settings.value("ShipDimensions/beam", 13.0).toDouble());
@@ -821,15 +968,9 @@ void SettingsDialog::loadSettings() {
     predictionDensityLabel->setEnabled(predictionEnabled);
     predictionDensityCombo->setEnabled(predictionEnabled);
 
-    // Navigation Safety Variables
-    navDepthSpin->setValue(settings.value("Navigation/nav_depth", 10.0).toDouble());
-    navDraftSpin->setValue(settings.value("Navigation/nav_draft", 2.0).toDouble());
-    navDraftBelowKeelSpin->setValue(settings.value("Navigation/nav_draft_below_keel", 1.0).toDouble());
-
-    // Update RouteSafetyFeature with loaded values
-    RouteSafetyFeature::setNavDepth(navDepthSpin->value());
-    RouteSafetyFeature::setNavDraft(navDraftSpin->value());
-    RouteSafetyFeature::setNavDraftBelowKeel(navDraftBelowKeelSpin->value());
+    // Navigation Safety Variables removed
+    // (kept backward compatibility in settings file but UI control removed)
+    // If needed in future, guard usage with null checks.
 
     // GPS Positions
     gpsTableWidget->setRowCount(0); // Clear table before loading
@@ -917,6 +1058,15 @@ void SettingsDialog::saveSettings() {
     // CPA/TCPA
     settings.setValue("CPA-TCPA/cpa_threshold", cpaSpin->value());
     settings.setValue("CPA-TCPA/tcpa_threshold", tcpaSpin->value());
+
+    // Collision Risk (save settings)
+    settings.setValue("CollisionRisk/enabled", enableCollisionRiskCheckBox->isChecked());
+    settings.setValue("CollisionRisk/show_symbols", showRiskSymbolsCheckBox->isChecked());
+    settings.setValue("CollisionRisk/audio_alerts", enableAudioAlertsCheckBox->isChecked());
+    settings.setValue("CollisionRisk/pulsing_warnings", enablePulsingWarningsCheckBox->isChecked());
+    settings.setValue("CollisionRisk/critical_distance_nm", criticalRiskDistanceSpin->value());
+    settings.setValue("CollisionRisk/high_distance_nm", highRiskDistanceSpin->value());
+    settings.setValue("CollisionRisk/critical_time_min", criticalTimeSpin->value());
 
     // Turning Prediction
     settings.setValue("TurningPrediction/enabled", showTurningPredictionCheckBox->isChecked());
@@ -1065,6 +1215,15 @@ void SettingsDialog::accept() {
     data.predictionTimeMinutes = predictionTimeSpin->value();
     data.predictionDensity = predictionDensityCombo->currentData().toInt();
 
+    // Collision Risk
+    data.enableCollisionRisk = enableCollisionRiskCheckBox->isChecked();
+    data.criticalRiskDistance = criticalRiskDistanceSpin->value();
+    data.highRiskDistance = highRiskDistanceSpin->value();
+    data.criticalRiskTime = criticalTimeSpin->value();
+    data.showRiskSymbols = showRiskSymbolsCheckBox->isChecked();
+    data.enableAudioAlerts = enableAudioAlertsCheckBox->isChecked();
+    data.enablePulsingWarnings = enablePulsingWarningsCheckBox->isChecked();
+
     // GPS Positions
     data.gpsPositions.clear();
     for (int i = 0; i < gpsTableWidget->rowCount(); ++i) {
@@ -1090,9 +1249,7 @@ void SettingsDialog::accept() {
     // Save Navigation Safety Variables to settings file
     QString configPath = QString(EcKernelGetEnv("APPDATA")) + "/SevenCs/EC2007/DENC" + "/config.ini";
     QSettings settings(configPath, QSettings::IniFormat);
-    settings.setValue("Navigation/nav_depth", navDepthSpin->value());
-    settings.setValue("Navigation/nav_draft", navDraftSpin->value());
-    settings.setValue("Navigation/nav_draft_below_keel", navDraftBelowKeelSpin->value());
+    // Navigation Safety Variables removed; skip persisting UI controls
 
     SettingsManager::instance().save(data);
 

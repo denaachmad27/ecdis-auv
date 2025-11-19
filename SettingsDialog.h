@@ -11,6 +11,7 @@ class QLineEdit;
 class QComboBox;
 class QLabel;
 class QButtonGroup;
+class QGroupBox;
 class QCheckBox;
 class QSlider;
 class QDoubleSpinBox;
@@ -103,6 +104,7 @@ private:
     QDoubleSpinBox *ukcWarningSpin;
 
     // TURNING PREDICTION
+    QGroupBox *turningPredictionGroup;
     QCheckBox *showTurningPredictionCheckBox;
     QSpinBox *predictionTimeSpin;
     QLabel *predictionTimeLabel;
