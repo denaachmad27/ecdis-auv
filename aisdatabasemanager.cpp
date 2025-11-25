@@ -1,5 +1,9 @@
 #include "aisdatabasemanager.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 AisDatabaseManager& AisDatabaseManager::instance() {
     static AisDatabaseManager instance;
     return instance;
@@ -7,13 +11,56 @@ AisDatabaseManager& AisDatabaseManager::instance() {
 
 bool AisDatabaseManager::connect(const QString& host, int port, const QString& dbName,
                                  const QString& user, const QString& password) {
+
+#ifdef _WIN32
+    // Set PATH untuk Qt dan PostgreSQL binaries (Windows only)
+    QString currentPath = qgetenv("PATH");
+    QString qtPath = "C:/Qt/5.15.0/mingw81_64/bin";
+    QString pgPath = "C:/Program Files/PostgreSQL/16/bin";
+
+    if (!currentPath.contains(qtPath, Qt::CaseInsensitive)) {
+        qputenv("PATH", (qtPath + ";" + pgPath + ";" + currentPath).toLocal8Bit());
+        qDebug() << "Updated PATH for PostgreSQL support";
+    }
+#endif
+
+    qDebug() << "Available SQL drivers:" << QSqlDatabase::drivers();
+
+    if (!QSqlDatabase::drivers().contains("QPSQL")) {
+        qDebug() << "ERROR: QPSQL driver not found!";
+        return false;
+    }
+
     db = QSqlDatabase::addDatabase("QPSQL");
     db.setHostName(host);
     db.setPort(port);
     db.setDatabaseName(dbName);
     db.setUserName(user);
     db.setPassword(password);
-    return db.open();
+
+    // Tambahkan connection options untuk debugging
+    db.setConnectOptions("connect_timeout=5");
+
+    bool connected = db.open();
+    if (!connected) {
+        qDebug() << "=== DATABASE CONNECTION FAILED ===";
+        qDebug() << "Error:" << db.lastError().text();
+        qDebug() << "Error Type:" << db.lastError().type();
+        qDebug() << "Error Number:" << db.lastError().number();
+        qDebug() << "Database:" << db.databaseName();
+        qDebug() << "Host:" << db.hostName();
+        qDebug() << "Port:" << db.port();
+        qDebug() << "User:" << db.userName();
+        qDebug() << "Driver:" << db.driverName();
+        qDebug() << "Connection Options:" << db.connectOptions();
+        qDebug() << "=================================";
+    } else {
+        qDebug() << "=== DATABASE CONNECTED SUCCESSFULLY ===";
+        qDebug() << "Database:" << db.databaseName();
+        qDebug() << "Host:" << db.hostName();
+        qDebug() << "=================================";
+    }
+    return connected;
 }
 
 void AisDatabaseManager::insertOrUpdateAisTarget(const EcAISTargetInfo& info) {

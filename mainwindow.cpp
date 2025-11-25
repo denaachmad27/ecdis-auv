@@ -1140,7 +1140,8 @@ void MainWindow::fetchNmea(){
     connect(m_playbackTimerDB, &QTimer::timeout, this, &MainWindow::processNextNmeaDataDB);
 
     // === 6. Koneksi database ===
-    if (AisDatabaseManager::instance().connect("localhost", 5432, "ecdis", "postgres", "112030")) {
+    // Coba koneksi dengan IPv4 terlebih dahulu
+    if (AisDatabaseManager::instance().connect("127.0.0.1", 5432, "ecdis", "postgres", "112030")) {
         qDebug() << "Database connected.";
     } else {
         QMessageBox::critical(this, "Error", "Gagal terhubung ke database.");
