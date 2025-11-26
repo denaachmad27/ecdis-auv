@@ -2956,6 +2956,7 @@ void EcWidget::drawPois(QPainter& painter)
         case EC_POI_CHECKPOINT: return QColor(30, 144, 255, 220);
         case EC_POI_HAZARD: return QColor(220, 53, 69, 220);
         case EC_POI_SURVEY_TARGET: return QColor(255, 165, 0, 220);
+        case EC_POI_MAN_OVERBOARD: return QColor(192, 192, 192, 240);
         case EC_POI_GENERIC:
         default:
             return QColor(0, 200, 180, 220);
@@ -3005,7 +3006,43 @@ void EcWidget::drawPois(QPainter& painter)
         pen.setCosmetic(true);
         painter.setPen(pen);
         painter.setBrush(color);
-        painter.drawEllipse(screenPoint, radius, radius);
+
+        // Draw different shapes for different POI categories
+        if (poi.category == EC_POI_MAN_OVERBOARD) {
+            // Draw circle background for Man Overboard
+            painter.drawEllipse(screenPoint, radius, radius);
+
+            // Draw person icon inside the circle
+            painter.setPen(QPen(QColor(0, 0, 0, 200), 1.5));
+            painter.setBrush(Qt::NoBrush);
+
+            const float iconScale = radius * 0.6f;
+            const QPointF center = screenPoint;
+
+            // Head (circle)
+            QPointF headCenter(center.x(), center.y() - iconScale * 0.3f);
+            float headRadius = iconScale * 0.2f;
+            painter.drawEllipse(headCenter, headRadius, headRadius);
+
+            // Body (line)
+            QPointF bodyTop(center.x(), center.y() - iconScale * 0.05f);
+            QPointF bodyBottom(center.x(), center.y() + iconScale * 0.4f);
+            painter.drawLine(bodyTop, bodyBottom);
+
+            // Arms (line)
+            QPointF leftArm(center.x() - iconScale * 0.3f, center.y() + iconScale * 0.15f);
+            QPointF rightArm(center.x() + iconScale * 0.3f, center.y() + iconScale * 0.15f);
+            painter.drawLine(leftArm, rightArm);
+
+            // Legs (V-shape)
+            QPointF leftLeg(center.x() - iconScale * 0.25f, center.y() + iconScale * 0.7f);
+            QPointF rightLeg(center.x() + iconScale * 0.25f, center.y() + iconScale * 0.7f);
+            painter.drawLine(bodyBottom, leftLeg);
+            painter.drawLine(bodyBottom, rightLeg);
+        } else {
+            // Draw circle for other categories
+            painter.drawEllipse(screenPoint, radius, radius);
+        }
 
         if (showPoiLabels && poi.showLabel) {
             const QString labelText = poi.label.isEmpty()

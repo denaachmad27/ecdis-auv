@@ -352,6 +352,21 @@ void SettingsDialog::setupUI() {
     criticalTimeSpin->setSuffix(" min");
     collisionRiskForm->addRow(tr("Critical Time:"), criticalTimeSpin);
 
+    // CPA/TCPA Threshold fields (merged into Collision Risk Indication)
+    cpaSpin = new QDoubleSpinBox;
+    cpaSpin->setRange(0.1, 5.0);
+    cpaSpin->setDecimals(1);
+    cpaSpin->setSingleStep(0.1);
+    cpaSpin->setSuffix(" NM");
+    collisionRiskForm->addRow(tr("CPA Threshold:"), cpaSpin);
+
+    tcpaSpin = new QDoubleSpinBox;
+    tcpaSpin->setRange(1, 20);
+    tcpaSpin->setDecimals(0);
+    tcpaSpin->setSingleStep(1);
+    tcpaSpin->setSuffix(" min");
+    collisionRiskForm->addRow(tr("TCPA Threshold:"), tcpaSpin);
+
     // Connect collision risk signals
     connect(enableCollisionRiskCheckBox, &QCheckBox::toggled, this, [=](bool enabled) {
         showRiskSymbolsCheckBox->setEnabled(enabled);
@@ -360,6 +375,8 @@ void SettingsDialog::setupUI() {
         criticalRiskDistanceSpin->setEnabled(enabled);
         highRiskDistanceSpin->setEnabled(enabled);
         criticalTimeSpin->setEnabled(enabled);
+        cpaSpin->setEnabled(enabled);
+        tcpaSpin->setEnabled(enabled);
     });
 
     // Place remaining checkboxes at the bottom (three rows)
@@ -670,26 +687,6 @@ void SettingsDialog::setupUI() {
     QWidget *cpatcpaTab = new QWidget;
     QFormLayout *cpatcpaLayout = new QFormLayout;
 
-    // CPA/TCPA Threshold group
-    QGroupBox *cpaTcpaGroup = new QGroupBox(tr("CPA/TCPA Threshold"));
-    QFormLayout *cpaTcpaForm = new QFormLayout(cpaTcpaGroup);
-
-    cpaSpin = new QDoubleSpinBox;
-    cpaSpin->setRange(0.1, 5.0);
-    cpaSpin->setDecimals(1);
-    cpaSpin->setSingleStep(0.1);
-    cpaSpin->setSuffix(" NM");
-    cpaTcpaForm->addRow(tr("CPA Threshold:"), cpaSpin);
-
-    tcpaSpin = new QDoubleSpinBox;
-    tcpaSpin->setRange(1, 20);
-    tcpaSpin->setDecimals(0);
-    tcpaSpin->setSingleStep(1);
-    tcpaSpin->setSuffix(" min");
-    cpaTcpaForm->addRow(tr("TCPA Threshold:"), tcpaSpin);
-
-    cpatcpaLayout->addRow(cpaTcpaGroup);
-
     // Add Collision Risk header + group into AIS Target tab with tight spacing
     QWidget *collisionContainer = new QWidget;
     QVBoxLayout *collisionContainerLayout = new QVBoxLayout(collisionContainer);
@@ -699,11 +696,11 @@ void SettingsDialog::setupUI() {
     collisionContainerLayout->addWidget(collisionRiskGroup);
     cpatcpaLayout->addRow(collisionContainer);
 
-    // Align AIS Target tab fields so inputs start at the same x as
-    // the "High Risk Distance:" input by normalizing label widths
+    // Align AIS Target tab fields so inputs start at the same x
+    // by normalizing label widths in collisionRiskForm
     {
         int refWidth = 0;
-        // Prefer the actual label widget for "High Risk Distance:" inside collisionRiskForm
+        // Find the "High Risk Distance:" label for reference width
         for (int i = 0; i < collisionRiskForm->rowCount(); ++i) {
             if (QLayoutItem* li = collisionRiskForm->itemAt(i, QFormLayout::LabelRole)) {
                 if (QLabel* lbl = qobject_cast<QLabel*>(li->widget())) {
@@ -715,21 +712,16 @@ void SettingsDialog::setupUI() {
             }
         }
         if (refWidth == 0) {
-            QFontMetrics fm(cpaTcpaGroup->font());
+            QFontMetrics fm(collisionRiskGroup->font());
             refWidth = fm.horizontalAdvance(tr("High Risk Distance:"));
         }
 
-        auto applyLabelWidth = [&](QFormLayout* form) {
-            if (!form) return;
-            for (int i = 0; i < form->rowCount(); ++i) {
-                if (QLayoutItem* li = form->itemAt(i, QFormLayout::LabelRole)) {
-                    if (QWidget* w = li->widget()) w->setMinimumWidth(refWidth);
-                }
+        // Apply label width to all labels in collisionRiskForm for alignment
+        for (int i = 0; i < collisionRiskForm->rowCount(); ++i) {
+            if (QLayoutItem* li = collisionRiskForm->itemAt(i, QFormLayout::LabelRole)) {
+                if (QWidget* w = li->widget()) w->setMinimumWidth(refWidth);
             }
-        };
-
-        applyLabelWidth(cpaTcpaForm);
-        applyLabelWidth(collisionRiskForm);
+        }
     }
     cpatcpaTab->setLayout(cpatcpaLayout);
 

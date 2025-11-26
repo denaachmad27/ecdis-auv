@@ -2766,20 +2766,47 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
             }
 
             const double depth = ecchart->estimateDepthAt(lat, lon);
-            const QString defaultName = QString("Point Object %1").arg(ecchart->poiEntries().size() + 1);
 
             QDialog dialog(this);
             dialog.setWindowTitle(tr("Add Point Object"));
 
             QFormLayout form(&dialog);
 
+            QComboBox* categoryCombo = new QComboBox(&dialog);
+            categoryCombo->addItems({tr("Generic"), tr("Checkpoint"), tr("Hazard"), tr("Survey Target"), tr("Man Overboard")});
+            form.addRow(tr("Category"), categoryCombo);
+
+            // Helper function to generate default name based on category
+            auto getDefaultName = [&](const QString& category) -> QString {
+                const int poiCount = ecchart->poiEntries().size() + 1;
+                if (category == tr("Man Overboard")) {
+                    return tr("Man Overboard");
+                } else if (category == tr("Checkpoint")) {
+                    return tr("Checkpoint %1").arg(poiCount);
+                } else if (category == tr("Hazard")) {
+                    return tr("Hazard %1").arg(poiCount);
+                } else if (category == tr("Survey Target")) {
+                    return tr("Survey Target %1").arg(poiCount);
+                } else {
+                    return tr("Point Object %1").arg(poiCount);
+                }
+            };
+
+            QString defaultName = getDefaultName(categoryCombo->currentText());
+
             QLineEdit* nameEdit = new QLineEdit(&dialog);
             nameEdit->setText(defaultName);
             form.addRow(tr("Name"), nameEdit);
 
-            QComboBox* categoryCombo = new QComboBox(&dialog);
-            categoryCombo->addItems({tr("Generic"), tr("Checkpoint"), tr("Hazard"), tr("Survey Target")});
-            form.addRow(tr("Category"), categoryCombo);
+            // Update default name when category changes
+            connect(categoryCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                    [&](int index) {
+                        QString newDefaultName = getDefaultName(categoryCombo->itemText(index));
+                        if (nameEdit->text() == defaultName) {
+                            nameEdit->setText(newDefaultName);
+                        }
+                        defaultName = newDefaultName;
+                    });
 
             QPlainTextEdit* notesEdit = new QPlainTextEdit(&dialog);
             notesEdit->setPlaceholderText(tr("Optional notes..."));
