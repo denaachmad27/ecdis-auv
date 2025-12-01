@@ -26,7 +26,8 @@ typedef enum _EcPoiCategory
     EC_POI_GENERIC = 0,
     EC_POI_CHECKPOINT,
     EC_POI_HAZARD,
-    EC_POI_SURVEY_TARGET
+    EC_POI_SURVEY_TARGET,
+    EC_POI_MAN_OVERBOARD
 } EcPoiCategory;
 #endif
 
@@ -74,7 +75,8 @@ public:
         Generic = EC_POI_GENERIC,
         Checkpoint = EC_POI_CHECKPOINT,
         Hazard = EC_POI_HAZARD,
-        SurveyTarget = EC_POI_SURVEY_TARGET
+        SurveyTarget = EC_POI_SURVEY_TARGET,
+        ManOverboard = EC_POI_MAN_OVERBOARD
     };
 
     static bool isFlagSet(UINT32 flags, Flag flag)

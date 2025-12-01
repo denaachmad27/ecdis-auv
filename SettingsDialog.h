@@ -137,9 +137,7 @@ private:
     QLabel *ukcNoticeLabel;
     QTimer *ukcNoticeTimer;
 
-    // CPA/TCPA
-    QLabel *cpaLabel;
-    QLabel *tcpaLabel;
+    // CPA/TCPA (merged into Collision Risk Indication)
     QDoubleSpinBox *cpaSpin;
     QDoubleSpinBox *tcpaSpin;
 

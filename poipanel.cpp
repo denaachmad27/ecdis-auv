@@ -176,6 +176,7 @@ QString POIPanel::categoryToString(EcPoiCategory category) const
     case EC_POI_CHECKPOINT: return tr("Checkpoint");
     case EC_POI_HAZARD: return tr("Hazard");
     case EC_POI_SURVEY_TARGET: return tr("Survey Target");
+    case EC_POI_MAN_OVERBOARD: return tr("Man Overboard");
     default: return tr("Unknown");
     }
 }
@@ -187,6 +188,7 @@ EcPoiCategory POIPanel::categoryFromIndex(int index) const
     case 1: return EC_POI_CHECKPOINT;
     case 2: return EC_POI_HAZARD;
     case 3: return EC_POI_SURVEY_TARGET;
+    case 4: return EC_POI_MAN_OVERBOARD;
     default: return EC_POI_GENERIC;
     }
 }
@@ -202,7 +204,7 @@ bool POIPanel::showPoiDialog(PoiEntry& inOutPoi, bool isEdit)
     formLayout->addRow(tr("Name"), nameEdit);
 
     auto* categoryCombo = new QComboBox(&dialog);
-    categoryCombo->addItems({tr("Generic"), tr("Checkpoint"), tr("Hazard"), tr("Survey Target")});
+    categoryCombo->addItems({tr("Generic"), tr("Checkpoint"), tr("Hazard"), tr("Survey Target"), tr("Man Overboard")});
     categoryCombo->setCurrentIndex(static_cast<int>(inOutPoi.category));
     formLayout->addRow(tr("Category"), categoryCombo);
 
