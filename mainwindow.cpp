@@ -1150,6 +1150,7 @@ void MainWindow::fetchNmea(){
 
 void MainWindow::onPlayClickedDB()
 {
+    ecchart->setCustomOwnship(true);
     if (m_isPlayingDB) {
         // Logika PAUSE: Hentikan timer, ubah tombol menjadi 'Play'
         m_playbackTimerDB->stop();
@@ -1207,6 +1208,7 @@ void MainWindow::onPlayClickedDB()
 
 void MainWindow::onStopClickedDB()
 {
+    ecchart->setCustomOwnship(false);
     m_playbackTimerDB->stop();
     m_isPlayingDB = false;
     m_nmeaDataQueueDB.clear();

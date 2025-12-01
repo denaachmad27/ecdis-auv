@@ -3740,7 +3740,7 @@ void EcWidget::resizeEvent (QResizeEvent *event)
       drawPixmap = QPixmap(wi, hei);
   }
 
-  
+
   initialized = true;
 
 #ifdef _WIN32
@@ -4660,7 +4660,7 @@ void EcWidget::mouseMoveEvent(QMouseEvent *e)
     if (editingAOI) {
         if (draggedAoiVertex >= 0) {
             // Ghost move: do not modify original AOI until drop
-            EcCoordinate lat, lon; 
+            EcCoordinate lat, lon;
             if (XyToLatLon(e->x(), e->y(), lat, lon)) {
                 aoiVertexDragging = true;
                 aoiGhostLat = lat;
@@ -6626,6 +6626,10 @@ void EcWidget::ownShipDraw(){
             }
         }
     }
+}
+
+void EcWidget::setCustomOwnship(bool state){
+    showCustomOwnShip = state;
 }
 
 void EcWidget::setMainWindow(MainWindow *mw) {

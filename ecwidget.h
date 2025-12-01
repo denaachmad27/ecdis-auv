@@ -749,6 +749,7 @@ public:
   void Draw();
   void waypointDraw();
   void ownShipDraw();
+  void setCustomOwnship(bool state);
 
   // Waypoint
   // Custom colors per routeId
