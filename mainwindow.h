@@ -316,6 +316,11 @@ private slots:
     void onIncreaseSpeedClickedDB();
     void onDecreaseSpeedClickedDB();
 
+    // Recording session management
+    void onStartRecordingSession();
+    void onStopRecordingSession();
+    void onRecordingStatusChanged(bool isRecording);
+
 private:
     GuardZonePanel* guardZonePanel;
     QDockWidget* guardZoneDock;
@@ -461,6 +466,11 @@ private:
     QQueue<QVariantList> m_nmeaDataQueueDB;
     bool m_isPlayingDB = false;
     int m_currentIntervalDB = 1000;
+
+    // Recording session state
+    bool m_isRecording = false;
+    QLabel *m_recordingStatusLabel = nullptr;
+    QUuid m_currentRecordingSession;
 };
 
 #endif // _mainwindow_h_

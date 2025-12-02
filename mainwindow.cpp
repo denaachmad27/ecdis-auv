@@ -1102,6 +1102,12 @@ void MainWindow::fetchNmea(){
     m_decreaseSpeedButtonDB->setFixedSize(smallButtonSize);
     m_increaseSpeedButtonDB->setFixedSize(smallButtonSize);
 
+    // Recording controls
+    QPushButton *m_startRecordButton = new QPushButton("⏺ Start Recording");
+    QPushButton *m_stopRecordButton = new QPushButton("⏹ Stop Recording");
+    m_recordingStatusLabel = new QLabel("🔴 Recording: OFF");
+    m_recordingStatusLabel->setStyleSheet("color: red; font-weight: bold;");
+
     m_displayEditDB = new QTextEdit();
     m_displayEditDB->setReadOnly(true);
 
@@ -1115,12 +1121,23 @@ void MainWindow::fetchNmea(){
     controlLayout->addWidget(m_increaseSpeedButtonDB);
     controlLayout->addStretch();
 
+    // Recording controls layout
+    QHBoxLayout *recordLayout = new QHBoxLayout();
+    recordLayout->addWidget(m_startRecordButton);
+    recordLayout->addWidget(m_stopRecordButton);
+    recordLayout->addStretch();
+    recordLayout->addWidget(m_recordingStatusLabel);
+
     // === 3. Tambahkan layout dan widget ke layout utama ===
     mainLayout->addWidget(startLabel);
     mainLayout->addWidget(m_startEditDB);
     mainLayout->addWidget(endLabel);
     mainLayout->addWidget(m_endEditDB);
     mainLayout->addLayout(controlLayout);
+
+    // Add recording controls
+    mainLayout->addLayout(recordLayout);
+
     mainLayout->addWidget(m_displayEditDB);
 
     // === 4. Atur Dock Widget ===
@@ -1135,6 +1152,10 @@ void MainWindow::fetchNmea(){
     connect(m_stopButtonDB, &QPushButton::clicked, this, &MainWindow::onStopClickedDB);
     connect(m_increaseSpeedButtonDB, &QPushButton::clicked, this, &MainWindow::onIncreaseSpeedClickedDB);
     connect(m_decreaseSpeedButtonDB, &QPushButton::clicked, this, &MainWindow::onDecreaseSpeedClickedDB);
+
+    // Recording controls connections
+    connect(m_startRecordButton, &QPushButton::clicked, this, &MainWindow::onStartRecordingSession);
+    connect(m_stopRecordButton, &QPushButton::clicked, this, &MainWindow::onStopRecordingSession);
 
     m_playbackTimerDB = new QTimer(this);
     connect(m_playbackTimerDB, &QTimer::timeout, this, &MainWindow::processNextNmeaDataDB);
@@ -1173,12 +1194,13 @@ void MainWindow::onPlayClickedDB()
             m_displayEditDB->clear();
 
             QSqlQuery query;
-            AisDatabaseManager::instance().getOwnShipNmeaData(query, startTime, endTime);
+            // Gunakan unified table untuk get kedua ownship dan AIS target data
+            AisDatabaseManager::instance().getCombinedNmeaData(query, startTime, endTime, {"ownship", "aistarget"});
 
             if (query.isActive()) {
                 while (query.next()) {
                     QVariantList row;
-                    row << query.value("timestamp") << query.value("nmea");
+                    row << query.value("timestamp") << query.value("nmea") << query.value("data_source");
                     m_nmeaDataQueueDB.enqueue(row);
                 }
 
@@ -1265,18 +1287,111 @@ void MainWindow::processNextNmeaDataDB()
         QVariantList data = m_nmeaDataQueueDB.dequeue();
         QDateTime timestamp = data.at(0).toDateTime();
         QString nmea = data.at(1).toString();
+        QString dataSource = data.at(2).toString(); // New field from unified table
 
         if(ecchart && !ecchart->isDragging){
             ecchart->readAISVariableString(nmea);
         }
 
-        m_displayEditDB->append(QString("Waktu: %1, NMEA: %2").arg(timestamp.toString(Qt::ISODate)).arg(nmea));
+        // Enhanced display dengan color coding untuk data source
+        QString color = (dataSource == "ownship") ? "blue" : "green";
+        QString sourceIcon = (dataSource == "ownship") ? "🚢" : "📡";
+        m_displayEditDB->append(QString("<span style='color:%1;'>[%2] %3 %4: %5</span>")
+            .arg(color)
+            .arg(timestamp.toString("hh:mm:ss.zzz"))
+            .arg(sourceIcon)
+            .arg(dataSource.toUpper())
+            .arg(nmea.left(60) + "..."));
     } else {
         m_playbackTimerDB->stop();
         m_isPlayingDB = false;
         m_playButtonDB->setText("Play");
         m_playButtonDB->setIcon(QIcon(":/icon/play.svg"));
         qDebug() << "Playback selesai.";
+    }
+}
+
+// ========================================
+// RECORDING SESSION MANAGEMENT
+// ========================================
+
+void MainWindow::onStartRecordingSession()
+{
+    if (m_isRecording) {
+        QMessageBox::information(this, "Recording", "Recording already in progress.");
+        return;
+    }
+
+    try {
+        AisDatabaseManager::instance().startRecordingSession(
+            QString("Session_%1").arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss"))
+        );
+
+        m_isRecording = true;
+        m_currentRecordingSession = AisDatabaseManager::instance().getCurrentSessionId();
+
+        // Update UI
+        m_recordingStatusLabel->setText("🔴 Recording: ON");
+        m_recordingStatusLabel->setStyleSheet("color: green; font-weight: bold;");
+
+        // Log ke display
+        m_displayEditDB->append(QString("<span style='color: green;'><b>[RECORDING STARTED]</b> Session: %1</span>")
+            .arg(m_currentRecordingSession.toString().left(8)));
+
+        // Create playback request for audit trail
+        AisDatabaseManager::instance().createPlaybackRequest(
+            "current_user",
+            QDateTime::currentDateTime(),
+            QDateTime::currentDateTime().addYears(1), // Long duration for recording
+            1.0
+        );
+
+        qDebug() << "Recording session started:" << m_currentRecordingSession.toString();
+
+    } catch (const std::exception& e) {
+        QMessageBox::critical(this, "Error", QString("Failed to start recording: %1").arg(e.what()));
+    }
+}
+
+void MainWindow::onStopRecordingSession()
+{
+    if (!m_isRecording) {
+        QMessageBox::information(this, "Recording", "No recording in progress.");
+        return;
+    }
+
+    try {
+        AisDatabaseManager::instance().stopRecordingSession();
+
+        m_isRecording = false;
+        QUuid sessionId = m_currentRecordingSession;
+        m_currentRecordingSession = QUuid();
+
+        // Update UI
+        m_recordingStatusLabel->setText("🔴 Recording: OFF");
+        m_recordingStatusLabel->setStyleSheet("color: red; font-weight: bold;");
+
+        // Log ke display
+        m_displayEditDB->append(QString("<span style='color: orange;'><b>[RECORDING STOPPED]</b> Session: %1</span>")
+            .arg(sessionId.toString().left(8)));
+
+        qDebug() << "Recording session stopped:" << sessionId.toString();
+
+    } catch (const std::exception& e) {
+        QMessageBox::critical(this, "Error", QString("Failed to stop recording: %1").arg(e.what()));
+    }
+}
+
+void MainWindow::onRecordingStatusChanged(bool isRecording)
+{
+    m_isRecording = isRecording;
+
+    if (isRecording) {
+        m_recordingStatusLabel->setText("🔴 Recording: ON");
+        m_recordingStatusLabel->setStyleSheet("color: green; font-weight: bold;");
+    } else {
+        m_recordingStatusLabel->setText("🔴 Recording: OFF");
+        m_recordingStatusLabel->setStyleSheet("color: red; font-weight: bold;");
     }
 }
 
@@ -2099,23 +2214,45 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL){
 
 MainWindow::~MainWindow()
 {
-  if (dict)
-  {
-    EcDictionaryFree(dict);
-    dict = NULL;
-  }
-  if (pickWindow)
-    delete pickWindow;
+    qDebug() << "MainWindow destructor called";
 
-  if (aisDvr && aisDvr->isRecording()) {
-      aisDvr->stopRecording();
-  }
+  try {
+    if (dict) {
+        EcDictionaryFree(dict);
+        dict = NULL;
+    }
 
-  // ========== CLEANUP GUARDZONE PANEL ==========
-  if (guardZonePanel) {
-      delete guardZonePanel;
-      guardZonePanel = nullptr;
-  }
+    if (pickWindow) {
+        delete pickWindow;
+        pickWindow = NULL;
+    }
+
+    if (aisDvr && aisDvr->isRecording()) {
+        qDebug() << "Stopping AIS DVR recording";
+        aisDvr->stopRecording();
+    }
+
+    // Stop recording session if active
+    if (m_isRecording) {
+        qDebug() << "Stopping recording session";
+        onStopRecordingSession();
+    }
+
+    // Stop playback timers
+    if (m_playbackTimerDB) {
+        m_playbackTimerDB->stop();
+        delete m_playbackTimerDB;
+        m_playbackTimerDB = nullptr;
+    }
+
+    // Clear queues
+    m_nmeaDataQueueDB.clear();
+
+    // ========== CLEANUP GUARDZONE PANEL ==========
+    if (guardZonePanel) {
+        delete guardZonePanel;
+        guardZonePanel = nullptr;
+    }
 
   if (guardZoneDock) {
       delete guardZoneDock;
@@ -2141,6 +2278,13 @@ MainWindow::~MainWindow()
 
   delete m_logStream;
   delete m_logFile;
+  }
+  catch (const std::exception& e) {
+      qWarning() << "Exception in MainWindow destructor:" << e.what();
+  }
+  catch (...) {
+      qWarning() << "Unknown exception in MainWindow destructor";
+  }
 }
 
 void MainWindow::onReload()
@@ -5765,16 +5909,19 @@ void MainWindow::onEditRouteByForm(int routeId)
     ecchart->showEditRouteDialog(routeId);
 }
 
-void MainWindow::setReconnectStatusText(const QString text){
+void MainWindow::setReconnectStatusText(const QString text)
+{
     reconnectStatusText->setText(text);
 }
 
-SettingsData MainWindow::getSettingsForwarder(){
+SettingsData MainWindow::getSettingsForwarder()
+{
     return SettingsManager::instance().data();
 }
 
 // ========= DARK MODE SLOTS ============
-void MainWindow::applyPalette(const QPalette &palette, const QString &styleName) {
+void MainWindow::applyPalette(const QPalette &palette, const QString &styleName)
+{
     qApp->setStyle(QStyleFactory::create(styleName));
     qApp->setPalette(palette);
 
@@ -5785,7 +5932,8 @@ void MainWindow::applyPalette(const QPalette &palette, const QString &styleName)
     }
 }
 
-void MainWindow::setDarkMode() {
+void MainWindow::setDarkMode()
+{
     AppConfig::setTheme(AppConfig::AppTheme::Dark);
 
     QPalette dark;
@@ -5812,7 +5960,8 @@ void MainWindow::setDarkMode() {
     emit routePanel->updateThemeAwareStyles();
 }
 
-void MainWindow::setLightMode() {
+void MainWindow::setLightMode()
+{
     AppConfig::setTheme(AppConfig::AppTheme::Light);
 
     QPalette light = style()->standardPalette();
@@ -5856,7 +6005,8 @@ void MainWindow::setDimMode()
     emit routePanel->updateThemeAwareStyles();
 }
 
-void MainWindow::updateIcon(bool dark){
+void MainWindow::updateIcon(bool dark)
+{
     if (dark){
         connectAct->setIcon(QIcon(":/images/connect-white.png"));
         disconnectAct->setIcon(QIcon(":/images/disconnect-white.png"));

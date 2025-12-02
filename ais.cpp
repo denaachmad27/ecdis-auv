@@ -468,6 +468,42 @@ void Ais::handleOwnShipUpdate(EcAISTargetInfo *ti)
 
         Ais::instance()->_aisOwnShip = dataOS;
 
+        // Record parsed ownship data to unified database (with protection against infinite loops)
+        try {
+            //qDebug() << "Ownship received - Lat:" << ((double)ti->latitude / 10000.0) / 60.0 << "| Lon:" << ((double)ti->longitude / 10000.0) / 60.0;
+
+              // RE-ENABLED RECORDING AFTER STABILITY CONFIRMATION
+            // Convert SevenCs coordinates to decimal degrees
+            double dbOSLat = ((double)ti->latitude / 10000.0) / 60.0;
+            double dbOSLon = ((double)ti->longitude / 10000.0) / 60.0;
+            double dbOSSog = (ti->sog < 1023) ? ti->sog / 10.0 : -1.0;
+            double dbOSCog = (ti->cog < 3600) ? ti->cog / 10.0 : -1.0;
+            double dbOSHeading = (ti->heading < 3600) ? ti->heading / 10.0 : -1.0;
+
+            // RE-ENABLED: AIS ownship recording with throttling
+            try {
+                // Simple throttling - only record every 2 seconds
+                static QDateTime lastOwnshipRecord;
+                QDateTime currentTime = QDateTime::currentDateTime();
+
+                if (!lastOwnshipRecord.isValid() || lastOwnshipRecord.secsTo(currentTime) >= 2) {
+                    // Create AIVDO NMEA string for ownship data
+                    QString ownshipNmea = AIVDOEncoder::encodeAIVDO1(dbOSLat, dbOSLon, dbOSCog, dbOSSog, dbOSHeading, 0, 1);
+
+                    AisDatabaseManager::instance().insertParsedOwnshipData(
+                        ownshipNmea,
+                        "ownship",
+                        dbOSLat, dbOSLon, dbOSSog, dbOSCog, dbOSHeading
+                    );
+                    lastOwnshipRecord = currentTime;
+                }
+            } catch (const std::exception& e) {
+                qWarning() << "Error recording ownship data:" << e.what();
+            }
+        } catch (const std::exception& e) {
+            qWarning() << "Error in ownship data processing:" << e.what();
+        }
+
         // EKOR OWNSHIP
         if (ownShipLat != 0 && ownShipLon != 0 && _wParent->getOwnShipTrail()) {
             int setting = _wParent->getTrackLine();
@@ -592,14 +628,51 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
                 data.rawInfo = *ti;
                 _myAis->postTargetUpdate(data);
 
+                // RE-ENABLED: AIS target recording with throttling
+                try {
+                    // Simple throttling - only record every 5 seconds per MMSI
+                    static QHash<quint32, QDateTime> lastTargetRecords;
+                    QDateTime currentTime = QDateTime::currentDateTime();
+
+                    if (!lastTargetRecords.contains(ti->mmsi) ||
+                        lastTargetRecords[ti->mmsi].secsTo(currentTime) >= 5) {
+
+                        qDebug() << "AIS Target received - MMSI:" << ti->mmsi << "| Lat:" << ((double)ti->latitude / 10000.0) / 60.0;
+
+                        // Convert position for database (from SevenCs 1/10000° to decimal degrees)
+                        double dbLat = ((double)ti->latitude / 10000.0) / 60.0;
+                        double dbLon = ((double)ti->longitude / 10000.0) / 60.0;
+                        double dbSog = (ti->sog < 1023) ? ti->sog / 10.0 : -1.0;
+                        double dbCog = (ti->cog < 3600) ? ti->cog / 10.0 : -1.0;
+                        double dbHeading = (ti->heading < 3600) ? ti->heading / 10.0 : -1.0;
+
+                        // Create NMEA string from parsed data (for record keeping)
+                        QString reconstructedNmea = QString("!AIVDM,,A,,%1,%2,%3,%4,5*55")
+                            .arg(ti->mmsi)
+                            .arg(QString::number(dbLat, 'f', 6))
+                            .arg(QString::number(dbLon, 'f', 6))
+                            .arg(QString::number(ti->navStatus));
+
+                        AisDatabaseManager::instance().insertParsedAisData(
+                            reconstructedNmea,
+                            "aistarget",
+                            ti->mmsi,
+                            *ti
+                        );
+
+                        lastTargetRecords[ti->mmsi] = currentTime;
+                    }
+                } catch (const std::exception& e) {
+                    qWarning() << "Error recording AIS data:" << e.what();
+                }
+
                 // Ais::instance()->_aisTargetInfoMap[ti->mmsi] = *ti;
                 // Ais::instance()->_aisTargetMap[ti->mmsi] = data;
             }
 
             // EMIT KE CPA/TCPA PANEL
 
-            // MASUK KE DATABASE
-            // PLEASE WAIT!!
+            // Legacy database insert (commented out - using unified table instead)
             // AisDatabaseManager::instance().insertOrUpdateAisTarget(*ti); // EcAISTargetInfo
         }
     }

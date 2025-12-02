@@ -285,8 +285,12 @@ void AISSubscriber::onReadyRead() {
 
         extractString("MAP_INFO_REQ", [=](QString v){ emit mapInfoReqReceived(v);});
 
-        if (hasLat && hasLon) { emit processingData(lat, lon, cog, sog, hdg, spd, dep, yaw, z);}
-        if (hasAis){ emit processingAis(ais);}
+        if (hasLat && hasLon) {
+            emit processingData(lat, lon, cog, sog, hdg, spd, dep, yaw, z);
+        }
+        if (hasAis){
+            emit processingAis(ais);
+        }
 
         // ROUTES INFORMATION
         extractDouble("RTE_WP_BRG", [=](double v){ emit rteWpBrgReceived(v); });

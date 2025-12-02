@@ -5916,18 +5916,34 @@ void EcWidget::processData(double lat, double lon, double cog, double sog, doubl
 
     _aisObj->readAISVariableThread({nmea});
 
+    // Legacy recording (keep for compatibility)
     IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
     if (dvr && dvr->isRecording() && !nmea.isEmpty()) {
         dvr->recordRawNmea(nmea);
+    }
+
+    // Record ownship data to database
+    try {
+        static QDateTime lastOwnshipRecord;
+        QDateTime currentTime = QDateTime::currentDateTime();
+
+        if (!lastOwnshipRecord.isValid() || lastOwnshipRecord.secsTo(currentTime) >= 2) {
+            AisDatabaseManager::instance().insertParsedOwnshipData(
+                nmea,
+                "ownship",
+                lat, lon, sog/10, cog, hdg
+            );
+            lastOwnshipRecord = currentTime;
+        }
+    } catch (const std::exception& e) {
+        qWarning() << "Error recording ownship data:" << e.what();
     }
 
     // PUBLISH NAV INFO
     //publishNavInfo(lat, lon);
     //publishPerTime();
 
-    // INSERT TO DATABASE
-    // PLEASE WAIT!!
-    // AisDatabaseManager::instance().insertOwnShipToDB(lat, lon, dep, hdg, cog, spd, sog, yaw, z);
+    // Legacy database insert (keep for compatibility)
     if (canRecord && AppConfig::isBeta()){
         AisDatabaseManager::instance().insertOwnShipToDB(nmea);
         canRecord = false;
@@ -6136,12 +6152,43 @@ void EcWidget::processAis(QString ais)
 
     for (const QString &sentence : sentences) {
         if (sentence.startsWith("!AIVDM")) {
+            // Legacy recording (keep for compatibility)
             IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
-
             if (dvr && dvr->isRecording() && !sentence.isEmpty()) {
                 dvr->recordRawNmea(sentence);
             }
 
+            // Record AIS target data directly to database
+            try {
+                static QDateTime lastAisTargetRecord;
+                QDateTime currentTime = QDateTime::currentDateTime();
+
+                if (!lastAisTargetRecord.isValid() || lastAisTargetRecord.secsTo(currentTime) >= 2) {
+                    // Extract MMSI from NMEA sentence
+                    uint32_t mmsi = 0;
+                    QStringList parts = sentence.split(',');
+                    if (parts.size() >= 6) {
+                        bool ok;
+                        uint mmsiValue = parts[5].toUInt(&ok);
+                        if (ok) mmsi = mmsiValue;
+                    }
+
+                    // Create empty target info since we can't parse full NMEA here
+                    EcAISTargetInfo emptyTargetInfo = {};
+
+                    AisDatabaseManager::instance().insertParsedAisData(
+                        sentence,
+                        "aistarget",
+                        mmsi,
+                        emptyTargetInfo
+                    );
+                    lastAisTargetRecord = currentTime;
+                }
+            } catch (const std::exception& e) {
+                qWarning() << "Error recording AIS target data:" << e.what();
+            }
+
+            // Process AIS sentence - recording will happen in SevenCs callback
             _aisObj->readAISVariableString(sentence);
         }
     }
