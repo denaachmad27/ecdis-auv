@@ -5944,11 +5944,11 @@ void EcWidget::processData(double lat, double lon, double cog, double sog, doubl
     //publishPerTime();
 
     // Legacy database insert (keep for compatibility)
-    if (canRecord && AppConfig::isBeta()){
-        AisDatabaseManager::instance().insertOwnShipToDB(nmea);
-        canRecord = false;
-        dbTimer.start();
-    }
+    // if (canRecord && AppConfig::isBeta()){
+    //     AisDatabaseManager::instance().insertOwnShipToDB(nmea);
+    //     canRecord = false;
+    //     dbTimer.start();
+    // }
 
     // EKOR OWNSHIP
     //ownShipTrailPoints.append(qMakePair(EcCoordinate(lat), EcCoordinate(lon)));
@@ -6158,34 +6158,10 @@ void EcWidget::processAis(QString ais)
                 dvr->recordRawNmea(sentence);
             }
 
-            // Record AIS target data directly to database
-            try {
-                static QDateTime lastAisTargetRecord;
-                QDateTime currentTime = QDateTime::currentDateTime();
-
-                if (!lastAisTargetRecord.isValid() || lastAisTargetRecord.secsTo(currentTime) >= 2) {
-                    // Extract MMSI from NMEA sentence
-                    uint32_t mmsi = 0;
-                    QStringList parts = sentence.split(',');
-                    if (parts.size() >= 6) {
-                        bool ok;
-                        uint mmsiValue = parts[5].toUInt(&ok);
-                        if (ok) mmsi = mmsiValue;
-                    }
-
-                    // Create empty target info since we can't parse full NMEA here
-                    EcAISTargetInfo emptyTargetInfo = {};
-
-                    AisDatabaseManager::instance().insertParsedAisData(
-                        sentence,
-                        "aistarget",
-                        mmsi,
-                        emptyTargetInfo
-                    );
-                    lastAisTargetRecord = currentTime;
-                }
-            } catch (const std::exception& e) {
-                qWarning() << "Error recording AIS target data:" << e.what();
+            // Cache NMEA asli untuk digunakan di callback nanti
+            // Kita cache NMEA terakhir dan akan mengasosiasikannya dengan MMSI di callback
+            if (sentence.startsWith("!AIVDM")) {
+                _aisObj->cacheLatestNmea(sentence);
             }
 
             // Process AIS sentence - recording will happen in SevenCs callback

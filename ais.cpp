@@ -72,7 +72,7 @@ Ais::~Ais(){
         delete _tcpSocket;
         _tcpSocket = nullptr;
     }
-    
+
     if( _errLog ){
         delete _errLog;
     }
@@ -80,6 +80,10 @@ Ais::~Ais(){
     if( _fAisFile ){
         delete _fAisFile;
     }
+
+    // Bersihkan NMEA cache
+    _latestNmea.clear();
+    _latestNmeaTime = QDateTime();
 
     if (_myAis == this){
         _myAis = nullptr;
@@ -468,42 +472,7 @@ void Ais::handleOwnShipUpdate(EcAISTargetInfo *ti)
 
         Ais::instance()->_aisOwnShip = dataOS;
 
-        // Record parsed ownship data to unified database (with protection against infinite loops)
-        try {
-            //qDebug() << "Ownship received - Lat:" << ((double)ti->latitude / 10000.0) / 60.0 << "| Lon:" << ((double)ti->longitude / 10000.0) / 60.0;
-
-              // RE-ENABLED RECORDING AFTER STABILITY CONFIRMATION
-            // Convert SevenCs coordinates to decimal degrees
-            double dbOSLat = ((double)ti->latitude / 10000.0) / 60.0;
-            double dbOSLon = ((double)ti->longitude / 10000.0) / 60.0;
-            double dbOSSog = (ti->sog < 1023) ? ti->sog / 10.0 : -1.0;
-            double dbOSCog = (ti->cog < 3600) ? ti->cog / 10.0 : -1.0;
-            double dbOSHeading = (ti->heading < 3600) ? ti->heading / 10.0 : -1.0;
-
-            // RE-ENABLED: AIS ownship recording with throttling
-            try {
-                // Simple throttling - only record every 2 seconds
-                static QDateTime lastOwnshipRecord;
-                QDateTime currentTime = QDateTime::currentDateTime();
-
-                if (!lastOwnshipRecord.isValid() || lastOwnshipRecord.secsTo(currentTime) >= 2) {
-                    // Create AIVDO NMEA string for ownship data
-                    QString ownshipNmea = AIVDOEncoder::encodeAIVDO1(dbOSLat, dbOSLon, dbOSCog, dbOSSog, dbOSHeading, 0, 1);
-
-                    AisDatabaseManager::instance().insertParsedOwnshipData(
-                        ownshipNmea,
-                        "ownship",
-                        dbOSLat, dbOSLon, dbOSSog, dbOSCog, dbOSHeading
-                    );
-                    lastOwnshipRecord = currentTime;
-                }
-            } catch (const std::exception& e) {
-                qWarning() << "Error recording ownship data:" << e.what();
-            }
-        } catch (const std::exception& e) {
-            qWarning() << "Error in ownship data processing:" << e.what();
-        }
-
+  
         // EKOR OWNSHIP
         if (ownShipLat != 0 && ownShipLon != 0 && _wParent->getOwnShipTrail()) {
             int setting = _wParent->getTrackLine();
@@ -628,39 +597,47 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
                 data.rawInfo = *ti;
                 _myAis->postTargetUpdate(data);
 
-                // RE-ENABLED: AIS target recording with throttling
+                // Record AIS target data using unified system (both static and dynamic)
                 try {
-                    // Simple throttling - only record every 5 seconds per MMSI
-                    static QHash<quint32, QDateTime> lastTargetRecords;
+                    // Throttle recording to every 5 seconds per MMSI
+                    static QHash<quint32, QDateTime> lastAisRecords;
                     QDateTime currentTime = QDateTime::currentDateTime();
 
-                    if (!lastTargetRecords.contains(ti->mmsi) ||
-                        lastTargetRecords[ti->mmsi].secsTo(currentTime) >= 5) {
+                    if (!lastAisRecords.contains(ti->mmsi) ||
+                        lastAisRecords[ti->mmsi].secsTo(currentTime) >= 5) {
 
-                        qDebug() << "AIS Target received - MMSI:" << ti->mmsi << "| Lat:" << ((double)ti->latitude / 10000.0) / 60.0;
+                        // Gunakan NMEA asli dari cache, bukan reconstructed
+                        QString originalNmea = getLatestNmea();
+                        if (originalNmea.isEmpty()) {
+                            // Fallback: jika tidak ada di cache, gunakan NMEA dari parsed data
+                            // Semua data diambil dari EcAISTargetInfo (kernel)
+                            originalNmea = QString("!AIVDM,,A,,%1,%2,%3,%4,5*55")
+                                .arg(ti->mmsi)
+                                .arg(QString::number(lat, 'f', 6))
+                                .arg(QString::number(lon, 'f', 6))
+                                .arg(QString::number(ti->navStatus));
 
-                        // Convert position for database (from SevenCs 1/10000° to decimal degrees)
-                        double dbLat = ((double)ti->latitude / 10000.0) / 60.0;
-                        double dbLon = ((double)ti->longitude / 10000.0) / 60.0;
-                        double dbSog = (ti->sog < 1023) ? ti->sog / 10.0 : -1.0;
-                        double dbCog = (ti->cog < 3600) ? ti->cog / 10.0 : -1.0;
-                        double dbHeading = (ti->heading < 3600) ? ti->heading / 10.0 : -1.0;
+                            // Jika perlu NMEA yang lebih lengkap dengan SOG/COG/Heading dari kernel
+                            // originalNmea = QString("!AIVDM,,A,,%1,%2,%3,%4,%5,%6,%7*55")
+                            //     .arg(ti->mmsi)
+                            //     .arg(QString::number(lat, 'f', 6))
+                            //     .arg(QString::number(lon, 'f', 6))
+                            //     .arg(QString::number(ti->navStatus))
+                            //     .arg(QString::number(ti->sog))
+                            //     .arg(QString::number(ti->cog))
+                            //     .arg(QString::number(ti->heading));
+                        }
 
-                        // Create NMEA string from parsed data (for record keeping)
-                        QString reconstructedNmea = QString("!AIVDM,,A,,%1,%2,%3,%4,5*55")
-                            .arg(ti->mmsi)
-                            .arg(QString::number(dbLat, 'f', 6))
-                            .arg(QString::number(dbLon, 'f', 6))
-                            .arg(QString::number(ti->navStatus));
-
+                        // This function automatically handles both:
+                        // 1. nmea_records table (dynamic data with timestamp)
+                        // 2. target_references cache (static data) via async processing
                         AisDatabaseManager::instance().insertParsedAisData(
-                            reconstructedNmea,
+                            originalNmea,
                             "aistarget",
                             ti->mmsi,
                             *ti
                         );
-
-                        lastTargetRecords[ti->mmsi] = currentTime;
+                        lastAisRecords[ti->mmsi] = currentTime;
                     }
                 } catch (const std::exception& e) {
                     qWarning() << "Error recording AIS data:" << e.what();
@@ -900,10 +877,8 @@ void Ais::nmeaSelection(const QString &line, QString &outNmea) {
 
     //qDebug() << "LAT: " << navShip.lat;
 
-    if (navShip.lat == 0) { qDebug() << line; }
-
-    qDebug() << QString("%1, %2, %3, %4").arg(navShip.lat).arg(navShip.lon).arg(navShip.sog).arg(navShip.heading_og);
-
+    
+  
     //outNmea = AIVDOEncoder::encodeAIVDO(0, navShip.lat, navShip.lon, navShip.speed, navShip.heading_og);
     outNmea = AIVDOEncoder::encodeAIVDO1(navShip.lat, navShip.lon, navShip.heading_og, navShip.sog, navShip.heading, 0, 1);
 }
@@ -1157,7 +1132,7 @@ void Ais::readAISVariableThread(const QStringList &dataLines)
         std::string lineStd = line.toStdString();
         if( EcAISAddTransponderOutput( _transponder, (unsigned char*)lineStd.c_str(), line.count() ) == False )
         {
-            qDebug() << ( QString( "Error in readAISLogfile(): EcAISAddTransponderOutput() failed in input line %1" ).arg( iLineNo ) );
+            addLogFileEntry( QString( "Error in readAISVariable(): EcAISAddTransponderOutput() failed in input line %1" ).arg( iLineNo ) );
             break;
         }
 
@@ -1439,5 +1414,27 @@ void Ais::deleteOldOwnShipFeature()
         // Jangan reset handle, biarkan sistem yang handle
         qDebug() << "Old ownship feature deleted successfully";
     }
+}
+
+// NMEA Cache Management Functions
+void Ais::cacheLatestNmea(const QString& nmea)
+{
+    if (!nmea.isEmpty() && nmea.startsWith("!AIVDM")) {
+        _latestNmea = nmea;
+        _latestNmeaTime = QDateTime::currentDateTime();
+    }
+}
+
+QString Ais::getLatestNmea()
+{
+    // Kembalikan latest NMEA jika masih fresh (dalam 3 detik)
+    if (!_latestNmea.isEmpty() && _latestNmeaTime.isValid()) {
+        qint64 elapsed = _latestNmeaTime.msecsTo(QDateTime::currentDateTime());
+        if (elapsed < 3000) { // 3 detik
+            return _latestNmea;
+        }
+    }
+
+    return QString(); // Kosong jika tidak fresh
 }
 

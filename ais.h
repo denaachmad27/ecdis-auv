@@ -108,7 +108,12 @@ public:
 
     QMap<unsigned int, AISTargetData> _aisTargetMap;
     QMap<unsigned int, EcAISTargetInfo> _aisTargetInfoMap;
+    QString _latestNmea; // Cache untuk NMEA terakhir yang masuk
+    QDateTime _latestNmeaTime; // Timestamp untuk memastikan NMEA masih fresh
 
+    // Fungsi untuk NMEA cache management
+    void cacheLatestNmea(const QString& nmea);
+    QString getLatestNmea();
 
     static Ais* instance();                       // untuk ambil pointer dari class lain
 
