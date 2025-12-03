@@ -1699,7 +1699,22 @@ public:
   // Compute dynamic pan margin based on current scale
   int effectivePanMargin() const;
 
-  
+  // Enhanced POI visualization using EC2007 kernel
+  void drawEnhancedPOI(QPainter &painter, const PoiEntry &poi, const QPoint &screenPoint);
+  const char* getPOISymbolName(EcPoiCategory category);
+  int getPOIColorIndex(EcPoiCategory category);
+  double getPOISizeFactor(EcPoiCategory category);
+  void drawCriticalGlow(HDC hdc, int x, int y, int width, int height);
+  void drawCustomPOIIcon(QPainter &painter, const PoiEntry &poi, const QPoint &screenPoint);
+  void drawSafeGlow(QPainter &painter, const QPoint &screenPoint);
+  void setupS52ColorScheme();
+  bool isManOverboardCritical(const PoiEntry &poi);
+
+  // Enhanced POI animation
+  QTimer* poiAnimationTimer;
+  bool hasVisibleManOverboardPOI();
+
+
 }; // EcWidget
 
 #endif // _ec_widget_h_
