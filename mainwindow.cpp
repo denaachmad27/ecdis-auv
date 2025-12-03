@@ -279,6 +279,12 @@ void MainWindow::onMoosConnectionStatusChanged(bool connected)
     }
 
     conn = connected;
+
+    // Update recording status based on connection change
+    if (!connected) {
+        updateRecordingStatus(false, "MOOSDB disconnected");
+    }
+    // If connected, the recording status will be updated by the AIS processing logic
 }
 
 // STATUS BAR
@@ -398,6 +404,18 @@ void MainWindow::createStatusBar(){
 
     // Tambahkan ke paling kiri status bar
     statusBar()->addWidget(routesStatusWidget);
+
+    // RECORDING STATUS BAR
+    m_recordingStatusLabel = new QLabel(" ● Recording: Inactive");
+    m_recordingStatusLabel->setStyleSheet("color: gray; font-weight: bold;");
+
+    QWidget *recordingStatusWidget = new QWidget;
+    QHBoxLayout *recordingStatusLayout = new QHBoxLayout(recordingStatusWidget);
+    recordingStatusLayout->setContentsMargins(5, 0, 10, 0); // spasi antar widget
+    recordingStatusLayout->addWidget(m_recordingStatusLabel);
+
+    // Tambahkan ke paling kiri status bar
+    statusBar()->addWidget(recordingStatusWidget);
 }
 
 // MENU BAR
@@ -1104,12 +1122,6 @@ void MainWindow::fetchNmea(){
     m_decreaseSpeedButtonDB->setFixedSize(smallButtonSize);
     m_increaseSpeedButtonDB->setFixedSize(smallButtonSize);
 
-    // Recording controls
-    QPushButton *m_startRecordButton = new QPushButton("⏺ Start Recording");
-    QPushButton *m_stopRecordButton = new QPushButton("⏹ Stop Recording");
-    m_recordingStatusLabel = new QLabel("🔴 Recording: OFF");
-    m_recordingStatusLabel->setStyleSheet("color: red; font-weight: bold;");
-
     m_displayEditDB = new QTextEdit();
     m_displayEditDB->setReadOnly(true);
 
@@ -1123,23 +1135,12 @@ void MainWindow::fetchNmea(){
     controlLayout->addWidget(m_increaseSpeedButtonDB);
     controlLayout->addStretch();
 
-    // Recording controls layout
-    QHBoxLayout *recordLayout = new QHBoxLayout();
-    recordLayout->addWidget(m_startRecordButton);
-    recordLayout->addWidget(m_stopRecordButton);
-    recordLayout->addStretch();
-    recordLayout->addWidget(m_recordingStatusLabel);
-
     // === 3. Tambahkan layout dan widget ke layout utama ===
     mainLayout->addWidget(startLabel);
     mainLayout->addWidget(m_startEditDB);
     mainLayout->addWidget(endLabel);
     mainLayout->addWidget(m_endEditDB);
     mainLayout->addLayout(controlLayout);
-
-    // Add recording controls
-    mainLayout->addLayout(recordLayout);
-
     mainLayout->addWidget(m_displayEditDB);
 
     // === 4. Atur Dock Widget ===
@@ -1154,10 +1155,6 @@ void MainWindow::fetchNmea(){
     connect(m_stopButtonDB, &QPushButton::clicked, this, &MainWindow::onStopClickedDB);
     connect(m_increaseSpeedButtonDB, &QPushButton::clicked, this, &MainWindow::onIncreaseSpeedClickedDB);
     connect(m_decreaseSpeedButtonDB, &QPushButton::clicked, this, &MainWindow::onDecreaseSpeedClickedDB);
-
-    // Recording controls connections
-    connect(m_startRecordButton, &QPushButton::clicked, this, &MainWindow::onStartRecordingSession);
-    connect(m_stopRecordButton, &QPushButton::clicked, this, &MainWindow::onStopRecordingSession);
 
     m_playbackTimerDB = new QTimer(this);
     connect(m_playbackTimerDB, &QTimer::timeout, this, &MainWindow::processNextNmeaDataDB);
@@ -1238,7 +1235,11 @@ void MainWindow::onPlayClickedDB()
 
 void MainWindow::onStopClickedDB()
 {
+    qDebug() << "onStopClickedDB() called";
+
     ecchart->setCustomOwnship(false);
+    ecchart->clearAisTargets();
+
     m_playbackTimerDB->stop();
     m_isPlayingDB = false;
     m_nmeaDataQueueDB.clear();
@@ -1250,7 +1251,8 @@ void MainWindow::onStopClickedDB()
     m_playbackSpeed = 1.0;
     m_speedLabelDB->setText("1x");
     m_lastPlaybackTimestamp = QDateTime(); // Clear timestamp
-    qDebug() << "Playback dihentikan dan antrean dibersihkan.";
+
+    qDebug() << "Basic stop completed successfully";
 }
 
 void MainWindow::onIncreaseSpeedClickedDB()
@@ -1374,85 +1376,6 @@ void MainWindow::processNextNmeaDataDB()
 // RECORDING SESSION MANAGEMENT
 // ========================================
 
-void MainWindow::onStartRecordingSession()
-{
-    if (m_isRecording) {
-        QMessageBox::information(this, "Recording", "Recording already in progress.");
-        return;
-    }
-
-    try {
-        AisDatabaseManager::instance().startRecordingSession(
-            QString("Session_%1").arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss"))
-        );
-
-        m_isRecording = true;
-        m_currentRecordingSession = AisDatabaseManager::instance().getCurrentSessionId();
-
-        // Update UI
-        m_recordingStatusLabel->setText("🔴 Recording: ON");
-        m_recordingStatusLabel->setStyleSheet("color: green; font-weight: bold;");
-
-        // Log ke display
-        m_displayEditDB->append(QString("<span style='color: green;'><b>[RECORDING STARTED]</b> Session: %1</span>")
-            .arg(m_currentRecordingSession.toString().left(8)));
-
-        // Create playback request for audit trail
-        AisDatabaseManager::instance().createPlaybackRequest(
-            "current_user",
-            QDateTime::currentDateTime(),
-            QDateTime::currentDateTime().addYears(1), // Long duration for recording
-            1.0
-        );
-
-        qDebug() << "Recording session started:" << m_currentRecordingSession.toString();
-
-    } catch (const std::exception& e) {
-        QMessageBox::critical(this, "Error", QString("Failed to start recording: %1").arg(e.what()));
-    }
-}
-
-void MainWindow::onStopRecordingSession()
-{
-    if (!m_isRecording) {
-        QMessageBox::information(this, "Recording", "No recording in progress.");
-        return;
-    }
-
-    try {
-        AisDatabaseManager::instance().stopRecordingSession();
-
-        m_isRecording = false;
-        QUuid sessionId = m_currentRecordingSession;
-        m_currentRecordingSession = QUuid();
-
-        // Update UI
-        m_recordingStatusLabel->setText("🔴 Recording: OFF");
-        m_recordingStatusLabel->setStyleSheet("color: red; font-weight: bold;");
-
-        // Log ke display
-        m_displayEditDB->append(QString("<span style='color: orange;'><b>[RECORDING STOPPED]</b> Session: %1</span>")
-            .arg(sessionId.toString().left(8)));
-
-        qDebug() << "Recording session stopped:" << sessionId.toString();
-
-    } catch (const std::exception& e) {
-        QMessageBox::critical(this, "Error", QString("Failed to stop recording: %1").arg(e.what()));
-    }
-}
-
-void MainWindow::onRecordingStatusChanged(bool isRecording)
-{
-    m_isRecording = isRecording;
-
-    if (isRecording) {
-        m_recordingStatusLabel->setText("🔴 Recording: ON");
-        m_recordingStatusLabel->setStyleSheet("color: green; font-weight: bold;");
-    } else {
-        m_recordingStatusLabel->setText("🔴 Recording: OFF");
-        m_recordingStatusLabel->setStyleSheet("color: red; font-weight: bold;");
-    }
-}
 
 void MainWindow::setupUI(){
     // Dock widget utama untuk semua kontrol
@@ -1620,8 +1543,12 @@ void MainWindow::onPlayPauseClicked()
 
 void MainWindow::onStopClicked()
 {
+    qDebug() << "onStopClicked() called";
+
     updatePlayerState(MainWindow::PlayerState::Stopped);
     seekToLine(0);
+
+    qDebug() << "File playback stop completed successfully";
 }
 
 void MainWindow::onPlaybackTimerTimeout()
@@ -2292,11 +2219,7 @@ MainWindow::~MainWindow()
     }
 
     // Stop recording session if active
-    if (m_isRecording) {
-        qDebug() << "Stopping recording session";
-        onStopRecordingSession();
-    }
-
+    
     // Stop playback timers
     if (m_playbackTimerDB) {
         m_playbackTimerDB->stop();
@@ -5971,6 +5894,23 @@ void MainWindow::onEditRouteByForm(int routeId)
 void MainWindow::setReconnectStatusText(const QString text)
 {
     reconnectStatusText->setText(text);
+}
+
+void MainWindow::updateRecordingStatus(bool isActive, const QString& reason)
+{
+    if (!m_recordingStatusLabel) return;
+
+    if (isActive) {
+        m_recordingStatusLabel->setText(" ● Recording: Active");
+        m_recordingStatusLabel->setStyleSheet("color: green; font-weight: bold;");
+    } else {
+        QString statusText = " ● Recording: Inactive";
+        if (!reason.isEmpty()) {
+            statusText += QString(" (%1)").arg(reason);
+        }
+        m_recordingStatusLabel->setText(statusText);
+        m_recordingStatusLabel->setStyleSheet("color: gray; font-weight: bold;");
+    }
 }
 
 SettingsData MainWindow::getSettingsForwarder()

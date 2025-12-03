@@ -179,6 +179,10 @@ private:
 
     QDateTime lastTrailDrawTime;
 
+    // Recording status tracking
+    bool _lastRecordingState = false;
+    void updateRecordingStatusUI(bool shouldRecord, const QString& reason = QString());
+
     struct OwnShipSnapshot {
         double lat = 0;
         double lon = 0;

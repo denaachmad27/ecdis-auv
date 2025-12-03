@@ -53,6 +53,7 @@ public:
 
     void refreshTargetList();
     void clearAllTargets();
+    void clearAllTargetsForce(); // Clear without confirmation
 
 public slots:
     void onGuardZoneAlert(int guardZoneId, int mmsi, const QString& message);

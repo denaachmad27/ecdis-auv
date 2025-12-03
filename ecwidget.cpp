@@ -3742,6 +3742,19 @@ void EcWidget::clearOwnShipTrail()
     update();
 }
 
+void EcWidget::clearAisTargets()
+{
+    if (_aisObj) {
+        deleteAISCell();
+        createAISCell();
+
+        _aisObj->clearTargetData();
+        _aisObj->setAISCell( aisCellId );
+
+        draw(true);
+    }
+}
+
 /*---------------------------------------------------------------------------*/
 
 void EcWidget::resizeEvent (QResizeEvent *event)

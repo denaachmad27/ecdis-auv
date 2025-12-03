@@ -52,6 +52,7 @@ public:
 
     void refreshGuardZoneList();
     void selectGuardZone(int guardZoneId);
+    void clearGuardZoneList(); // Clear all guard zones without confirmation
 
     void validatePanelState();
     void recoverFromError();

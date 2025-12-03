@@ -88,6 +88,10 @@ public:
     // RECONNECT STATUS BAR
     QLabel *reconnectStatusText;
     void setReconnectStatusText(const QString);
+
+    // RECORDING STATUS BAR
+    QLabel *m_recordingStatusLabel = nullptr;
+    void updateRecordingStatus(bool isActive, const QString& reason = QString());
     SettingsData getSettingsForwarder();
 
     // COMPASS
@@ -104,6 +108,7 @@ public slots:
 
     // Enable and Disable icon
     void onMoosConnectionStatusChanged(bool connected);
+    bool isMoosConnected() const { return conn; }
 
 protected slots:
     void onReload();
@@ -316,11 +321,6 @@ private slots:
     void onIncreaseSpeedClickedDB();
     void onDecreaseSpeedClickedDB();
 
-    // Recording session management
-    void onStartRecordingSession();
-    void onStopRecordingSession();
-    void onRecordingStatusChanged(bool isRecording);
-
 private:
     GuardZonePanel* guardZonePanel;
     QDockWidget* guardZoneDock;
@@ -470,10 +470,6 @@ private:
     double m_playbackSpeed = 1.0; // 1.0 = normal speed, 2.0 = 2x speed
     QDateTime m_lastPlaybackTimestamp; // Track last processed timestamp
 
-    // Recording session state
-    bool m_isRecording = false;
-    QLabel *m_recordingStatusLabel = nullptr;
-    QUuid m_currentRecordingSession;
-};
+    };
 
 #endif // _mainwindow_h_

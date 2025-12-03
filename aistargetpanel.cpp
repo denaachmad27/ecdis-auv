@@ -396,16 +396,25 @@ void AISTargetPanel::refreshTargetList()
 
 void AISTargetPanel::clearAllTargets()
 {
-    int ret = QMessageBox::question(this, "Clear All Targets", 
+    int ret = QMessageBox::question(this, "Clear All Targets",
                                    "Are you sure you want to clear all target detections?",
                                    QMessageBox::Yes | QMessageBox::No);
-    
+
     if (ret == QMessageBox::Yes) {
         detectedTargets.clear();
         targetList->clear();
         updateStatistics();
         qDebug() << "All target detections cleared";
     }
+}
+
+void AISTargetPanel::clearAllTargetsForce()
+{
+    // Clear without confirmation dialog
+    detectedTargets.clear();
+    targetList->clear();
+    updateStatistics();
+    qDebug() << "All target detections force cleared";
 }
 
 void AISTargetPanel::onTargetSelectionChanged()

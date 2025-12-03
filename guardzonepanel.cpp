@@ -323,6 +323,17 @@ void GuardZonePanel::refreshGuardZoneList()
     }
 }
 
+void GuardZonePanel::clearGuardZoneList()
+{
+    // Clear guard zone list widget without confirmation
+    guardZoneList->blockSignals(true);
+    guardZoneList->clear();
+    guardZoneList->blockSignals(false);
+
+    updateInfoLabels();
+    qDebug() << "GuardZonePanel list cleared via clearGuardZoneList()";
+}
+
 void GuardZonePanel::selectGuardZone(int guardZoneId)
 {
     for (int i = 0; i < guardZoneList->count(); ++i) {

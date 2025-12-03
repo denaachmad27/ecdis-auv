@@ -906,6 +906,8 @@ public:
 
   // GETTER SETTER AISSUB VAR
   AISSubscriber* getAisSub() const;
+  Ais* getAis() const { return _aisObj; }
+  void clearAisTargets();
 
   // DISPLAY CATEGORY
   void setDisplayCategoryInternal(int category);

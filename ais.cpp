@@ -6,6 +6,7 @@
 #include "aisdatabasemanager.h"
 #include "aivdoencoder.h"
 #include "SettingsManager.h"
+#include "mainwindow.h"
 #include <QElapsedTimer>
 
 // Initialize static member variables
@@ -614,46 +615,100 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
                 data.rawInfo = *ti;
                 _myAis->postTargetUpdate(data);
 
-                // Record AIS target data using unified system (both static and dynamic)
+                // Check recording conditions: Only record if connected to MOOSDB and has AIS data
+                bool shouldRecord = false;
                 try {
-                    // Performance measurement - only for error/delay detection
-                    QElapsedTimer timer;
-                    timer.start();
+                    // Check MOOSDB connection status via MainWindow
+                    MainWindow* mainWin = qobject_cast<MainWindow*>(_wParent);
+                    bool moosConnected = mainWin && mainWin->isMoosConnected();
 
-                    // Gunakan NMEA asli dari cache, bukan reconstructed
-                    QString originalNmea = getLatestNmea();
+                    // Check if there's AIS data (targets exist)
+                    bool hasTargets = (_aisTargetMap.size() > 0 || _aisTargetInfoMap.size() > 0);
+
+                    shouldRecord = moosConnected && hasTargets;
+
+                    if (!shouldRecord) {
+                        // Debug log untuk tracking kenapa tidak direkam
+                        if (!moosConnected && !hasTargets) {
+                            static int skipCount = 0;
+                            if (++skipCount % 100 == 0) {
+                                qDebug() << "RECORDING SKIPPED: MOOSDB disconnected AND no AIS targets (MMSI:" << ti->mmsi << ")";
+                            }
+                        } else if (!moosConnected) {
+                            static int skipCount = 0;
+                            if (++skipCount % 100 == 0) {
+                                qDebug() << "RECORDING SKIPPED: MOOSDB disconnected (MMSI:" << ti->mmsi << ")";
+                            }
+                        } else if (!hasTargets) {
+                            static int skipCount = 0;
+                            if (++skipCount % 100 == 0) {
+                                qDebug() << "RECORDING SKIPPED: No AIS targets available (MMSI:" << ti->mmsi << ")";
+                            }
+                        }
+                    }
+                } catch (...) {
+                    qWarning() << "Error checking recording conditions for MMSI:" << ti->mmsi;
+                }
+
+                // Update recording status in UI if state changed
+                QString statusReason;
+                if (!shouldRecord) {
+                    MainWindow* mainWin = qobject_cast<MainWindow*>(_wParent);
+                    bool moosConnected = mainWin && mainWin->isMoosConnected();
+                    bool hasTargets = (_aisTargetMap.size() > 0 || _aisTargetInfoMap.size() > 0);
+
+                    if (!moosConnected && !hasTargets) {
+                        statusReason = "MOOSDB disconnected & no AIS data";
+                    } else if (!moosConnected) {
+                        statusReason = "MOOSDB disconnected";
+                    } else if (!hasTargets) {
+                        statusReason = "No AIS data";
+                    }
+                }
+                updateRecordingStatusUI(shouldRecord, statusReason);
+
+                // Record AIS target data using unified system (both static and dynamic)
+                if (shouldRecord) {
+                    try {
+                        // Performance measurement - only for error/delay detection
+                        QElapsedTimer timer;
+                        timer.start();
+
+                        // Gunakan NMEA asli dari cache, bukan reconstructed
+                        QString originalNmea = getLatestNmea();
 
                     // Fallback: jika tidak ada di cache, gunakan NMEA dari parsed data
-                    if (originalNmea.isEmpty()) {
-                        // Semua data diambil dari EcAISTargetInfo (kernel)
-                        originalNmea = QString("!AIVDM,,A,,%1,%2,%3,%4,5*55")
-                            .arg(ti->mmsi)
-                            .arg(QString::number(lat, 'f', 6))
-                            .arg(QString::number(lon, 'f', 6))
-                            .arg(QString::number(ti->navStatus));
-                    }
+                        if (originalNmea.isEmpty()) {
+                            // Semua data diambil dari EcAISTargetInfo (kernel)
+                            originalNmea = QString("!AIVDM,,A,,%1,%2,%3,%4,5*55")
+                                .arg(ti->mmsi)
+                                .arg(QString::number(lat, 'f', 6))
+                                .arg(QString::number(lon, 'f', 6))
+                                .arg(QString::number(ti->navStatus));
+                        }
 
-                    // This function automatically handles both:
-                    // 1. nmea_records table (dynamic data with timestamp)
-                    // 2. target_references cache (static data) via async processing
-                    bool success = AisDatabaseManager::instance().insertParsedAisData(
-                        originalNmea,
-                        "aistarget",
-                        ti->mmsi,
-                        *ti
-                    );
+                        // This function automatically handles both:
+                        // 1. nmea_records table (dynamic data with timestamp)
+                        // 2. target_references cache (static data) via async processing
+                        bool success = AisDatabaseManager::instance().insertParsedAisData(
+                            originalNmea,
+                            "aistarget",
+                            ti->mmsi,
+                            *ti
+                        );
 
-                    qint64 elapsed = timer.elapsed();
-                    if (!success) {
-                        qWarning() << "DATABASE INSERT FAILED for MMSI:" << ti->mmsi;
-                    } else if (elapsed > 10) {
-                        // Only log if database operation is slow (more than 10ms)
-                        qWarning() << "SLOW DATABASE INSERT: MMSI:" << ti->mmsi << "took" << elapsed << "ms";
+                        qint64 elapsed = timer.elapsed();
+                        if (!success) {
+                            qWarning() << "DATABASE INSERT FAILED for MMSI:" << ti->mmsi;
+                        } else if (elapsed > 10) {
+                            // Only log if database operation is slow (more than 10ms)
+                            qWarning() << "SLOW DATABASE INSERT: MMSI:" << ti->mmsi << "took" << elapsed << "ms";
+                        }
+                        // Normal successful inserts are silent for clean logging
+                    } catch (const std::exception& e) {
+                        qWarning() << "Error recording AIS data:" << e.what();
                     }
-                    // Normal successful inserts are silent for clean logging
-                } catch (const std::exception& e) {
-                    qWarning() << "Error recording AIS data:" << e.what();
-                }
+                } // end if (shouldRecord)
 
                 // Ais::instance()->_aisTargetInfoMap[ti->mmsi] = *ti;
                 // Ais::instance()->_aisTargetMap[ti->mmsi] = data;
@@ -1445,5 +1500,21 @@ QString Ais::getLatestNmea()
     }
 
     return QString(); // Kosong jika tidak ada
+}
+
+void Ais::updateRecordingStatusUI(bool shouldRecord, const QString& reason)
+{
+    // Only update UI if recording state actually changed
+    if (_lastRecordingState != shouldRecord || !reason.isEmpty()) {
+        _lastRecordingState = shouldRecord;
+
+        MainWindow* mainWin = qobject_cast<MainWindow*>(_wParent);
+        if (mainWin) {
+            QMetaObject::invokeMethod(mainWin, "updateRecordingStatus",
+                Qt::QueuedConnection,
+                Q_ARG(bool, shouldRecord),
+                Q_ARG(QString, reason));
+        }
+    }
 }
 
