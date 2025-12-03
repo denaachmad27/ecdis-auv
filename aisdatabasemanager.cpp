@@ -729,12 +729,33 @@ bool AisDatabaseManager::insertParsedAisDataFast(const QString& nmea, const QStr
 
     QDateTime currentTime = QDateTime::currentDateTimeUtc();
 
+    // Extract additional data from targetInfo
+    QString callSign = QString::fromUtf8(targetInfo.callSign).replace("'", "''");
+    QString imo = targetInfo.imoNumber > 0 ? QString::number(targetInfo.imoNumber) : "NULL";
+    QString shipType = targetInfo.shipType > 0 ? QString::number(targetInfo.shipType) : "NULL";
+    QString sog = (targetInfo.sog > 0 && targetInfo.sog < 1023) ? QString::number(targetInfo.sog / 10.0) : "NULL";
+    QString cog = (targetInfo.cog > 0 && targetInfo.cog < 3600) ? QString::number(targetInfo.cog / 10.0) : "NULL";
+    QString trueHeading = (targetInfo.heading > 0 && targetInfo.heading <= 360) ? QString::number(targetInfo.heading) : "NULL";
+
+    // Extract message type from NMEA
+    QString messageType = "NULL";
+    QStringList parts = nmea.split(',');
+    if (parts.length() >= 6 && !parts[1].isEmpty()) {
+        messageType = QString("'%1'").arg(parts[1]); // Message type is field 2 (index 1)
+    }
+
+    // Handle call sign - empty string should be NULL, not quoted
+    QString callSignSql = callSign.isEmpty() ? "NULL" : QString("'%1'").arg(callSign);
+
     // Fast insert without trigger overhead - using received_at for correct timezone
     QSqlQuery query(db);
     QString sql = QString(
         "INSERT INTO nmea_records (nmea, data_source, mmsi, latitude, longitude, "
-        "vessel_name, raw_data_type, parsed_successfully, received_at) "
-        "VALUES ('%1', '%2', %3, %4, %5, '%6', '%7', true, TIMESTAMP '%8')"
+        "vessel_name, raw_data_type, parsed_successfully, received_at, "
+        "message_type, call_sign, imo, ship_type, speed_over_ground, course_over_ground, true_heading, "
+        "destination, draught) "
+        "VALUES ('%1', '%2', %3, %4, %5, '%6', '%7', true, TIMESTAMP '%8', "
+        "%9, %10, %11, %12, %13, %14, %15, NULL, NULL)"
     ).arg(QString(nmea).replace("'", "''"))
      .arg(dataSource)
      .arg(mmsi)
@@ -742,7 +763,14 @@ bool AisDatabaseManager::insertParsedAisDataFast(const QString& nmea, const QStr
      .arg(longitude != 0 ? QString::number(longitude, 'f', 6) : "NULL")
      .arg(QString::fromUtf8(targetInfo.shipName).replace("'", "''"))
      .arg(determineDataType(nmea))
-     .arg(currentTime.toString("yyyy-MM-dd hh:mm:ss.zzz"));
+     .arg(currentTime.toString("yyyy-MM-dd hh:mm:ss.zzz"))
+     .arg(messageType)
+     .arg(callSignSql)
+     .arg(imo)
+     .arg(shipType)
+     .arg(sog)
+     .arg(cog)
+     .arg(trueHeading);
 
     bool success = query.exec(sql);
 
@@ -761,8 +789,17 @@ bool AisDatabaseManager::insertParsedAisDataFast(const QString& nmea, const QStr
             record.sourceCount++;
             record.timestamp = currentTime;
         }
+
+        // Debug: log successful insert
+        static int insertCount = 0;
+        insertCount++;
+        if (insertCount % 10 == 0) {
+            qDebug() << "DB INSERT SUCCESS: Total records inserted:" << insertCount << "for MMSI:" << mmsi;
+        }
     } else {
-        qWarning() << "Fast AIS insert failed:" << query.lastError().text();
+        qWarning() << "Fast AIS insert failed for MMSI:" << mmsi;
+        qWarning() << "SQL Error:" << query.lastError().text();
+        qWarning() << "SQL Query:" << sql.left(200) << "...";
     }
 
     return success;

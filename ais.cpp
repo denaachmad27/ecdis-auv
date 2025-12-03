@@ -599,45 +599,42 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
 
                 // Record AIS target data using unified system (both static and dynamic)
                 try {
-                    // Throttle recording to every 5 seconds per MMSI
-                    static QHash<quint32, QDateTime> lastAisRecords;
-                    QDateTime currentTime = QDateTime::currentDateTime();
+                    // Gunakan NMEA asli dari cache, bukan reconstructed
+                    QString originalNmea = getLatestNmea();
 
-                    if (!lastAisRecords.contains(ti->mmsi) ||
-                        lastAisRecords[ti->mmsi].secsTo(currentTime) >= 5) {
+                    // Debug: log apakah NMEA ada di cache
+                    static int recordCount = 0;
+                    recordCount++;
 
-                        // Gunakan NMEA asli dari cache, bukan reconstructed
-                        QString originalNmea = getLatestNmea();
-                        if (originalNmea.isEmpty()) {
-                            // Fallback: jika tidak ada di cache, gunakan NMEA dari parsed data
-                            // Semua data diambil dari EcAISTargetInfo (kernel)
-                            originalNmea = QString("!AIVDM,,A,,%1,%2,%3,%4,5*55")
-                                .arg(ti->mmsi)
-                                .arg(QString::number(lat, 'f', 6))
-                                .arg(QString::number(lon, 'f', 6))
-                                .arg(QString::number(ti->navStatus));
+                    if (originalNmea.isEmpty()) {
+                        qDebug() << "RECORD DEBUG #" << recordCount << "- MMSI:" << ti->mmsi << "NMEA cache KOSONG, using fallback";
+                        // Fallback: jika tidak ada di cache, gunakan NMEA dari parsed data
+                        // Semua data diambil dari EcAISTargetInfo (kernel)
+                        originalNmea = QString("!AIVDM,,A,,%1,%2,%3,%4,5*55")
+                            .arg(ti->mmsi)
+                            .arg(QString::number(lat, 'f', 6))
+                            .arg(QString::number(lon, 'f', 6))
+                            .arg(QString::number(ti->navStatus));
+                    } else {
+                        qDebug() << "RECORD DEBUG #" << recordCount << "- MMSI:" << ti->mmsi << "NMEA cache OK:" << originalNmea.left(20);
+                    }
 
-                            // Jika perlu NMEA yang lebih lengkap dengan SOG/COG/Heading dari kernel
-                            // originalNmea = QString("!AIVDM,,A,,%1,%2,%3,%4,%5,%6,%7*55")
-                            //     .arg(ti->mmsi)
-                            //     .arg(QString::number(lat, 'f', 6))
-                            //     .arg(QString::number(lon, 'f', 6))
-                            //     .arg(QString::number(ti->navStatus))
-                            //     .arg(QString::number(ti->sog))
-                            //     .arg(QString::number(ti->cog))
-                            //     .arg(QString::number(ti->heading));
+                    // This function automatically handles both:
+                    // 1. nmea_records table (dynamic data with timestamp)
+                    // 2. target_references cache (static data) via async processing
+                    bool success = AisDatabaseManager::instance().insertParsedAisData(
+                        originalNmea,
+                        "aistarget",
+                        ti->mmsi,
+                        *ti
+                    );
+
+                    if (!success) {
+                        qWarning() << "DATABASE INSERT FAILED for MMSI:" << ti->mmsi;
+                    } else {
+                        if (recordCount % 10 == 0) {
+                            qDebug() << "RECORDING PROGRESS: Successfully recorded" << recordCount << "AIS targets";
                         }
-
-                        // This function automatically handles both:
-                        // 1. nmea_records table (dynamic data with timestamp)
-                        // 2. target_references cache (static data) via async processing
-                        AisDatabaseManager::instance().insertParsedAisData(
-                            originalNmea,
-                            "aistarget",
-                            ti->mmsi,
-                            *ti
-                        );
-                        lastAisRecords[ti->mmsi] = currentTime;
                     }
                 } catch (const std::exception& e) {
                     qWarning() << "Error recording AIS data:" << e.what();
@@ -1427,14 +1424,11 @@ void Ais::cacheLatestNmea(const QString& nmea)
 
 QString Ais::getLatestNmea()
 {
-    // Kembalikan latest NMEA jika masih fresh (dalam 3 detik)
-    if (!_latestNmea.isEmpty() && _latestNmeaTime.isValid()) {
-        qint64 elapsed = _latestNmeaTime.msecsTo(QDateTime::currentDateTime());
-        if (elapsed < 3000) { // 3 detik
-            return _latestNmea;
-        }
+    // Kembalikan latest NMEA tanpa timeout
+    if (!_latestNmea.isEmpty()) {
+        return _latestNmea;
     }
 
-    return QString(); // Kosong jika tidak fresh
+    return QString(); // Kosong jika tidak ada
 }
 
