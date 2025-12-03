@@ -605,20 +605,15 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
 
                 // Record AIS target data using unified system (both static and dynamic)
                 try {
-                    // Performance measurement
+                    // Performance measurement - only for error/delay detection
                     QElapsedTimer timer;
                     timer.start();
 
                     // Gunakan NMEA asli dari cache, bukan reconstructed
                     QString originalNmea = getLatestNmea();
 
-                    // Debug: log apakah NMEA ada di cache
-                    static int recordCount = 0;
-                    recordCount++;
-
+                    // Fallback: jika tidak ada di cache, gunakan NMEA dari parsed data
                     if (originalNmea.isEmpty()) {
-                        qDebug() << "QUEUED RECORD #" << recordCount << "- MMSI:" << ti->mmsi << "NMEA cache KOSONG, using fallback";
-                        // Fallback: jika tidak ada di cache, gunakan NMEA dari parsed data
                         // Semua data diambil dari EcAISTargetInfo (kernel)
                         originalNmea = QString("!AIVDM,,A,,%1,%2,%3,%4,5*55")
                             .arg(ti->mmsi)
@@ -639,16 +634,12 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
 
                     qint64 elapsed = timer.elapsed();
                     if (!success) {
-                        qWarning() << "DATABASE INSERT FAILED for MMSI:" << ti->mmsi << "in" << elapsed << "ms";
-                    } else {
-                        if (recordCount % 50 == 0) {
-                            qDebug() << "QUEUED RECORDING PROGRESS: Successfully recorded" << recordCount << "AIS targets";
-                            qDebug() << "Last insert took:" << elapsed << "ms";
-                        }
-                        if (elapsed > 10) {
-                            qWarning() << "SLOW DATABASE INSERT: MMSI:" << ti->mmsi << "took" << elapsed << "ms";
-                        }
+                        qWarning() << "DATABASE INSERT FAILED for MMSI:" << ti->mmsi;
+                    } else if (elapsed > 10) {
+                        // Only log if database operation is slow (more than 10ms)
+                        qWarning() << "SLOW DATABASE INSERT: MMSI:" << ti->mmsi << "took" << elapsed << "ms";
                     }
+                    // Normal successful inserts are silent for clean logging
                 } catch (const std::exception& e) {
                     qWarning() << "Error recording AIS data:" << e.what();
                 }

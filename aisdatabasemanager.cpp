@@ -789,17 +789,12 @@ bool AisDatabaseManager::insertParsedAisDataFast(const QString& nmea, const QStr
             record.sourceCount++;
             record.timestamp = currentTime;
         }
-
-        // Debug: log successful insert
-        static int insertCount = 0;
-        insertCount++;
-        if (insertCount % 10 == 0) {
-            qDebug() << "DB INSERT SUCCESS: Total records inserted:" << insertCount << "for MMSI:" << mmsi;
-        }
+        // Normal successful inserts are silent for clean logging
     } else {
         qWarning() << "Fast AIS insert failed for MMSI:" << mmsi;
         qWarning() << "SQL Error:" << query.lastError().text();
-        qWarning() << "SQL Query:" << sql.left(200) << "...";
+        // Only show partial SQL query to avoid log spam
+        qWarning() << "SQL Query (first 100 chars):" << sql.left(100) << "...";
     }
 
     return success;
