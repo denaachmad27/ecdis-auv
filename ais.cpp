@@ -6,6 +6,7 @@
 #include "aisdatabasemanager.h"
 #include "aivdoencoder.h"
 #include "SettingsManager.h"
+#include <QElapsedTimer>
 
 Ais::Ais( EcWidget *parent, EcView *view, EcDictInfo *dict,
          EcCoordinate ownShipLat, EcCoordinate ownShipLon,
@@ -417,7 +418,12 @@ void Ais::AISTargetUpdateCallbackThread(EcAISTargetInfo *ti)
     // =================== OTHER AIS TARGET ===================
     if (tiCopy.ownShip == False)
     {
-        _myAis->handleAISTargetUpdate(&tiCopy);
+        // ===== Database update via queued connection (non-blocking) =====
+        EcAISTargetInfo* tiCopyPtr = new EcAISTargetInfo(tiCopy); // allocate on heap
+        QMetaObject::invokeMethod(_myAis, [tiCopyPtr]() {
+            _myAis->handleAISTargetUpdate(tiCopyPtr);
+            delete tiCopyPtr; // clean up after processing
+        }, Qt::QueuedConnection);
 
         AISTargetData ais;
         _myAis->getAISTrack(ais);
@@ -599,6 +605,10 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
 
                 // Record AIS target data using unified system (both static and dynamic)
                 try {
+                    // Performance measurement
+                    QElapsedTimer timer;
+                    timer.start();
+
                     // Gunakan NMEA asli dari cache, bukan reconstructed
                     QString originalNmea = getLatestNmea();
 
@@ -607,7 +617,7 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
                     recordCount++;
 
                     if (originalNmea.isEmpty()) {
-                        qDebug() << "RECORD DEBUG #" << recordCount << "- MMSI:" << ti->mmsi << "NMEA cache KOSONG, using fallback";
+                        qDebug() << "QUEUED RECORD #" << recordCount << "- MMSI:" << ti->mmsi << "NMEA cache KOSONG, using fallback";
                         // Fallback: jika tidak ada di cache, gunakan NMEA dari parsed data
                         // Semua data diambil dari EcAISTargetInfo (kernel)
                         originalNmea = QString("!AIVDM,,A,,%1,%2,%3,%4,5*55")
@@ -615,8 +625,6 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
                             .arg(QString::number(lat, 'f', 6))
                             .arg(QString::number(lon, 'f', 6))
                             .arg(QString::number(ti->navStatus));
-                    } else {
-                        qDebug() << "RECORD DEBUG #" << recordCount << "- MMSI:" << ti->mmsi << "NMEA cache OK:" << originalNmea.left(20);
                     }
 
                     // This function automatically handles both:
@@ -629,11 +637,16 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
                         *ti
                     );
 
+                    qint64 elapsed = timer.elapsed();
                     if (!success) {
-                        qWarning() << "DATABASE INSERT FAILED for MMSI:" << ti->mmsi;
+                        qWarning() << "DATABASE INSERT FAILED for MMSI:" << ti->mmsi << "in" << elapsed << "ms";
                     } else {
-                        if (recordCount % 10 == 0) {
-                            qDebug() << "RECORDING PROGRESS: Successfully recorded" << recordCount << "AIS targets";
+                        if (recordCount % 50 == 0) {
+                            qDebug() << "QUEUED RECORDING PROGRESS: Successfully recorded" << recordCount << "AIS targets";
+                            qDebug() << "Last insert took:" << elapsed << "ms";
+                        }
+                        if (elapsed > 10) {
+                            qWarning() << "SLOW DATABASE INSERT: MMSI:" << ti->mmsi << "took" << elapsed << "ms";
                         }
                     }
                 } catch (const std::exception& e) {
