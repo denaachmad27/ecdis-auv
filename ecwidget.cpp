@@ -618,24 +618,29 @@ EcWidget::~EcWidget ()
   // Release AIS object.
   if( _aisObj )
   {
+    // Stop animation to prevent callbacks
     _aisObj->stopAnimation();
 
+    // Force disconnection of ALL signals immediately to prevent callbacks
+    QObject::disconnect(_aisObj, 0, 0, 0);
+
+    // Wait a bit for any ongoing operations to complete safely
     int iCnt = 0;
-    while( QCoreApplication::hasPendingEvents() == True && iCnt < 20 )
+    while( QCoreApplication::hasPendingEvents() == True && iCnt < 10 )
     {
 #ifdef _WINNT_SOURCE
-      Sleep( 100 );
- #endif
+      Sleep( 50 ); // Reduced wait time
+#else
+      QThread::msleep(50);
+#endif
+      QCoreApplication::processEvents(); // Process remaining events
       iCnt++;
     }
 
-    if( QObject::disconnect( _aisObj, 0, this, 0 ) == False )
-    {
-      QObject::disconnect( _aisObj, 0, this, 0 );
-    }
-
+    // Clean up AIS resources
     deleteAISCell();
 
+    // Set to NULL BEFORE deletion to prevent access via callbacks
     _aisObj = NULL;
   }
 

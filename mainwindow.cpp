@@ -9,6 +9,7 @@
 #include <QLabel>
 #include <QtGlobal>
 #include <cmath>
+#include "AppConfig.h"
 
 #include <QPluginLoader>
 #include <QDir>
@@ -1308,9 +1309,27 @@ void MainWindow::processNextNmeaDataDB()
             ecchart->readAISVariableString(nmea);
         }
 
-        // Enhanced display dengan color coding untuk data source
-        QString color = (dataSource == "ownship") ? "blue" : "green";
+        // Enhanced display dengan color coding untuk data source berdasarkan theme
         QString sourceIcon = (dataSource == "ownship") ? "🚢" : "📡";
+
+        // Tentukan warna berdasarkan theme dan data source
+        QString color;
+        if (dataSource == "ownship") {
+            // Ownship: putih untuk dark/dim, hitam untuk light
+            if (AppConfig::isDark() || AppConfig::isDim()) {
+                color = "white";
+            } else {
+                color = "black";
+            }
+        } else {
+            // AIS Target: kuning untuk dark/dim, kuning tua untuk light
+            if (AppConfig::isDark() || AppConfig::isDim()) {
+                color = "yellow";  // Kuning terang untuk dark theme
+            } else {
+                color = "#FFB300"; // Kuning tua/gold untuk light theme
+            }
+        }
+
         m_displayEditDB->append(QString("<span style='color:%1;'>[%2] %3 %4: %5</span>")
             .arg(color)
             .arg(timestamp.toString("hh:mm:ss.zzz"))

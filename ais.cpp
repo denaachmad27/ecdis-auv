@@ -8,6 +8,9 @@
 #include "SettingsManager.h"
 #include <QElapsedTimer>
 
+// Initialize static member variables
+bool Ais::_isShuttingDown = false;
+
 Ais::Ais( EcWidget *parent, EcView *view, EcDictInfo *dict,
          EcCoordinate ownShipLat, EcCoordinate ownShipLon,
          double oSpd, double oCrs,
@@ -37,6 +40,10 @@ Ais::Ais( EcWidget *parent, EcView *view, EcDictInfo *dict,
   _bReadFromServer = False;
 
   _errLog->open(QIODevice::WriteOnly);
+
+  // Initialize shutdown flag
+  _isShuttingDown = false;
+
   if( createTransponderObject() == False )
   {
     addLogFileEntry( QString( "createTransponderObject() failed!" ) );
@@ -58,6 +65,9 @@ Ais::Ais( EcWidget *parent, EcView *view, EcDictInfo *dict,
 }
 
 Ais::~Ais(){
+    // Set shutdown flag to prevent callbacks
+    _isShuttingDown = true;
+
     // Pastikan transponder dibersihkan
     if( _transponder != NULL ){
         if( EcAISDeleteTransponder( &_transponder ) == False ){
@@ -395,7 +405,8 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
 
 void Ais::AISTargetUpdateCallbackThread(EcAISTargetInfo *ti)
 {
-    if (!ti || !_myAis) return;
+    // Enhanced safety checks during shutdown
+    if (!ti || !_myAis || _isShuttingDown) return;
 
     EcAISTargetInfo tiCopy = *ti; // copy biar aman
 

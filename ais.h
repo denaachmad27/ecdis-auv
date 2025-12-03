@@ -144,6 +144,8 @@ private:
     void closeErrLogFile();
     void closeAisFile();
     void closeSocketConnection();
+
+    static bool _isShuttingDown; // Flag to prevent callbacks during shutdown
     
     EcCoordinate _ownShipLat, _ownShipLon;
     EcCoordinate _targetLat, _targetLon;

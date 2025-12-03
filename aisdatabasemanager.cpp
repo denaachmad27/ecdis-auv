@@ -18,9 +18,34 @@ AisDatabaseManager::AisDatabaseManager() : asyncProcessingTimer(nullptr) {
 }
 
 AisDatabaseManager::~AisDatabaseManager() {
-    // Process any remaining target references before shutdown
-    processTargetReferencesAsync();
+    // Stop async timer first to prevent race conditions
+    if (asyncProcessingTimer) {
+        asyncProcessingTimer->stop();
+    }
+
+    // Process any remaining target references ONLY if database is still open
+    try {
+        if (db.isOpen()) {
+            processTargetReferencesAsync();
+        }
+    } catch (...) {
+        // Ignore errors during shutdown
+        qWarning() << "Error processing target references during shutdown";
+    }
+
+    // Clean up timer
     delete asyncProcessingTimer;
+    asyncProcessingTimer = nullptr;
+
+    // Close database connection if still open
+    try {
+        if (db.isOpen()) {
+            db.close();
+        }
+    } catch (...) {
+        qWarning() << "Error closing database during shutdown";
+    }
+
     qDebug() << "AisDatabaseManager destroyed";
 }
 
