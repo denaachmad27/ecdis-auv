@@ -7,6 +7,7 @@
 #include <QComboBox>
 #include <QLineEdit>
 #include <QLabel>
+#include <QtGlobal>
 #include <cmath>
 
 #include <QPluginLoader>
@@ -1208,8 +1209,10 @@ void MainWindow::onPlayClickedDB()
                     m_isPlayingDB = true;
                     m_playButtonDB->setText("Pause");
                     m_playButtonDB->setIcon(QIcon(":/icon/pause.svg"));
-                    m_playbackTimerDB->start(m_currentIntervalDB);
-                    qDebug() << "Playback dimulai.";
+
+                    // Start with immediate processing of first data
+                    processNextNmeaDataDB();
+                    qDebug() << "Playback dimulai dengan speed:" << m_playbackSpeed << "x";
                 } else {
                     m_isPlayingDB = false;
                     QMessageBox::information(this, "Data Kosong", "Tidak ada data NMEA dalam rentang waktu yang dipilih.");
@@ -1222,8 +1225,12 @@ void MainWindow::onPlayClickedDB()
             m_isPlayingDB = true;
             m_playButtonDB->setText("Pause");
             m_playButtonDB->setIcon(QIcon(":/icon/pause.svg"));
-            m_playbackTimerDB->start(m_currentIntervalDB);
-            qDebug() << "Playback dilanjutkan.";
+
+            // Resume playback with next data using timestamp-based timing
+            if (!m_nmeaDataQueueDB.isEmpty()) {
+                processNextNmeaDataDB();
+            }
+            qDebug() << "Playback dilanjutkan dengan speed:" << m_playbackSpeed << "x";
         }
     }
 }
@@ -1239,44 +1246,52 @@ void MainWindow::onStopClickedDB()
     m_playButtonDB->setIcon(QIcon(":/icon/play.svg"));
 
     // Reset kecepatan ke default (1x)
-    m_currentIntervalDB = 1000;
+    m_playbackSpeed = 1.0;
     m_speedLabelDB->setText("1x");
+    m_lastPlaybackTimestamp = QDateTime(); // Clear timestamp
     qDebug() << "Playback dihentikan dan antrean dibersihkan.";
 }
 
 void MainWindow::onIncreaseSpeedClickedDB()
 {
-    // Maksimal kecepatan adalah 8x (interval 125ms)
-    if (m_currentIntervalDB > 125) {
-        m_currentIntervalDB /= 2;
+    // Maksimal kecepatan adalah 8x
+    if (m_playbackSpeed < 8.0) {
+        m_playbackSpeed *= 2;
+        m_speedLabelDB->setText(QString("%1x").arg(m_playbackSpeed));
+        qDebug() << "Playback speed increased to" << m_playbackSpeed << "x";
 
-        int speedFactor = 1000 / m_currentIntervalDB;
-        m_speedLabelDB->setText(QString("%1x").arg(speedFactor));
-
-        if (m_isPlayingDB) {
+        // Restart timer immediately to apply new speed if playing
+        if (m_isPlayingDB && !m_nmeaDataQueueDB.isEmpty()) {
             m_playbackTimerDB->stop();
-            m_playbackTimerDB->start(m_currentIntervalDB);
+            // Calculate new interval for current data
+            QVariantList currentData = m_nmeaDataQueueDB.head();
+            QDateTime currentTimestamp = currentData.at(0).toDateTime();
+            QDateTime nextTimestamp = m_lastPlaybackTimestamp.isValid() ? m_lastPlaybackTimestamp : currentTimestamp;
+            qint64 timeDiffMs = nextTimestamp.msecsTo(currentTimestamp);
+            qint64 newInterval = qMax<qint64>(10, static_cast<qint64>(timeDiffMs / m_playbackSpeed));
+            m_playbackTimerDB->start(newInterval);
         }
     }
 }
 
 void MainWindow::onDecreaseSpeedClickedDB()
 {
-    // Minimal kecepatan adalah 0.5x (interval 2000ms)
-    if (m_currentIntervalDB < 2000) {
-        m_currentIntervalDB *= 2;
+    // Minimal kecepatan adalah 0.25x
+    if (m_playbackSpeed > 0.25) {
+        m_playbackSpeed /= 2;
+        m_speedLabelDB->setText(QString("%1x").arg(m_playbackSpeed));
+        qDebug() << "Playback speed decreased to" << m_playbackSpeed << "x";
 
-        // Atur label khusus untuk 0.5x
-        if (m_currentIntervalDB == 2000) {
-            m_speedLabelDB->setText("0.5x");
-        } else {
-            int speedFactor = 1000 / m_currentIntervalDB;
-            m_speedLabelDB->setText(QString("%1x").arg(speedFactor));
-        }
-
-        if (m_isPlayingDB) {
+        // Restart timer immediately to apply new speed if playing
+        if (m_isPlayingDB && !m_nmeaDataQueueDB.isEmpty()) {
             m_playbackTimerDB->stop();
-            m_playbackTimerDB->start(m_currentIntervalDB);
+            // Calculate new interval for current data
+            QVariantList currentData = m_nmeaDataQueueDB.head();
+            QDateTime currentTimestamp = currentData.at(0).toDateTime();
+            QDateTime nextTimestamp = m_lastPlaybackTimestamp.isValid() ? m_lastPlaybackTimestamp : currentTimestamp;
+            qint64 timeDiffMs = nextTimestamp.msecsTo(currentTimestamp);
+            qint64 newInterval = qMax<qint64>(10, static_cast<qint64>(timeDiffMs / m_playbackSpeed));
+            m_playbackTimerDB->start(newInterval);
         }
     }
 }
@@ -1302,6 +1317,31 @@ void MainWindow::processNextNmeaDataDB()
             .arg(sourceIcon)
             .arg(dataSource.toUpper())
             .arg(nmea.left(60) + "..."));
+
+        // Calculate next interval based on timestamp difference
+        if (!m_nmeaDataQueueDB.isEmpty()) {
+            QVariantList nextData = m_nmeaDataQueueDB.head();
+            QDateTime nextTimestamp = nextData.at(0).toDateTime();
+
+            // Calculate actual time difference between current and next NMEA
+            qint64 timeDiffMs = timestamp.msecsTo(nextTimestamp);
+
+            // Apply speed multiplier (1.0 = normal, 2.0 = 2x faster)
+            qint64 playbackInterval = qMax<qint64>(10, static_cast<qint64>(timeDiffMs / m_playbackSpeed));
+
+            // Start timer with calculated interval
+            m_playbackTimerDB->start(playbackInterval);
+
+            // Store current timestamp for reference
+            m_lastPlaybackTimestamp = timestamp;
+        } else {
+            // No more data, stop playback
+            m_playbackTimerDB->stop();
+            m_isPlayingDB = false;
+            m_playButtonDB->setText("Play");
+            m_playButtonDB->setIcon(QIcon(":/icon/play.svg"));
+            qDebug() << "Playback selesai.";
+        }
     } else {
         m_playbackTimerDB->stop();
         m_isPlayingDB = false;

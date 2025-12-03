@@ -465,7 +465,10 @@ private:
     QTimer *m_playbackTimerDB;
     QQueue<QVariantList> m_nmeaDataQueueDB;
     bool m_isPlayingDB = false;
-    int m_currentIntervalDB = 1000;
+
+    // Playback speed and timing
+    double m_playbackSpeed = 1.0; // 1.0 = normal speed, 2.0 = 2x speed
+    QDateTime m_lastPlaybackTimestamp; // Track last processed timestamp
 
     // Recording session state
     bool m_isRecording = false;
