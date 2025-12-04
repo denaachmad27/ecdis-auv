@@ -6061,20 +6061,22 @@ void EcWidget::processData(double lat, double lon, double cog, double sog, doubl
     }
 
     // Record ownship data to database
-    try {
-        static QDateTime lastOwnshipRecord;
-        QDateTime currentTime = QDateTime::currentDateTime();
+    if (false){
+        try {
+            static QDateTime lastOwnshipRecord;
+            QDateTime currentTime = QDateTime::currentDateTime();
 
-        if (!lastOwnshipRecord.isValid() || lastOwnshipRecord.secsTo(currentTime) >= 2) {
-            AisDatabaseManager::instance().insertParsedOwnshipData(
-                nmea,
-                "ownship",
-                lat, lon, sog/10, cog, hdg
-            );
-            lastOwnshipRecord = currentTime;
+            if (!lastOwnshipRecord.isValid() || lastOwnshipRecord.secsTo(currentTime) >= 2) {
+                AisDatabaseManager::instance().insertParsedOwnshipData(
+                    nmea,
+                    "ownship",
+                    lat, lon, sog/10, cog, hdg
+                );
+                lastOwnshipRecord = currentTime;
+            }
+        } catch (const std::exception& e) {
+            qWarning() << "Error recording ownship data:" << e.what();
         }
-    } catch (const std::exception& e) {
-        qWarning() << "Error recording ownship data:" << e.what();
     }
 
     // PUBLISH NAV INFO

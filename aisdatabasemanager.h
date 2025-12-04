@@ -10,6 +10,7 @@
 #include <QObject>
 #include <QQueue>
 #include <QHash>
+#include "AIVDOEncoder.h"
 // SevenCs Kernel EC2007
 #ifdef _WIN32
 #include <windows.h>
@@ -64,6 +65,28 @@ public:
     void getRecordingSessions(QSqlQuery& query);
     void createPlaybackRequest(const QString& userId, const QDateTime& startTime,
                               const QDateTime& endTime, double playbackSpeed = 1.0);
+
+    // NMEA Playback Control - Get targets for specific date
+    struct TargetData {
+        quint32 mmsi;
+        QString vesselName;
+        QString callSign;
+        quint64 imo;
+        int shipType;
+        double latitude;
+        double longitude;
+        double sog;
+        double cog;
+        double heading;
+        QDateTime timestamp;
+        QString nmea;
+
+        TargetData() : mmsi(0), imo(0), shipType(0), latitude(0), longitude(0),
+                      sog(0), cog(0), heading(0) {}
+    };
+
+    QList<TargetData> getTargetsForDate(const QDateTime& date);
+    void encodeTargetsToNMEA(const QList<TargetData>& targets);
 
     ~AisDatabaseManager();
 

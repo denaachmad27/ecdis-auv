@@ -865,3 +865,210 @@ bool AisDatabaseManager::insertParsedOwnshipDataFast(const QString& nmea, const 
 
     return true;
 }
+
+// NMEA Playback Control - Get targets for specific date
+QList<AisDatabaseManager::TargetData> AisDatabaseManager::getTargetsForDate(const QDateTime& date) {
+    QList<TargetData> targets;
+
+    if (!db.isOpen()) {
+        qCritical() << "Database is not open";
+        return targets;
+    }
+
+    QString dateStr = date.toString("yyyy-MM-dd");
+    qCritical() << "Fetching targets for date:" << dateStr;
+
+    // (a) Get static data from target_references
+    QHash<quint32, TargetData> staticDataMap;
+    QSqlQuery staticQuery;
+    QString staticSql = QString(
+        "SELECT DISTINCT mmsi, vessel_name, call_sign, imo, ship_type "
+        "FROM target_references "
+        "WHERE DATE(created_at) = DATE('%1') OR DATE(last_seen) = DATE('%1')"
+    ).arg(dateStr);
+
+    if (staticQuery.exec(staticSql)) {
+        while (staticQuery.next()) {
+            TargetData data;
+            data.mmsi = staticQuery.value("mmsi").toUInt();
+            data.vesselName = staticQuery.value("vessel_name").toString();
+            data.callSign = staticQuery.value("call_sign").toString();
+            data.imo = staticQuery.value("imo").toULongLong();
+            data.shipType = staticQuery.value("ship_type").toInt();
+
+            staticDataMap[data.mmsi] = data;
+        }
+        qCritical() << "Found" << staticDataMap.size() << "static targets from target_references";
+    } else {
+        qCritical() << "Error fetching static data:" << staticQuery.lastError().text();
+    }
+
+    // (b) Get latest dynamic data from nmea_records for each MMSI
+    QHash<quint32, TargetData> dynamicDataMap;
+
+    // First, get all unique MMSIs for the date
+    QSqlQuery mmsiQuery;
+    QString mmsiSql = QString(
+        "SELECT DISTINCT mmsi "
+        "FROM nmea_records "
+        "WHERE DATE(timestamp) = DATE('%1') AND mmsi IS NOT NULL AND mmsi != 0"
+    ).arg(dateStr);
+
+    QSet<quint32> allMmsis;
+    if (mmsiQuery.exec(mmsiSql)) {
+        while (mmsiQuery.next()) {
+            allMmsis.insert(mmsiQuery.value("mmsi").toUInt());
+        }
+        qCritical() << "Found" << allMmsis.size() << "unique MMSIs in nmea_records";
+    }
+
+    // For each MMSI, get the latest non-null values
+    for (quint32 mmsi : allMmsis) {
+        QSqlQuery dynamicQuery;
+        QString dynamicSql = QString(
+            "SELECT "
+            "MAX(CASE WHEN latitude IS NOT NULL THEN timestamp END) as latest_lat_time, "
+            "MAX(CASE WHEN longitude IS NOT NULL THEN timestamp END) as latest_lon_time, "
+            "MAX(CASE WHEN speed_over_ground IS NOT NULL THEN timestamp END) as latest_sog_time, "
+            "MAX(CASE WHEN course_over_ground IS NOT NULL THEN timestamp END) as latest_cog_time, "
+            "MAX(CASE WHEN true_heading IS NOT NULL THEN timestamp END) as latest_hdg_time, "
+            "MAX(timestamp) as latest_time "
+            "FROM nmea_records "
+            "WHERE DATE(timestamp) = DATE('%1') AND mmsi = %2"
+        ).arg(dateStr).arg(mmsi);
+
+        if (dynamicQuery.exec(dynamicSql) && dynamicQuery.next()) {
+            TargetData data;
+            data.mmsi = mmsi;
+
+            // Get latest lat
+            QSqlQuery latQuery;
+            latQuery.prepare(QString(
+                "SELECT latitude FROM nmea_records "
+                "WHERE mmsi = ? AND DATE(timestamp) = DATE('%1') AND latitude IS NOT NULL "
+                "ORDER BY timestamp DESC LIMIT 1"
+            ).arg(dateStr));
+            latQuery.addBindValue(mmsi);
+            if (latQuery.exec() && latQuery.next()) {
+                data.latitude = latQuery.value(0).toDouble();
+            }
+
+            // Get latest lon
+            QSqlQuery lonQuery;
+            lonQuery.prepare(QString(
+                "SELECT longitude FROM nmea_records "
+                "WHERE mmsi = ? AND DATE(timestamp) = DATE('%1') AND longitude IS NOT NULL "
+                "ORDER BY timestamp DESC LIMIT 1"
+            ).arg(dateStr));
+            lonQuery.addBindValue(mmsi);
+            if (lonQuery.exec() && lonQuery.next()) {
+                data.longitude = lonQuery.value(0).toDouble();
+            }
+
+            // Get latest SOG
+            QSqlQuery sogQuery;
+            sogQuery.prepare(QString(
+                "SELECT speed_over_ground FROM nmea_records "
+                "WHERE mmsi = ? AND DATE(timestamp) = DATE('%1') AND speed_over_ground IS NOT NULL "
+                "ORDER BY timestamp DESC LIMIT 1"
+            ).arg(dateStr));
+            sogQuery.addBindValue(mmsi);
+            if (sogQuery.exec() && sogQuery.next()) {
+                data.sog = sogQuery.value(0).toDouble();
+            }
+
+            // Get latest COG
+            QSqlQuery cogQuery;
+            cogQuery.prepare(QString(
+                "SELECT course_over_ground FROM nmea_records "
+                "WHERE mmsi = ? AND DATE(timestamp) = DATE('%1') AND course_over_ground IS NOT NULL "
+                "ORDER BY timestamp DESC LIMIT 1"
+            ).arg(dateStr));
+            cogQuery.addBindValue(mmsi);
+            if (cogQuery.exec() && cogQuery.next()) {
+                data.cog = cogQuery.value(0).toDouble();
+            }
+
+            // Get latest heading
+            QSqlQuery hdgQuery;
+            hdgQuery.prepare(QString(
+                "SELECT true_heading FROM nmea_records "
+                "WHERE mmsi = ? AND DATE(timestamp) = DATE('%1') AND true_heading IS NOT NULL "
+                "ORDER BY timestamp DESC LIMIT 1"
+            ).arg(dateStr));
+            hdgQuery.addBindValue(mmsi);
+            if (hdgQuery.exec() && hdgQuery.next()) {
+                data.heading = hdgQuery.value(0).toDouble();
+            }
+
+            dynamicDataMap[mmsi] = data;
+        }
+    }
+
+    qCritical() << "Found" << dynamicDataMap.size() << "dynamic targets from nmea_records";
+
+    // (c) Combine static and dynamic data
+    QSet<quint32> allTargetMmsis = QSet<quint32>::fromList(staticDataMap.keys()) + QSet<quint32>::fromList(dynamicDataMap.keys());
+
+    for (quint32 mmsi : allTargetMmsis) {
+        TargetData combined;
+
+        // Start with static data if available
+        if (staticDataMap.contains(mmsi)) {
+            combined = staticDataMap[mmsi];
+        } else {
+            combined.mmsi = mmsi;
+        }
+
+        // Overwrite with dynamic data if available
+        if (dynamicDataMap.contains(mmsi)) {
+            const TargetData& dynamic = dynamicDataMap[mmsi];
+            if (dynamic.latitude != 0) combined.latitude = dynamic.latitude;
+            if (dynamic.longitude != 0) combined.longitude = dynamic.longitude;
+            if (dynamic.sog != 0) combined.sog = dynamic.sog;
+            if (dynamic.cog != 0) combined.cog = dynamic.cog;
+            if (dynamic.heading != 0) combined.heading = dynamic.heading;
+        }
+
+        targets.append(combined);
+    }
+
+    qCritical() << "Combined data for" << targets.size() << "targets";
+    return targets;
+}
+
+// Encode targets to NMEA 0183
+void AisDatabaseManager::encodeTargetsToNMEA(const QList<TargetData>& targets) {
+    AIVDOEncoder encoder;
+
+    qCritical() << "=== ENCODING TARGETS TO NMEA 0183 ===";
+    qCritical() << "Total targets to encode:" << targets.size();
+
+    for (const TargetData& target : targets) {
+        // Only encode targets with valid position data
+        if (target.latitude != 0 && target.longitude != 0) {
+            QString nmea = encoder.encodeAIVDO(
+                target.mmsi,
+                target.latitude,
+                target.longitude,
+                target.sog,
+                target.cog
+            );
+
+            qCritical() << "MMSI:" << target.mmsi
+                       << "Vessel:" << target.vesselName
+                       << "Call Sign:" << target.callSign
+                       << "IMO:" << target.imo
+                       << "Position:" << target.latitude << "," << target.longitude
+                       << "SOG:" << target.sog << "knots"
+                       << "COG:" << target.cog << "degrees"
+                       << "Heading:" << target.heading << "degrees"
+                       << "NMEA:" << nmea;
+        } else {
+            qCritical() << "MMSI:" << target.mmsi
+                       << "Vessel:" << target.vesselName
+                       << "- SKIPPED (no position data)";
+        }
+    }
+    qCritical() << "=== END ENCODING ===";
+}
