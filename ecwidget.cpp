@@ -54,6 +54,7 @@
 #include <QMenu>
 #include <QAction>
 #include <QSvgRenderer>
+#include <QFormLayout>
 
 // Guardzone
 #include "IAisDvrPlugin.h"
@@ -3013,7 +3014,7 @@ void EcWidget::drawPois(QPainter& painter)
         QColor color = categoryColor(poi.category);
 
         const bool highlighted = (poi.id == highlightedPoiId);
-        const int radius = highlighted ? 7 : 5;
+        const int radius = 5; // Fixed size, no zoom on focus
 
         QPen pen(QColor(0, 0, 0, active ? 200 : 120));
         pen.setWidth(highlighted ? 3 : 2);
@@ -3024,7 +3025,12 @@ void EcWidget::drawPois(QPainter& painter)
         // Enhanced POI visualization using EC2007 kernel
         drawEnhancedPOI(painter, poi, screenPoint);
 
-        if (showPoiLabels && poi.showLabel) {
+        // Check zoom level for label visibility
+        int currentScale = GetScale();
+        double currentRange = GetRange(currentScale);
+        bool showLabelsAtThisZoom = (currentRange < 50.0); // Hide labels when zoomed out beyond 50 NM
+
+        if (showPoiLabels && poi.showLabel && showLabelsAtThisZoom) {
             const QString labelText = poi.label.isEmpty()
                     ? tr("Point Object %1").arg(poi.id)
                     : poi.label;
@@ -3062,13 +3068,19 @@ void EcWidget::drawWaypointsOverlay(QPainter& painter)
         viewport.translate(-t.x(), -t.y());
     }
 
+    // Clear label collision tracking for overlay to ensure clean label positioning
+    usedLabelRects.clear();
+
     // Decide label density based on range (mirror logic from waypointDraw)
     int currentScale = GetScale();
     double currentRange = GetRange(currentScale);
     bool showRouteNamesOnly = (currentRange >= 123.0);
 
+    // Hide labels when zoomed out beyond certain level (same as POI)
+    bool showLabelsAtThisZoom = (currentRange < 50.0);
+
     QFont labelFont("Arial", 9, QFont::Bold);
-    QFontMetrics fm(labelFont);
+    painter.setFont(labelFont);
 
     for (const Waypoint &wp : waypointList) {
         if (wp.routeId > 0 && !isRouteVisible(wp.routeId)) continue;
@@ -3079,7 +3091,27 @@ void EcWidget::drawWaypointsOverlay(QPainter& painter)
         QPen pen(waypointColor); pen.setWidth(2); painter.setPen(pen); painter.setBrush(Qt::NoBrush);
         painter.drawEllipse(QPoint(x,y), 8, 8);
 
-        // Avoid double labels during dragging: only draw markers here, labels remain from base pixmap
+        // Draw label with POI-style positioning during drag
+        if (!showRouteNamesOnly && showLabelsAtThisZoom && !wp.label.isEmpty()) {
+            // Use POI-style label positioning (always to the right)
+            QFontMetrics fm(labelFont);
+            const int radius = 8; // Waypoint radius
+
+            QRect textRect = fm.boundingRect(wp.label);
+            textRect.adjust(-8, -4, 8, 4);
+            textRect.moveLeft(x + radius + 10);  // Same positioning as POI
+            textRect.moveTop(y - textRect.height() / 2);
+
+            // POI-style background (dark, no border)
+            QColor labelBg = QColor(20, 20, 20, 110);  // Same transparency as inactive POI
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(labelBg);
+            painter.drawRoundedRect(textRect, 4, 4);  // Same radius as POI
+
+            // White text
+            painter.setPen(Qt::white);
+            painter.drawText(textRect, Qt::AlignCenter, wp.label);
+        }
     }
 
     painter.restore();
@@ -4182,6 +4214,75 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
 
     // Keep waypoint highlight when clicking on the map; it will be changed
     // only when another waypoint is explicitly selected.
+
+    // Check for POI right-click
+    if (e->button() == Qt::RightButton) {
+        // Check if click is on a POI
+        for (const auto& poi : poiList) {
+            if (!std::isfinite(poi.latitude) || !std::isfinite(poi.longitude)) {
+                continue;
+            }
+            int x = 0, y = 0;
+            if (!LatLonToXy(poi.latitude, poi.longitude, x, y)) {
+                continue;
+            }
+
+            // Check if click is within POI hit radius
+            const int hitRadius = 12;
+            double dx = e->x() - x;
+            double dy = e->y() - y;
+            double dist = std::sqrt(dx * dx + dy * dy);
+
+            if (dist <= hitRadius) {
+                // Show POI context menu
+                QMenu poiMenu(this);
+                QAction* editAct = poiMenu.addAction(tr("Edit POI"));
+                QAction* moveAct = poiMenu.addAction(tr("Move POI"));
+                QAction* deleteAct = poiMenu.addAction(tr("Delete POI"));
+                poiMenu.addSeparator();
+                QAction* focusAct = poiMenu.addAction(tr("Focus POI"));
+
+                QAction* chosen = poiMenu.exec(mapToGlobal(e->pos()));
+
+                if (chosen == editAct) {
+                    // Try to emit signal first (if panel is connected)
+                    qDebug() << "[POI] Emitting editPOIRequested for POI ID:" << poi.id;
+                    bool signalHandled = false;
+                    emit editPOIRequested(poi.id, &signalHandled);
+
+                    // If no panel is connected to handle the signal, show dialog directly
+                    if (!signalHandled) {
+                        qDebug() << "[POI] No panel connected, showing dialog directly";
+                        showPOIDialogDirect(poi);
+                    }
+                } else if (chosen == moveAct) {
+                    // Start move mode
+                    movingPoiId = poi.id;
+                    movingPoiStartPos = QPoint(x, y);
+                    isMovingPoi = true;
+                    QApplication::setOverrideCursor(Qt::ClosedHandCursor);
+                    emit statusMessage(tr("Drag to move POI"));
+                } else if (chosen == deleteAct) {
+                    // Confirm deletion
+                    QMessageBox::StandardButton reply = QMessageBox::question(
+                        this,
+                        tr("Delete POI"),
+                        tr("Are you sure you want to delete this POI?"),
+                        QMessageBox::Yes | QMessageBox::No,
+                        QMessageBox::No
+                    );
+                    if (reply == QMessageBox::Yes) {
+                        removePoi(poi.id);
+                        emit statusMessage(tr("POI deleted"));
+                    }
+                } else if (chosen == focusAct) {
+                    focusPoi(poi.id);
+                }
+                return; // Handled POI right-click
+            }
+        }
+    }
+
     // AOI context menu on right-click (global, even outside edit mode)
     if (e->button() == Qt::RightButton && !editingAOI) {
         int aoiId=-1, vIdx=-1;
@@ -4619,7 +4720,7 @@ void EcWidget::waypointLeftClick(QMouseEvent *e){
             }
             else
             {
-                if (dragMode){
+                if (dragMode && !isMovingPoi){
                     isDragging = true;
                     lastPanPoint = e->pos();
                     tempOffset = QPoint(0,0);
@@ -4683,6 +4784,24 @@ void EcWidget::mouseMoveEvent(QMouseEvent *e)
                 aoiGhostLat = lat;
                 aoiGhostLon = lon;
                 update();
+            }
+        }
+        return;
+    }
+
+    // Handle POI move
+    if (movingPoiId > 0) {
+        EcCoordinate lat, lon;
+        if (XyToLatLon(e->x(), e->y(), lat, lon)) {
+            // Update POI position in real-time during drag
+            for (auto& poi : poiList) {
+                if (poi.id == movingPoiId) {
+                    poi.latitude = lat;
+                    poi.longitude = lon;
+                    poi.updatedAt = QDateTime::currentDateTimeUtc();
+                    update();
+                    break;
+                }
             }
         }
         return;
@@ -4912,6 +5031,23 @@ void EcWidget::mouseReleaseEvent(QMouseEvent *e)
             update();
             return;
         }
+    }
+
+    // Handle POI move completion
+    if (e->button() == Qt::LeftButton && movingPoiId > 0) {
+        // Save POI position
+        savePois();
+
+        // Also trigger immediate update to ensure UI refresh
+        update();
+
+        movingPoiId = -1;
+        movingPoiStartPos = QPoint();
+        isMovingPoi = false;  // Reset POI move flag
+        QApplication::restoreOverrideCursor();
+        emit statusMessage(tr("POI moved"));
+        emit poiListChanged();
+        return;
     }
     if (guardZoneManager && guardZoneManager->isEditingGuardZone()) {
         if (guardZoneManager->handleMouseRelease(e)) {
@@ -8008,6 +8144,11 @@ void EcWidget::drawWaypointWithLabel(double lat, double lon, const QString& labe
         return; // Waypoint is off-screen, don't draw label
     }
 
+    // Check zoom level for label visibility (same as POI)
+    int currentScale = GetScale();
+    double currentRange = GetRange(currentScale);
+    bool showLabelsAtThisZoom = (currentRange < 50.0); // Hide labels when zoomed out beyond 50 NM
+
     QPainter painter(&drawPixmap);
     painter.setRenderHint(QPainter::Antialiasing, true);
 
@@ -8019,46 +8160,30 @@ void EcWidget::drawWaypointWithLabel(double lat, double lon, const QString& labe
     // Gambar Donut waypoint
     painter.drawEllipse(QPoint(x, y), 8, 8);
 
-    // Setup font dan ukuran teks
-    QFont labelFont("Arial", 9, QFont::Bold);
-    painter.setFont(labelFont);
-    QFontMetrics fm(labelFont);
-    int labelWidth = fm.horizontalAdvance(label);
-    int labelHeight = fm.height();
-    QSize textSize(labelWidth, labelHeight);
+    // Use POI-style label positioning (always to the right of waypoint)
+    if (showLabelsAtThisZoom && !label.isEmpty()) {
+        // Setup font dan ukuran teks (same as POI)
+        QFont labelFont("Arial", 9, QFont::Bold);
+        painter.setFont(labelFont);
+        QFontMetrics fm(labelFont);
 
-    // Use optimal label position with collision detection (allow off-screen)
-    QPoint labelPos = findOptimalLabelPosition(x, y, textSize, 12);
+        // Position label to the right of waypoint like POI
+        const int radius = 8; // Waypoint radius
+        QRect textRect = fm.boundingRect(label);
+        textRect.adjust(-8, -4, 8, 4);
+        textRect.moveLeft(x + radius + 10);  // Same positioning as POI
+        textRect.moveTop(y - textRect.height() / 2);
 
-    // Calculate background rectangle
-    QRect bgRect(labelPos.x() - 4, labelPos.y() - labelHeight - 2,
-                 labelWidth + 8, labelHeight + 4);
+        // POI-style background (dark, no border)
+        QColor labelBg = QColor(20, 20, 20, 110); // Same transparency as inactive POI
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(labelBg);
+        painter.drawRoundedRect(textRect, 4, 4);  // Same radius as POI
 
-    // Skip label if it would be completely off-screen
-    if (bgRect.right() < -margin || bgRect.left() > screenBounds.width() + margin ||
-        bgRect.bottom() < -margin || bgRect.top() > screenBounds.height() + margin) {
-        painter.end();
-        return; // Label would be off-screen
+        // White text
+        painter.setPen(Qt::white);
+        painter.drawText(textRect, Qt::AlignCenter, label);
     }
-
-    // Draw label background (dark transparent like ghost waypoint)
-    QColor bgColor(50, 50, 50, 200); // Dark semi-transparent
-    QColor borderColor = color;
-    borderColor.setAlpha(180);
-
-    // Draw shadow for depth
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(QBrush(QColor(0, 0, 0, 100)));
-    painter.drawRoundedRect(bgRect.adjusted(2, 2, 2, 2), 3, 3);
-
-    // Draw background
-    painter.setBrush(QBrush(bgColor));
-    painter.setPen(QPen(borderColor, 1));
-    painter.drawRoundedRect(bgRect, 3, 3);
-
-    // Draw label text
-    painter.setPen(QColor(255, 255, 255)); // White text for contrast
-    painter.drawText(labelPos, label);
 
     painter.end();
 }
@@ -20176,5 +20301,96 @@ bool EcWidget::hasVisibleManOverboardPOI()
         }
     }
     return false;
+}
+
+void EcWidget::showPOIDialogDirect(const PoiEntry& poi)
+{
+    // Create dialog directly on EcWidget
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Edit Point Object"));
+
+    auto* formLayout = new QFormLayout(&dialog);
+
+    // Make a copy of POI that we can edit
+    PoiEntry editPoi = poi;
+
+    auto* nameEdit = new QLineEdit(editPoi.label, &dialog);
+    formLayout->addRow(tr("Name"), nameEdit);
+
+    auto* categoryCombo = new QComboBox(&dialog);
+    categoryCombo->addItems({tr("Generic"), tr("Checkpoint"), tr("Hazard"), tr("Survey Target"), tr("Man Overboard")});
+    categoryCombo->setCurrentIndex(static_cast<int>(editPoi.category));
+    formLayout->addRow(tr("Category"), categoryCombo);
+
+    auto* latEdit = new QLineEdit(&dialog);
+    latEdit->setText(qIsFinite(editPoi.latitude) ? QString::number(editPoi.latitude, 'f', 6) : QString());
+    latEdit->setValidator(new QDoubleValidator(-90.0, 90.0, 6, latEdit));
+    formLayout->addRow(tr("Latitude"), latEdit);
+
+    auto* lonEdit = new QLineEdit(&dialog);
+    lonEdit->setText(qIsFinite(editPoi.longitude) ? QString::number(editPoi.longitude, 'f', 6) : QString());
+    lonEdit->setValidator(new QDoubleValidator(-180.0, 180.0, 6, lonEdit));
+    formLayout->addRow(tr("Longitude"), lonEdit);
+
+    auto* depthEdit = new QLineEdit(&dialog);
+    depthEdit->setText(qIsFinite(editPoi.depth) ? QString::number(editPoi.depth, 'f', 1) : QString());
+    depthEdit->setValidator(new QDoubleValidator(-11000.0, 11000.0, 2, depthEdit));
+    formLayout->addRow(tr("Depth (m)"), depthEdit);
+
+    auto* notesEdit = new QTextEdit(&dialog);
+    notesEdit->setPlainText(editPoi.description);
+    notesEdit->setMinimumHeight(60);
+    formLayout->addRow(tr("Notes"), notesEdit);
+
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    formLayout->addRow(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    const QString name = nameEdit->text().trimmed();
+    if (name.isEmpty()) {
+        QMessageBox::warning(this, tr("Invalid Input"), tr("Please provide a name for the POI."));
+        return;
+    }
+
+    bool okLat = false;
+    bool okLon = false;
+    const double latitude = latEdit->text().toDouble(&okLat);
+    const double longitude = lonEdit->text().toDouble(&okLon);
+
+    if (!okLat || !okLon) {
+        QMessageBox::warning(this, tr("Invalid Input"), tr("Latitude or longitude is not valid."));
+        return;
+    }
+
+    double depth = std::numeric_limits<double>::quiet_NaN();
+    if (!depthEdit->text().trimmed().isEmpty()) {
+        bool okDepth = false;
+        depth = depthEdit->text().toDouble(&okDepth);
+        if (!okDepth) {
+            QMessageBox::warning(this, tr("Invalid Input"), tr("Depth value is not valid."));
+            return;
+        }
+    }
+
+    // Update POI with new values
+    editPoi.label = name;
+    editPoi.category = static_cast<EcPoiCategory>(categoryCombo->currentIndex());
+    editPoi.latitude = latitude;
+    editPoi.longitude = longitude;
+    editPoi.depth = depth;
+    editPoi.description = notesEdit->toPlainText().trimmed();
+    editPoi.updatedAt = QDateTime::currentDateTimeUtc();
+
+    // Save the updated POI
+    if (updatePoi(poi.id, editPoi)) {
+        emit statusMessage(tr("POI \"%1\" updated").arg(editPoi.label));
+    } else {
+        QMessageBox::warning(this, tr("Error"), tr("Failed to update POI."));
+    }
 }
 

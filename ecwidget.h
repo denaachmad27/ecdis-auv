@@ -452,6 +452,7 @@ public:
   bool focusPoi(int poiId);
   void setShowPoiLabels(bool on) { showPoiLabels = on; update(); }
   bool getShowPoiLabels() const { return showPoiLabels; }
+  void showPOIDialogDirect(const PoiEntry& poi);
   // POI persistence
   void savePois();
   void loadPois();
@@ -977,6 +978,7 @@ public slots:
 
 signals:
   void poiListChanged();
+  void editPOIRequested(int poiId, bool* handled = nullptr);
   // Drawing signals
   void mouseMove(EcCoordinate, EcCoordinate);
   void mouseRightClick(QPoint);
@@ -1241,6 +1243,11 @@ public:
   int nextPoiId = 1;
   int highlightedPoiId = -1;
   bool showPoiLabels = true;
+
+  // POI move state
+  int movingPoiId = -1;
+  QPoint movingPoiStartPos;
+  bool isMovingPoi = false;
 
   AOI *lastAoiList;
   int lastBestSeg;

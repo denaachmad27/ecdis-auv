@@ -389,3 +389,48 @@ void POIPanel::onItemDoubleClicked(QTreeWidgetItem* item, int column)
     Q_UNUSED(column);
     onEditPoi();
 }
+
+void POIPanel::editPoiById(int poiId, bool* handled)
+{
+    qDebug() << "[POIPanel] editPoiById called with POI ID:" << poiId;
+
+    // Mark that we're handling the signal
+    if (handled) {
+        *handled = true;
+    }
+
+    if (!ecWidget) {
+        qDebug() << "[POIPanel] ecWidget is null!";
+        return;
+    }
+    if (poiId < 0) {
+        qDebug() << "[POIPanel] Invalid POI ID:" << poiId;
+        return;
+    }
+
+    PoiEntry poi = ecWidget->poiEntry(poiId);
+    if (poi.id < 0) return;
+
+    // Select the POI in the tree first
+    for (int i = 0; i < tree->topLevelItemCount(); ++i) {
+        QTreeWidgetItem* item = tree->topLevelItem(i);
+        if (item && item->data(0, Qt::UserRole).toInt() == poiId) {
+            tree->setCurrentItem(item);
+            tree->scrollToItem(item);
+            break;
+        }
+    }
+
+    // Open edit dialog directly (don't need to show panel)
+    if (!showPoiDialog(poi, true)) {
+        return;
+    }
+
+    if (!ecWidget->updatePoi(poiId, poi)) {
+        QMessageBox::warning(this, tr("Edit Point Object"), tr("Failed to update Point Object."));
+        return;
+    }
+
+    emit statusMessage(tr("POI \"%1\" updated").arg(poi.label));
+    refreshList();
+}
