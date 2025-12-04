@@ -56,6 +56,28 @@ AISSubscriber::AISSubscriber(QObject* parent)
     });
 }
 
+AISSubscriber::~AISSubscriber() {
+    // Stop all timers to prevent race conditions during destruction
+    shuttingDown = true;
+
+    if (countdownTimer) {
+        countdownTimer->stop();
+    }
+
+    if (noDataTimer) {
+        noDataTimer->stop();
+    }
+
+    // Clean up socket
+    if (socket) {
+        socket->disconnectFromHost();
+        socket->deleteLater();
+        socket = nullptr;
+    }
+
+    qDebug() << "AISSubscriber destroyed safely";
+}
+
 void AISSubscriber::connectToHost(const QString &host, quint16 port) {
     QString dHost = SettingsManager::instance().data().moosIp;
     int dPort = 5000;

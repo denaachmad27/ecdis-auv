@@ -23,9 +23,10 @@ AisDatabaseManager::~AisDatabaseManager() {
         asyncProcessingTimer->stop();
     }
 
-    // Process any remaining target references ONLY if database is still open
+    // Process any remaining target references ONLY if database is still open and not shutting down
     try {
-        if (db.isOpen()) {
+        if (db.isOpen() && !targetReferenceCache.isEmpty()) {
+            qDebug() << "Processing final batch of target references during shutdown...";
             processTargetReferencesAsync();
         }
     } catch (...) {
@@ -712,8 +713,16 @@ void AisDatabaseManager::processTargetReferencesAsync() {
                 "INSERT INTO target_references (mmsi, vessel_name, call_sign, imo, ship_type, data_quality, last_seen, source_count) "
                 "VALUES %1 "
                 "ON CONFLICT (mmsi) DO UPDATE SET "
-                "vessel_name = COALESCE(EXCLUDED.vessel_name, target_references.vessel_name), "
-                "call_sign = COALESCE(EXCLUDED.call_sign, target_references.call_sign), "
+                "vessel_name = CASE "
+                "WHEN EXCLUDED.vessel_name IS NOT NULL AND EXCLUDED.vessel_name != '' "
+                "THEN EXCLUDED.vessel_name "
+                "ELSE target_references.vessel_name "
+                "END, "
+                "call_sign = CASE "
+                "WHEN EXCLUDED.call_sign IS NOT NULL AND EXCLUDED.call_sign != '' "
+                "THEN EXCLUDED.call_sign "
+                "ELSE target_references.call_sign "
+                "END, "
                 "imo = COALESCE(EXCLUDED.imo, target_references.imo), "
                 "ship_type = COALESCE(EXCLUDED.ship_type, target_references.ship_type), "
                 "last_seen = CURRENT_TIMESTAMP, "

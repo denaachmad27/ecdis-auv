@@ -13,6 +13,7 @@ class AISSubscriber : public QObject {
 
 public:
     explicit AISSubscriber(QObject *parent = nullptr);
+    ~AISSubscriber();
     //void disconnectFromHost();
     void setMainWindow(MainWindow*);
     bool dataFlag = false;

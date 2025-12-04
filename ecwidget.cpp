@@ -5915,8 +5915,12 @@ void EcWidget::stopAllThread()
         // Minta thread keluar event loop
         threadAIS->quit();
 
-        // Tunggu thread benar-benar mati
-        threadAIS->wait();
+        // Tunggu thread benar-benar mati dengan timeout
+        if (!threadAIS->wait(3000)) { // 3 second timeout
+            qWarning() << "AIS thread did not quit gracefully, terminating...";
+            threadAIS->terminate();
+            threadAIS->wait(1000); // Final timeout after terminate
+        }
 
         // Pindahkan subscriber ke thread utama agar deleteLater dieksekusi
         subscriber->moveToThread(QApplication::instance()->thread());
