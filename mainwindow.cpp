@@ -4048,6 +4048,9 @@ void MainWindow::setupPOIPanel()
         }
     });
 
+    // Connect POI edit request from EcWidget to POIPanel
+    connect(ecchart, &EcWidget::editPOIRequested, poiPanel, &POIPanel::editPoiById);
+
     QMenu* sidebarMenu = nullptr;
     const QList<QMenu*> menus = menuBar()->findChildren<QMenu*>();
     for (QMenu* menu : menus) {

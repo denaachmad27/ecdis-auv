@@ -22,6 +22,7 @@ signals:
 
 public slots:
     void refreshList();
+    void editPoiById(int poiId, bool* handled = nullptr);
 
 private slots:
     void onAddPoi();
