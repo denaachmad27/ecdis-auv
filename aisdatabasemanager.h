@@ -86,7 +86,7 @@ public:
     };
 
     QList<TargetData> getTargetsForDate(const QDateTime& date);
-    void encodeTargetsToNMEA(const QList<TargetData>& targets);
+    QStringList encodeTargetsToNMEA(const QList<TargetData>& targets);
 
     ~AisDatabaseManager();
 

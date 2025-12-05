@@ -293,10 +293,10 @@ QStringList AIVDOEncoder::encodeType5(int mmsi, QString callsign, QString name, 
 
     bitstream += QString::number(5, 2).rightJustified(6, '0'); // Type 5
     bitstream += "00"; // Repeat
-    bitstream += QString::number(mmsi, 2).rightJustified(30, '0');
+    bitstream += QString::number(mmsi, 2).rightJustified(30, '0'); // MMSI
     bitstream += QString::number(0, 2).rightJustified(2, '0'); // AIS Version
-    bitstream += encode6bitString(callsign, 7);  // 7 chars
-    bitstream += encode6bitString(name, 20);     // 20 chars
+    bitstream += encode6bitString(callsign, 7);  // 7 chars × 6 = 42 bits
+    bitstream += encode6bitString(name, 20);     // 20 chars × 6 = 120 bits
     bitstream += QString::number(shipType, 2).rightJustified(8, '0');
     bitstream += QString::number(static_cast<int>(length), 2).rightJustified(9, '0');
     bitstream += QString::number(static_cast<int>(width), 2).rightJustified(9, '0');
@@ -306,7 +306,7 @@ QStringList AIVDOEncoder::encodeType5(int mmsi, QString callsign, QString name, 
     bitstream += "000000"; // Spare
 
     QString payload = binaryToAIS6Bit(bitstream);
-    return splitPayloadToVDM(payload); // Fungsi bantu pecah payload jadi 2 fragment
+    return splitPayloadToVDM(payload);
 }
 
 QString AIVDOEncoder::encodeType18(int mmsi, double lat, double lon, double sog, double cog, double heading) {

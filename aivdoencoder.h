@@ -75,7 +75,7 @@ public:
     static int decodeSigned(const QString &bits, int len);
     static QString sixbitToBinary(const QString &payload);
 
-private:
+    private:
     static QStringList splitPayloadToVDM(const QString &payload);
     static QString encode6bitString(const QString &text, int maxLen);
     static QString calculateNMEAChecksum(const QString &sentence);

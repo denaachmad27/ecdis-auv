@@ -320,7 +320,6 @@ private slots:
     void processNextNmeaDataDB();
     void onIncreaseSpeedClickedDB();
     void onDecreaseSpeedClickedDB();
-    void onEncodeTargetsForDateClicked();
 
 private:
     GuardZonePanel* guardZonePanel;
@@ -458,7 +457,6 @@ private:
     QPushButton *m_stopButtonDB;
     QPushButton *m_increaseSpeedButtonDB;
     QPushButton *m_decreaseSpeedButtonDB;
-    QPushButton *m_encodeTargetsButtonDB;
     QDateTimeEdit *m_startEditDB;
     QDateTimeEdit *m_endEditDB;
     QTextEdit *m_displayEditDB;

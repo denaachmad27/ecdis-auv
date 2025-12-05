@@ -1038,8 +1038,9 @@ QList<AisDatabaseManager::TargetData> AisDatabaseManager::getTargetsForDate(cons
 }
 
 // Encode targets to NMEA 0183
-void AisDatabaseManager::encodeTargetsToNMEA(const QList<TargetData>& targets) {
+QStringList AisDatabaseManager::encodeTargetsToNMEA(const QList<TargetData>& targets) {
     AIVDOEncoder encoder;
+    QStringList nmeaList;
 
     qCritical() << "=== ENCODING TARGETS TO NMEA 0183 ===";
     qCritical() << "Total targets to encode:" << targets.size();
@@ -1047,28 +1048,36 @@ void AisDatabaseManager::encodeTargetsToNMEA(const QList<TargetData>& targets) {
     for (const TargetData& target : targets) {
         // Only encode targets with valid position data
         if (target.latitude != 0 && target.longitude != 0) {
-            QString nmea = encoder.encodeAIVDO(
+            // Use encodeAIVDM instead of encodeAIVDO to start with "AIVDM"
+            QString nmea = encoder.encodeAIVDM(
+                1,  // Message type (Type 1: Position Report)
                 target.mmsi,
+                0,  // Navigation status (0 = under way using engine)
+                0,  // Rate of turn (0 = not turning)
+                target.sog,
+                1,  // Position accuracy (1 = high)
                 target.latitude,
                 target.longitude,
-                target.sog,
-                target.cog
+                target.cog,
+                static_cast<int>(target.heading),
+                60, // Timestamp (60 = not available)
+                0,  // Maneuver indicator (0 = not available)
+                false, // RAIM flag (false = not in use)
+                0    // Radio status (0 = default)
             );
+
+            nmeaList.append(nmea);
 
             qCritical() << "MMSI:" << target.mmsi
                        << "Vessel:" << target.vesselName
-                       << "Call Sign:" << target.callSign
-                       << "IMO:" << target.imo
-                       << "Position:" << target.latitude << "," << target.longitude
-                       << "SOG:" << target.sog << "knots"
-                       << "COG:" << target.cog << "degrees"
-                       << "Heading:" << target.heading << "degrees"
-                       << "NMEA:" << nmea;
+                       << "- ENCODED with AIVDM";
         } else {
             qCritical() << "MMSI:" << target.mmsi
                        << "Vessel:" << target.vesselName
                        << "- SKIPPED (no position data)";
         }
     }
-    qCritical() << "=== END ENCODING ===";
+    qCritical() << "=== ENCODING COMPLETED - Generated" << nmeaList.size() << "NMEA strings ===";
+
+    return nmeaList;
 }

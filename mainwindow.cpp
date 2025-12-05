@@ -1112,7 +1112,6 @@ void MainWindow::fetchNmea(){
 
     m_playButtonDB = new QPushButton("Play");
     m_stopButtonDB = new QPushButton("Stop");
-    m_encodeTargetsButtonDB = new QPushButton("Encode Targets");
 
     m_decreaseSpeedButtonDB = new QPushButton("-");
     m_increaseSpeedButtonDB = new QPushButton("+");
@@ -1130,7 +1129,6 @@ void MainWindow::fetchNmea(){
     QHBoxLayout *controlLayout = new QHBoxLayout();
     controlLayout->addWidget(m_playButtonDB);
     controlLayout->addWidget(m_stopButtonDB);
-    controlLayout->addWidget(m_encodeTargetsButtonDB);
     controlLayout->addStretch();
     controlLayout->addWidget(m_decreaseSpeedButtonDB);
     controlLayout->addWidget(m_speedLabelDB);
@@ -1155,7 +1153,6 @@ void MainWindow::fetchNmea(){
     // === 5. Hubungkan sinyal/slot ===
     connect(m_playButtonDB, &QPushButton::clicked, this, &MainWindow::onPlayClickedDB);
     connect(m_stopButtonDB, &QPushButton::clicked, this, &MainWindow::onStopClickedDB);
-    connect(m_encodeTargetsButtonDB, &QPushButton::clicked, this, &MainWindow::onEncodeTargetsForDateClicked);
     connect(m_increaseSpeedButtonDB, &QPushButton::clicked, this, &MainWindow::onIncreaseSpeedClickedDB);
     connect(m_decreaseSpeedButtonDB, &QPushButton::clicked, this, &MainWindow::onDecreaseSpeedClickedDB);
 
@@ -1194,6 +1191,23 @@ void MainWindow::onPlayClickedDB()
             }
 
             m_displayEditDB->clear();
+
+            // ENCODE TARGETS FOR START DATE (first play or after stop)
+            QDateTime startOnly = QDateTime(startTime.date());
+            QList<AisDatabaseManager::TargetData> targets = AisDatabaseManager::instance().getTargetsForDate(startOnly);
+            QStringList encodedNmeaList = AisDatabaseManager::instance().encodeTargetsToNMEA(targets);
+
+            // Feed encoded NMEA to ecchart and display
+            m_displayEditDB->append(QString("=== ENCODED TARGETS FOR %1 ===\n").arg(startOnly.toString("yyyy-MM-dd")));
+            m_displayEditDB->append(QString("Generated %1 NMEA strings:\n").arg(encodedNmeaList.size()));
+
+            for (const QString& nmea : encodedNmeaList) {
+                // Feed NMEA to ecchart
+                ecchart->readAISVariableString(nmea);
+                // Display NMEA in text area
+                m_displayEditDB->append(nmea);
+            }
+            m_displayEditDB->append("\n");
 
             QSqlQuery query;
             // Gunakan unified table untuk get kedua ownship dan AIS target data
@@ -1300,57 +1314,6 @@ void MainWindow::onDecreaseSpeedClickedDB()
             m_playbackTimerDB->start(newInterval);
         }
     }
-}
-
-void MainWindow::onEncodeTargetsForDateClicked()
-{
-    // Get the date from startEditDB (we only care about the date part)
-    QDateTime selectedDateTime = m_startEditDB->dateTime();
-    QDate selectedDate = selectedDateTime.date();
-
-    // Convert to QDateTime at start of day
-    QDateTime dateOnly = QDateTime(selectedDate);
-
-    qCritical() << "=== ENCODING TARGETS FOR DATE:" << selectedDate.toString("yyyy-MM-dd") << "===";
-
-    // Get targets for the selected date
-    QList<AisDatabaseManager::TargetData> targets = AisDatabaseManager::instance().getTargetsForDate(dateOnly);
-
-    if (!targets.isEmpty()) {
-        // Encode targets to NMEA 0183
-        AisDatabaseManager::instance().encodeTargetsToNMEA(targets);
-
-        // Display summary in the text area
-        m_displayEditDB->clear();
-        QString summary = QString("=== TARGETS FOR %1 ===\n\n")
-                         .arg(selectedDate.toString("yyyy-MM-dd"));
-        summary += QString("Total targets found: %1\n\n").arg(targets.size());
-
-        int targetsWithPosition = 0;
-        for (const auto& target : targets) {
-            if (target.latitude != 0 && target.longitude != 0) {
-                targetsWithPosition++;
-            }
-        }
-
-        summary += QString("Targets with valid position: %1\n\n").arg(targetsWithPosition);
-        summary += "Details:\n";
-
-        for (const auto& target : targets) {
-            summary += QString("MMSI: %1, Vessel: %2, Pos: %3,%4\n")
-                      .arg(target.mmsi)
-                      .arg(target.vesselName)
-                      .arg(target.latitude, 0, 'f', 6)
-                      .arg(target.longitude, 0, 'f', 6);
-        }
-
-        m_displayEditDB->append(summary);
-    } else {
-        m_displayEditDB->clear();
-        m_displayEditDB->append(QString("No targets found for date: %1").arg(selectedDate.toString("yyyy-MM-dd")));
-    }
-
-    qCritical() << "=== ENCODING COMPLETED ===";
 }
 
 void MainWindow::processNextNmeaDataDB()
