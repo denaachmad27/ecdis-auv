@@ -619,9 +619,20 @@ quint32 AisDatabaseManager::extractMmsiFromNmea(const QString& nmea)
 
 QString AisDatabaseManager::extractVesselNameFromNmea(const QString& nmea)
 {
-    // Simplified vessel name extraction
-    // In real implementation, you'd decode the AIS payload
-    return ""; // Not implemented yet
+    // Use our AIVDOEncoder to decode vessel name from NMEA
+    AisDecoded decoded = AIVDOEncoder::decodeNMEALine(nmea);
+
+    QString vesselName = "";
+
+    // Check if this is Type 5 message (Static and Voyage Related Data)
+    if (decoded.type == 5) {
+        vesselName = decoded.name;
+        // FIX: Replace @ with space for better display
+        vesselName.replace("@", " ");
+        vesselName = vesselName.trimmed();
+    }
+
+    return vesselName;
 }
 
 QString AisDatabaseManager::determineDataType(const QString& nmea)
@@ -892,7 +903,9 @@ QList<AisDatabaseManager::TargetData> AisDatabaseManager::getTargetsForDate(cons
             TargetData data;
             data.mmsi = staticQuery.value("mmsi").toUInt();
             data.vesselName = staticQuery.value("vessel_name").toString();
+            data.vesselName.replace("@", " "); // Fix @ symbols in vessel names
             data.callSign = staticQuery.value("call_sign").toString();
+            data.callSign.replace("@", " "); // Fix @ symbols in call signs
             data.imo = staticQuery.value("imo").toULongLong();
             data.shipType = staticQuery.value("ship_type").toInt();
 
@@ -1068,18 +1081,58 @@ QStringList AisDatabaseManager::encodeTargetsToNMEA(const QList<TargetData>& tar
 
             nmeaList.append(nmeaType1);
 
-            qCritical() << "MMSI:" << target.mmsi
-                       << "Vessel:" << target.vesselName
+            QString displayVesselName = target.vesselName;
+displayVesselName.replace("@", " "); // FIX: Replace @ with space for log readability
+qCritical() << "MMSI:" << target.mmsi
+                       << "Vessel:" << displayVesselName
                        << "- ENCODED Type 1 (Position)";
         } else {
+            QString displayVesselName = target.vesselName;
+            displayVesselName.replace("@", " "); // FIX: Replace @ with space for log readability
             qCritical() << "MMSI:" << target.mmsi
-                       << "Vessel:" << target.vesselName
+                       << "Vessel:" << displayVesselName
                        << "- SKIPPED Type 1 (no position data)";
         }
 
-        // 2. Type 5 - Vessel Name (always if vessel name available)
+        // 2. Type 5 - Vessel Name and Call Sign (always if vessel name available)
         if (!target.vesselName.isEmpty()) {
-            QStringList nmeaType5List = encoder.encodeVesselNameType5(target.mmsi, target.vesselName);
+            // FIX: Trim whitespace from database values before encoding
+            QString cleanCallSign = target.callSign.trimmed();
+            QString cleanVesselName = target.vesselName.trimmed();
+
+            // DEBUG: Log what we're actually passing to encoder
+            qDebug() << "=== ENCODING DEBUG ===";
+            qDebug() << "MMSI:" << target.mmsi;
+            qDebug() << "Call Sign from DB: '" << target.callSign << "' (length:" << target.callSign.length() << ")";
+            qDebug() << "Call Sign cleaned: '" << cleanCallSign << "' (length:" << cleanCallSign.length() << ")";
+            qDebug() << "Vessel Name from DB: '" << target.vesselName << "' (length:" << target.vesselName.length() << ")";
+            qDebug() << "Vessel Name cleaned: '" << cleanVesselName << "' (length:" << cleanVesselName.length() << ")";
+
+            // EXTRA DEBUG: Character analysis
+            qDebug() << "--- CALL SIGN CHAR ANALYSIS ---";
+            for (int i = 0; i < target.callSign.length(); ++i) {
+                QChar ch = target.callSign[i];
+                int ascii = ch.toLatin1();
+                QString desc = (ascii == 32) ? "SPACE" : (ascii == 0) ? "NULL" : QString("'%1'(%2)").arg(ch).arg(ascii);
+                qDebug() << QString("  [%1] %2").arg(i).arg(desc);
+            }
+
+            qDebug() << "--- VESSEL NAME CHAR ANALYSIS ---";
+            for (int i = 0; i < target.vesselName.length(); ++i) {
+                QChar ch = target.vesselName[i];
+                int ascii = ch.toLatin1();
+                QString desc = (ascii == 32) ? "SPACE" : (ascii == 0) ? "NULL" : QString("'%1'(%2)").arg(ch).arg(ascii);
+                qDebug() << QString("  [%1] %2").arg(i).arg(desc);
+            }
+
+            // Test if trimming actually changes anything
+            bool callSignChanged = (target.callSign != cleanCallSign);
+            bool vesselNameChanged = (target.vesselName != cleanVesselName);
+            qDebug() << "--- TRIM EFFECTIVENESS ---";
+            qDebug() << "Call sign changed after trim:" << callSignChanged;
+            qDebug() << "Vessel name changed after trim:" << vesselNameChanged;
+
+            QStringList nmeaType5List = encoder.encodeVesselNameType5(target.mmsi, cleanCallSign, cleanVesselName);
 
             if (!nmeaType5List.isEmpty()) {
                 // Add all Type 5 fragments (usually 2 strings)
@@ -1088,11 +1141,13 @@ QStringList AisDatabaseManager::encodeTargetsToNMEA(const QList<TargetData>& tar
                 }
 
                 qCritical() << "MMSI:" << target.mmsi
-                           << "Vessel:" << target.vesselName
-                           << "- ENCODED Type 5 (Vessel Name) - Generated" << nmeaType5List.size() << "fragments";
+                           << "Call Sign:" << cleanCallSign
+                           << "Vessel:" << cleanVesselName
+                           << "- ENCODED Type 5 (Call Sign + Vessel Name) - Generated" << nmeaType5List.size() << "fragments";
             } else {
                 qCritical() << "MMSI:" << target.mmsi
-                           << "Vessel:" << target.vesselName
+                           << "Call Sign:" << cleanCallSign
+                           << "Vessel:" << cleanVesselName
                            << "- FAILED to encode Type 5";
             }
         } else {

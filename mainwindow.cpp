@@ -1093,6 +1093,26 @@ void MainWindow::createMenuBar(){
     if (AppConfig::isBeta()){
         fetchNmea();
     }
+
+    // Tabify AIS Target Manager Panel (CPATCPA) with existing right-side docks (follow AOI pattern)
+    if (m_cpatcpaDock) {
+        if (m_nmeaPlaybackDock) {
+            tabifyDockWidget(m_nmeaPlaybackDock, m_cpatcpaDock);
+            qDebug() << "[TABIFY] AIS Target Manager Panel tabified with NMEA Playback Control";
+        } else if (guardZoneDock) {
+            tabifyDockWidget(guardZoneDock, m_cpatcpaDock);
+            qDebug() << "[TABIFY] AIS Target Manager Panel tabified with GuardZone";
+        } else if (obstacleDetectionDock) {
+            tabifyDockWidget(obstacleDetectionDock, m_cpatcpaDock);
+            qDebug() << "[TABIFY] AIS Target Manager Panel tabified with Obstacle Detection";
+        } else if (routeDock) {
+            tabifyDockWidget(routeDock, m_cpatcpaDock);
+            qDebug() << "[TABIFY] AIS Target Manager Panel tabified with Route Panel";
+        } else if (aisTargetDock) {
+            tabifyDockWidget(aisTargetDock, m_cpatcpaDock);
+            qDebug() << "[TABIFY] AIS Target Manager Panel tabified with AIS Target Manager";
+        }
+    }
 }
 
 void MainWindow::debugPurpose(){
@@ -1154,6 +1174,38 @@ void MainWindow::fetchNmea(){
     addDockWidget(Qt::RightDockWidgetArea, dock);
 
     dock->hide();
+
+    // Store dock widget for tabify behavior
+    m_nmeaPlaybackDock = dock;
+
+    // Tabify NMEA Playback Control with existing right-side docks (follow AOI pattern)
+    if (aisTargetDock) {
+        tabifyDockWidget(aisTargetDock, m_nmeaPlaybackDock);
+        qDebug() << "[TABIFY] NMEA Playback Control tabified with AIS Target Manager";
+    } else if (guardZoneDock) {
+        tabifyDockWidget(guardZoneDock, m_nmeaPlaybackDock);
+        qDebug() << "[TABIFY] NMEA Playback Control tabified with GuardZone";
+    } else if (obstacleDetectionDock) {
+        tabifyDockWidget(obstacleDetectionDock, m_nmeaPlaybackDock);
+        qDebug() << "[TABIFY] NMEA Playback Control tabified with Obstacle Detection";
+    } else if (routeDock) {
+        tabifyDockWidget(routeDock, m_nmeaPlaybackDock);
+        qDebug() << "[TABIFY] NMEA Playback Control tabified with Route Panel";
+    } else if (m_cpatcpaDock) {
+        tabifyDockWidget(m_cpatcpaDock, m_nmeaPlaybackDock);
+        qDebug() << "[TABIFY] NMEA Playback Control tabified with AIS Target Manager Panel";
+    }
+
+    // Add to Sidebar menu (follow AOI pattern)
+    QMenu* sidebarMenu = nullptr;
+    QList<QMenu*> menus = menuBar()->findChildren<QMenu*>();
+    for (QMenu* menu : menus) {
+        if (menu->title().contains("Sidebar") || menu->title().contains("&Sidebar")) {
+            sidebarMenu = menu;
+            break;
+        }
+    }
+    if (sidebarMenu) sidebarMenu->addAction(m_nmeaPlaybackDock->toggleViewAction());
 
     // === 5. Hubungkan sinyal/slot ===
     connect(m_playButtonDB, &QPushButton::clicked, this, &MainWindow::onPlayClickedDB);
@@ -1331,6 +1383,8 @@ void MainWindow::processNextNmeaDataDB()
 
         if(ecchart && !ecchart->isDragging){
             ecchart->readAISVariableString(nmea);
+            // Emit signal untuk update AIS panels setiap NMEA data diproses
+            emit ecchart->tickPerSecond();
         }
 
         // Enhanced display dengan color coding untuk data source berdasarkan theme

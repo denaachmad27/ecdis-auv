@@ -228,6 +228,8 @@ void AISTargetPanel::onGuardZoneAlert(int guardZoneId, int mmsi, const QString& 
             EcAISTargetInfo& targetInfo = targetInfoMap[mmsi];
             if (!QString(targetInfo.shipName).isEmpty()) {
                 shipName = QString(targetInfo.shipName);
+                // FIX: Replace @ with space for better display
+                shipName.replace("@", " ");
             }
             
             if (guardZoneManager) {

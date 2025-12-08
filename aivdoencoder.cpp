@@ -297,6 +297,7 @@ QStringList AIVDOEncoder::encodeType5(int mmsi, QString callsign, QString name, 
     bitstream += "00"; // Repeat
     bitstream += QString::number(mmsi, 2).rightJustified(30, '0'); // MMSI
     bitstream += QString::number(0, 2).rightJustified(2, '0'); // AIS Version
+    bitstream += QString::number(0, 2).rightJustified(30, '0'); // IMO Number (30 bits) - FIX: Added missing field!
     bitstream += encode6bitString(callsign, 7);  // 7 chars × 6 = 42 bits
     bitstream += encode6bitString(name, 20);     // 20 chars × 6 = 120 bits
     bitstream += QString::number(shipType, 2).rightJustified(8, '0');
@@ -313,18 +314,41 @@ QStringList AIVDOEncoder::encodeType5(int mmsi, QString callsign, QString name, 
 
 // Simplified Type 5 encoder for vessel name and MMSI only - WORKING VERSION
 QStringList AIVDOEncoder::encodeVesselNameType5(int mmsi, const QString &vesselName) {
-    // Use the existing encodeType5 function which is already tested and working
-    // This generates proper Type 5 with vessel name and splits into 2 strings (call sign and name)
+    // Legacy function - calls the new version with empty call sign
+    return encodeVesselNameType5(mmsi, "", vesselName);
+}
+
+QStringList AIVDOEncoder::encodeVesselNameType5(int mmsi, const QString &callSign, const QString &vesselName) {
+    // Use the existing encodeType5 function with proper call sign and vessel name
+    qDebug() << "=== ENCODING TYPE 5 WITH CALL SIGN ===";
+    qDebug() << "MMSI:" << mmsi;
+    qDebug() << "Call Sign:" << callSign;
+    qDebug() << "Vessel Name:" << vesselName;
 
     QStringList nmeaList = encodeType5(
         mmsi,                    // MMSI
-        "",                      // Call sign (empty)
-        vesselName,              // Vessel name
+        callSign,                // Call sign (from database)
+        vesselName,              // Vessel name (from database)
         0,                       // Ship type
         0,                       // Length
         0,                       // Width
         ""                       // Destination (empty)
     );
+
+    qDebug() << "Generated" << nmeaList.size() << "NMEA strings";
+    for (int i = 0; i < nmeaList.size(); ++i) {
+        QString nmea = nmeaList[i];
+        qDebug() << "NMEA" << (i+1) << "length:" << nmea.length();
+        qDebug() << "NMEA" << (i+1) << ":" << nmea;
+
+        // Extract and analyze payload separately
+        QStringList parts = nmea.split(',');
+        if (parts.size() >= 6) {
+            QString payload = parts[5];
+            qDebug() << "Payload" << (i+1) << "length:" << payload.length();
+            qDebug() << "Payload" << (i+1) << ":" << payload;
+        }
+    }
 
     return nmeaList;
 }

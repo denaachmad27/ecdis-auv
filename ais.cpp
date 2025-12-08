@@ -244,8 +244,28 @@ void Ais::AISTargetUpdateCallbackOld( EcAISTargetInfo *ti )
       // Set the tracking status of the ais target feature
       EcAISSetTargetTrackingStatus( feat, _dictInfo, aisTrkStatus, NULL );
 
-      // Set the remaining attributes of the ais target feature
-      EcAISSetTargetObjectData( feat, _dictInfo, ti, &_bSymbolize );
+      // Create a copy of ti to modify vessel names for SevenCs display
+      EcAISTargetInfo tiModified = *ti;
+
+      // Replace @ with spaces in vessel name for SevenCs display
+      QString shipName = QString(tiModified.shipName);
+      shipName.replace("@", " ");
+      strncpy(tiModified.shipName, shipName.toUtf8().constData(), sizeof(tiModified.shipName) - 1);
+      tiModified.shipName[sizeof(tiModified.shipName) - 1] = '\0';
+
+      // Also fix call sign and destination
+      QString callSign = QString(tiModified.callSign);
+      callSign.replace("@", " ");
+      strncpy(tiModified.callSign, callSign.toUtf8().constData(), sizeof(tiModified.callSign) - 1);
+      tiModified.callSign[sizeof(tiModified.callSign) - 1] = '\0';
+
+      QString destination = QString(tiModified.destination);
+      destination.replace("@", " ");
+      strncpy(tiModified.destination, destination.toUtf8().constData(), sizeof(tiModified.destination) - 1);
+      tiModified.destination[sizeof(tiModified.destination) - 1] = '\0';
+
+      // Set the remaining attributes of the ais target feature with modified data
+      EcAISSetTargetObjectData( feat, _dictInfo, &tiModified, &_bSymbolize );
 
 
       // SIMPEN DATA AIS
@@ -279,7 +299,25 @@ void Ais::AISTargetUpdateCallbackOld( EcAISTargetInfo *ti )
           data._dictInfo = _dictInfo;
 
           Ais::instance()->_aisTargetMap[ti->mmsi] = data;
-          Ais::instance()->_aisTargetInfoMap[ti->mmsi] = *ti;
+
+          // Create a modified copy with @ to space conversion for targetInfoMap
+          EcAISTargetInfo tiModified = *ti;
+          QString shipName = QString(tiModified.shipName);
+          shipName.replace("@", " ");
+          strncpy(tiModified.shipName, shipName.toUtf8().constData(), sizeof(tiModified.shipName) - 1);
+          tiModified.shipName[sizeof(tiModified.shipName) - 1] = '\0';
+
+          QString callSign = QString(tiModified.callSign);
+          callSign.replace("@", " ");
+          strncpy(tiModified.callSign, callSign.toUtf8().constData(), sizeof(tiModified.callSign) - 1);
+          tiModified.callSign[sizeof(tiModified.callSign) - 1] = '\0';
+
+          QString destination = QString(tiModified.destination);
+          destination.replace("@", " ");
+          strncpy(tiModified.destination, destination.toUtf8().constData(), sizeof(tiModified.destination) - 1);
+          tiModified.destination[sizeof(tiModified.destination) - 1] = '\0';
+
+          Ais::instance()->_aisTargetInfoMap[ti->mmsi] = tiModified;
       }
 
       // if (aisTrkStatusManual == aisDangerous){
@@ -430,6 +468,10 @@ void Ais::AISTargetUpdateCallbackThread(EcAISTargetInfo *ti)
     // =================== OTHER AIS TARGET ===================
     if (tiCopy.ownShip == False)
     {
+        // Filter out MMSI 999999999 (ownship placeholder) from being displayed as target
+        if (tiCopy.mmsi == 999999999) {
+            return;
+        }
         // ===== Database update via queued connection (non-blocking) =====
         EcAISTargetInfo* tiCopyPtr = new EcAISTargetInfo(tiCopy); // allocate on heap
         QMetaObject::invokeMethod(_myAis, [tiCopyPtr]() {
@@ -537,6 +579,11 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
 {
     if (ti->ownShip == True) return; // Skip jika ini ownship
 
+    // Filter out MMSI 999999999 (ownship placeholder) from being processed as target
+    if (ti->mmsi == 999999999) {
+        return;
+    }
+
     EcCoordinate ownShipLat = 0, ownShipLon = 0;
     double ownShipSog = _dSpeed, ownShipCog = _dCourse;
 
@@ -579,8 +626,28 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
             // Set the tracking status of the ais target feature
             // EcAISSetTargetTrackingStatus(feat, _dictInfo, aisTrkStatus, NULL);
 
-            // Set the remaining attributes of the ais target feature
-            EcAISSetTargetObjectData(feat, _dictInfo, ti, &_bSymbolize);
+            // Create a copy of ti to modify vessel names for SevenCs display
+            EcAISTargetInfo tiModified = *ti;
+
+            // Replace @ with spaces in vessel name for SevenCs display
+            QString shipName = QString(tiModified.shipName);
+            shipName.replace("@", " ");
+            strncpy(tiModified.shipName, shipName.toUtf8().constData(), sizeof(tiModified.shipName) - 1);
+            tiModified.shipName[sizeof(tiModified.shipName) - 1] = '\0';
+
+            // Also fix call sign and destination
+            QString callSign = QString(tiModified.callSign);
+            callSign.replace("@", " ");
+            strncpy(tiModified.callSign, callSign.toUtf8().constData(), sizeof(tiModified.callSign) - 1);
+            tiModified.callSign[sizeof(tiModified.callSign) - 1] = '\0';
+
+            QString destination = QString(tiModified.destination);
+            destination.replace("@", " ");
+            strncpy(tiModified.destination, destination.toUtf8().constData(), sizeof(tiModified.destination) - 1);
+            tiModified.destination[sizeof(tiModified.destination) - 1] = '\0';
+
+            // Set the remaining attributes of the ais target feature with modified data
+            EcAISSetTargetObjectData(feat, _dictInfo, &tiModified, &_bSymbolize);
 
             _myAis->setTargetPos(lat, lon);
 

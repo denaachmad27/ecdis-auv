@@ -4020,11 +4020,15 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
                 // Try to get ship name from AIS data
                 if (strlen(ti->shipName) > 0) {
                     targetName = QString::fromLatin1(ti->shipName).trimmed();
+                    // FIX: Replace @ with space for better display
+                    targetName.replace("@", " ");
                     if (targetName.isEmpty()) {
                         targetName = QString("AIS %1").arg(mmsi);
                     }
                 } else if (strlen(ti->navName) > 0) {
                     targetName = QString::fromLatin1(ti->navName).trimmed();
+                    // FIX: Replace @ with space for better display
+                    targetName.replace("@", " ");
                     if (targetName.isEmpty()) {
                         targetName = QString("AIS %1").arg(mmsi);
                     }
@@ -14854,6 +14858,8 @@ void EcWidget::updateAISTooltipContent(EcAISTargetInfo* ti)
     while (objectName.endsWith('@')) {
         objectName.chop(1);
     }
+    // Replace @ symbols with spaces in the middle of vessel name
+    objectName.replace("@", " ");
 
     // Untuk field yang tidak ada, gunakan nilai default seperti di panel
     QString shipBreadth = "7.00";  // Default value
@@ -14866,7 +14872,9 @@ void EcWidget::updateAISTooltipContent(EcAISTargetInfo* ti)
     QString navStatus = getNavStatusString(ti->navStatus);
     QString mmsiValue = QString::number(ti->mmsi);
     QString callSign = QString(ti->callSign).trimmed();
+    callSign.replace("@", " ");
     QString destination = QString(ti->destination).trimmed();
+    destination.replace("@", " ");
     //QString trackStatus = QString(ti->trackingStatus == 2 ? "Dangerous" : "Tracking");
 
     double lat = ((double)ti->latitude / 10000.0) / 60.0;
@@ -14881,11 +14889,23 @@ void EcWidget::updateAISTooltipContent(EcAISTargetInfo* ti)
     tooltipAntennaLocation->setText(QString("POS: %1").arg(antennaLocation));
 
     // Range & Bearing relative to ownship
-    double osLat = navShip.lat;
-    double osLon = navShip.lon;
+    double osLat = 0, osLon = 0;
+
+    // Try to get ownship position from SevenCs first (most reliable)
+    if (Ais::instance()) {
+        Ais::instance()->getOwnShipPos(osLat, osLon);
+    }
+
+    // Fallback to navShip if SevenCs doesn't have position
+    if (osLat == 0 && osLon == 0) {
+        osLat = navShip.lat;
+        osLon = navShip.lon;
+    }
+
     if (!qIsNaN(osLat) && !qIsNaN(osLon) && (osLat != 0.0 || osLon != 0.0)) {
         double distNm = 0.0, brgDeg = 0.0;
-        EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84, lat, lon, osLat, osLon, &distNm, &brgDeg);
+        // Fix: Calculate bearing FROM ownship TO target (consistent with CPATCPA Panel)
+        EcCalculateRhumblineDistanceAndBearing(EC_GEO_DATUM_WGS84, osLat, osLon, lat, lon, &distNm, &brgDeg);
         tooltipRangeBearing->setText(QString("RNG/BRG: %1 NM / %2°").arg(distNm, 0, 'f', 2).arg(brgDeg, 0, 'f', 0));
         tooltipRangeBearing->show();
     } else {

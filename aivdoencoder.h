@@ -65,6 +65,10 @@ public:
     static QString encodeType4(int mmsi, QDateTime timestamp, double longitude, double latitude);
     static QStringList encodeType5(int mmsi, QString callsign, QString name, int shipType, double length, double width, QString destination);
     static QStringList encodeVesselNameType5(int mmsi, const QString &vesselName);
+    static QStringList encodeVesselNameType5(int mmsi, const QString &callSign, const QString &vesselName);
+
+  // Custom encoder for Type 5 that preserves spaces properly
+  static QStringList encodeType5V2(int mmsi, QString callsign, QString name, int shipType, double length, double width, QString destination);
     static QString encodeType18(int mmsi, double lat, double lon, double sog, double cog, double heading);
     static QString encodeType24A(int mmsi, QString name);
     static QString encodeType24B(int mmsi, QString callsign, int shipType, double length, double width);

@@ -412,10 +412,26 @@ void CPATCPAPanel::updateTargetsDisplay()
         //if (target.mmsi != "367159080" && target.mmsi != "366973590" && target.mmsi != "366996240") continue;
 
         VesselState ownShip;
-        ownShip.lat = Ais::instance()->getOwnShipVar().lat;
-        ownShip.lon = Ais::instance()->getOwnShipVar().lon;
-        ownShip.sog = Ais::instance()->getOwnShipVar().sog;
-        ownShip.cog = Ais::instance()->getOwnShipVar().cog;
+
+        // Try to get ownship position from SevenCs first (most reliable for playback)
+        double osLat = 0, osLon = 0;
+        if (Ais::instance()) {
+            Ais::instance()->getOwnShipPos(osLat, osLon);
+        }
+
+        // Use SevenCs position if available, fallback to ownShipVar
+        if (osLat != 0 && osLon != 0) {
+            ownShip.lat = osLat;
+            ownShip.lon = osLon;
+            // For SOG/COG, still use ownShipVar as SevenCs might not have this data
+            ownShip.sog = Ais::instance()->getOwnShipVar().sog;
+            ownShip.cog = Ais::instance()->getOwnShipVar().cog;
+        } else {
+            ownShip.lat = Ais::instance()->getOwnShipVar().lat;
+            ownShip.lon = Ais::instance()->getOwnShipVar().lon;
+            ownShip.sog = Ais::instance()->getOwnShipVar().sog;
+            ownShip.cog = Ais::instance()->getOwnShipVar().cog;
+        }
 
         VesselState targetVessel;
         targetVessel.lat = target.lat;
@@ -540,6 +556,7 @@ void CPATCPAPanel::updateTargetRow(int row, const AISTargetData& target, const C
 
     QStringList values;
     QString shipName = QString(target.rawInfo.shipName).trimmed();
+    shipName.replace("@", " "); // Fix @ symbols in vessel names
     if (shipName.isEmpty()) shipName = target.mmsi;
     QString statusText;
     if (isDangerous) {

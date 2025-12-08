@@ -401,6 +401,7 @@ private:
     // Chart Manager Panel
     class ChartManagerPanel* chartManagerPanel = nullptr;
     QDockWidget* chartManagerDock = nullptr;
+    QDockWidget* m_nmeaPlaybackDock = nullptr;
     void setupChartManagerPanel();
 
     // BAR BAR
