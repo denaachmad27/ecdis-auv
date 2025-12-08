@@ -192,6 +192,7 @@ protected slots:
     void restartApplication();
     void openReleaseNotesDialog();
     void fetchNmea();
+    void debugPurpose();
     void setDisplay();
 
     void openRouteManager();

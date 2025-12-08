@@ -64,6 +64,7 @@ public:
     static QString encodeAIVDM(int _type, int _mmsi, int _navStatus, int _rot, double _sog, int _posAccuracy, double _lat, double _lon, double _cog, double _hdg, int _timestamp, int _manIndicator, bool _raim, int _radioStatus);
     static QString encodeType4(int mmsi, QDateTime timestamp, double longitude, double latitude);
     static QStringList encodeType5(int mmsi, QString callsign, QString name, int shipType, double length, double width, QString destination);
+    static QStringList encodeVesselNameType5(int mmsi, const QString &vesselName);
     static QString encodeType18(int mmsi, double lat, double lon, double sog, double cog, double heading);
     static QString encodeType24A(int mmsi, QString name);
     static QString encodeType24B(int mmsi, QString callsign, int shipType, double length, double width);
@@ -74,6 +75,9 @@ public:
     static QString decode6bitToString(const QString &bitstream);
     static int decodeSigned(const QString &bits, int len);
     static QString sixbitToBinary(const QString &payload);
+
+    // DEBUG METHODS
+    static QString testEncode6bitString(const QString &text, int maxLen);
 
     private:
     static QStringList splitPayloadToVDM(const QString &payload);

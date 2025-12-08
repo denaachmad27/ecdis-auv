@@ -896,6 +896,7 @@ QList<AisDatabaseManager::TargetData> AisDatabaseManager::getTargetsForDate(cons
             data.imo = staticQuery.value("imo").toULongLong();
             data.shipType = staticQuery.value("ship_type").toInt();
 
+            
             staticDataMap[data.mmsi] = data;
         }
         qCritical() << "Found" << staticDataMap.size() << "static targets from target_references";
@@ -1046,10 +1047,9 @@ QStringList AisDatabaseManager::encodeTargetsToNMEA(const QList<TargetData>& tar
     qCritical() << "Total targets to encode:" << targets.size();
 
     for (const TargetData& target : targets) {
-        // Only encode targets with valid position data
+        // 1. Type 1 - Position Report (if position data available)
         if (target.latitude != 0 && target.longitude != 0) {
-            // Use encodeAIVDM instead of encodeAIVDO to start with "AIVDM"
-            QString nmea = encoder.encodeAIVDM(
+            QString nmeaType1 = encoder.encodeAIVDM(
                 1,  // Message type (Type 1: Position Report)
                 target.mmsi,
                 0,  // Navigation status (0 = under way using engine)
@@ -1066,15 +1066,38 @@ QStringList AisDatabaseManager::encodeTargetsToNMEA(const QList<TargetData>& tar
                 0    // Radio status (0 = default)
             );
 
-            nmeaList.append(nmea);
+            nmeaList.append(nmeaType1);
 
             qCritical() << "MMSI:" << target.mmsi
                        << "Vessel:" << target.vesselName
-                       << "- ENCODED with AIVDM";
+                       << "- ENCODED Type 1 (Position)";
         } else {
             qCritical() << "MMSI:" << target.mmsi
                        << "Vessel:" << target.vesselName
-                       << "- SKIPPED (no position data)";
+                       << "- SKIPPED Type 1 (no position data)";
+        }
+
+        // 2. Type 5 - Vessel Name (always if vessel name available)
+        if (!target.vesselName.isEmpty()) {
+            QStringList nmeaType5List = encoder.encodeVesselNameType5(target.mmsi, target.vesselName);
+
+            if (!nmeaType5List.isEmpty()) {
+                // Add all Type 5 fragments (usually 2 strings)
+                for (const QString& nmeaType5 : nmeaType5List) {
+                    nmeaList.append(nmeaType5);
+                }
+
+                qCritical() << "MMSI:" << target.mmsi
+                           << "Vessel:" << target.vesselName
+                           << "- ENCODED Type 5 (Vessel Name) - Generated" << nmeaType5List.size() << "fragments";
+            } else {
+                qCritical() << "MMSI:" << target.mmsi
+                           << "Vessel:" << target.vesselName
+                           << "- FAILED to encode Type 5";
+            }
+        } else {
+            qCritical() << "MMSI:" << target.mmsi
+                       << "- SKIPPED Type 5 (no vessel name)";
         }
     }
     qCritical() << "=== ENCODING COMPLETED - Generated" << nmeaList.size() << "NMEA strings ===";

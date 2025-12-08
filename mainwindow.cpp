@@ -1074,7 +1074,7 @@ void MainWindow::createMenuBar(){
     // ================================== ABOUT MENU
     QMenu *aboutMenu = menuBar()->addMenu("&About");
     aboutMenu->addAction("Release Notes", this, SLOT(openReleaseNotesDialog()) );
-    //aboutMenu->addAction("Debug", this, SLOT(fetchNmea()) );
+    aboutMenu->addAction("Debug", this, SLOT(fetchNmea()) );
 
     // Set default dark
     if (AppConfig::isDark()){
@@ -1093,6 +1093,11 @@ void MainWindow::createMenuBar(){
     if (AppConfig::isBeta()){
         fetchNmea();
     }
+}
+
+void MainWindow::debugPurpose(){
+    ecchart->readAISVariableString("!AIVDM,2,1,1,A,E@F`U[P@@@@@@@@MHDQTAXUMPD@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@,0*78");
+    ecchart->readAISVariableString("!AIVDM,2,2,1,A,@@@@,0*17");
 }
 
 void MainWindow::fetchNmea(){

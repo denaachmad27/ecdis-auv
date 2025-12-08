@@ -20,10 +20,12 @@ QString AIVDOEncoder::calculateNMEAChecksum(const QString &sentence) {
 
 // Fungsi mengonversi bitstream ke 6-bit ASCII AIS
 QString AIVDOEncoder::binaryToAIS6Bit(const QString &bitstream) {
-    QString padded = bitstream.leftJustified(168, '0');
+    // FIX: Calculate exact needed length (multiple of 6)
+    int neededLength = ((bitstream.length() + 5) / 6) * 6;
+    QString padded = bitstream.leftJustified(neededLength, '0');
 
     QString encoded;
-    for (int i = 0; i < 168; i += 6) {
+    for (int i = 0; i < neededLength; i += 6) {
         QString chunk = padded.mid(i, 6);
         int value = chunk.toInt(nullptr, 2);
         value += 48;
@@ -309,6 +311,24 @@ QStringList AIVDOEncoder::encodeType5(int mmsi, QString callsign, QString name, 
     return splitPayloadToVDM(payload);
 }
 
+// Simplified Type 5 encoder for vessel name and MMSI only - WORKING VERSION
+QStringList AIVDOEncoder::encodeVesselNameType5(int mmsi, const QString &vesselName) {
+    // Use the existing encodeType5 function which is already tested and working
+    // This generates proper Type 5 with vessel name and splits into 2 strings (call sign and name)
+
+    QStringList nmeaList = encodeType5(
+        mmsi,                    // MMSI
+        "",                      // Call sign (empty)
+        vesselName,              // Vessel name
+        0,                       // Ship type
+        0,                       // Length
+        0,                       // Width
+        ""                       // Destination (empty)
+    );
+
+    return nmeaList;
+}
+
 QString AIVDOEncoder::encodeType18(int mmsi, double lat, double lon, double sog, double cog, double heading) {
     QString bitstream;
 
@@ -375,25 +395,36 @@ QString AIVDOEncoder::encodeType24B(int mmsi, QString callsign, int shipType, do
 
 QString AIVDOEncoder::encode6bitString(const QString &text, int maxLen) {
     QString result;
-    QString truncated = text.leftJustified(maxLen).left(maxLen).toUpper();
+    QString truncated = text.left(maxLen).toUpper();  // FIX: left() bukan leftJustified()
+
+    // Encode actual characters only
     for (int i = 0; i < truncated.length(); ++i) {
         QChar ch = truncated.at(i);
         int val;
 
         if (ch == '@' || ch == ' ')
             val = 0;
-        else if (ch >= 'A' && ch <= 'W')
+        else if (ch >= 'A' && ch <= 'Z')  // FIX: Cover A-Z lengkap
             val = ch.toLatin1() - 'A' + 1;
         else if (ch >= '0' && ch <= '9')
             val = ch.toLatin1() - '0' + 48;
-        else if (ch >= 'X' && ch <= 'Z')
-            val = ch.toLatin1() - 'X' + 33;
         else
             val = 0; // unknown char to @ (0)
 
         result += QString::number(val, 2).rightJustified(6, '0');
     }
+
+    // Pad to exactly maxLen * 6 bits with zeros (spaces/@)
+    while (result.length() < maxLen * 6) {
+        result += "000000";  // Pad with zeros = @ characters
+    }
+
     return result;
+}
+
+// DEBUG METHOD - public wrapper for private encode6bitString
+QString AIVDOEncoder::testEncode6bitString(const QString &text, int maxLen) {
+    return encode6bitString(text, maxLen);
 }
 
 QStringList AIVDOEncoder::splitPayloadToVDM(const QString &payload) {
@@ -474,7 +505,26 @@ AisDecoded AIVDOEncoder::decodeNMEALine(const QString &line) {
         break;
 
     case 5:
-        // Extended message, typically requires multipart handling
+        // Static and Voyage Related Data
+        // Callsign: bits 40-81 (42 bits = 7 chars)
+        result.callsign = decode6bitToString(bin.mid(40, 42));
+        // Name: bits 82-201 (120 bits = 20 chars)
+        result.name = decode6bitToString(bin.mid(82, 120));
+        // Ship Type: bits 202-209 (8 bits)
+        result.shipType = bin.mid(202, 8).toInt(nullptr, 2);
+        // Dimension: A to D bits 210-245 (36 bits total)
+        if (bin.length() >= 279) {  // Check if we have enough bits for dimensions
+            int dimA = bin.mid(210, 9).toInt(nullptr, 2);
+            int dimB = bin.mid(219, 9).toInt(nullptr, 2);
+            int dimC = bin.mid(228, 9).toInt(nullptr, 2);
+            int dimD = bin.mid(237, 9).toInt(nullptr, 2);
+            result.length = dimA + dimB;
+            result.width = dimC + dimD;
+            // Destination: bits 302-421 (120 bits = 20 chars) - only if full packet
+            if (bin.length() >= 422) {
+                result.destination = decode6bitToString(bin.mid(302, 120));
+            }
+        }
         break;
 
     case 18:
