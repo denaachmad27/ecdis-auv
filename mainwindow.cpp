@@ -1219,7 +1219,7 @@ void MainWindow::onPlayClickedDB()
     if (m_isPlayingDB) {
         // Logika PAUSE: Hentikan timer, ubah tombol menjadi 'Play'
         m_playbackTimerDB->stop();
-        ecchart->stopNmeaPlaybackTimer();  // Stop NMEA Playback timer
+        ecchart->pauseNmeaPlaybackTimer();  // Pause NMEA Playback timer
         m_isPlayingDB = false;
         m_playButtonDB->setText("Play");
         m_playButtonDB->setIcon(QIcon(":/icon/play.svg"));
@@ -1453,6 +1453,7 @@ void MainWindow::processNextNmeaDataDB()
         } else {
             // No more data, stop playback
             m_playbackTimerDB->stop();
+            ecchart->stopNmeaPlaybackTimer();  // Stop NMEA timer properly
             m_isPlayingDB = false;
             m_playButtonDB->setText("Play");
             m_playButtonDB->setIcon(QIcon(":/icon/play.svg"));
@@ -1460,6 +1461,7 @@ void MainWindow::processNextNmeaDataDB()
         }
     } else {
         m_playbackTimerDB->stop();
+        ecchart->stopNmeaPlaybackTimer();  // Stop NMEA timer properly
         m_isPlayingDB = false;
         m_playButtonDB->setText("Play");
         m_playButtonDB->setIcon(QIcon(":/icon/play.svg"));
@@ -2320,6 +2322,11 @@ MainWindow::~MainWindow()
         m_playbackTimerDB->stop();
         delete m_playbackTimerDB;
         m_playbackTimerDB = nullptr;
+    }
+
+    // Stop NMEA Playback timer in ecchart
+    if (ecchart) {
+        ecchart->stopNmeaPlaybackTimer();
     }
 
     // Clear queues

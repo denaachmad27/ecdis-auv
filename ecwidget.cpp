@@ -629,6 +629,7 @@ EcWidget::~EcWidget ()
     dbTimer.stop();
     timer.stop();
     timerPublish.stop();
+    nmeaPlaybackTimer.stop();  // Stop NMEA playback timer
 
   // Release AIS object.
   if( _aisObj )
@@ -5964,8 +5965,10 @@ void EcWidget::startAISConnection()
     });
 
     connect(&nmeaPlaybackTimer, &QTimer::timeout, this, [=](){
-        allFunctionPerTimeNMEA(pickWindow);
-        canWorkNMEA = true;
+        if (!shuttingDown && pickWindow) {  // Safety checks
+            allFunctionPerTimeNMEA(pickWindow);
+            canWorkNMEA = true;
+        }
     });
 
     //connect(this, &EcWidget::ownshipCache, this, &EcWidget::updateOwnshipCache);
@@ -6077,7 +6080,7 @@ void EcWidget::processData(double lat, double lon, double cog, double sog, doubl
     }
 
     // Record ownship data to database
-    if (true){
+    if (false){
         try {
             static QDateTime lastOwnshipRecord;
             QDateTime currentTime = QDateTime::currentDateTime();
@@ -6285,8 +6288,9 @@ void EcWidget::allFunctionPerTime(PickWindow *pickWindow){
 void EcWidget::allFunctionPerTimeNMEA(PickWindow *pickWindow){
     if (shuttingDown) { return; }
     if (!canWorkNMEA) { return;}
+    if (!pickWindow) { return; }  // Safety check
 
-    // DRAW PER TIME untuk NMEA Playback
+    // DRAW PER TIME untuk NMEA Playback - completely independent from MOOS
     if (!isDragging) {
         // Update dangerous AIS list in the same tick before drawing
         clearDangerousAISList();
@@ -6354,12 +6358,19 @@ void EcWidget::allFunctionPerTimeNMEA(PickWindow *pickWindow){
 void EcWidget::startNmeaPlaybackTimer() {
     nmeaPlaybackTimer.start();
     canWorkNMEA = true;
-    // Stop MOOSDB timer saat NMEA playback aktif
-    allTimer.stop();
+    // NMEA Playback completely independent from MOOS - no MOOS timer interaction
+}
+
+void EcWidget::pauseNmeaPlaybackTimer() {
+    nmeaPlaybackTimer.stop();
+    canWorkNMEA = false;
+    // NMEA Playback completely independent from MOOS - only pause NMEA timer
 }
 
 void EcWidget::stopNmeaPlaybackTimer() {
     nmeaPlaybackTimer.stop();
+    canWorkNMEA = false;
+    // NMEA Playback completely independent from MOOS - only stop NMEA timer
 }
 
 double EcWidget::getSpeedAverage(){

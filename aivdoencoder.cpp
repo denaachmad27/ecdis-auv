@@ -227,7 +227,7 @@ QString AIVDOEncoder::encodeAIVDM(int _type, int _mmsi, int _navStatus, int _rot
     bitstream += QString::number(cog, 2).rightJustified(12, '0');
 
     // True Heading (9 bit)
-    int hdg = static_cast<int>(hdg);
+    int hdg = static_cast<int>(_hdg);
     bitstream += QString::number(hdg, 2).rightJustified(9, '0');
 
     // Time Stamp (6 bit)

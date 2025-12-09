@@ -951,6 +951,7 @@ public slots:
   // NMEA Playback control methods
   void startNmeaPlaybackTimer();
   void stopNmeaPlaybackTimer();
+  void pauseNmeaPlaybackTimer();
 
   // waypoint
   void createWaypointAt(EcCoordinate lat, EcCoordinate lon);

@@ -691,7 +691,7 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
                 data.rawInfo = *ti;
                 _myAis->postTargetUpdate(data);
 
-                if (true){
+                if (false){
                     try {
                         // Performance measurement - only for error/delay detection
                         QElapsedTimer timer;
