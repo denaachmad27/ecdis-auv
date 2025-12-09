@@ -1231,6 +1231,7 @@ void MainWindow::onPlayClickedDB()
     if (m_isPlayingDB) {
         // Logika PAUSE: Hentikan timer, ubah tombol menjadi 'Play'
         m_playbackTimerDB->stop();
+        ecchart->stopNmeaPlaybackTimer();  // Stop NMEA Playback timer
         m_isPlayingDB = false;
         m_playButtonDB->setText("Play");
         m_playButtonDB->setIcon(QIcon(":/icon/play.svg"));
@@ -1282,6 +1283,9 @@ void MainWindow::onPlayClickedDB()
                     m_playButtonDB->setText("Pause");
                     m_playButtonDB->setIcon(QIcon(":/icon/pause.svg"));
 
+                    // Start NMEA Playback timer (khusus untuk playback, bukan MOOSDB)
+                    ecchart->startNmeaPlaybackTimer();
+
                     // Start with immediate processing of first data
                     processNextNmeaDataDB();
                     qDebug() << "Playback dimulai dengan speed:" << m_playbackSpeed << "x";
@@ -1297,6 +1301,9 @@ void MainWindow::onPlayClickedDB()
             m_isPlayingDB = true;
             m_playButtonDB->setText("Pause");
             m_playButtonDB->setIcon(QIcon(":/icon/pause.svg"));
+
+            // Resume NMEA Playback timer
+            ecchart->startNmeaPlaybackTimer();
 
             // Resume playback with next data using timestamp-based timing
             if (!m_nmeaDataQueueDB.isEmpty()) {
@@ -1315,6 +1322,7 @@ void MainWindow::onStopClickedDB()
     ecchart->clearAisTargets();
 
     m_playbackTimerDB->stop();
+    ecchart->stopNmeaPlaybackTimer();  // Stop NMEA Playback timer
     m_isPlayingDB = false;
     m_nmeaDataQueueDB.clear();
     m_displayEditDB->clear();

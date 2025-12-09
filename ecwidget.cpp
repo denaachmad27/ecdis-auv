@@ -5940,11 +5940,18 @@ void EcWidget::startAISConnection()
     dbTimer.setInterval(1000);
     dbTimer.setSingleShot(true);
 
+    // NMEA PLAYBACK TIMER
+    nmeaPlaybackTimer.setInterval(1000);
+    nmeaPlaybackTimer.setSingleShot(true);
+
     // DRAW TIMER START
     connect(subscriber, &AISSubscriber::startDrawTimer, this, [this]() {
         qDebug() << "TIMER STARTED!";
-        allTimer.start();
-        dbTimer.start();
+        // Hanya start MOOSDB timer jika NMEA Playback tidak aktif
+        if (!nmeaPlaybackTimer.isActive()) {
+            allTimer.start();
+            dbTimer.start();
+        }
     });
 
     connect(&allTimer, &QTimer::timeout, this, [=](){
@@ -5954,6 +5961,11 @@ void EcWidget::startAISConnection()
 
     connect(&dbTimer, &QTimer::timeout, this, [=](){
         canRecord = true;
+    });
+
+    connect(&nmeaPlaybackTimer, &QTimer::timeout, this, [=](){
+        allFunctionPerTimeNMEA(pickWindow);
+        canWorkNMEA = true;
     });
 
     //connect(this, &EcWidget::ownshipCache, this, &EcWidget::updateOwnshipCache);
@@ -6267,6 +6279,87 @@ void EcWidget::allFunctionPerTime(PickWindow *pickWindow){
         qCritical() << "[DRAW] Stopped";
         return;
     }
+}
+
+// NMEA PLAYBACK VERSION - Duplikasi dari allFunctionPerTime() untuk NMEA Playback
+void EcWidget::allFunctionPerTimeNMEA(PickWindow *pickWindow){
+    if (shuttingDown) { return; }
+    if (!canWorkNMEA) { return;}
+
+    // DRAW PER TIME untuk NMEA Playback
+    if (!isDragging) {
+        // Update dangerous AIS list in the same tick before drawing
+        clearDangerousAISList();
+        {
+            QMap<unsigned int, AISTargetData> targets = Ais::instance()->getTargetMap();
+            AISTargetData own = Ais::instance()->getOwnShipVar();
+            CPATCPASettings& settings = CPATCPASettings::instance();
+
+            for (const auto &entry : targets) {
+                VesselState ownShip; ownShip.lat = own.lat; ownShip.lon = own.lon; ownShip.sog = own.sog; ownShip.cog = own.cog;
+                VesselState targetVessel; targetVessel.lat = entry.lat; targetVessel.lon = entry.lon; targetVessel.sog = entry.sog; targetVessel.cog = entry.cog;
+                CPATCPACalculator calc; CPATCPAResult res = calc.calculateCPATCPA(ownShip, targetVessel);
+                bool isDanger = false;
+                if (res.isValid && res.currentRange < 0.5) {
+                    if (settings.isCPAAlarmEnabled() && res.cpa < SettingsManager::instance().data().cpaThreshold) isDanger = true;
+                    if (settings.isTCPAAlarmEnabled() && res.tcpa > 0 && res.tcpa < SettingsManager::instance().data().tcpaThreshold) isDanger = true;
+                }
+                if (isDanger) addDangerousAISTarget(entry);
+            }
+        }
+        draw(true);
+        slotUpdateAISTargets(true);
+    }
+
+    // UPDATE ETA
+    emit updateEta();
+
+    // UPDATE OWNSHIP PANEL
+    ownShipText->setText(pickWindow->ownShipAutoFill());
+
+    // UPDATE AIS PANEL (per detik) saat tracking target aktif
+    if (aisText && isTrackTarget()) {
+        QString mmsi = getTrackMMSI();
+        bool ok=false; unsigned int mmsiInt = mmsi.toUInt(&ok);
+        if (ok) {
+            QMap<unsigned int, AISTargetData>& targets = Ais::instance()->getTargetMap();
+            if (targets.contains(mmsiInt)) {
+                const AISTargetData &td = targets[mmsiInt];
+                if (ECOK(td.feat) && td._dictInfo != nullptr && navShip.lat != 0 && navShip.lon != 0) {
+                    // Gunakan perhitungan yang sama dengan CPATCPAPanel untuk konsistensi
+                    CPATCPACalculator calculator;
+                    double rangeNm = calculator.calculateDistance(navShip.lat, navShip.lon, td.lat, td.lon);
+                    double bearDeg = calculator.calculateBearing(navShip.lat, navShip.lon, td.lat, td.lon);
+
+                    QString html = pickWindow->buildAisHtml(td.feat, td._dictInfo,
+                                                            td.lat, td.lon,
+                                                            rangeNm, bearDeg);
+                    if (!html.trimmed().isEmpty()) {
+                        aisText->setHtml(html);
+                    }
+                }
+            }
+        }
+    }
+
+    // 1 Hz tick for panels to update in sync with draw
+    emit tickPerSecond();
+
+    // start countdown
+    canWorkNMEA = false;
+    nmeaPlaybackTimer.start();
+}
+
+// NMEA Playback control methods
+void EcWidget::startNmeaPlaybackTimer() {
+    nmeaPlaybackTimer.start();
+    canWorkNMEA = true;
+    // Stop MOOSDB timer saat NMEA playback aktif
+    allTimer.stop();
+}
+
+void EcWidget::stopNmeaPlaybackTimer() {
+    nmeaPlaybackTimer.stop();
 }
 
 double EcWidget::getSpeedAverage(){

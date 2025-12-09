@@ -948,6 +948,10 @@ public slots:
   void updateAISTargetsList();
   void addOrUpdateAISTarget(const AISTargetData& target);
 
+  // NMEA Playback control methods
+  void startNmeaPlaybackTimer();
+  void stopNmeaPlaybackTimer();
+
   // waypoint
   void createWaypointAt(EcCoordinate lat, EcCoordinate lon);
   bool createWaypointInRoute(int routeId, double lat, double lon, const QString& label = "");
@@ -1614,6 +1618,11 @@ private:
   QTimer dbTimer;
   bool canWork = true;
   bool canRecord = true;
+
+  // NMEA PLAYBACK TIME
+  void allFunctionPerTimeNMEA(PickWindow *pickWindow);
+  QTimer nmeaPlaybackTimer;
+  bool canWorkNMEA = true;
 
   // RIGHT CLICK ICON
   QAction* editAction;
