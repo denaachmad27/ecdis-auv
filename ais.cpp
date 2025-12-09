@@ -418,24 +418,27 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
         }
         */
 
-        // =========== CARA 2: SET KE CENTER TERUS ADA ATAU PUN TIADA PERUBAHAN DATA ===========
-        AISTargetData ais;
-        _myAis->getAISTrack(ais);
-        _myAis->emitSignalTarget(ais.lat, ais.lon);
+        // =========== CARA 2: HANYA PROSES TARGET YANG SEDANG DI-FOLLOW ===========
+        // Gunakan MMSI dari trackTarget di EcWidget untuk memastikan konsistensi
+        QString trackedMMSI = _wParent->getTrackMMSI();
 
-        if (!ais.mmsi.isEmpty())
-        {
+        // HANYA proses jika ini adalah target yang sedang di-follow
+        if (!trackedMMSI.isEmpty() && trackedMMSI == QString::number(ti->mmsi)) {
+            // AMBIL POSISI LANGSUNG DARI ti, JANGAN PAKAI getTargetPos()!
+            EcCoordinate targetLat = ((double)ti->latitude / 10000.0) / 60.0;
+            EcCoordinate targetLon = ((double)ti->longitude / 10000.0) / 60.0;
 
-            if (ais.mmsi == QString::number(ti->mmsi)){
-                EcCoordinate ownLat, ownLon;
-                _myAis->getTargetPos(ownLat, ownLon);
+            // Update AISTrack dengan data target yang di-follow
+            AISTargetData ais;
+            ais.mmsi = trackedMMSI;
+            ais.lat = targetLat;
+            ais.lon = targetLon;
+            _myAis->setAISTrack(ais);
 
-                ais.lat = ownLat;
-                ais.lon = ownLon;
-
-                _myAis->setAISTrack(ais);
-            }
+            // Emit signal untuk centering chart
+            _myAis->emitSignalTarget(ais.lat, ais.lon);
         }
+        // Jika bukan target yang di-follow, TIDAK ADA APA-APA YANG DILAKUKAN
 
 
         return;
@@ -479,22 +482,27 @@ void Ais::AISTargetUpdateCallbackThread(EcAISTargetInfo *ti)
             delete tiCopyPtr; // clean up after processing
         }, Qt::QueuedConnection);
 
-        AISTargetData ais;
-        _myAis->getAISTrack(ais);
+        // Gunakan MMSI dari trackTarget di EcWidget untuk memastikan konsistensi
+        QString trackedMMSI = _wParent->getTrackMMSI();
 
-        if (!ais.mmsi.isEmpty() && ais.mmsi == QString::number(tiCopy.mmsi))
+        if (!trackedMMSI.isEmpty() && trackedMMSI == QString::number(tiCopy.mmsi))
         {
-            EcCoordinate targetLat, targetLon;
-            _myAis->getTargetPos(targetLat, targetLon);
+            // AMBIL POSISI LANGSUNG DARI tiCopy, JANGAN PAKAI getTargetPos()!
+            EcCoordinate targetLat = ((double)tiCopy.latitude / 10000.0) / 60.0;
+            EcCoordinate targetLon = ((double)tiCopy.longitude / 10000.0) / 60.0;
+
+            // Update AISTrack dengan data target yang di-follow
+            AISTargetData ais;
+            ais.mmsi = trackedMMSI;
             ais.lat = targetLat;
             ais.lon = targetLon;
             _myAis->setAISTrack(ais);
-        }
 
-        // ===== emit target update via queued connection =====
-        QMetaObject::invokeMethod(_myAis, [ais]() {
-            emit _myAis->signalRefreshCenter(ais.lat, ais.lon);
-        }, Qt::QueuedConnection);
+            // Hanya emit signal centering jika target yang di-update adalah target yang di-follow
+            QMetaObject::invokeMethod(_myAis, [ais]() {
+                emit _myAis->signalRefreshCenter(ais.lat, ais.lon);
+            }, Qt::QueuedConnection);
+        }
 
         return;
     }
