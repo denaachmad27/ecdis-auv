@@ -1042,10 +1042,15 @@ void Ais::readAISLogfileWDelay(const QString &logFile, int delayMs, std::atomic<
 
 void Ais::extractNMEA(QString nmea){
     if (nmea.contains("!AIVDO")){
-        navShip.lat = AisDecoder::decodeAisOption(nmea, "latitude", "!AIVDO");
-        navShip.lon = AisDecoder::decodeAisOption(nmea, "longitude", "!AIVDO");
-        navShip.sog = AisDecoder::decodeAisOption(nmea, "sog", "!AIVDO");
-        navShip.heading_og = AisDecoder::decodeAisOption(nmea, "cog", "!AIVDO") / 10;
+        auto setIfValid = [&](double &field, double v) {
+            if (v != -1) field = v;
+        };
+
+        setIfValid(navShip.lat, AisDecoder::decodeAisOption(nmea, "latitude",  "!AIVDO"));
+        setIfValid(navShip.lon, AisDecoder::decodeAisOption(nmea, "longitude", "!AIVDO"));
+        setIfValid(navShip.sog, AisDecoder::decodeAisOption(nmea, "sog", "!AIVDO") / 10.0);
+        setIfValid(navShip.course_og, AisDecoder::decodeAisOption(nmea, "cog", "!AIVDO") / 10.0);
+        setIfValid(navShip.heading, AisDecoder::decodeAisOption(nmea, "heading", "!AIVDO"));
     }
 }
 
@@ -1260,6 +1265,8 @@ void Ais::readAISVariableString( const QString &data )
     }
 
     QString line = data + "\r\n";
+    extractNMEA(line);
+
     // qDebug() << data;
 
     if( EcAISAddTransponderOutput( _transponder, (unsigned char*)line.toStdString().c_str(), line.count() ) == False )
