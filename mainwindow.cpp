@@ -1321,6 +1321,9 @@ void MainWindow::onStopClickedDB()
     ecchart->setCustomOwnship(false);
     ecchart->clearAisTargets();
 
+    // Hapus Dangerous Box merah pada AIS
+    ecchart->clearDangerousAISList();
+
     m_playbackTimerDB->stop();
     ecchart->stopNmeaPlaybackTimer();  // Stop NMEA Playback timer
     m_isPlayingDB = false;
@@ -1328,6 +1331,26 @@ void MainWindow::onStopClickedDB()
     m_displayEditDB->clear();
     m_playButtonDB->setText("Play");
     m_playButtonDB->setIcon(QIcon(":/icon/play.svg"));
+
+    // 1. Kosongkan AIS Target Detail
+    if (aisText) {
+        aisText->setText("");
+    }
+
+    // 2. Kosongkan AIS Target Manager Panel (CPATCPAPanel)
+    if (m_cpatcpaPanel) {
+        m_cpatcpaPanel->clearTargets();
+    }
+
+    // 3. Unfollow AIS target jika sedang follow
+    if (ecchart->isTrackTarget()) {
+        QString trackedMMSI = ecchart->getTrackMMSI();
+        if (!trackedMMSI.isEmpty()) {
+            ecchart->TrackTarget("");
+            ecchart->TrackShip(false);
+            qDebug() << "Unfollowed AIS target:" << trackedMMSI;
+        }
+    }
 
     // Reset kecepatan ke default (1x)
     m_playbackSpeed = 1.0;

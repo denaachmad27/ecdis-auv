@@ -824,3 +824,19 @@ void CPATCPAPanel::onClearAlarmsClicked()
     }
 }
 
+void CPATCPAPanel::clearTargets()
+{
+    // Clear all rows from the table
+    targetsTable->setRowCount(0);
+
+    // Reset counters
+    totalTargets = 0;
+    dangerousCount = 0;
+
+    // Reset status labels
+    activeTargetsLabel->setText("Targets: 0 (Tracking: 0)");
+    dangerousTargetsLabel->setText("Dangerous: <font color='green'>0</font>");
+    systemStatusLabel->setText("System: <font color='red'>INACTIVE</font>");
+    lastUpdateLabel->setText("Last Update: --:--");
+}
+

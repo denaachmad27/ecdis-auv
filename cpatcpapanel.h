@@ -46,6 +46,9 @@ public slots:
     void onClearAlarmsClicked();
     void onTargetsContextMenuRequested(const QPoint& pos);
 
+    // Clear all targets from table
+    void clearTargets();
+
 private slots:
     void onTimerTimeout();  // Ganti nama dari updateTimer
     void onTargetSelected();
