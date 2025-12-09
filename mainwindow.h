@@ -88,10 +88,6 @@ public:
     // RECONNECT STATUS BAR
     QLabel *reconnectStatusText;
     void setReconnectStatusText(const QString);
-
-    // RECORDING STATUS BAR
-    QLabel *m_recordingStatusLabel = nullptr;
-    void updateRecordingStatus(bool isActive, const QString& reason = QString());
     SettingsData getSettingsForwarder();
 
     // COMPASS

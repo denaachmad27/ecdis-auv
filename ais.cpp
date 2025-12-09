@@ -354,7 +354,7 @@ void Ais::AISTargetUpdateCallbackOld( EcAISTargetInfo *ti )
                 dataOS.lat = _oLat;
                 dataOS.lon = _oLon;
                 dataOS.cog = ti->cog / 10.0;        // Course over ground
-                dataOS.sog = ti->sog;               // Speed over ground
+                dataOS.sog = ti->sog / 10.0;        // Speed over ground
                 dataOS.heading = ti->heading;       // ⭐ TAMBAHAN: True heading
                 dataOS.cpaCalculatedAt = QDateTime::currentDateTime();
 
@@ -686,11 +686,12 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
                 data.feat = feat;
                 data._dictInfo = _dictInfo;
                 data.isDangerous = (aisTrkStatus == aisDangerous);
+                data.heading = ti->heading;
 
                 data.rawInfo = *ti;
                 _myAis->postTargetUpdate(data);
 
-                if (false){
+                if (true){
                     try {
                         // Performance measurement - only for error/delay detection
                         QElapsedTimer timer;
@@ -1532,13 +1533,14 @@ void Ais::updateRecordingStatusUI(bool shouldRecord, const QString& reason)
     if (_lastRecordingState != shouldRecord || !reason.isEmpty()) {
         _lastRecordingState = shouldRecord;
 
-        MainWindow* mainWin = qobject_cast<MainWindow*>(_wParent);
-        if (mainWin) {
-            QMetaObject::invokeMethod(mainWin, "updateRecordingStatus",
-                Qt::QueuedConnection,
-                Q_ARG(bool, shouldRecord),
-                Q_ARG(QString, reason));
-        }
+        // Recording status dihapus, tidak perlu update UI
+        // MainWindow* mainWin = qobject_cast<MainWindow*>(_wParent);
+        // if (mainWin) {
+        //     QMetaObject::invokeMethod(mainWin, "updateRecordingStatus",
+        //         Qt::QueuedConnection,
+        //         Q_ARG(bool, shouldRecord),
+        //         Q_ARG(QString, reason));
+        // }
     }
 }
 

@@ -6077,7 +6077,7 @@ void EcWidget::processData(double lat, double lon, double cog, double sog, doubl
     }
 
     // Record ownship data to database
-    if (false){
+    if (true){
         try {
             static QDateTime lastOwnshipRecord;
             QDateTime currentTime = QDateTime::currentDateTime();

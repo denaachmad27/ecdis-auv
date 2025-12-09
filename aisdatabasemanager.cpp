@@ -778,8 +778,8 @@ bool AisDatabaseManager::insertParsedAisDataFast(const QString& nmea, const QStr
     QString callSign = QString::fromUtf8(targetInfo.callSign).replace("'", "''");
     QString imo = targetInfo.imoNumber > 0 ? QString::number(targetInfo.imoNumber) : "NULL";
     QString shipType = targetInfo.shipType > 0 ? QString::number(targetInfo.shipType) : "NULL";
-    QString sog = (targetInfo.sog > 0 && targetInfo.sog < 1023) ? QString::number(targetInfo.sog / 10.0) : "NULL";
-    QString cog = (targetInfo.cog > 0 && targetInfo.cog < 3600) ? QString::number(targetInfo.cog / 10.0) : "NULL";
+    QString sog = (targetInfo.sog > 0 && targetInfo.sog < 1023) ? QString::number(targetInfo.sog) : "NULL";
+    QString cog = (targetInfo.cog > 0 && targetInfo.cog < 3600) ? QString::number(targetInfo.cog) : "NULL";
     QString trueHeading = (targetInfo.heading > 0 && targetInfo.heading <= 360) ? QString::number(targetInfo.heading) : "NULL";
 
     // Extract message type from NMEA
@@ -1047,7 +1047,6 @@ QList<AisDatabaseManager::TargetData> AisDatabaseManager::getTargetsForDate(cons
         targets.append(combined);
     }
 
-    qCritical() << "Combined data for" << targets.size() << "targets";
     return targets;
 }
 
@@ -1056,8 +1055,7 @@ QStringList AisDatabaseManager::encodeTargetsToNMEA(const QList<TargetData>& tar
     AIVDOEncoder encoder;
     QStringList nmeaList;
 
-    qCritical() << "=== ENCODING TARGETS TO NMEA 0183 ===";
-    qCritical() << "Total targets to encode:" << targets.size();
+    // Start encoding targets to NMEA 0183
 
     for (const TargetData& target : targets) {
         // 1. Type 1 - Position Report (if position data available)
@@ -1081,56 +1079,16 @@ QStringList AisDatabaseManager::encodeTargetsToNMEA(const QList<TargetData>& tar
 
             nmeaList.append(nmeaType1);
 
-            QString displayVesselName = target.vesselName;
-displayVesselName.replace("@", " "); // FIX: Replace @ with space for log readability
-qCritical() << "MMSI:" << target.mmsi
-                       << "Vessel:" << displayVesselName
-                       << "- ENCODED Type 1 (Position)";
+            // Position Report encoded successfully
         } else {
-            QString displayVesselName = target.vesselName;
-            displayVesselName.replace("@", " "); // FIX: Replace @ with space for log readability
-            qCritical() << "MMSI:" << target.mmsi
-                       << "Vessel:" << displayVesselName
-                       << "- SKIPPED Type 1 (no position data)";
+            // No position data available for Type 1 encoding
         }
 
         // 2. Type 5 - Vessel Name and Call Sign (always if vessel name available)
         if (!target.vesselName.isEmpty()) {
-            // FIX: Trim whitespace from database values before encoding
+            // Trim whitespace from database values before encoding
             QString cleanCallSign = target.callSign.trimmed();
             QString cleanVesselName = target.vesselName.trimmed();
-
-            // DEBUG: Log what we're actually passing to encoder
-            qDebug() << "=== ENCODING DEBUG ===";
-            qDebug() << "MMSI:" << target.mmsi;
-            qDebug() << "Call Sign from DB: '" << target.callSign << "' (length:" << target.callSign.length() << ")";
-            qDebug() << "Call Sign cleaned: '" << cleanCallSign << "' (length:" << cleanCallSign.length() << ")";
-            qDebug() << "Vessel Name from DB: '" << target.vesselName << "' (length:" << target.vesselName.length() << ")";
-            qDebug() << "Vessel Name cleaned: '" << cleanVesselName << "' (length:" << cleanVesselName.length() << ")";
-
-            // EXTRA DEBUG: Character analysis
-            qDebug() << "--- CALL SIGN CHAR ANALYSIS ---";
-            for (int i = 0; i < target.callSign.length(); ++i) {
-                QChar ch = target.callSign[i];
-                int ascii = ch.toLatin1();
-                QString desc = (ascii == 32) ? "SPACE" : (ascii == 0) ? "NULL" : QString("'%1'(%2)").arg(ch).arg(ascii);
-                qDebug() << QString("  [%1] %2").arg(i).arg(desc);
-            }
-
-            qDebug() << "--- VESSEL NAME CHAR ANALYSIS ---";
-            for (int i = 0; i < target.vesselName.length(); ++i) {
-                QChar ch = target.vesselName[i];
-                int ascii = ch.toLatin1();
-                QString desc = (ascii == 32) ? "SPACE" : (ascii == 0) ? "NULL" : QString("'%1'(%2)").arg(ch).arg(ascii);
-                qDebug() << QString("  [%1] %2").arg(i).arg(desc);
-            }
-
-            // Test if trimming actually changes anything
-            bool callSignChanged = (target.callSign != cleanCallSign);
-            bool vesselNameChanged = (target.vesselName != cleanVesselName);
-            qDebug() << "--- TRIM EFFECTIVENESS ---";
-            qDebug() << "Call sign changed after trim:" << callSignChanged;
-            qDebug() << "Vessel name changed after trim:" << vesselNameChanged;
 
             QStringList nmeaType5List = encoder.encodeVesselNameType5(target.mmsi, cleanCallSign, cleanVesselName);
 
@@ -1139,23 +1097,11 @@ qCritical() << "MMSI:" << target.mmsi
                 for (const QString& nmeaType5 : nmeaType5List) {
                     nmeaList.append(nmeaType5);
                 }
-
-                qCritical() << "MMSI:" << target.mmsi
-                           << "Call Sign:" << cleanCallSign
-                           << "Vessel:" << cleanVesselName
-                           << "- ENCODED Type 5 (Call Sign + Vessel Name) - Generated" << nmeaType5List.size() << "fragments";
-            } else {
-                qCritical() << "MMSI:" << target.mmsi
-                           << "Call Sign:" << cleanCallSign
-                           << "Vessel:" << cleanVesselName
-                           << "- FAILED to encode Type 5";
+                // Type 5 encoding successful
             }
-        } else {
-            qCritical() << "MMSI:" << target.mmsi
-                       << "- SKIPPED Type 5 (no vessel name)";
         }
+        // No vessel name available for Type 5 encoding
     }
-    qCritical() << "=== ENCODING COMPLETED - Generated" << nmeaList.size() << "NMEA strings ===";
 
     return nmeaList;
 }

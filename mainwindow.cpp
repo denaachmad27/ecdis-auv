@@ -280,9 +280,9 @@ void MainWindow::onMoosConnectionStatusChanged(bool connected)
 
     conn = connected;
 
-    // Update recording status based on connection change
+    // MOOSDB disconnected - tidak perlu update recording status
     if (!connected) {
-        updateRecordingStatus(false, "MOOSDB disconnected");
+        // Recording status dihapus, tidak perlu update
     }
     // If connected, the recording status will be updated by the AIS processing logic
 }
@@ -404,18 +404,6 @@ void MainWindow::createStatusBar(){
 
     // Tambahkan ke paling kiri status bar
     statusBar()->addWidget(routesStatusWidget);
-
-    // RECORDING STATUS BAR
-    m_recordingStatusLabel = new QLabel(" ● Recording: Inactive");
-    m_recordingStatusLabel->setStyleSheet("color: gray; font-weight: bold;");
-
-    QWidget *recordingStatusWidget = new QWidget;
-    QHBoxLayout *recordingStatusLayout = new QHBoxLayout(recordingStatusWidget);
-    recordingStatusLayout->setContentsMargins(5, 0, 10, 0); // spasi antar widget
-    recordingStatusLayout->addWidget(m_recordingStatusLabel);
-
-    // Tambahkan ke paling kiri status bar
-    statusBar()->addWidget(recordingStatusWidget);
 }
 
 // MENU BAR
@@ -6006,22 +5994,6 @@ void MainWindow::setReconnectStatusText(const QString text)
     reconnectStatusText->setText(text);
 }
 
-void MainWindow::updateRecordingStatus(bool isActive, const QString& reason)
-{
-    if (!m_recordingStatusLabel) return;
-
-    if (isActive) {
-        m_recordingStatusLabel->setText(" ● Recording: Active");
-        m_recordingStatusLabel->setStyleSheet("color: green; font-weight: bold;");
-    } else {
-        QString statusText = " ● Recording: Inactive";
-        if (!reason.isEmpty()) {
-            statusText += QString(" (%1)").arg(reason);
-        }
-        m_recordingStatusLabel->setText(statusText);
-        m_recordingStatusLabel->setStyleSheet("color: gray; font-weight: bold;");
-    }
-}
 
 SettingsData MainWindow::getSettingsForwarder()
 {
