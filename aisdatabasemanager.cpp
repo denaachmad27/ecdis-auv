@@ -917,131 +917,56 @@ QList<AisDatabaseManager::TargetData> AisDatabaseManager::getTargetsForDate(cons
         qCritical() << "Error fetching static data:" << staticQuery.lastError().text();
     }
 
-    // (b) Get latest dynamic data from nmea_records for each MMSI
-    QHash<quint32, TargetData> dynamicDataMap;
+    // (b) Get all unique MMSIs with their navigation data directly from nmea_records
+    QHash<quint32, TargetData> nmeaDataMap;
 
-    // First, get all unique MMSIs for the date
-    QSqlQuery mmsiQuery;
-    QString mmsiSql = QString(
-        "SELECT DISTINCT mmsi "
+    QSqlQuery nmeaQuery;
+    QString nmeaSql = QString(
+        "SELECT mmsi, latitude, longitude, speed_over_ground, course_over_ground, true_heading "
         "FROM nmea_records "
-        "WHERE DATE(timestamp) = DATE('%1') AND mmsi IS NOT NULL AND mmsi != 0"
+        "WHERE DATE(timestamp) = DATE('%1') AND mmsi IS NOT NULL AND mmsi != 0 "
+        "GROUP BY mmsi, latitude, longitude, speed_over_ground, course_over_ground, true_heading"
     ).arg(dateStr);
 
-    QSet<quint32> allMmsis;
-    if (mmsiQuery.exec(mmsiSql)) {
-        while (mmsiQuery.next()) {
-            allMmsis.insert(mmsiQuery.value("mmsi").toUInt());
-        }
-        qCritical() << "Found" << allMmsis.size() << "unique MMSIs in nmea_records";
-    }
-
-    // For each MMSI, get the latest non-null values
-    for (quint32 mmsi : allMmsis) {
-        QSqlQuery dynamicQuery;
-        QString dynamicSql = QString(
-            "SELECT "
-            "MAX(CASE WHEN latitude IS NOT NULL THEN timestamp END) as latest_lat_time, "
-            "MAX(CASE WHEN longitude IS NOT NULL THEN timestamp END) as latest_lon_time, "
-            "MAX(CASE WHEN speed_over_ground IS NOT NULL THEN timestamp END) as latest_sog_time, "
-            "MAX(CASE WHEN course_over_ground IS NOT NULL THEN timestamp END) as latest_cog_time, "
-            "MAX(CASE WHEN true_heading IS NOT NULL THEN timestamp END) as latest_hdg_time, "
-            "MAX(timestamp) as latest_time "
-            "FROM nmea_records "
-            "WHERE DATE(timestamp) = DATE('%1') AND mmsi = %2"
-        ).arg(dateStr).arg(mmsi);
-
-        if (dynamicQuery.exec(dynamicSql) && dynamicQuery.next()) {
+    if (nmeaQuery.exec(nmeaSql)) {
+        while (nmeaQuery.next()) {
             TargetData data;
-            data.mmsi = mmsi;
+            data.mmsi = nmeaQuery.value("mmsi").toUInt();
+            data.latitude = nmeaQuery.value("latitude").toDouble();
+            data.longitude = nmeaQuery.value("longitude").toDouble();
+            data.sog = nmeaQuery.value("speed_over_ground").toDouble();
+            data.cog = nmeaQuery.value("course_over_ground").toDouble();
+            data.heading = nmeaQuery.value("true_heading").toDouble();
 
-            // Get latest lat
-            QSqlQuery latQuery;
-            latQuery.prepare(QString(
-                "SELECT latitude FROM nmea_records "
-                "WHERE mmsi = ? AND DATE(timestamp) = DATE('%1') AND latitude IS NOT NULL "
-                "ORDER BY timestamp DESC LIMIT 1"
-            ).arg(dateStr));
-            latQuery.addBindValue(mmsi);
-            if (latQuery.exec() && latQuery.next()) {
-                data.latitude = latQuery.value(0).toDouble();
-            }
-
-            // Get latest lon
-            QSqlQuery lonQuery;
-            lonQuery.prepare(QString(
-                "SELECT longitude FROM nmea_records "
-                "WHERE mmsi = ? AND DATE(timestamp) = DATE('%1') AND longitude IS NOT NULL "
-                "ORDER BY timestamp DESC LIMIT 1"
-            ).arg(dateStr));
-            lonQuery.addBindValue(mmsi);
-            if (lonQuery.exec() && lonQuery.next()) {
-                data.longitude = lonQuery.value(0).toDouble();
-            }
-
-            // Get latest SOG
-            QSqlQuery sogQuery;
-            sogQuery.prepare(QString(
-                "SELECT speed_over_ground FROM nmea_records "
-                "WHERE mmsi = ? AND DATE(timestamp) = DATE('%1') AND speed_over_ground IS NOT NULL "
-                "ORDER BY timestamp DESC LIMIT 1"
-            ).arg(dateStr));
-            sogQuery.addBindValue(mmsi);
-            if (sogQuery.exec() && sogQuery.next()) {
-                data.sog = sogQuery.value(0).toDouble();
-            }
-
-            // Get latest COG
-            QSqlQuery cogQuery;
-            cogQuery.prepare(QString(
-                "SELECT course_over_ground FROM nmea_records "
-                "WHERE mmsi = ? AND DATE(timestamp) = DATE('%1') AND course_over_ground IS NOT NULL "
-                "ORDER BY timestamp DESC LIMIT 1"
-            ).arg(dateStr));
-            cogQuery.addBindValue(mmsi);
-            if (cogQuery.exec() && cogQuery.next()) {
-                data.cog = cogQuery.value(0).toDouble();
-            }
-
-            // Get latest heading
-            QSqlQuery hdgQuery;
-            hdgQuery.prepare(QString(
-                "SELECT true_heading FROM nmea_records "
-                "WHERE mmsi = ? AND DATE(timestamp) = DATE('%1') AND true_heading IS NOT NULL "
-                "ORDER BY timestamp DESC LIMIT 1"
-            ).arg(dateStr));
-            hdgQuery.addBindValue(mmsi);
-            if (hdgQuery.exec() && hdgQuery.next()) {
-                data.heading = hdgQuery.value(0).toDouble();
-            }
-
-            dynamicDataMap[mmsi] = data;
+            // Store the data - this will include all navigation data for each MMSI
+            nmeaDataMap[data.mmsi] = data;
         }
+        qCritical() << "Found" << nmeaDataMap.size() << "targets with navigation data from nmea_records";
+    } else {
+        qCritical() << "Error fetching NMEA data:" << nmeaQuery.lastError().text();
     }
 
-    qCritical() << "Found" << dynamicDataMap.size() << "dynamic targets from nmea_records";
-
-    // (c) Combine static and dynamic data
-    QSet<quint32> allTargetMmsis = QSet<quint32>::fromList(staticDataMap.keys()) + QSet<quint32>::fromList(dynamicDataMap.keys());
+    // (c) Combine static data from target_references with navigation data from nmea_records
+    QSet<quint32> allTargetMmsis = QSet<quint32>::fromList(staticDataMap.keys()) + QSet<quint32>::fromList(nmeaDataMap.keys());
 
     for (quint32 mmsi : allTargetMmsis) {
         TargetData combined;
 
-        // Start with static data if available
+        // Start with static data from target_references if available
         if (staticDataMap.contains(mmsi)) {
             combined = staticDataMap[mmsi];
         } else {
             combined.mmsi = mmsi;
         }
 
-        // Overwrite with dynamic data if available
-        if (dynamicDataMap.contains(mmsi)) {
-            const TargetData& dynamic = dynamicDataMap[mmsi];
-            if (dynamic.latitude != 0) combined.latitude = dynamic.latitude;
-            if (dynamic.longitude != 0) combined.longitude = dynamic.longitude;
-            if (dynamic.sog != 0) combined.sog = dynamic.sog;
-            if (dynamic.cog != 0) combined.cog = dynamic.cog;
-            if (dynamic.heading != 0) combined.heading = dynamic.heading;
+        // Merge with navigation data from nmea_records if available
+        if (nmeaDataMap.contains(mmsi)) {
+            const TargetData& nmea = nmeaDataMap[mmsi];
+            if (nmea.latitude != 0) combined.latitude = nmea.latitude;
+            if (nmea.longitude != 0) combined.longitude = nmea.longitude;
+            if (nmea.sog != 0) combined.sog = nmea.sog;
+            if (nmea.cog != 0) combined.cog = nmea.cog;
+            if (nmea.heading != 0) combined.heading = nmea.heading;
         }
 
         targets.append(combined);
