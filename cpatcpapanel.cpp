@@ -3,6 +3,7 @@
 #include <QStyledItemDelegate>
 #include <QStyleOptionViewItem>
 #include <QPainter>
+#include <QtGlobal>
 
 #include "cpatcpapanel.h"
 #include "cpatcpasettingsdialog.h"
@@ -17,6 +18,11 @@
 CPATCPAPanel::CPATCPAPanel(QWidget *parent)
     : QWidget(parent)
     , ecWidget(nullptr)
+    , ownShipGroup(nullptr)  // Initialize to nullptr
+    , ownShipLatLabel(nullptr)
+    , ownShipLonLabel(nullptr)
+    , ownShipCogLabel(nullptr)
+    , ownShipSogLabel(nullptr)
     , dangerousCount(0)
     , totalTargets(0)
     , refreshTimer(nullptr)  // Ganti nama
@@ -48,25 +54,19 @@ void CPATCPAPanel::setupUI()
     mainLayout->setSpacing(10);
     mainLayout->setContentsMargins(10, 10, 10, 10);
 
+    // Set minimum size and background to prevent transparency
+    this->setMinimumSize(400, 300);
+    this->setStyleSheet("CPATCPAPanel { background-color: white; border: 1px solid gray; }");
+
     // System Status Panel
     setupStatusPanel();
 
-    // Own Ship Info Panel
-    // ownShipGroup = new QGroupBox("Own Ship");
-    // QGridLayout* ownShipLayout = new QGridLayout();
-    // ownShipGroup->setLayout(ownShipLayout);
-
-    ownShipLatLabel = new QLabel("LAT: 0");
-    ownShipLonLabel = new QLabel("LON: 0");
-    ownShipCogLabel = new QLabel("COG: 0");
-    ownShipSogLabel = new QLabel("SOG: 0");
-
-    // ownShipLayout->addWidget(new QLabel("Position:"), 0, 0);
-    // ownShipLayout->addWidget(ownShipLatLabel, 0, 1);
-    // ownShipLayout->addWidget(ownShipLonLabel, 0, 2);
-    // ownShipLayout->addWidget(new QLabel("Course/Speed:"), 1, 0);
-    // ownShipLayout->addWidget(ownShipCogLabel, 1, 1);
-    // ownShipLayout->addWidget(ownShipSogLabel, 1, 2);
+    // Own Ship Info Panel - Commented out since not used
+    // ownShipGroup = nullptr;  // Explicitly set to nullptr
+    // ownShipLatLabel = nullptr;
+    // ownShipLonLabel = nullptr;
+    // ownShipCogLabel = nullptr;
+    // ownShipSogLabel = nullptr;
 
     // Targets Table Panel
     setupTargetsTable();
@@ -92,7 +92,7 @@ void CPATCPAPanel::setupUI()
     }
 
     mainLayout->addWidget(statusGroup);
-    mainLayout->addWidget(ownShipGroup);
+    // mainLayout->addWidget(ownShipGroup);  // Removed - ownShipGroup is null
     mainLayout->addWidget(targetsGroup);
 }
 
@@ -714,10 +714,18 @@ QString CPATCPAPanel::formatTime(double minutes)
 
 void CPATCPAPanel::updateOwnShipInfo(double lat, double lon, double sog, double cog)
 {
-    ownShipLatLabel->setText(QString("LAT: <b>%1°</b>").arg(lat, 0, 'f', 4));
-    ownShipLonLabel->setText(QString("LON: <b>%1°</b>").arg(lon, 0, 'f', 4));
-    ownShipSogLabel->setText(QString("COG: <b>%1°</b>").arg(cog, 0, 'f', 1));
-    ownShipCogLabel->setText(QString("SOG: <b>%1kt</b>").arg(sog, 0, 'f', 1));
+    // Own ship labels are not implemented yet - skip update
+    // These labels are nullptr since own ship panel was disabled
+    /*
+    if (ownShipLatLabel) ownShipLatLabel->setText(QString("LAT: <b>%1°</b>").arg(lat, 0, 'f', 4));
+    if (ownShipLonLabel) ownShipLonLabel->setText(QString("LON: <b>%1°</b>").arg(lon, 0, 'f', 4));
+    if (ownShipSogLabel) ownShipSogLabel->setText(QString("COG: <b>%1°</b>").arg(cog, 0, 'f', 1));
+    if (ownShipCogLabel) ownShipCogLabel->setText(QString("SOG: <b>%1kt</b>").arg(sog, 0, 'f', 1));
+    */
+    Q_UNUSED(lat)
+    Q_UNUSED(lon)
+    Q_UNUSED(sog)
+    Q_UNUSED(cog)
 }
 
 void CPATCPAPanel::onTargetSelected()

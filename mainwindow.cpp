@@ -769,7 +769,6 @@ void MainWindow::createMenuBar(){
     // Setup CPA/TCPA Panel after createDockWindows
     setupCPATCPAPanel();
     if (m_cpatcpaPanel) {
-        qCritical() << "MASUK?";
         ecchart->setCPAPanelToAIS(m_cpatcpaPanel);
     }
 
@@ -1083,24 +1082,15 @@ void MainWindow::createMenuBar(){
         fetchNmea();
     }
 
-    // Tabify AIS Target Manager Panel (CPATCPA) with existing right-side docks (follow AOI pattern)
+    // Add AIS Target Manager Panel and AIS Playback Control to UI Panels menu
     if (m_cpatcpaDock) {
-        if (m_nmeaPlaybackDock) {
-            tabifyDockWidget(m_nmeaPlaybackDock, m_cpatcpaDock);
-            qDebug() << "[TABIFY] AIS Target Manager Panel tabified with NMEA Playback Control";
-        } else if (guardZoneDock) {
-            tabifyDockWidget(guardZoneDock, m_cpatcpaDock);
-            qDebug() << "[TABIFY] AIS Target Manager Panel tabified with GuardZone";
-        } else if (obstacleDetectionDock) {
-            tabifyDockWidget(obstacleDetectionDock, m_cpatcpaDock);
-            qDebug() << "[TABIFY] AIS Target Manager Panel tabified with Obstacle Detection";
-        } else if (routeDock) {
-            tabifyDockWidget(routeDock, m_cpatcpaDock);
-            qDebug() << "[TABIFY] AIS Target Manager Panel tabified with Route Panel";
-        } else if (aisTargetDock) {
-            tabifyDockWidget(aisTargetDock, m_cpatcpaDock);
-            qDebug() << "[TABIFY] AIS Target Manager Panel tabified with AIS Target Manager";
-        }
+        viewMenu->addAction(m_cpatcpaDock->toggleViewAction());
+        qDebug() << "[MENU] Added AIS Target Manager Panel to UI Panels menu";
+    }
+
+    if (m_nmeaPlaybackDock) {
+        viewMenu->addAction(m_nmeaPlaybackDock->toggleViewAction());
+        qDebug() << "[MENU] Added AIS Playback Control to UI Panels menu";
     }
 }
 
@@ -1157,44 +1147,40 @@ void MainWindow::fetchNmea(){
     mainLayout->addLayout(controlLayout);
     mainLayout->addWidget(m_displayEditDB);
 
-    // === 4. Atur Dock Widget ===
-    QDockWidget *dock = new QDockWidget("NMEA Playback Control", this);
-    dock->setWidget(dockWidgetContents);
-    addDockWidget(Qt::RightDockWidgetArea, dock);
+    // Fix transparency: Ensure widget has solid background
+    dockWidgetContents->setAutoFillBackground(true);
 
-    dock->hide();
+    // === 4. Atur Dock Widget ===
+    QDockWidget *dock = new QDockWidget("AIS Playback Control", this);
+    dock->setWidget(dockWidgetContents);
+    dock->setAllowedAreas(Qt::RightDockWidgetArea);  // Force right side only
+    addDockWidget(Qt::RightDockWidgetArea, dock);
 
     // Store dock widget for tabify behavior
     m_nmeaPlaybackDock = dock;
 
-    // Tabify NMEA Playback Control with existing right-side docks (follow AOI pattern)
-    if (aisTargetDock) {
+    dock->hide();
+
+    // Tabify AIS Playback Control with existing right-side docks (prioritize CPA/TCPA)
+    if (m_cpatcpaDock) {
+        tabifyDockWidget(m_cpatcpaDock, m_nmeaPlaybackDock);
+        qDebug() << "[TABIFY] AIS Playback Control tabified with AIS Target Manager Panel";
+    } else if (aisTargetDock) {
         tabifyDockWidget(aisTargetDock, m_nmeaPlaybackDock);
-        qDebug() << "[TABIFY] NMEA Playback Control tabified with AIS Target Manager";
+        qDebug() << "[TABIFY] AIS Playback Control tabified with AIS Target Manager";
     } else if (guardZoneDock) {
         tabifyDockWidget(guardZoneDock, m_nmeaPlaybackDock);
-        qDebug() << "[TABIFY] NMEA Playback Control tabified with GuardZone";
+        qDebug() << "[TABIFY] AIS Playback Control tabified with GuardZone";
     } else if (obstacleDetectionDock) {
         tabifyDockWidget(obstacleDetectionDock, m_nmeaPlaybackDock);
-        qDebug() << "[TABIFY] NMEA Playback Control tabified with Obstacle Detection";
+        qDebug() << "[TABIFY] AIS Playback Control tabified with Obstacle Detection";
     } else if (routeDock) {
         tabifyDockWidget(routeDock, m_nmeaPlaybackDock);
-        qDebug() << "[TABIFY] NMEA Playback Control tabified with Route Panel";
-    } else if (m_cpatcpaDock) {
-        tabifyDockWidget(m_cpatcpaDock, m_nmeaPlaybackDock);
-        qDebug() << "[TABIFY] NMEA Playback Control tabified with AIS Target Manager Panel";
+        qDebug() << "[TABIFY] AIS Playback Control tabified with Route Panel";
     }
 
-    // Add to Sidebar menu (follow AOI pattern)
-    QMenu* sidebarMenu = nullptr;
-    QList<QMenu*> menus = menuBar()->findChildren<QMenu*>();
-    for (QMenu* menu : menus) {
-        if (menu->title().contains("Sidebar") || menu->title().contains("&Sidebar")) {
-            sidebarMenu = menu;
-            break;
-        }
-    }
-    if (sidebarMenu) sidebarMenu->addAction(m_nmeaPlaybackDock->toggleViewAction());
+    // Menu addition moved to setupCPATCPAPanel() to ensure proper ordering
+    // AIS Playback Control menu is added after AIS Target Manager Panel in UI Panels menu
 
     // === 5. Hubungkan sinyal/slot ===
     connect(m_playButtonDB, &QPushButton::clicked, this, &MainWindow::onPlayClickedDB);
@@ -5346,9 +5332,11 @@ void MainWindow::onShowCPATargets(bool enabled)
 
     ecchart->ShowDangerTarget(enabled);
 
-    if (m_cpatcpaDock) {
-        m_cpatcpaDock->setVisible(enabled);
-    }
+    // Don't force dock visibility - let user control via menu
+    // The menu toggle action should control panel visibility
+    // if (m_cpatcpaDock) {
+    //     m_cpatcpaDock->setVisible(enabled);
+    // }
 
     if (enabled) {
         addTextToBar("CPA Target display enabled");
@@ -5381,9 +5369,8 @@ void MainWindow::onCPATCPAAlarms(bool enabled)
     if (enabled) {
         addTextToBar("CPA/TCPA Alarms enabled");
         m_cpaUpdateTimer->start();
-        if (m_cpatcpaDock) {
-            m_cpatcpaDock->setVisible(true);
-        }
+        // Don't force visibility - let user control via menu
+        // Panel visibility should be controlled by menu action, not by alarm state
     } else {
         addTextToBar("CPA/TCPA Alarms disabled");
         m_cpaUpdateTimer->stop();
@@ -5661,37 +5648,33 @@ void MainWindow::setupCPATCPAPanel()
 
     // Create dock widget untuk panel
     m_cpatcpaDock = new QDockWidget(tr("AIS Target Manager Panel"), this);
-    m_cpatcpaDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    m_cpatcpaDock->setAllowedAreas(Qt::RightDockWidgetArea);  // Force right side only
     m_cpatcpaDock->setWidget(m_cpatcpaPanel);
+    m_cpatcpaDock->setMinimumSize(450, 350);  // Ensure proper size
+    m_cpatcpaDock->setFloating(false);        // Prevent floating
 
-    // Add dock to main window
+    // Add dock to right side FIRST
     addDockWidget(Qt::RightDockWidgetArea, m_cpatcpaDock);
 
-    // Add AIS Target Manager to Sidebar menu
-    QMenu* sidebarMenu = nullptr;
-    QList<QMenu*> menus = menuBar()->findChildren<QMenu*>();
-    for (QMenu* menu : menus) {
-        if (menu->title().contains("UI Panels") || menu->title().contains("&UI Panels")) {
-            sidebarMenu = menu;
-            break;
-        }
-    }
+    // Menu addition moved to createMenus() after UI Panels menu is created
 
-    if (sidebarMenu) {
-        sidebarMenu->addAction(m_cpatcpaDock->toggleViewAction());
-    }
-
-    // Set initial visibility
-    m_cpatcpaDock->setVisible(false);
-    
-    // Force tabify with Route Panel if it exists
+    // Force tabify with any available right-side dock (regardless of visibility)
     if (routeDock) {
-        qDebug() << "[SETUP-CPA] Attempting to tabify CPA/TCPA with Route Panel";
+        qDebug() << "[SETUP-CPA] Forcing tabify with Route Panel";
         tabifyDockWidget(routeDock, m_cpatcpaDock);
-        m_cpatcpaDock->raise(); // Make CPA/TCPA the active tab
+        m_cpatcpaDock->hide(); // Hide after tabify
         qDebug() << "[SETUP-CPA] CPA/TCPA tabified with Route Panel";
+    } else if (m_nmeaPlaybackDock) {
+        qDebug() << "[SETUP-CPA] Forcing tabify with NMEA Playback Control";
+        tabifyDockWidget(m_nmeaPlaybackDock, m_cpatcpaDock);
+        m_cpatcpaDock->hide();
+    } else if (aisTargetDock) {
+        qDebug() << "[SETUP-CPA] Forcing tabify with AIS Target Manager";
+        tabifyDockWidget(aisTargetDock, m_cpatcpaDock);
+        m_cpatcpaDock->hide();
     } else {
-        qDebug() << "[SETUP-CPA] Route Panel not available for tabify";
+        qDebug() << "[SETUP-CPA] No docks available, using standalone right dock";
+        m_cpatcpaDock->hide(); // Hide initially
     }
 }
 
