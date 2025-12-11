@@ -108,8 +108,9 @@ public:
 
     QMap<unsigned int, AISTargetData> _aisTargetMap;
     QMap<unsigned int, EcAISTargetInfo> _aisTargetInfoMap;
-    QString _latestNmea; // Cache untuk NMEA terakhir yang masuk
     QDateTime _latestNmeaTime; // Timestamp untuk memastikan NMEA masih fresh
+    static QString _latestNmea; // Cache untuk NMEA terakhir yang masuk
+    static QMutex _nmeaMutex;
 
     // Fungsi untuk NMEA cache management
     void cacheLatestNmea(const QString& nmea);
@@ -175,7 +176,7 @@ private:
 
     void deleteOldOwnShipFeature();
     void handleOwnShipUpdate(EcAISTargetInfo *ti);
-    void handleAISTargetUpdate(EcAISTargetInfo *ti);
+    void handleAISTargetUpdate(EcAISTargetInfo *ti, const QString nmeaCopy);
 
     QDateTime lastTrailDrawTime;
 

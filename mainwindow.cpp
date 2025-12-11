@@ -769,6 +769,7 @@ void MainWindow::createMenuBar(){
     // Setup CPA/TCPA Panel after createDockWindows
     setupCPATCPAPanel();
     if (m_cpatcpaPanel) {
+        qCritical() << "MASUK?";
         ecchart->setCPAPanelToAIS(m_cpatcpaPanel);
     }
 

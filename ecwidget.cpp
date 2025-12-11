@@ -6408,9 +6408,9 @@ void EcWidget::processAis(QString ais)
 
             // Cache NMEA asli untuk digunakan di callback nanti
             // Kita cache NMEA terakhir dan akan mengasosiasikannya dengan MMSI di callback
-            if (sentence.startsWith("!AIVDM")) {
-                _aisObj->cacheLatestNmea(sentence);
-            }
+            // if (sentence.startsWith("!AIVDM")) {
+            //     _aisObj->cacheLatestNmea(sentence);
+            // }
 
             // Process AIS sentence - recording will happen in SevenCs callback
             _aisObj->readAISVariableString(sentence);

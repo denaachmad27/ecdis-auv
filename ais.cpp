@@ -11,6 +11,8 @@
 
 // Initialize static member variables
 bool Ais::_isShuttingDown = false;
+QString Ais::_latestNmea = "";
+QMutex Ais::_nmeaMutex;
 
 Ais::Ais( EcWidget *parent, EcView *view, EcDictInfo *dict,
          EcCoordinate ownShipLat, EcCoordinate ownShipLon,
@@ -395,7 +397,7 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
 
     // 2. Handle AIS targets (bukan ownship)
     else if (ti->ownShip == False) {
-        _myAis->handleAISTargetUpdate(ti);
+        _myAis->handleAISTargetUpdate(ti, "");
 
         // KURANGI emit signal - hanya emit sekali per detik atau sesuai kebutuhan
         // static QDateTime lastEmit = QDateTime::currentDateTime();
@@ -477,8 +479,15 @@ void Ais::AISTargetUpdateCallbackThread(EcAISTargetInfo *ti)
         }
         // ===== Database update via queued connection (non-blocking) =====
         EcAISTargetInfo* tiCopyPtr = new EcAISTargetInfo(tiCopy); // allocate on heap
-        QMetaObject::invokeMethod(_myAis, [tiCopyPtr]() {
-            _myAis->handleAISTargetUpdate(tiCopyPtr);
+
+        QString nmeaCopy;
+        {
+            QMutexLocker locker(&_nmeaMutex);
+            nmeaCopy = _latestNmea;             // FAST: microseconds operation
+        }
+
+        QMetaObject::invokeMethod(_myAis, [tiCopyPtr, nmeaCopy]() {
+            _myAis->handleAISTargetUpdate(tiCopyPtr, nmeaCopy);
             delete tiCopyPtr; // clean up after processing
         }, Qt::QueuedConnection);
 
@@ -583,7 +592,7 @@ void Ais::handleOwnShipUpdate(EcAISTargetInfo *ti)
 }
 
 // Fungsi khusus untuk handle AIS targets (bukan ownship)
-void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
+void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti, const QString nmeaCopy)
 {
     if (ti->ownShip == True) return; // Skip jika ini ownship
 
@@ -698,7 +707,8 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
                         timer.start();
 
                         // Gunakan NMEA asli dari cache, bukan reconstructed
-                        QString originalNmea = getLatestNmea();
+                        //QString originalNmea = getLatestNmea();
+                        QString originalNmea = nmeaCopy;
 
                         // Fallback: jika tidak ada di cache, gunakan NMEA dari parsed data
                         if (originalNmea.isEmpty()) {
@@ -1267,6 +1277,11 @@ void Ais::readAISVariableString( const QString &data )
 
     QString line = data + "\r\n";
     extractNMEA(line);
+
+    if (line.contains("!AIVDM")){
+        QMutexLocker locker(&_nmeaMutex);
+        _latestNmea = line;
+    }
 
     // qDebug() << data;
 
