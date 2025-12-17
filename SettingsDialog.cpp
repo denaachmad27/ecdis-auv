@@ -91,7 +91,7 @@ void SettingsDialog::setupUI() {
 
     databaseForm->addRow("Host:", dbHostLineEdit);
     databaseForm->addRow("Port:", dbPortLineEdit);
-    databaseForm->addRow("Database Name:", dbNameLineEdit);
+    databaseForm->addRow("DB Name:", dbNameLineEdit);
     databaseForm->addRow("User:", dbUserLineEdit);
     databaseForm->addRow("Password:", dbPasswordLineEdit);
 
