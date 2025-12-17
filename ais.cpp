@@ -346,8 +346,8 @@ void Ais::AISTargetUpdateCallbackOld( EcAISTargetInfo *ti )
                 ownShipLat = _oLat;
                 ownShipLon = _oLon;
 
-                _dSpeed = ti->sog;
-                _dCourse = ti->cog / 10;
+                _dSpeed = ti->sog / 10.0;
+                _dCourse = ti->cog;
 
                 _myAis->setOwnShipPos(ownShipLat, ownShipLon);
 
@@ -355,7 +355,7 @@ void Ais::AISTargetUpdateCallbackOld( EcAISTargetInfo *ti )
                 AISTargetData dataOS;
                 dataOS.lat = _oLat;
                 dataOS.lon = _oLon;
-                dataOS.cog = ti->cog / 10.0;        // Course over ground
+                dataOS.cog = ti->cog;        // Course over ground
                 dataOS.sog = ti->sog / 10.0;        // Speed over ground
                 dataOS.heading = ti->heading;       // ⭐ TAMBAHAN: True heading
                 dataOS.cpaCalculatedAt = QDateTime::currentDateTime();
@@ -533,8 +533,8 @@ void Ais::handleOwnShipUpdate(EcAISTargetInfo *ti)
 
         ownShipLat = _oLat;
         ownShipLon = _oLon;
-        ownShipCog = ti->cog / 10;
-        ownShipSog = ti->sog;
+        ownShipCog = ti->cog/10;
+        ownShipSog = ti->sog/10;
 
         _myAis->setOwnShipPos(ownShipLat, ownShipLon);
 
@@ -542,14 +542,13 @@ void Ais::handleOwnShipUpdate(EcAISTargetInfo *ti)
         AISTargetData dataOS;
         dataOS.lat = _oLat;
         dataOS.lon = _oLon;
-        dataOS.cog = ti->cog / 10.0;        // Course over ground
-        dataOS.sog = ti->sog;               // Speed over ground
+        dataOS.cog = ti->cog/10;               // Course over ground
+        dataOS.sog = ti->sog/10;               // Speed over ground
         dataOS.heading = ti->heading;       // ⭐ TAMBAHAN: True heading dari compass
         dataOS.cpaCalculatedAt = QDateTime::currentDateTime();
 
         Ais::instance()->_aisOwnShip = dataOS;
 
-  
         // EKOR OWNSHIP
         if (ownShipLat != 0 && ownShipLon != 0 && _wParent->getOwnShipTrail()) {
             int setting = _wParent->getTrackLine();

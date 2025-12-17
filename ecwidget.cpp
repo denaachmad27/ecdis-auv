@@ -6069,7 +6069,7 @@ void EcWidget::stopAllThread()
 
 
 void EcWidget::processData(double lat, double lon, double cog, double sog, double hdg, double spd, double dep, double yaw, double z){
-    QString nmea = AIVDOEncoder::encodeAIVDO1(lat, lon, cog, sog/10, hdg, 0, 1);
+    QString nmea = AIVDOEncoder::encodeAIVDO1(lat, lon, cog, sog, hdg, 0, 1);
 
     _aisObj->readAISVariableThread({nmea});
 
@@ -6089,7 +6089,7 @@ void EcWidget::processData(double lat, double lon, double cog, double sog, doubl
                 AisDatabaseManager::instance().insertParsedOwnshipData(
                     nmea,
                     "ownship",
-                    lat, lon, sog/10, cog, hdg
+                    lat, lon, sog, cog, hdg
                 );
                 lastOwnshipRecord = currentTime;
             }

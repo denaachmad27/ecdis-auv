@@ -76,5 +76,6 @@
         <file>icon/poi_white.svg</file>
         <file>icon/add_area_white.svg</file>
         <file>icon/add_area.svg</file>
+        <file>icon/dummy_icon.png</file>
     </qresource>
 </RCC>

@@ -31,6 +31,9 @@ public:
     bool connect(const QString& host, int port, const QString& dbName,
                  const QString& user, const QString& password);
 
+    // Connect using settings from config file
+    bool connectFromSettings();
+
     // Legacy functions (keep for backward compatibility)
     void insertOrUpdateAisTarget(const EcAISTargetInfo& info);
     void insertOwnShipToDB(double lat, double lon, double depth,
@@ -86,6 +89,8 @@ public:
     };
 
     QList<TargetData> getTargetsForDate(const QDateTime& date);
+    QList<TargetData> getTargetsForDateRev(const QDateTime& date);
+
     QStringList encodeTargetsToNMEA(const QList<TargetData>& targets);
 
     ~AisDatabaseManager();

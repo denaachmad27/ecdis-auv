@@ -2,7 +2,15 @@
 #include "SettingsManager.h"
 #include "appconfig.h"
 #include "mainwindow.h"
+#include "qsqlerror.h"
 #include "routesafetyfeature.h"
+
+#ifdef _WIN32
+#include <windows.h>
+#include <QDir>
+#include <QFile>
+#include <QCoreApplication>
+#endif
 
 #include <QLineEdit>
 #include <QComboBox>
@@ -28,10 +36,22 @@
 #include <QTimer>
 #include <QTableWidget>
 #include <QHeaderView>
+#include <QSqlDatabase>
+#include <QProgressDialog>
+#include <QApplication>
+#include <QtConcurrent>
+#include <QFutureWatcher>
 
-SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
+SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent), isDatabaseConnected(false), loadingDialog(nullptr), connectionWatcher(nullptr) {
     setupUI();
     loadSettings();
+
+    // Connect button action
+    connect(dbConnectButton, &QPushButton::clicked, this, &SettingsDialog::onDbConnectClicked);
+
+  
+    // Initial database connection check on startup
+    checkDatabaseConnection();
 }
 
 void SettingsDialog::setupUI() {
@@ -44,16 +64,56 @@ void SettingsDialog::setupUI() {
     // Make all QGroupBox titles bold without affecting child widget fonts
     this->setStyleSheet("QGroupBox::title { font-weight: bold; }");
 
-    // =========== MOOSDB TAB =========== //
-    QWidget *moosTab = new QWidget;
-    QFormLayout *moosLayout = new QFormLayout;
+    // =========== CONNECTION TAB =========== //
+    QWidget *connectionTab = new QWidget;
+    QVBoxLayout *connectionLayout = new QVBoxLayout(connectionTab);
+
+    // MOOSDB Section
+    QGroupBox *moosdbGroup = new QGroupBox(tr("MOOSDB"));
+    QFormLayout *moosdbForm = new QFormLayout(moosdbGroup);
     moosIpLineEdit = new QLineEdit;
     moosIpLineEdit->setDisabled(false);
     moosPortLineEdit = new QLineEdit;
-    moosLayout->addRow("MOOSDB IP:", moosIpLineEdit);
-    //moosLayout->addRow("MOOSDB Port:", moosPortLineEdit);
+    moosdbForm->addRow("MOOSDB IP:", moosIpLineEdit);
+    //moosdbForm->addRow("MOOSDB Port:", moosPortLineEdit);
 
-    moosTab->setLayout(moosLayout);
+    // Database Section
+    QGroupBox *databaseGroup = new QGroupBox(tr("Database"));
+    QVBoxLayout *databaseLayout = new QVBoxLayout(databaseGroup);
+
+    QFormLayout *databaseForm = new QFormLayout;
+    dbHostLineEdit = new QLineEdit;
+    dbPortLineEdit = new QLineEdit;
+    dbNameLineEdit = new QLineEdit;
+    dbUserLineEdit = new QLineEdit;
+    dbPasswordLineEdit = new QLineEdit;
+    dbPasswordLineEdit->setEchoMode(QLineEdit::Password);
+
+    databaseForm->addRow("Host:", dbHostLineEdit);
+    databaseForm->addRow("Port:", dbPortLineEdit);
+    databaseForm->addRow("Database Name:", dbNameLineEdit);
+    databaseForm->addRow("User:", dbUserLineEdit);
+    databaseForm->addRow("Password:", dbPasswordLineEdit);
+
+    databaseLayout->addLayout(databaseForm);
+
+    // Database status and connect button
+    QHBoxLayout *dbStatusLayout = new QHBoxLayout;
+
+    dbStatusLabel = new QLabel("Disconnected");
+    dbStatusLabel->setStyleSheet("QLabel { color: red; font-weight: bold; }");
+    dbConnectButton = new QPushButton("Connect");
+    dbConnectButton->setMaximumWidth(100);
+
+    dbStatusLayout->addWidget(dbStatusLabel);
+    dbStatusLayout->addStretch();
+    dbStatusLayout->addWidget(dbConnectButton);
+
+    databaseLayout->addLayout(dbStatusLayout);
+
+    connectionLayout->addWidget(moosdbGroup);
+    connectionLayout->addWidget(databaseGroup);
+    connectionLayout->addStretch();
 
     // =========== OWNSHIP TAB =========== //
     QWidget *ownShipTab = new QWidget;
@@ -729,12 +789,12 @@ void SettingsDialog::setupUI() {
 
     // ================================================= //
 
-    // Reorder tabs: Own Ship, Ship Dimension, AIS Target, Display, MOOSDB
+    // Reorder tabs: Own Ship, Ship Dimension, AIS Target, Display, Connection
     // Remove Own Ship tab; rename Ship Dimensions tab to Ownship
     tabWidget->addTab(shipDimensionsTab, "Ownship");
     tabWidget->addTab(cpatcpaTab, "AIS Target");
     tabWidget->addTab(displayTab, "Display");
-    tabWidget->addTab(moosTab, "MOOSDB");
+    tabWidget->addTab(connectionTab, "Connection");
 
     if (AppConfig::isDevelopment()){
         tabWidget->addTab(guardzoneTab, "GuardZone");
@@ -772,6 +832,13 @@ void SettingsDialog::loadSettings() {
     // MOOSDB
     moosIpLineEdit->setText(settings.value("MOOSDB/ip", "127.0.0.1").toString());
     moosPortLineEdit->setText(settings.value("MOOSDB/port", "9000").toString());
+
+    // Database
+    dbHostLineEdit->setText(settings.value("Database/host", "localhost").toString());
+    dbPortLineEdit->setText(settings.value("Database/port", "5432").toString());
+    dbNameLineEdit->setText(settings.value("Database/name", "ecdis_ais").toString());
+    dbUserLineEdit->setText(settings.value("Database/user", "postgres").toString());
+    dbPasswordLineEdit->setText(settings.value("Database/password", "").toString());
 
     // AIS
     if (AppConfig::isDevelopment()){
@@ -997,6 +1064,13 @@ void SettingsDialog::saveSettings() {
     // MOOSDB
     settings.setValue("MOOSDB/ip", moosIpLineEdit->text());
     settings.setValue("MOOSDB/port", moosPortLineEdit->text());
+
+    // Database
+    settings.setValue("Database/host", dbHostLineEdit->text());
+    settings.setValue("Database/port", dbPortLineEdit->text());
+    settings.setValue("Database/name", dbNameLineEdit->text());
+    settings.setValue("Database/user", dbUserLineEdit->text());
+    settings.setValue("Database/password", dbPasswordLineEdit->text());
 
     // AIS
     if (AppConfig::isDevelopment()){
@@ -1371,4 +1445,168 @@ void SettingsDialog::onNavDraftBelowKeelChanged(double value)
 {
     RouteSafetyFeature::setNavDraftBelowKeel(value);
     qDebug() << "[SETTINGS] NAV_DRAFT_BELOW_KEEL changed to:" << value;
+}
+
+SettingsDialog::DatabaseSettings SettingsDialog::getDatabaseSettings()
+{
+    DatabaseSettings settings;
+
+    QString configPath = QString(EcKernelGetEnv("APPDATA")) + "/SevenCs/EC2007/DENC" + "/config.ini";
+    QSettings configSettings(configPath, QSettings::IniFormat);
+
+    settings.host = configSettings.value("Database/host", "localhost").toString();
+    settings.port = configSettings.value("Database/port", "5432").toString();
+    settings.dbName = configSettings.value("Database/name", "ecdis_ais").toString();
+    settings.user = configSettings.value("Database/user", "postgres").toString();
+    settings.password = configSettings.value("Database/password", "").toString();
+
+    return settings;
+}
+
+void SettingsDialog::onDbConnectClicked()
+{
+    // Save current settings first
+    QString configPath = QString(EcKernelGetEnv("APPDATA")) + "/SevenCs/EC2007/DENC" + "/config.ini";
+    QSettings settings(configPath, QSettings::IniFormat);
+
+    settings.setValue("Database/host", dbHostLineEdit->text());
+    settings.setValue("Database/port", dbPortLineEdit->text());
+    settings.setValue("Database/name", dbNameLineEdit->text());
+    settings.setValue("Database/user", dbUserLineEdit->text());
+    settings.setValue("Database/password", dbPasswordLineEdit->text());
+
+    // Create loading dialog
+    loadingDialog = new QProgressDialog("Connecting to database...", "Cancel", 0, 0, this);
+    loadingDialog->setWindowModality(Qt::WindowModal);
+    loadingDialog->setCancelButton(nullptr); // Remove cancel button to prevent interruption
+    loadingDialog->setRange(0, 0); // Indeterminate progress
+    loadingDialog->setMinimumDuration(0); // Show immediately
+    loadingDialog->show();
+
+    // Create future watcher for async connection
+    if (connectionWatcher) {
+        connectionWatcher->deleteLater();
+    }
+    connectionWatcher = new QFutureWatcher<bool>(this);
+
+    // Connect the finished signal
+    connect(connectionWatcher, &QFutureWatcher<bool>::finished, this, &SettingsDialog::onDatabaseConnectionFinished);
+
+    // Start the database connection in a separate thread
+    QFuture<bool> future = QtConcurrent::run(this, &SettingsDialog::checkDatabaseConnectionAsync);
+    connectionWatcher->setFuture(future);
+}
+
+bool SettingsDialog::checkDatabaseConnectionAsync()
+{
+#ifdef _WIN32
+    // Ensure PostgreSQL is in PATH
+    QString currentPath = qgetenv("PATH");
+    QString pgPath = "C:/Program Files/PostgreSQL/16/bin";
+
+    // Try alternative paths if primary doesn't exist
+    QDir pgDir(pgPath);
+    if (!pgDir.exists()) {
+        QStringList altPaths = {
+            "C:/Program Files/PostgreSQL/15/bin",
+            "C:/Program Files/PostgreSQL/14/bin",
+            "C:/Program Files (x86)/PostgreSQL/16/bin",
+            "C:/Program Files (x86)/PostgreSQL/15/bin"
+        };
+
+        for (const QString& altPath : altPaths) {
+            QDir altDir(altPath);
+            if (altDir.exists()) {
+                pgPath = altPath;
+                break;
+            }
+        }
+    }
+
+    QString newPath = pgPath + ";" + currentPath;
+    qputenv("PATH", newPath.toLocal8Bit());
+#endif
+
+    // Create temporary database connection to test
+    QSqlDatabase testDb = QSqlDatabase::addDatabase("QPSQL", "test_connection");
+
+    testDb.setHostName(dbHostLineEdit->text());
+    testDb.setPort(dbPortLineEdit->text().toInt());
+    testDb.setDatabaseName(dbNameLineEdit->text());
+    testDb.setUserName(dbUserLineEdit->text());
+    testDb.setPassword(dbPasswordLineEdit->text());
+
+    bool connected = testDb.open();
+
+    // Close test connection
+    if (testDb.isOpen()) {
+        testDb.close();
+    }
+    QSqlDatabase::removeDatabase("test_connection");
+
+    return connected;
+}
+
+void SettingsDialog::checkDatabaseConnection()
+{
+    // This method can still be used for synchronous connection (startup)
+    bool connected = checkDatabaseConnectionAsync();
+
+    if (connected) {
+        dbStatusLabel->setText("Connected");
+        dbStatusLabel->setStyleSheet("QLabel { color: green; font-weight: bold; }");
+        isDatabaseConnected = true;
+        qDebug() << "Database connection test: SUCCESS";
+    } else {
+        dbStatusLabel->setText("Disconnected");
+        dbStatusLabel->setStyleSheet("QLabel { color: red; font-weight: bold; }");
+        isDatabaseConnected = false;
+        qWarning() << "Database connection test FAILED";
+    }
+}
+
+void SettingsDialog::onDatabaseConnectionFinished()
+{
+    // Get the result from the future
+    bool connected = connectionWatcher->result();
+
+    // Update UI based on connection result
+    if (connected) {
+        dbStatusLabel->setText("Connected");
+        dbStatusLabel->setStyleSheet("QLabel { color: green; font-weight: bold; }");
+        isDatabaseConnected = true;
+        qDebug() << "Database connection test: SUCCESS";
+    } else {
+        dbStatusLabel->setText("Disconnected");
+        dbStatusLabel->setStyleSheet("QLabel { color: red; font-weight: bold; }");
+        isDatabaseConnected = false;
+        qWarning() << "Database connection test FAILED";
+    }
+
+    // Hide and delete loading dialog
+    if (loadingDialog) {
+        loadingDialog->hide();
+        loadingDialog->deleteLater();
+        loadingDialog = nullptr;
+    }
+
+    // Clean up connection watcher
+    connectionWatcher->deleteLater();
+    connectionWatcher = nullptr;
+}
+
+SettingsDialog::~SettingsDialog()
+{
+    // Clean up loading dialog if it exists
+    if (loadingDialog) {
+        loadingDialog->hide();
+        loadingDialog->deleteLater();
+        loadingDialog = nullptr;
+    }
+
+    // Clean up connection watcher if it exists
+    if (connectionWatcher) {
+        connectionWatcher->deleteLater();
+        connectionWatcher = nullptr;
+    }
 }
