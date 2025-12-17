@@ -17,11 +17,17 @@ class QSlider;
 class QDoubleSpinBox;
 class QTableWidget;
 class QTimer;
+class QProgressDialog;
+class QApplication;
+
+template<typename T>
+class QFutureWatcher;
 
 class SettingsDialog : public QDialog {
     Q_OBJECT
 public:
     explicit SettingsDialog(QWidget *parent = nullptr);
+    ~SettingsDialog();
 
     void loadSettings();
     void saveSettings();
@@ -30,6 +36,17 @@ public:
     EcWidget::DisplayOrientationMode orientation(const QString &str);
     EcWidget::OSCenteringMode centering(const QString &str);
     AppConfig::AppTheme theme(const QString &str);
+
+    // Database connection settings
+    struct DatabaseSettings {
+        QString host;
+        QString port;
+        QString dbName;
+        QString user;
+        QString password;
+    };
+    static DatabaseSettings getDatabaseSettings();
+    bool getDatabaseConnectionStatus() const { return isDatabaseConnected; }
 
 signals:
     void dialogOpened();
@@ -50,6 +67,10 @@ private slots:
     void onNavDepthChanged(double value);
     void onNavDraftChanged(double value);
     void onNavDraftBelowKeelChanged(double value);
+    void onDbConnectClicked();
+    void checkDatabaseConnection();
+    bool checkDatabaseConnectionAsync();
+    void onDatabaseConnectionFinished();
 
 private:
     void setupUI();
@@ -59,6 +80,20 @@ private:
     // MOOSDB
     QLineEdit *moosIpLineEdit;
     QLineEdit *moosPortLineEdit;
+
+    // Database Connection
+    QLineEdit *dbHostLineEdit;
+    QLineEdit *dbPortLineEdit;
+    QLineEdit *dbNameLineEdit;
+    QLineEdit *dbUserLineEdit;
+    QLineEdit *dbPasswordLineEdit;
+    QLabel *dbStatusLabel;
+    QPushButton *dbConnectButton;
+
+    // Database status management
+    bool isDatabaseConnected;
+    QProgressDialog *loadingDialog;
+    QFutureWatcher<bool> *connectionWatcher;
 
     // AIS
     QComboBox *aisSourceCombo;

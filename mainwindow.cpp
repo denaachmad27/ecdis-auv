@@ -1026,13 +1026,14 @@ void MainWindow::createMenuBar(){
     // connect(autoCheckAction, SIGNAL(toggled(bool)), this, SLOT(onAutoCheckGuardZone(bool)));
 
     // ================================== AIS DVR MENU
+    if (AppConfig::isDevelopment()) {
     QMenu *dvrMenu = menuBar()->addMenu("&AIS DVR");
+        startAisRecAction = dvrMenu->addAction("Start Record", this, SLOT(startAisRecord()) );
+        stopAisRecAction = dvrMenu->addAction("Stop Record", this, SLOT(stopAisRecord()) );
 
-    startAisRecAction = dvrMenu->addAction("Start Record", this, SLOT(startAisRecord()) );
-    stopAisRecAction = dvrMenu->addAction("Stop Record", this, SLOT(stopAisRecord()) );
-
-    startAisRecAction->setEnabled(true);
-    stopAisRecAction->setEnabled(false);
+        startAisRecAction->setEnabled(true);
+        stopAisRecAction->setEnabled(false);
+    }
 
     if (AppConfig::isDevelopment()) {
         QMenu *debugMenu = menuBar()->addMenu("&Debug");
@@ -1207,11 +1208,18 @@ void MainWindow::fetchNmea(){
 
     // === 6. Koneksi database ===
     // Coba koneksi dengan IPv4 terlebih dahulu
-    if (AisDatabaseManager::instance().connect("127.0.0.1", 5432, "ecdis", "postgres", "112030")) {
+
+    if (AisDatabaseManager::instance().connectFromSettings()) {
         qDebug() << "Database connected.";
     } else {
         QMessageBox::critical(this, "Error", "Gagal terhubung ke database.");
     }
+
+    // if (AisDatabaseManager::instance().connect("127.0.0.1", 5432, "ecdis", "postgres", "112030")) {
+    //     qDebug() << "Database connected.";
+    // } else {
+    //     QMessageBox::critical(this, "Error", "Gagal terhubung ke database.");
+    // }
 }
 
 void MainWindow::onPlayClickedDB()
@@ -1241,7 +1249,7 @@ void MainWindow::onPlayClickedDB()
 
             // ENCODE TARGETS FOR START DATE (first play or after stop)
             QDateTime startOnly = QDateTime(startTime.date());
-            QList<AisDatabaseManager::TargetData> targets = AisDatabaseManager::instance().getTargetsForDate(startOnly);
+            QList<AisDatabaseManager::TargetData> targets = AisDatabaseManager::instance().getTargetsForDateRev(startOnly);
             QStringList encodedNmeaList = AisDatabaseManager::instance().encodeTargetsToNMEA(targets);
 
             // Feed encoded NMEA to ecchart and display

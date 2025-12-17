@@ -12,7 +12,7 @@ QT += concurrent
 # win32:KERNELPATH = ../../
 win32:KERNELPATH = C:/EC2007/5.22.69.3
 
-TARGET += 
+TARGET +=
 DEPENDPATH += .
 DEPENDPATH += ..
 INCLUDEPATH += .
@@ -139,9 +139,13 @@ RESOURCES += \
     resources.qrc
 
 DISTFILES += \
+    icon/icon.ico
 
 SUBDIRS += \
 
 CONFIG += plugin
 
 LIBS += -ldwmapi
+
+win32:RC_ICONS += icon.ico
+

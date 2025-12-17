@@ -1,8 +1,12 @@
 #include "aisdatabasemanager.h"
+#include "SettingsDialog.h"
 
 #ifdef _WIN32
 #include <windows.h>
 #endif
+#include <QDir>
+#include <QFile>
+#include <QCoreApplication>
 
 AisDatabaseManager::AisDatabaseManager() : asyncProcessingTimer(nullptr) {
     qDebug() << "AisDatabaseManager initialized with high-performance async processing";
@@ -64,16 +68,90 @@ bool AisDatabaseManager::connect(const QString& host, int port, const QString& d
     QString qtPath = "C:/Qt/5.15.0/mingw81_64/bin";
     QString pgPath = "C:/Program Files/PostgreSQL/16/bin";
 
-    if (!currentPath.contains(qtPath, Qt::CaseInsensitive)) {
-        qputenv("PATH", (qtPath + ";" + pgPath + ";" + currentPath).toLocal8Bit());
-        qDebug() << "Updated PATH for PostgreSQL support";
+    // Check if PostgreSQL path exists
+    QDir pgDir(pgPath);
+    if (!pgDir.exists()) {
+        qDebug() << "PostgreSQL path not found:" << pgPath;
+        qDebug() << "Trying alternative PostgreSQL paths...";
+
+        // Try alternative PostgreSQL paths
+        QStringList altPaths = {
+            "C:/Program Files/PostgreSQL/15/bin",
+            "C:/Program Files/PostgreSQL/14/bin",
+            "C:/Program Files (x86)/PostgreSQL/16/bin",
+            "C:/Program Files (x86)/PostgreSQL/15/bin"
+        };
+
+        for (const QString& altPath : altPaths) {
+            QDir altDir(altPath);
+            if (altDir.exists()) {
+                pgPath = altPath;
+                qDebug() << "Found PostgreSQL at:" << pgPath;
+                break;
+            }
+        }
     }
+
+    // Ensure PostgreSQL DLLs are available
+    QStringList requiredDlls = {"libpq.dll", "libiconv-2.dll", "libintl-8.dll"};
+    QStringList missingDlls;
+
+    for (const QString& dll : requiredDlls) {
+        QString dllPath = pgPath + "/" + dll;
+        if (!QFile::exists(dllPath)) {
+            missingDlls << dll;
+            qDebug() << "Missing PostgreSQL DLL:" << dllPath;
+        }
+    }
+
+    if (!missingDlls.isEmpty()) {
+        qDebug() << "ERROR: Missing PostgreSQL DLLs:" << missingDlls;
+        qDebug() << "Attempting to copy missing DLLs to application directory...";
+
+        QString appDir = QCoreApplication::applicationDirPath();
+        for (const QString& dll : missingDlls) {
+            QString sourcePath = pgPath + "/" + dll;
+            QString destPath = appDir + "/" + dll;
+
+            if (QFile::exists(sourcePath)) {
+                if (QFile::copy(sourcePath, destPath)) {
+                    qDebug() << "Copied" << dll << "to application directory";
+                } else {
+                    qDebug() << "Failed to copy" << dll;
+                }
+            }
+        }
+
+        // Check again after copying
+        bool allFound = true;
+        for (const QString& dll : requiredDlls) {
+            if (!QFile::exists(appDir + "/" + dll)) {
+                allFound = false;
+                break;
+            }
+        }
+
+        if (allFound) {
+            qDebug() << "All PostgreSQL DLLs are now available in application directory";
+        } else {
+            qDebug() << "Still missing some PostgreSQL DLLs after copying attempt";
+        }
+    } else {
+        qDebug() << "All PostgreSQL DLLs found successfully";
+    }
+
+    QString newPath = qtPath + ";" + pgPath + ";" + currentPath;
+    qputenv("PATH", newPath.toLocal8Bit());
+    qDebug() << "Updated PATH for PostgreSQL support";
+    qDebug() << "PostgreSQL path:" << pgPath;
 #endif
 
     qDebug() << "Available SQL drivers:" << QSqlDatabase::drivers();
 
     if (!QSqlDatabase::drivers().contains("QPSQL")) {
         qDebug() << "ERROR: QPSQL driver not found!";
+        qDebug() << "This usually means PostgreSQL libraries are not found.";
+        qDebug() << "Make sure libpq.dll and related PostgreSQL DLLs are in PATH";
         return false;
     }
 
@@ -107,6 +185,25 @@ bool AisDatabaseManager::connect(const QString& host, int port, const QString& d
         qDebug() << "=================================";
     }
     return connected;
+}
+
+bool AisDatabaseManager::connectFromSettings()
+{
+    SettingsDialog::DatabaseSettings dbSettings = SettingsDialog::getDatabaseSettings();
+
+    bool portOk;
+    int port = dbSettings.port.toInt(&portOk);
+    if (!portOk) {
+        port = 5432; // default PostgreSQL port
+    }
+
+    qDebug() << "Connecting to database using settings:";
+    qDebug() << "Host:" << dbSettings.host;
+    qDebug() << "Port:" << port;
+    qDebug() << "Database:" << dbSettings.dbName;
+    qDebug() << "User:" << dbSettings.user;
+
+    return connect(dbSettings.host, port, dbSettings.dbName, dbSettings.user, dbSettings.password);
 }
 
 void AisDatabaseManager::insertOrUpdateAisTarget(const EcAISTargetInfo& info) {
@@ -778,8 +875,8 @@ bool AisDatabaseManager::insertParsedAisDataFast(const QString& nmea, const QStr
     QString callSign = QString::fromUtf8(targetInfo.callSign).replace("'", "''");
     QString imo = targetInfo.imoNumber > 0 ? QString::number(targetInfo.imoNumber) : "NULL";
     QString shipType = targetInfo.shipType > 0 ? QString::number(targetInfo.shipType) : "NULL";
-    QString sog = (targetInfo.sog > 0 && targetInfo.sog < 1023) ? QString::number(targetInfo.sog) : "NULL";
-    QString cog = (targetInfo.cog > 0 && targetInfo.cog < 3600) ? QString::number(targetInfo.cog) : "NULL";
+    QString sog = (targetInfo.sog > 0 && targetInfo.sog < 1023) ? QString::number(targetInfo.sog/10) : "NULL";
+    QString cog = (targetInfo.cog > 0 && targetInfo.cog < 3600) ? QString::number(targetInfo.cog/10) : "NULL";
     QString trueHeading = (targetInfo.heading > 0 && targetInfo.heading <= 360) ? QString::number(targetInfo.heading) : "NULL";
 
     // Extract message type from NMEA
@@ -975,6 +1072,97 @@ QList<AisDatabaseManager::TargetData> AisDatabaseManager::getTargetsForDate(cons
     return targets;
 }
 
+QList<AisDatabaseManager::TargetData> AisDatabaseManager::getTargetsForDateRev(const QDateTime& date) {
+    QList<TargetData> targets;
+
+    if (!db.isOpen()) {
+        qCritical() << "Database is not open";
+        return targets;
+    }
+
+    QString dateStr = date.toString("yyyy-MM-dd");
+    qCritical() << "Fetching targets for date:" << dateStr;
+
+    // (a) Get static data from target_references
+    QHash<quint32, TargetData> staticDataMap;
+    QSqlQuery staticQuery;
+    QString staticSql = QString(
+                            "SELECT DISTINCT mmsi, vessel_name, call_sign, imo, ship_type "
+                            "FROM target_references "
+                            "WHERE DATE(created_at) = DATE('%1') OR DATE(last_seen) = DATE('%1')"
+                            ).arg(dateStr);
+
+    if (staticQuery.exec(staticSql)) {
+        while (staticQuery.next()) {
+            TargetData data;
+            data.mmsi = staticQuery.value("mmsi").toUInt();
+            data.vesselName = staticQuery.value("vessel_name").toString();
+            data.vesselName.replace("@", " "); // Fix @ symbols in vessel names
+            data.callSign = staticQuery.value("call_sign").toString();
+            data.callSign.replace("@", " "); // Fix @ symbols in call signs
+            data.imo = staticQuery.value("imo").toULongLong();
+            data.shipType = staticQuery.value("ship_type").toInt();
+
+
+            staticDataMap[data.mmsi] = data;
+        }
+        qCritical() << "Found" << staticDataMap.size() << "static targets from target_references";
+    } else {
+        qCritical() << "Error fetching static data:" << staticQuery.lastError().text();
+    }
+
+    // (b) Get all unique MMSIs with their raw NMEA strings from nmea_records
+    QHash<quint32, TargetData> nmeaDataMap;
+
+    QSqlQuery nmeaQuery;
+    QString nmeaSql = QString(
+                          "SELECT DISTINCT ON (mmsi) mmsi, nmea "
+                          "FROM nmea_records "
+                          "WHERE DATE(timestamp) = DATE('%1') AND mmsi IS NOT NULL AND mmsi != 0 "
+                          "AND (message_type = '1' OR message_type = '2' OR message_type = '3' OR message_type = '18' OR message_type = '19') "
+                          "ORDER BY mmsi, timestamp DESC"
+                          ).arg(dateStr);
+
+    if (nmeaQuery.exec(nmeaSql)) {
+        while (nmeaQuery.next()) {
+            TargetData data;
+            data.mmsi = nmeaQuery.value("mmsi").toUInt();
+            data.nmea = nmeaQuery.value("nmea").toString();
+
+            // Store the raw NMEA string
+            nmeaDataMap[data.mmsi] = data;
+        }
+        qCritical() << "Found" << nmeaDataMap.size() << "targets with raw NMEA from nmea_records";
+    } else {
+        qCritical() << "Error fetching NMEA data:" << nmeaQuery.lastError().text();
+    }
+
+    // (c) Combine static data from target_references with navigation data from nmea_records
+    QSet<quint32> allTargetMmsis = QSet<quint32>::fromList(staticDataMap.keys()) + QSet<quint32>::fromList(nmeaDataMap.keys());
+
+    for (quint32 mmsi : allTargetMmsis) {
+        TargetData combined;
+
+        // Start with static data from target_references if available
+        if (staticDataMap.contains(mmsi)) {
+            combined = staticDataMap[mmsi];
+        } else {
+            combined.mmsi = mmsi;
+        }
+
+        // Add raw NMEA from nmea_records if available
+        if (nmeaDataMap.contains(mmsi)) {
+            const TargetData& nmea = nmeaDataMap[mmsi];
+            combined.nmea = nmea.nmea;
+        }
+
+        targets.append(combined);
+    }
+
+    return targets;
+}
+
+
 // Encode targets to NMEA 0183
 QStringList AisDatabaseManager::encodeTargetsToNMEA(const QList<TargetData>& targets) {
     AIVDOEncoder encoder;
@@ -983,33 +1171,15 @@ QStringList AisDatabaseManager::encodeTargetsToNMEA(const QList<TargetData>& tar
     // Start encoding targets to NMEA 0183
 
     for (const TargetData& target : targets) {
-        // 1. Type 1 - Position Report (if position data available)
-        if (target.latitude != 0 && target.longitude != 0) {
-            QString nmeaType1 = encoder.encodeAIVDM(
-                1,  // Message type (Type 1: Position Report)
-                target.mmsi,
-                0,  // Navigation status (0 = under way using engine)
-                0,  // Rate of turn (0 = not turning)
-                target.sog,
-                1,  // Position accuracy (1 = high)
-                target.latitude,
-                target.longitude,
-                target.cog,
-                static_cast<int>(target.heading),
-                60, // Timestamp (60 = not available)
-                0,  // Maneuver indicator (0 = not available)
-                false, // RAIM flag (false = not in use)
-                0    // Radio status (0 = default)
-            );
-
-            nmeaList.append(nmeaType1);
-
-            // Position Report encoded successfully
+        // 1. NAV - Use raw NMEA from database (if available)
+        if (!target.nmea.isEmpty()) {
+            nmeaList.append(target.nmea);
+            // Raw NMEA added from database
         } else {
-            // No position data available for Type 1 encoding
+            // No raw NMEA available in database for this MMSI
         }
 
-        // 2. Type 5 - Vessel Name and Call Sign (always if vessel name available)
+        // 2. VES - Type 5 - Vessel Name and Call Sign (always if vessel name available)
         if (!target.vesselName.isEmpty()) {
             // Trim whitespace from database values before encoding
             QString cleanCallSign = target.callSign.trimmed();
