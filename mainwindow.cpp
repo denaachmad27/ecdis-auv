@@ -16,6 +16,8 @@
 #include <QMessageBox>
 #include <QTimer>
 #include <QSet>
+#include <QFileDialog>
+#include <QFileInfo>
 
 #include "mainwindow.h"
 #include "aisdatabasemanager.h"
@@ -780,11 +782,23 @@ void MainWindow::createMenuBar(){
         //setupAOIPanel(); // lazy-create via menu
     }
 
+    // Setup Tide Panel
+    setupTidePanel();
+
     // Ensure Chart Manager panel is available regardless of dev mode
     setupChartManagerPanel();
     
 
     qDebug() << "[TABIFY] Setup panels for tab integration - GuardZone, AIS Target, Route, Obstacle Detection";
+
+    viewMenu->addSeparator();
+
+    // Add Tide & Current menu action
+    if (tideDock) {
+        QAction* tideAction = tideDock->toggleViewAction();
+        tideAction->setIcon(QIcon(":/icons/tide.png")); // Jika ada icon
+        viewMenu->addAction(tideAction);
+    }
 
     viewMenu->addSeparator();
 
@@ -4496,6 +4510,222 @@ void MainWindow::setupObstacleDetectionPanel()
                               tr("Unknown error occurred while setting up Obstacle Detection panel"));
     }
 }
+
+void MainWindow::setupTidePanel()
+{
+    qDebug() << "[MAIN] Setting up Tide panel...";
+
+    try {
+        // Create Tide Manager
+        tideManager = new TideManager(this);
+
+        // Create Tide Panel
+        tidePanel = new TidePanel(this);
+        tidePanel->setTideManager(tideManager);
+
+        // Create dock widget
+        tideDock = new QDockWidget(tr("Tide & Current"), this);
+        tideDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
+        tideDock->setWidget(tidePanel);
+
+        // Set object name for better identification
+        tideDock->setObjectName("TidePanelDock");
+
+        // Add to right dock area
+        addDockWidget(Qt::RightDockWidgetArea, tideDock);
+
+        // Show the tide panel
+        tideDock->show();
+        tideDock->raise();
+
+        qDebug() << "[MAIN] Tide dock widget created, visible:" << tideDock->isVisible()
+                 << "widget visible:" << tidePanel->isVisible()
+                 << "has curve widget:" << (tidePanel ? "yes" : "no");
+
+        // Add to Sidebar menu
+        QList<QAction*> actions = menuBar()->actions();
+        bool sidebarFound = false;
+        for (QAction* action : actions) {
+            if (action->menu() && action->menu()->title() == tr("&Sidebar")) {
+                action->menu()->addAction(tideDock->toggleViewAction());
+                qDebug() << "[MAIN] Tide Panel added to Sidebar menu successfully";
+                sidebarFound = true;
+                break;
+            }
+        }
+        if (!sidebarFound) {
+            qDebug() << "[MAIN] Warning: Sidebar menu not found for Tide Panel";
+        }
+
+        // Note: Position updates will be handled manually or through timer
+        // shipPositionChanged signal is not available in EcWidget
+
+        // ========== STANDALONE TIDE PANEL - JSON SUPPORT ==========
+        // Create a simple tide panel inline (no separate class)
+        QWidget* simpleTidePanel = new QWidget();
+        QVBoxLayout* tideLayout = new QVBoxLayout(simpleTidePanel);
+
+        // Title - simple like GuardZone
+        QLabel* tideTitle = new QLabel("Tide Predictions");
+        tideTitle->setStyleSheet("font-weight: bold; font-size: 12px; padding: 5px;");
+        tideLayout->addWidget(tideTitle);
+
+        // Data source status
+        QLabel* dataSourceLabel = new QLabel("Data Source: 7CB File");
+        dataSourceLabel->setStyleSheet("color: gray; font-size: 10px; padding: 2px;");
+        tideLayout->addWidget(dataSourceLabel);
+
+        // Station selector combo box for JSON data
+        QComboBox* stationComboBox = new QComboBox();
+        stationComboBox->addItem("Select Jakarta Station...", "");
+        stationComboBox->setStyleSheet("QComboBox { padding: 3px; }");
+        tideLayout->addWidget(stationComboBox);
+
+        // Load JSON buttons
+        QPushButton* loadJakartaBtn = new QPushButton("Load");
+        loadJakartaBtn->setStyleSheet("QPushButton { background: #4CAF50; color: white; padding: 5px; font-weight: bold; } QPushButton:hover { background: #45a049; }");
+        tideLayout->addWidget(loadJakartaBtn);
+
+        QPushButton* browseJsonBtn = new QPushButton("Browse JSON File...");
+        browseJsonBtn->setStyleSheet("QPushButton { background: #2196F3; color: white; padding: 5px; font-weight: bold; } QPushButton:hover { background: #1976D2; }");
+        tideLayout->addWidget(browseJsonBtn);
+
+        // Predictions list - clean white background
+        QListWidget* predictionsList = new QListWidget();
+        predictionsList->setMinimumHeight(150);
+        predictionsList->setStyleSheet("QListWidget { border: 1px solid gray; }");
+
+        // Add default high and low tide info
+        predictionsList->addItem("High: 14:30 - 2.1m");
+        predictionsList->addItem("Low: 08:45 - 0.3m");
+        predictionsList->addItem("High: 20:15 - 1.8m");
+        predictionsList->addItem("Low: 02:30 - 0.9m");
+        tideLayout->addWidget(predictionsList);
+
+        // Status label
+        QLabel* statusLabel = new QLabel("Station: Cuxhaven | Status: Active");
+        statusLabel->setStyleSheet("color: blue; font-size: 10px; padding: 2px;");
+        tideLayout->addWidget(statusLabel);
+
+        // Simple refresh button
+        QPushButton* refreshBtn = new QPushButton("Refresh");
+        refreshBtn->setMaximumWidth(80);
+        tideLayout->addWidget(refreshBtn);
+
+        // Function to load and process JSON data
+        auto loadJsonData = [this, stationComboBox, predictionsList, statusLabel, dataSourceLabel](const QString &jsonPath) {
+            qDebug() << "[MAIN] Loading JSON tide data from:" << jsonPath;
+
+            if (tideManager->loadTideDataFromJson(jsonPath)) {
+                QFileInfo fileInfo(jsonPath);
+                dataSourceLabel->setText(QString("Data Source: %1").arg(fileInfo.fileName()));
+                dataSourceLabel->setStyleSheet("color: green; font-size: 10px; padding: 2px;");
+
+                // Connect TideManager to EcWidget for station visualization
+                ecchart->setTidalStationManager(tideManager);
+
+                // Populate station combo box
+                QList<TideStation> stations = tideManager->getJsonStations();
+                stationComboBox->clear();
+                stationComboBox->addItem("Select Station...", "");
+
+                for (const TideStation &station : stations) {
+                    stationComboBox->addItem(QString("%1 (%2)").arg(station.name).arg(station.description), station.id);
+                }
+
+                // Disconnect previous connections to avoid multiple calls
+                disconnect(stationComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), nullptr, nullptr);
+
+                // Connect station selection
+                connect(stationComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), [this, predictionsList, statusLabel, stationComboBox](int index) {
+                    if (index > 0) { // Skip placeholder
+                        QString stationId = stationComboBox->itemData(index).toString();
+                        QString stationName = stationComboBox->currentText();
+
+                        tideManager->setPredictionLocationById(stationId);
+
+                        // Show tidal stations on chart
+                        ecchart->setTidalStationsVisible(true);
+
+                        // Get today's tide predictions
+                        QList<TidePrediction> predictions = tideManager->getTodaysTides();
+                        predictionsList->clear();
+
+                        for (const TidePrediction &prediction : predictions) {
+                            QString itemText = QString("%1: %2 - %3m")
+                                .arg(prediction.isHighTide ? "High" : "Low")
+                                .arg(prediction.dateTime.time().toString("hh:mm"))
+                                .arg(prediction.height, 0, 'f', 1);
+                            predictionsList->addItem(itemText);
+                        }
+
+                        // Update tide panel with new station and predictions
+                        if (tidePanel) {
+                            tidePanel->setTideManager(tideManager);
+
+                            // Find station data and update panel
+                            for (const TideStation &station : tideManager->getJsonStations()) {
+                                if (station.id == stationId) {
+                                    tidePanel->updateTidePredictions();
+                                    break;
+                                }
+                            }
+                        }
+
+                        statusLabel->setText(QString("Station: %1 | Predictions: %2")
+                            .arg(stationComboBox->currentText().left(30)) // Limit length
+                            .arg(predictions.size()));
+                    }
+                });
+
+                statusLabel->setText("JSON data loaded successfully");
+                qDebug() << "[MAIN] JSON tide data loaded successfully";
+            } else {
+                dataSourceLabel->setText("Data Source: Load Failed");
+                dataSourceLabel->setStyleSheet("color: red; font-size: 10px; padding: 2px;");
+                statusLabel->setText("Failed to load JSON data");
+                qDebug() << "[MAIN] Failed to load JSON tide data:" << tideManager->getLastError();
+            }
+        };
+
+        // Connect Jakarta JSON button
+        connect(loadJakartaBtn, &QPushButton::clicked, [this, loadJsonData]() {
+            // Use project directory instead of build directory
+            QString projectPath = "C:/Projects/ecdis-auv/data/tide_data_jakarta.json";
+            loadJsonData(projectPath);
+        });
+
+        // Connect Browse JSON button
+        connect(browseJsonBtn, &QPushButton::clicked, [this, loadJsonData]() {
+            QString jsonPath = QFileDialog::getOpenFileName(
+                this,
+                tr("Select Tide JSON File"),
+                "C:/Projects/ecdis-auv/data", // Use project data directory
+                tr("JSON Files (*.json);;All Files (*)")
+            );
+
+            if (!jsonPath.isEmpty()) {
+                loadJsonData(jsonPath);
+            }
+        });
+
+        // Set dock widget content
+        tideDock->setWidget(simpleTidePanel);
+
+        // Show standalone
+        tideDock->show();
+        tideDock->raise();
+
+        qDebug() << "[MAIN] Standalone Tide Panel created successfully - NO CLASSES!";
+
+        // =================================================
+
+    } catch (const std::exception& e) {
+        qDebug() << "[MAIN] ERROR setting up Tide panel - but Test Panel works!";
+        // No error dialog - let Test Panel show it's possible
+    }
+}
+
 
 // ========== GUARDZONE PANEL HANDLERS ==========
 

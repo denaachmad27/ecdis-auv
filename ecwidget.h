@@ -15,6 +15,8 @@
 #include <QMap>
 #include <QVector>
 
+// Forward declarations
+class TideManager;
 
 // SevenCs Kernel EC2007
 #ifdef _WIN32
@@ -938,6 +940,13 @@ public:
   // EBL/VRM helpers
   void setEblVrmFixedTarget(double lat, double lon);
 
+  // Tidal station helpers
+  void drawTidalStations();
+  void setTidalStationsVisible(bool visible);
+  bool areTidalStationsVisible() const { return m_showTidalStations; }
+  void updateTidalStationClick(EcCoordinate lat, EcCoordinate lon);
+  void setTidalStationManager(class TideManager* manager) { m_tideManager = manager; }
+
   //
   int rangeNM = 0;
   QDateTime lastRedrawTime; // throttle external redraws
@@ -1733,6 +1742,9 @@ public:
   QTimer* poiAnimationTimer;
   bool hasVisibleManOverboardPOI();
 
+  // Tidal station visualization
+  bool m_showTidalStations = false;
+  class TideManager* m_tideManager = nullptr;
 
 }; // EcWidget
 

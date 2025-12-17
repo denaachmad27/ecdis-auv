@@ -82,6 +82,11 @@ HEADERS += mainwindow.h ecwidget.h pickwindow.h ais.h \
     autoroutedialog.h \
     autorouteplanner.h \
     autoroutestartdialog.h \
+    tidemanager.h \
+    tidepanel.h \
+    tidalcurvewidget.h \
+    tidalcurvewidget_simple.h \
+    testpanel.h \
     
 SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     chartmanagerpanel.cpp \
@@ -124,6 +129,11 @@ SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     autoroutedialog.cpp \
     autorouteplanner.cpp \
     autoroutestartdialog.cpp \
+    tidemanager.cpp \
+    tidepanel.cpp \
+    tidalcurvewidget.cpp \
+    tidalcurvewidget_simple.cpp \
+    testpanel.cpp \
     
 RESOURCES += \
     resources.qrc
