@@ -1250,11 +1250,16 @@ void MainWindow::fetchNmea(){
     // === 6. Koneksi database ===
     // Coba koneksi dengan IPv4 terlebih dahulu
 
-    if (AisDatabaseManager::instance().connectFromSettings()) {
+    bool dbConnected = AisDatabaseManager::instance().connectFromSettings();
+    if (dbConnected) {
         qDebug() << "Database connected.";
     } else {
-        QMessageBox::critical(this, "Error", "Gagal terhubung ke database.");
+        qDebug() << "Database connection failed - continuing without database";
+        // No error popup - application will continue with PostgreSQL disconnected flag
     }
+
+    // Update PostgreSQL connection status
+    onDatabaseConnectionStatusChanged(dbConnected);
 
     // if (AisDatabaseManager::instance().connect("127.0.0.1", 5432, "ecdis", "postgres", "112030")) {
     //     qDebug() << "Database connected.";
@@ -1332,7 +1337,8 @@ void MainWindow::onPlayClickedDB()
                     QMessageBox::information(this, "Data Kosong", "Tidak ada data NMEA dalam rentang waktu yang dipilih.");
                 }
             } else {
-                QMessageBox::warning(this, "Kesalahan Database", "Gagal mengambil data NMEA.");
+                qDebug() << "Failed to retrieve NMEA data from database - continuing without data";
+                // No error popup - playback will simply not have data to process
             }
         } else {
             // Jika antrean tidak kosong, artinya ini adalah RESUME
@@ -1444,6 +1450,8 @@ void MainWindow::onDecreaseSpeedClickedDB()
 
 void MainWindow::onDatabaseConnectionStatusChanged(bool connected)
 {
+    m_isDatabaseConnected = connected; // Store the database connection status
+
     if (connected) {
         postgreStatusText->setText(" Postgre: Connected");
         postgreStatusText->setStyleSheet("color: green; font-weight: bold;");
@@ -1455,6 +1463,11 @@ void MainWindow::onDatabaseConnectionStatusChanged(bool connected)
         postgreLedCircle->setStyleSheet("background-color: red; border-radius: 6px;");
         qDebug() << "PostgreSQL status updated: Disconnected";
     }
+}
+
+bool MainWindow::getDatabaseConnectionStatus() const
+{
+    return m_isDatabaseConnected;
 }
 
 void MainWindow::processNextNmeaDataDB()
@@ -1975,10 +1988,11 @@ void MainWindow::openSettingsDialog() {
     connect(&dlg, &SettingsDialog::databaseConnectionStatusChanged,
             this, &MainWindow::onDatabaseConnectionStatusChanged);
 
-    // Initialize with current database status
-    onDatabaseConnectionStatusChanged(dlg.getDatabaseConnectionStatus());
+    // Initialize settings dialog with current database status from main window
+    dlg.setDatabaseConnectionStatus(getDatabaseConnectionStatus());
 
-    dlg.loadSettings();
+    // NOTE: loadSettings() already called in SettingsDialog constructor
+    // dlg.loadSettings();
 
     if (dlg.exec() == QDialog::Accepted) {
         dlg.saveSettings();
@@ -2123,7 +2137,7 @@ void MainWindow::setDisplay(){
     DrawChart();
 }
 
-MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL){
+MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL), m_isDatabaseConnected(false){
   // set the registration mode similar to the mode
   // for which the Kernel development license has been registered
   // EcKernelRegisterSetMode(EC_REGISTER_CHECK_DONGLE_7); // for Sentinel dongle
@@ -4790,6 +4804,7 @@ void MainWindow::setupTidePanel()
         qDebug() << "[MAIN] Standalone Tide Panel created successfully - NO CLASSES!";
 
         // =================================================
+        tideDock->hide();
 
     } catch (const std::exception& e) {
         qDebug() << "[MAIN] ERROR setting up Tide panel - but Test Panel works!";

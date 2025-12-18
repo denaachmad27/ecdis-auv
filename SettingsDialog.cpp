@@ -49,9 +49,22 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent), isDatabaseCon
     // Connect button action
     connect(dbConnectButton, &QPushButton::clicked, this, &SettingsDialog::onDbConnectClicked);
 
-  
-    // Initial database connection check on startup
-    checkDatabaseConnection();
+    // NOTE: Removed initial database connection check to speed up dialog opening
+    // Connection status will be set from main window when dialog opens
+    isDatabaseConnected = false;
+}
+
+void SettingsDialog::setDatabaseConnectionStatus(bool connected)
+{
+    isDatabaseConnected = connected;
+
+    if (connected) {
+        dbStatusLabel->setText("Connected");
+        dbStatusLabel->setStyleSheet("QLabel { color: green; font-weight: bold; }");
+    } else {
+        dbStatusLabel->setText("Disconnected");
+        dbStatusLabel->setStyleSheet("QLabel { color: red; font-weight: bold; }");
+    }
 }
 
 void SettingsDialog::setupUI() {

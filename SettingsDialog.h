@@ -47,6 +47,7 @@ public:
     };
     static DatabaseSettings getDatabaseSettings();
     bool getDatabaseConnectionStatus() const { return isDatabaseConnected; }
+    void setDatabaseConnectionStatus(bool connected);
 
 signals:
     void dialogOpened();

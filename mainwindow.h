@@ -95,6 +95,7 @@ public:
     // POSTGRE STATUS BAR
     QLabel *postgreLedCircle;
     QLabel *postgreStatusText;
+    bool m_isDatabaseConnected;
     SettingsData getSettingsForwarder();
 
     // COMPASS
@@ -327,6 +328,7 @@ private slots:
 
     // Database connection status
     void onDatabaseConnectionStatusChanged(bool connected);
+    bool getDatabaseConnectionStatus() const;
 
 private:
     GuardZonePanel* guardZonePanel;
