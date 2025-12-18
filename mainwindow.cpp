@@ -725,6 +725,15 @@ void MainWindow::createMenuBar(){
     aisDangerAction->setChecked(showDangerTarget);
     connect(aisDangerAction, SIGNAL(toggled(bool)), this, SLOT(onShowDangerTargets(bool)));
 
+    QAction *showTideRectanglesAction = viewMenu->addAction("Tide");
+    showTideRectanglesAction->setCheckable(true);
+    showTideRectanglesAction->setChecked(true);
+    connect(showTideRectanglesAction, &QAction::toggled, this, [this](bool checked) {
+        if (ecchart) {
+            ecchart->setShowTideRectangles(checked);
+        }
+    });
+
     if (AppConfig::isDevelopment()) {
         QAction *trackAction = viewMenu->addAction("Track Ship");
         trackAction->setCheckable(true);
@@ -748,15 +757,6 @@ void MainWindow::createMenuBar(){
         connect(showCurrentArrowsAction, &QAction::toggled, this, [this](bool checked) {
             if (ecchart) {
                 ecchart->setShowCurrentArrows(checked);
-            }
-        });
-
-        QAction *showTideRectanglesAction = viewMenu->addAction("Show Tide Rectangles");
-        showTideRectanglesAction->setCheckable(true);
-        showTideRectanglesAction->setChecked(true);
-        connect(showTideRectanglesAction, &QAction::toggled, this, [this](bool checked) {
-            if (ecchart) {
-                ecchart->setShowTideRectangles(checked);
             }
         });
 
