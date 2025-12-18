@@ -1280,6 +1280,13 @@ void MainWindow::onPlayClickedDB()
         m_playButtonDB->setIcon(QIcon(":/icon/play.svg"));
         qDebug() << "Playback dijeda.";
     } else {
+        // Check PostgreSQL connection status before starting playback
+        if (!m_isDatabaseConnected || !AisDatabaseManager::instance().isConnected()) {
+            QMessageBox::warning(this, "Koneksi Database Terputus",
+                                "Sistem tidak terhubung ke database PostgreSQL.");
+            return;
+        }
+
         // Logika PLAY: Ada dua kemungkinan (melanjutkan atau mulai baru)
         // Jika antrean kosong, artinya ini adalah pemutaran pertama atau setelah di-stop total
         if (m_nmeaDataQueueDB.isEmpty()) {

@@ -206,6 +206,11 @@ bool AisDatabaseManager::connectFromSettings()
     return connect(dbSettings.host, port, dbSettings.dbName, dbSettings.user, dbSettings.password);
 }
 
+bool AisDatabaseManager::isConnected() const
+{
+    return db.isOpen();
+}
+
 void AisDatabaseManager::insertOrUpdateAisTarget(const EcAISTargetInfo& info) {
     QSqlQuery query;
     QString sql = R"(

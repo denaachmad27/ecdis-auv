@@ -699,7 +699,7 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti, const QString nmeaCopy)
                 data.rawInfo = *ti;
                 _myAis->postTargetUpdate(data);
 
-                if (false){
+                if (AisDatabaseManager::instance().isConnected()){
                     try {
                         // Performance measurement - only for error/delay detection
                         QElapsedTimer timer;

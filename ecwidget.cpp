@@ -6179,7 +6179,7 @@ void EcWidget::processData(double lat, double lon, double cog, double sog, doubl
     }
 
     // Record ownship data to database
-    if (false){
+    if (AisDatabaseManager::instance().isConnected()){
         try {
             static QDateTime lastOwnshipRecord;
             QDateTime currentTime = QDateTime::currentDateTime();

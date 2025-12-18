@@ -34,6 +34,9 @@ public:
     // Connect using settings from config file
     bool connectFromSettings();
 
+    // Check if database is connected
+    bool isConnected() const;
+
     // Legacy functions (keep for backward compatibility)
     void insertOrUpdateAisTarget(const EcAISTargetInfo& info);
     void insertOwnShipToDB(double lat, double lon, double depth,
