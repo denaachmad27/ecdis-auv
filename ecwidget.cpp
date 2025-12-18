@@ -15,6 +15,7 @@
 #endif
 
 #include "ecwidget.h"
+#include "src/currentvisualisation.h"
 #include "cpatcpacalculator.h"
 #include "ais.h"
 #include "waypointdialog.h"
@@ -28,6 +29,7 @@
 #include "aistooltip.h"
 #include "mainwindow.h"
 #include "aoi.h"
+#include "tidemanager.h"
 
 // Waypoint
 #include "SettingsManager.h"
@@ -2422,6 +2424,94 @@ void EcWidget::paintEvent (QPaintEvent *e)
       painter.setPen(Qt::NoPen);
       painter.setBrush(Qt::red);
       painter.drawPath(path);
+  }
+
+  // Draw tidal stations on top of everything
+  if (m_showTidalStations && m_tideManager) {
+    painter.save();
+
+    QList<TideStation> stations = m_tideManager->getJsonStations();
+    if (!stations.isEmpty()) {
+      // Set drawing properties
+      QPen stationPen(QColor(0, 100, 200), 2); // Blue color
+      QBrush stationBrush(QColor(0, 150, 255, 180)); // Semi-transparent blue
+      QFont stationFont("Segoe UI", 8, QFont::Bold); // Better font for Windows
+      if (!stationFont.exactMatch()) {
+          stationFont.setFamily("Arial"); // Fallback
+      }
+
+      painter.setPen(stationPen);
+      painter.setBrush(stationBrush);
+      painter.setFont(stationFont);
+      painter.setRenderHint(QPainter::Antialiasing, true);
+      painter.setRenderHint(QPainter::TextAntialiasing, true);
+
+      for (const TideStation &station : stations) {
+        // Convert lat/lon to screen coordinates
+        EcCoordinate lat = station.location.latitude;
+        EcCoordinate lon = station.location.longitude;
+
+        int screenX = 0, screenY = 0;
+        if (!LatLonToXy(lat, lon, screenX, screenY)) {
+            continue; // Skip if conversion fails
+        }
+
+        QPoint screenPoint(screenX, screenY);
+
+        // Only draw if visible on screen
+        if (screenPoint.x() >= 0 && screenPoint.x() < width() &&
+            screenPoint.y() >= 0 && screenPoint.y() < height()) {
+
+          // Draw station marker (circle with white dot center)
+          painter.drawEllipse(screenPoint, 6, 6);
+          painter.setBrush(QBrush(Qt::white));
+          painter.drawEllipse(screenPoint, 2, 2);
+          painter.setBrush(stationBrush);
+
+          // Calculate text bounds for proper sizing
+          QFontMetrics fontMetrics(painter.font());
+          QRect textBounds = fontMetrics.boundingRect(station.name);
+
+          // Add padding around text
+          int padding = 4;
+          int textWidth = textBounds.width() + padding * 2;
+          int textHeight = textBounds.height() + padding;
+
+          // Smart text positioning - try right first, then left if out of bounds
+          int textX = screenPoint.x() + 12; // Default: right of station
+          int textY = screenPoint.y() - textHeight/2;
+
+          // Check if text goes beyond right screen edge
+          if (textX + textWidth > width()) {
+              // Position text to the left of station
+              textX = screenPoint.x() - textWidth - 2;
+          }
+
+          // Ensure text doesn't go beyond left screen edge
+          if (textX < 0) {
+              textX = 2; // Minimum margin from left edge
+          }
+
+          // Ensure text stays within vertical bounds
+          if (textY < 2) textY = 2;
+          if (textY + textHeight > height()) textY = height() - textHeight - 2;
+
+          QRect textRect(textX, textY, textWidth, textHeight);
+
+          // Draw station name background with slightly rounded appearance
+          painter.fillRect(textRect, QColor(255, 255, 255, 240));
+          painter.setPen(QPen(QColor(0, 100, 200), 1)); // Blue border
+          painter.drawRect(textRect);
+
+          // Draw station name with proper alignment
+          painter.setPen(Qt::black);
+          painter.drawText(textRect, Qt::AlignCenter, station.name);
+          painter.setPen(stationPen);
+        }
+      }
+    }
+
+    painter.restore();
   }
 } // End paintEvent
 
@@ -5139,6 +5229,15 @@ void EcWidget::mouseReleaseEvent(QMouseEvent *e)
         Draw();             // redraw chart penuh
     }
 
+    // Handle tidal station clicks
+    if (m_showTidalStations && m_tideManager && e->button() == Qt::LeftButton) {
+        // Convert mouse position to lat/lon
+        EcCoordinate lat, lon;
+        if (XyToLatLon(e->x(), e->y(), lat, lon)) {
+            // Check if click is near a tidal station
+            updateTidalStationClick(lat, lon);
+        }
+    }
 
     QWidget::mouseReleaseEvent(e);
 }
@@ -6769,6 +6868,29 @@ void EcWidget::drawAISCell()
   // ROUTE FIX: Enhanced waypointDraw() to fix route and waypoint label flickering
   // Always ensure routes are drawn even when AIS cell operations occur
   waypointDraw();
+
+  // Draw current visualizations on overlay
+  if (m_currentVisualisation) {
+    QPainter p(&drawPixmap);
+    p.setRenderHint(QPainter::Antialiasing, true);
+    p.setClipRect(drawPixmap.rect());
+
+    if (m_showCurrentArrows) {
+      QList<CurrentStation> currentStations;
+      if (m_currentVisualisation) {
+        currentStations = m_currentVisualisation->generateSampleCurrentData();
+      }
+      m_currentVisualisation->drawCurrentArrows(&p, currentStations);
+    }
+
+    if (m_showTideRectangles) {
+      QList<TideVisualization> tideVisualizations;
+      if (m_currentVisualisation) {
+        tideVisualizations = m_currentVisualisation->generateSampleTideData();
+      }
+      m_currentVisualisation->drawTideRectangles(&p, tideVisualizations);
+    }
+  }
 
   // OWNSHIP DRAW
   ownShipDraw();
@@ -20562,6 +20684,156 @@ void EcWidget::showPOIDialogDirect(const PoiEntry& poi)
         emit statusMessage(tr("POI \"%1\" updated").arg(editPoi.label));
     } else {
         QMessageBox::warning(this, tr("Error"), tr("Failed to update POI."));
+    }
+}
+
+// ========== TIDAL STATION VISUALIZATION ==========
+
+void EcWidget::setTidalStationsVisible(bool visible)
+{
+    m_showTidalStations = visible;
+    qDebug() << "[ECWIDGET] Tidal stations visibility:" << visible;
+
+    if (visible) {
+        drawTidalStations();
+    }
+
+    forceRedraw();
+}
+
+void EcWidget::drawTidalStations()
+{
+    qDebug() << "[ECWIDGET] Drawing tidal stations on chart";
+
+    if (!m_showTidalStations || !m_tideManager) {
+        qDebug() << "[ECWIDGET] Tidal stations not visible or no manager";
+        return;
+    }
+
+    if (!m_tideManager->isUsingJsonData()) {
+        qDebug() << "[ECWIDGET] Not using JSON data, no stations to draw";
+        return;
+    }
+
+    QList<TideStation> stations = m_tideManager->getJsonStations();
+    if (stations.isEmpty()) {
+        qDebug() << "[ECWIDGET] No stations available";
+        return;
+    }
+
+    qDebug() << "[ECWIDGET] Drawing" << stations.size() << "tidal station markers";
+
+    // Get painter for overlay drawing
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    // Set drawing properties
+    QPen stationPen(QColor(0, 100, 200), 2); // Blue color
+    QBrush stationBrush(QColor(0, 150, 255, 180)); // Semi-transparent blue
+    QFont stationFont("Arial", 8, QFont::Bold);
+
+    painter.setPen(stationPen);
+    painter.setBrush(stationBrush);
+    painter.setFont(stationFont);
+
+    for (const TideStation &station : stations) {
+        // Convert lat/lon to screen coordinates
+        EcCoordinate lat = station.location.latitude;
+        EcCoordinate lon = station.location.longitude;
+
+        int screenX = 0, screenY = 0;
+        if (!LatLonToXy(lat, lon, screenX, screenY)) {
+            continue; // Skip if conversion fails
+        }
+
+        QPoint screenPoint(screenX, screenY);
+
+        // Only draw if visible on screen
+        if (screenPoint.x() >= 0 && screenPoint.x() < width() &&
+            screenPoint.y() >= 0 && screenPoint.y() < height()) {
+
+            // Draw station marker (circle with dot)
+            painter.drawEllipse(screenPoint, 6, 6);
+            painter.setBrush(QBrush(Qt::white));
+            painter.drawEllipse(screenPoint, 2, 2);
+            painter.setBrush(stationBrush);
+
+            // Draw station name
+            QRect textRect(screenPoint.x() + 10, screenPoint.y() - 10, 100, 20);
+            painter.drawText(textRect, Qt::AlignLeft, station.name);
+
+            qDebug() << "[ECWIDGET] Drew station:" << station.name
+                    << "at" << station.location.latitude << station.location.longitude
+                    << "-> screen" << screenPoint.x() << screenPoint.y();
+        }
+    }
+}
+
+void EcWidget::updateTidalStationClick(EcCoordinate lat, EcCoordinate lon)
+{
+    qDebug() << "[ECWIDGET] Tidal station click at:" << lat << lon;
+
+    if (!m_tideManager || !m_tideManager->isUsingJsonData()) {
+        return;
+    }
+
+    // Find station at clicked position
+    TideStation station = m_tideManager->getStationAtPosition(lat, lon, 0.05); // 0.05 degree tolerance
+
+    if (!station.id.isEmpty()) {
+        qDebug() << "[ECWIDGET] Clicked on station:" << station.name;
+
+        // Select this station in tide manager
+        m_tideManager->setPredictionLocationById(station.id);
+
+        // Show tide information (could be enhanced with popup)
+        QString info = QString("Station: %1\n%2\nLat: %3\nLon: %4")
+            .arg(station.name)
+            .arg(station.description)
+            .arg(station.location.latitude, 0, 'f', 4)
+            .arg(station.location.longitude, 0, 'f', 4);
+
+        QToolTip::showText(QCursor::pos(), info, this);
+    } else {
+        QToolTip::hideText();
+    }
+}
+
+// Visualization methods implementation
+void EcWidget::setShowCurrentArrows(bool show)
+{
+    m_showCurrentArrows = show;
+    update();  // Trigger repaint
+}
+
+void EcWidget::setShowTideRectangles(bool show)
+{
+    m_showTideRectangles = show;
+    update();  // Trigger repaint
+}
+
+void EcWidget::refreshVisualization()
+{
+    // Load sample data for visualization
+    if (m_currentVisualisation) {
+        m_currentVisualisation->updateCurrentData(m_currentVisualisation->generateSampleCurrentData());
+        m_currentVisualisation->updateTideData(m_currentVisualisation->generateSampleTideData());
+    }
+
+    update();  // Trigger repaint
+}
+
+void EcWidget::setCurrentScale(double scale)
+{
+    if (m_currentVisualisation) {
+        m_currentVisualisation->setCurrentScale(scale);
+    }
+}
+
+void EcWidget::setTideScale(double scale)
+{
+    if (m_currentVisualisation) {
+        m_currentVisualisation->setTideScale(scale);
     }
 }
 

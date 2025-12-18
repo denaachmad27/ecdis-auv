@@ -24,6 +24,9 @@
 #include "cpatcpasettings.h"
 #include <QTimer>
 #include "cpatcpapanel.h"
+#include "tidemanager.h"
+#include "tidepanel.h"
+#include "testpanel.h"
 
 // forward declerations
 class PickWindow;
@@ -345,6 +348,13 @@ private:
     QDockWidget* alertDock;
     void setupAlertPanel();
 
+    // Tide Panel
+    TidePanel* tidePanel;
+    TideManager* tideManager;
+    QDockWidget* tideDock;
+    void setupTidePanel();
+
+    
     // Alert handling methods
     void onAlertTriggered(const AlertData& alert);
     void onCriticalAlertTriggered(const AlertData& alert);

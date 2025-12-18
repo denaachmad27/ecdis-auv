@@ -1,0 +1,1609 @@
+{
+  "tide_stations": [
+    {
+      "id": "jakarta_utara",
+      "name": "Tanjung Priok, Jakarta Utara",
+      "latitude": -6.1333,
+      "longitude": 106.8750,
+      "description": "Pelabuhan utama Jakarta Utara"
+    },
+    {
+      "id": "jakarta_barat",
+      "name": "Tanjung Priok Barat, Jakarta Utara",
+      "latitude": -6.1167,
+      "longitude": 106.8500,
+      "description": "Area pelabuhan barat"
+    },
+    {
+      "id": "ancol",
+      "name": "Ancol, Jakarta Utara",
+      "latitude": -6.1250,
+      "longitude": 106.8333,
+      "description": "Taman Impian Jaya Ancol"
+    },
+    {
+      "id": "sunda_kelapa",
+      "name": "Sunda Kelapa, Jakarta Utara",
+      "latitude": -6.1167,
+      "longitude": 106.8000,
+      "description": "Pelabuhan Sunda Kelapa"
+    },
+    {
+      "id": "marunda",
+      "name": "Marunda, Kepulauan Seribu",
+      "latitude": -5.5667,
+      "longitude": 106.2667,
+      "description": "Pelabuhan Marunda"
+    },
+    {
+      "id": "bali_benoa",
+      "name": "Benoa, Bali",
+      "latitude": -8.6500,
+      "longitude": 115.2167,
+      "description": "Pelabuhan Benoa, Bali"
+    },
+    {
+      "id": "surabaya",
+      "name": "Surabaya, Jawa Timur",
+      "latitude": -7.2500,
+      "longitude": 112.7500,
+      "description": "Pelabuhan Tanjung Perak Surabaya"
+    },
+    {
+      "id": "makassar",
+      "name": "Makassar, Sulawesi Selatan",
+      "latitude": -5.1500,
+      "longitude": 119.4167,
+      "description": "Pelabuhan Makassar"
+    },
+    {
+      "id": "belawan",
+      "name": "Belawan, Kalimantan Timur",
+      "latitude": 1.0167,
+      "longitude": 114.4667,
+      "description": "Pelabuhan Belawan"
+    },
+    {
+      "id": "batam",
+      "name": "Batam Center, Batam",
+      "latitude": 1.1333,
+      "longitude": 104.4500,
+      "description": "Batam Centerpoint"
+    },
+    {
+      "id": "medan",
+      "name": "Belawan, Medan",
+      "latitude": 3.5833,
+      "longitude": 98.6833,
+      "description": "Pelabuhan Belawan Medan"
+    },
+    {
+      "id": "pekanbaru",
+      "name": "Pekanbaru, Riau",
+      "latitude": 0.5167,
+      "longitude": 101.4333,
+      "description": "Pelabuhan Sungai Duri Pekanbaru"
+    },
+    {
+      "id": "surabaya_tanjung_perak",
+      "name": "Tanjung Perak, Surabaya",
+      "latitude": -7.2000,
+      "longitude": 112.8167,
+      "description": "Pelabuhan utama Surabaya"
+    },
+    {
+      "id": "surabaya_gresik",
+      "name": "Gresik, Surabaya",
+      "latitude": -7.1333,
+      "longitude": 112.6500,
+      "description": "Pelabuhan Gresik"
+    },
+    {
+      "id": "madura_bangkalan",
+      "name": "Bangkalan, Madura",
+      "latitude": -7.0667,
+      "longitude": 112.8667,
+      "description": "Pelabuhan Bangkalan Madura"
+    },
+    {
+      "id": "pasuruan",
+      "name": "Pasuruan, Jawa Timur",
+      "latitude": -7.6500,
+      "longitude": 112.9000,
+      "description": "Pelabuhan Pasuruan"
+    },
+    {
+      "id": "probolinggo",
+      "name": "Probolinggo, Jawa Timur",
+      "latitude": -7.7500,
+      "longitude": 113.2167,
+      "description": "Pelabuhan Probolinggo"
+    },
+    {
+      "id": "situbondo",
+      "name": "Situbondo, Jawa Timur",
+      "latitude": -7.7000,
+      "longitude": 114.0167,
+      "description": "Pelabuhan Situbondo"
+    },
+    {
+      "id": "banyuwangi",
+      "name": "Banyuwangi, Jawa Timur",
+      "latitude": -8.2167,
+      "longitude": 114.3833,
+      "description": "Pelabuhan Ketapang Banyuwangi"
+    }
+  ],
+  "tide_predictions": [
+    {
+      "station_id": "jakarta_utara",
+      "date": "2025-12-11",
+      "predictions": [
+        {
+          "time": "00:15",
+          "type": "low",
+          "height": 0.8,
+          "description": "Low tide"
+        },
+        {
+          "time": "06:30",
+          "type": "high",
+          "height": 2.1,
+          "description": "High tide"
+        },
+        {
+          "time": "12:45",
+          "type": "low",
+          "height": 0.6,
+          "description": "Low tide"
+        },
+        {
+          "time": "19:00",
+          "type": "high",
+          "height": 2.3,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "jakarta_barat",
+      "date": "2025-12-11",
+      "predictions": [
+        {
+          "time": "00:45",
+          "type": "low",
+          "height": 0.7,
+          "description": "Low tide"
+        },
+        {
+          "time": "07:00",
+          "type": "high",
+          "height": 2.0,
+          "description": "High tide"
+        },
+        {
+          "time": "13:15",
+          "type": "low",
+          "height": 0.5,
+          "description": "Low tide"
+        },
+        {
+          "time": "19:30",
+          "type": "high",
+          "height": 2.2,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "ancol",
+      "date": "2025-12-11",
+      "predictions": [
+        {
+          "time": "01:00",
+          "type": "low",
+          "height": 0.9,
+          "description": "Low tide"
+        },
+        {
+          "time": "07:15",
+          "type": "high",
+          "height": 2.4,
+          "description": "High tide"
+        },
+        {
+          "time": "13:30",
+          "type": "low",
+          "height": 0.7,
+          "description": "Low tide"
+        },
+        {
+          "time": "19:45",
+          "type": "high",
+          "height": 2.5,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "makassar",
+      "date": "2025-12-11",
+      "predictions": [
+        {
+          "time": "00:30",
+          "type": "low",
+          "height": 1.2,
+          "description": "Low tide"
+        },
+        {
+          "time": "06:45",
+          "type": "high",
+          "height": 2.6,
+          "description": "High tide"
+        },
+        {
+          "time": "13:00",
+          "type": "low",
+          "height": 0.9,
+          "description": "Low tide"
+        },
+        {
+          "time": "19:15",
+          "type": "high",
+          "height": 2.7,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "batam",
+      "date": "2025-12-11",
+      "predictions": [
+        {
+          "time": "00:45",
+          "type": "low",
+          "height": 0.6,
+          "description": "Low tide"
+        },
+        {
+          "time": "06:30",
+          "type": "high",
+          "height": 1.8,
+          "description": "High tide"
+        },
+        {
+          "time": "12:45",
+          "type": "low",
+          "height": 0.4,
+          "description": "Low tide"
+        },
+        {
+          "time": "19:00",
+          "type": "high",
+          "height": 2.0,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "surabaya_tanjung_perak",
+      "date": "2025-12-11",
+      "predictions": [
+        {
+          "time": "02:00",
+          "type": "low",
+          "height": 0.5,
+          "description": "Low tide"
+        },
+        {
+          "time": "08:15",
+          "type": "high",
+          "height": 2.3,
+          "description": "High tide"
+        },
+        {
+          "time": "14:30",
+          "type": "low",
+          "height": 0.7,
+          "description": "Low tide"
+        },
+        {
+          "time": "20:45",
+          "type": "high",
+          "height": 2.5,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "surabaya_gresik",
+      "date": "2025-12-11",
+      "predictions": [
+        {
+          "time": "01:45",
+          "type": "low",
+          "height": 0.4,
+          "description": "Low tide"
+        },
+        {
+          "time": "08:00",
+          "type": "high",
+          "height": 2.1,
+          "description": "High tide"
+        },
+        {
+          "time": "14:15",
+          "type": "low",
+          "height": 0.6,
+          "description": "Low tide"
+        },
+        {
+          "time": "20:30",
+          "type": "high",
+          "height": 2.3,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "madura_bangkalan",
+      "date": "2025-12-11",
+      "predictions": [
+        {
+          "time": "01:30",
+          "type": "low",
+          "height": 0.6,
+          "description": "Low tide"
+        },
+        {
+          "time": "07:45",
+          "type": "high",
+          "height": 2.0,
+          "description": "High tide"
+        },
+        {
+          "time": "14:00",
+          "type": "low",
+          "height": 0.8,
+          "description": "Low tide"
+        },
+        {
+          "time": "20:15",
+          "type": "high",
+          "height": 2.2,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "banyuwangi",
+      "date": "2025-12-11",
+      "predictions": [
+        {
+          "time": "03:15",
+          "type": "low",
+          "height": 0.8,
+          "description": "Low tide"
+        },
+        {
+          "time": "09:30",
+          "type": "high",
+          "height": 1.7,
+          "description": "High tide"
+        },
+        {
+          "time": "15:45",
+          "type": "low",
+          "height": 0.9,
+          "description": "Low tide"
+        },
+        {
+          "time": "22:00",
+          "type": "high",
+          "height": 1.9,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "jakarta_utara",
+      "date": "2025-12-12",
+      "predictions": [
+        {
+          "time": "01:30",
+          "type": "low",
+          "height": 0.9,
+          "description": "Low tide"
+        },
+        {
+          "time": "07:45",
+          "type": "high",
+          "height": 2.0,
+          "description": "High tide"
+        },
+        {
+          "time": "14:00",
+          "type": "low",
+          "height": 0.6,
+          "description": "Low tide"
+        },
+        {
+          "time": "20:15",
+          "type": "high",
+          "height": 2.2,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "jakarta_barat",
+      "date": "2025-12-12",
+      "predictions": [
+        {
+          "time": "01:45",
+          "type": "low",
+          "height": 0.7,
+          "description": "Low tide"
+        },
+        {
+          "time": "08:00",
+          "type": "high",
+          "height": 1.9,
+          "description": "High tide"
+        },
+        {
+          "time": "14:15",
+          "type": "low",
+          "height": 0.5,
+          "description": "Low tide"
+        },
+        {
+          "time": "20:30",
+          "type": "high",
+          "height": 2.1,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "ancol",
+      "date": "2025-12-12",
+      "predictions": [
+        {
+          "time": "02:00",
+          "type": "low",
+          "height": 0.8,
+          "description": "Low tide"
+        },
+        {
+          "time": "08:15",
+          "type": "high",
+          "height": 2.2,
+          "description": "High tide"
+        },
+        {
+          "time": "14:30",
+          "type": "low",
+          "height": 0.7,
+          "description": "Low tide"
+        },
+        {
+          "time": "20:45",
+          "type": "high",
+          "height": 2.4,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "sunda_kelapa",
+      "date": "2025-12-12",
+      "predictions": [
+        {
+          "time": "01:15",
+          "type": "low",
+          "height": 0.6,
+          "description": "Low tide"
+        },
+        {
+          "time": "07:30",
+          "type": "high",
+          "height": 1.8,
+          "description": "High tide"
+        },
+        {
+          "time": "13:45",
+          "type": "low",
+          "height": 0.5,
+          "description": "Low tide"
+        },
+        {
+          "time": "20:00",
+          "type": "high",
+          "height": 2.0,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "surabaya_tanjung_perak",
+      "date": "2025-12-12",
+      "predictions": [
+        {
+          "time": "01:00",
+          "type": "low",
+          "height": 0.6,
+          "description": "Low tide"
+        },
+        {
+          "time": "07:15",
+          "type": "high",
+          "height": 2.4,
+          "description": "High tide"
+        },
+        {
+          "time": "13:30",
+          "type": "low",
+          "height": 0.8,
+          "description": "Low tide"
+        },
+        {
+          "time": "19:45",
+          "type": "high",
+          "height": 2.6,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "surabaya_gresik",
+      "date": "2025-12-12",
+      "predictions": [
+        {
+          "time": "00:45",
+          "type": "low",
+          "height": 0.5,
+          "description": "Low tide"
+        },
+        {
+          "time": "07:00",
+          "type": "high",
+          "height": 2.1,
+          "description": "High tide"
+        },
+        {
+          "time": "13:15",
+          "type": "low",
+          "height": 0.6,
+          "description": "Low tide"
+        },
+        {
+          "time": "19:30",
+          "type": "high",
+          "height": 2.3,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "batam",
+      "date": "2025-12-12",
+      "predictions": [
+        {
+          "time": "00:30",
+          "type": "low",
+          "height": 0.7,
+          "description": "Low tide"
+        },
+        {
+          "time": "06:30",
+          "type": "high",
+          "height": 1.9,
+          "description": "High tide"
+        },
+        {
+          "time": "12:45",
+          "type": "low",
+          "height": 0.4,
+          "description": "Low tide"
+        },
+        {
+          "time": "19:00",
+          "type": "high",
+          "height": 2.1,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "bali_benoa",
+      "date": "2025-12-12",
+      "predictions": [
+        {
+          "time": "01:15",
+          "type": "high",
+          "height": 2.2,
+          "description": "High tide"
+        },
+        {
+          "time": "07:30",
+          "type": "low",
+          "height": 0.8,
+          "description": "Low tide"
+        },
+        {
+          "time": "13:45",
+          "type": "high",
+          "height": 2.4,
+          "description": "High tide"
+        },
+        {
+          "time": "20:00",
+          "type": "low",
+          "height": 0.6,
+          "description": "Low tide"
+        }
+      ]
+    },
+    {
+      "station_id": "makassar",
+      "date": "2025-12-12",
+      "predictions": [
+        {
+          "time": "02:00",
+          "type": "low",
+          "height": 1.0,
+          "description": "Low tide"
+        },
+        {
+          "time": "08:15",
+          "type": "high",
+          "height": 2.8,
+          "description": "High tide"
+        },
+        {
+          "time": "14:30",
+          "type": "low",
+          "height": 1.1,
+          "description": "Low tide"
+        },
+        {
+          "time": "20:45",
+          "type": "high",
+          "height": 2.9,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "medan",
+      "date": "2025-12-12",
+      "predictions": [
+        {
+          "time": "01:45",
+          "type": "high",
+          "height": 1.8,
+          "description": "High tide"
+        },
+        {
+          "time": "08:00",
+          "type": "low",
+          "height": 0.5,
+          "description": "Low tide"
+        },
+        {
+          "time": "14:15",
+          "type": "high",
+          "height": 2.0,
+          "description": "High tide"
+        },
+        {
+          "time": "20:30",
+          "type": "low",
+          "height": 0.4,
+          "description": "Low tide"
+        }
+      ]
+    },
+    {
+      "station_id": "pekanbaru",
+      "date": "2025-12-12",
+      "predictions": [
+        {
+          "time": "00:00",
+          "type": "low",
+          "height": 0.3,
+          "description": "Low tide"
+        },
+        {
+          "time": "06:15",
+          "type": "high",
+          "height": 1.5,
+          "description": "High tide"
+        },
+        {
+          "time": "12:30",
+          "type": "low",
+          "height": 0.2,
+          "description": "Low tide"
+        },
+        {
+          "time": "18:45",
+          "type": "high",
+          "height": 1.7,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "marunda",
+      "date": "2025-12-12",
+      "predictions": [
+        {
+          "time": "02:30",
+          "type": "high",
+          "height": 2.1,
+          "description": "High tide"
+        },
+        {
+          "time": "08:45",
+          "type": "low",
+          "height": 0.9,
+          "description": "Low tide"
+        },
+        {
+          "time": "15:00",
+          "type": "high",
+          "height": 2.3,
+          "description": "High tide"
+        },
+        {
+          "time": "21:15",
+          "type": "low",
+          "height": 0.7,
+          "description": "Low tide"
+        }
+      ]
+    },
+    {
+      "station_id": "jakarta_utara",
+      "date": "2024-12-17",
+      "predictions": [
+        {
+          "time": "02:45",
+          "type": "low",
+          "height": 0.7,
+          "description": "Low tide"
+        },
+        {
+          "time": "09:00",
+          "type": "high",
+          "height": 2.2,
+          "description": "High tide"
+        },
+        {
+          "time": "15:15",
+          "type": "low",
+          "height": 0.5,
+          "description": "Low tide"
+        },
+        {
+          "time": "21:30",
+          "type": "high",
+          "height": 2.4,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "jakarta_barat",
+      "date": "2024-12-17",
+      "predictions": [
+        {
+          "time": "03:00",
+          "type": "low",
+          "height": 0.6,
+          "description": "Low tide"
+        },
+        {
+          "time": "09:15",
+          "type": "high",
+          "height": 2.1,
+          "description": "High tide"
+        },
+        {
+          "time": "15:30",
+          "type": "low",
+          "height": 0.4,
+          "description": "Low tide"
+        },
+        {
+          "time": "21:45",
+          "type": "high",
+          "height": 2.3,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "ancol",
+      "date": "2024-12-17",
+      "predictions": [
+        {
+          "time": "02:30",
+          "type": "low",
+          "height": 0.8,
+          "description": "Low tide"
+        },
+        {
+          "time": "08:45",
+          "type": "high",
+          "height": 2.5,
+          "description": "High tide"
+        },
+        {
+          "time": "15:00",
+          "type": "low",
+          "height": 0.6,
+          "description": "Low tide"
+        },
+        {
+          "time": "21:15",
+          "type": "high",
+          "height": 2.6,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "sunda_kelapa",
+      "date": "2024-12-17",
+      "predictions": [
+        {
+          "time": "03:15",
+          "type": "low",
+          "height": 0.7,
+          "description": "Low tide"
+        },
+        {
+          "time": "09:30",
+          "type": "high",
+          "height": 2.0,
+          "description": "High tide"
+        },
+        {
+          "time": "15:45",
+          "type": "low",
+          "height": 0.5,
+          "description": "Low tide"
+        },
+        {
+          "time": "22:00",
+          "type": "high",
+          "height": 2.2,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "surabaya_tanjung_perak",
+      "date": "2024-12-17",
+      "predictions": [
+        {
+          "time": "03:00",
+          "type": "low",
+          "height": 0.7,
+          "description": "Low tide"
+        },
+        {
+          "time": "09:15",
+          "type": "high",
+          "height": 2.5,
+          "description": "High tide"
+        },
+        {
+          "time": "15:30",
+          "type": "low",
+          "height": 0.9,
+          "description": "Low tide"
+        },
+        {
+          "time": "21:45",
+          "type": "high",
+          "height": 2.7,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "surabaya_gresik",
+      "date": "2024-12-17",
+      "predictions": [
+        {
+          "time": "02:45",
+          "type": "low",
+          "height": 0.6,
+          "description": "Low tide"
+        },
+        {
+          "time": "09:00",
+          "type": "high",
+          "height": 2.3,
+          "description": "High tide"
+        },
+        {
+          "time": "15:15",
+          "type": "low",
+          "height": 0.7,
+          "description": "Low tide"
+        },
+        {
+          "time": "21:30",
+          "type": "high",
+          "height": 2.5,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "madura_bangkalan",
+      "date": "2024-12-17",
+      "predictions": [
+        {
+          "time": "02:30",
+          "type": "low",
+          "height": 0.7,
+          "description": "Low tide"
+        },
+        {
+          "time": "08:45",
+          "type": "high",
+          "height": 2.2,
+          "description": "High tide"
+        },
+        {
+          "time": "15:00",
+          "type": "low",
+          "height": 0.9,
+          "description": "Low tide"
+        },
+        {
+          "time": "21:15",
+          "type": "high",
+          "height": 2.4,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "banyuwangi",
+      "date": "2024-12-17",
+      "predictions": [
+        {
+          "time": "04:15",
+          "type": "low",
+          "height": 0.9,
+          "description": "Low tide"
+        },
+        {
+          "time": "10:30",
+          "type": "high",
+          "height": 1.9,
+          "description": "High tide"
+        },
+        {
+          "time": "16:45",
+          "type": "low",
+          "height": 1.0,
+          "description": "Low tide"
+        },
+        {
+          "time": "23:00",
+          "type": "high",
+          "height": 2.1,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "bali_benoa",
+      "date": "2024-12-17",
+      "predictions": [
+        {
+          "time": "02:45",
+          "type": "high",
+          "height": 2.3,
+          "description": "High tide"
+        },
+        {
+          "time": "09:00",
+          "type": "low",
+          "height": 0.9,
+          "description": "Low tide"
+        },
+        {
+          "time": "15:15",
+          "type": "high",
+          "height": 2.5,
+          "description": "High tide"
+        },
+        {
+          "time": "21:30",
+          "type": "low",
+          "height": 0.7,
+          "description": "Low tide"
+        }
+      ]
+    },
+    {
+      "station_id": "makassar",
+      "date": "2024-12-17",
+      "predictions": [
+        {
+          "time": "03:30",
+          "type": "low",
+          "height": 1.1,
+          "description": "Low tide"
+        },
+        {
+          "time": "09:45",
+          "type": "high",
+          "height": 2.9,
+          "description": "High tide"
+        },
+        {
+          "time": "16:00",
+          "type": "low",
+          "height": 1.2,
+          "description": "Low tide"
+        },
+        {
+          "time": "22:15",
+          "type": "high",
+          "height": 3.0,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "batam",
+      "date": "2024-12-17",
+      "predictions": [
+        {
+          "time": "03:00",
+          "type": "low",
+          "height": 0.8,
+          "description": "Low tide"
+        },
+        {
+          "time": "08:45",
+          "type": "high",
+          "height": 2.0,
+          "description": "High tide"
+        },
+        {
+          "time": "15:00",
+          "type": "low",
+          "height": 0.5,
+          "description": "Low tide"
+        },
+        {
+          "time": "21:15",
+          "type": "high",
+          "height": 2.2,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "medan",
+      "date": "2024-12-17",
+      "predictions": [
+        {
+          "time": "03:15",
+          "type": "high",
+          "height": 1.9,
+          "description": "High tide"
+        },
+        {
+          "time": "09:30",
+          "type": "low",
+          "height": 0.6,
+          "description": "Low tide"
+        },
+        {
+          "time": "15:45",
+          "type": "high",
+          "height": 2.1,
+          "description": "High tide"
+        },
+        {
+          "time": "22:00",
+          "type": "low",
+          "height": 0.5,
+          "description": "Low tide"
+        }
+      ]
+    },
+    {
+      "station_id": "pekanbaru",
+      "date": "2024-12-17",
+      "predictions": [
+        {
+          "time": "01:30",
+          "type": "low",
+          "height": 0.4,
+          "description": "Low tide"
+        },
+        {
+          "time": "07:45",
+          "type": "high",
+          "height": 1.6,
+          "description": "High tide"
+        },
+        {
+          "time": "14:00",
+          "type": "low",
+          "height": 0.3,
+          "description": "Low tide"
+        },
+        {
+          "time": "20:15",
+          "type": "high",
+          "height": 1.8,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "marunda",
+      "date": "2024-12-17",
+      "predictions": [
+        {
+          "time": "03:45",
+          "type": "high",
+          "height": 2.2,
+          "description": "High tide"
+        },
+        {
+          "time": "10:00",
+          "type": "low",
+          "height": 1.0,
+          "description": "Low tide"
+        },
+        {
+          "time": "16:15",
+          "type": "high",
+          "height": 2.4,
+          "description": "High tide"
+        },
+        {
+          "time": "22:30",
+          "type": "low",
+          "height": 0.8,
+          "description": "Low tide"
+        }
+      ]
+    },
+    {
+      "station_id": "jakarta_utara",
+      "date": "2024-12-18",
+      "predictions": [
+        {
+          "time": "04:00",
+          "type": "low",
+          "height": 0.8,
+          "description": "Low tide"
+        },
+        {
+          "time": "10:15",
+          "type": "high",
+          "height": 2.1,
+          "description": "High tide"
+        },
+        {
+          "time": "16:30",
+          "type": "low",
+          "height": 0.6,
+          "description": "Low tide"
+        },
+        {
+          "time": "22:45",
+          "type": "high",
+          "height": 2.3,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "jakarta_barat",
+      "date": "2024-12-18",
+      "predictions": [
+        {
+          "time": "04:15",
+          "type": "low",
+          "height": 0.7,
+          "description": "Low tide"
+        },
+        {
+          "time": "10:30",
+          "type": "high",
+          "height": 2.0,
+          "description": "High tide"
+        },
+        {
+          "time": "16:45",
+          "type": "low",
+          "height": 0.5,
+          "description": "Low tide"
+        },
+        {
+          "time": "23:00",
+          "type": "high",
+          "height": 2.2,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "ancol",
+      "date": "2024-12-18",
+      "predictions": [
+        {
+          "time": "03:45",
+          "type": "low",
+          "height": 0.9,
+          "description": "Low tide"
+        },
+        {
+          "time": "10:00",
+          "type": "high",
+          "height": 2.4,
+          "description": "High tide"
+        },
+        {
+          "time": "16:15",
+          "type": "low",
+          "height": 0.7,
+          "description": "Low tide"
+        },
+        {
+          "time": "22:30",
+          "type": "high",
+          "height": 2.5,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "sunda_kelapa",
+      "date": "2024-12-18",
+      "predictions": [
+        {
+          "time": "04:30",
+          "type": "low",
+          "height": 0.8,
+          "description": "Low tide"
+        },
+        {
+          "time": "10:45",
+          "type": "high",
+          "height": 1.9,
+          "description": "High tide"
+        },
+        {
+          "time": "17:00",
+          "type": "low",
+          "height": 0.6,
+          "description": "Low tide"
+        },
+        {
+          "time": "23:15",
+          "type": "high",
+          "height": 2.1,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "surabaya_tanjung_perak",
+      "date": "2024-12-18",
+      "predictions": [
+        {
+          "time": "04:15",
+          "type": "low",
+          "height": 0.8,
+          "description": "Low tide"
+        },
+        {
+          "time": "10:30",
+          "type": "high",
+          "height": 2.4,
+          "description": "High tide"
+        },
+        {
+          "time": "16:45",
+          "type": "low",
+          "height": 1.0,
+          "description": "Low tide"
+        },
+        {
+          "time": "23:00",
+          "type": "high",
+          "height": 2.6,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "surabaya_gresik",
+      "date": "2024-12-18",
+      "predictions": [
+        {
+          "time": "04:00",
+          "type": "low",
+          "height": 0.7,
+          "description": "Low tide"
+        },
+        {
+          "time": "10:15",
+          "type": "high",
+          "height": 2.2,
+          "description": "High tide"
+        },
+        {
+          "time": "16:30",
+          "type": "low",
+          "height": 0.8,
+          "description": "Low tide"
+        },
+        {
+          "time": "22:45",
+          "type": "high",
+          "height": 2.4,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "madura_bangkalan",
+      "date": "2024-12-18",
+      "predictions": [
+        {
+          "time": "03:45",
+          "type": "low",
+          "height": 0.8,
+          "description": "Low tide"
+        },
+        {
+          "time": "10:00",
+          "type": "high",
+          "height": 2.1,
+          "description": "High tide"
+        },
+        {
+          "time": "16:15",
+          "type": "low",
+          "height": 1.0,
+          "description": "Low tide"
+        },
+        {
+          "time": "22:30",
+          "type": "high",
+          "height": 2.3,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "banyuwangi",
+      "date": "2024-12-18",
+      "predictions": [
+        {
+          "time": "05:30",
+          "type": "low",
+          "height": 1.0,
+          "description": "Low tide"
+        },
+        {
+          "time": "11:45",
+          "type": "high",
+          "height": 2.0,
+          "description": "High tide"
+        },
+        {
+          "time": "18:00",
+          "type": "low",
+          "height": 1.1,
+          "description": "Low tide"
+        },
+        {
+          "time": "00:15",
+          "type": "high",
+          "height": 2.2,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "bali_benoa",
+      "date": "2024-12-18",
+      "predictions": [
+        {
+          "time": "04:00",
+          "type": "high",
+          "height": 2.2,
+          "description": "High tide"
+        },
+        {
+          "time": "10:15",
+          "type": "low",
+          "height": 1.0,
+          "description": "Low tide"
+        },
+        {
+          "time": "16:30",
+          "type": "high",
+          "height": 2.4,
+          "description": "High tide"
+        },
+        {
+          "time": "22:45",
+          "type": "low",
+          "height": 0.8,
+          "description": "Low tide"
+        }
+      ]
+    },
+    {
+      "station_id": "makassar",
+      "date": "2024-12-18",
+      "predictions": [
+        {
+          "time": "04:45",
+          "type": "low",
+          "height": 1.3,
+          "description": "Low tide"
+        },
+        {
+          "time": "11:00",
+          "type": "high",
+          "height": 2.8,
+          "description": "High tide"
+        },
+        {
+          "time": "17:15",
+          "type": "low",
+          "height": 1.4,
+          "description": "Low tide"
+        },
+        {
+          "time": "23:30",
+          "type": "high",
+          "height": 2.9,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "batam",
+      "date": "2024-12-18",
+      "predictions": [
+        {
+          "time": "04:15",
+          "type": "low",
+          "height": 0.9,
+          "description": "Low tide"
+        },
+        {
+          "time": "10:00",
+          "type": "high",
+          "height": 1.9,
+          "description": "High tide"
+        },
+        {
+          "time": "16:15",
+          "type": "low",
+          "height": 0.6,
+          "description": "Low tide"
+        },
+        {
+          "time": "22:30",
+          "type": "high",
+          "height": 2.1,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "medan",
+      "date": "2024-12-18",
+      "predictions": [
+        {
+          "time": "04:30",
+          "type": "high",
+          "height": 1.8,
+          "description": "High tide"
+        },
+        {
+          "time": "10:45",
+          "type": "low",
+          "height": 0.7,
+          "description": "Low tide"
+        },
+        {
+          "time": "17:00",
+          "type": "high",
+          "height": 2.0,
+          "description": "High tide"
+        },
+        {
+          "time": "23:15",
+          "type": "low",
+          "height": 0.6,
+          "description": "Low tide"
+        }
+      ]
+    },
+    {
+      "station_id": "pekanbaru",
+      "date": "2024-12-18",
+      "predictions": [
+        {
+          "time": "02:45",
+          "type": "low",
+          "height": 0.5,
+          "description": "Low tide"
+        },
+        {
+          "time": "09:00",
+          "type": "high",
+          "height": 1.4,
+          "description": "High tide"
+        },
+        {
+          "time": "15:15",
+          "type": "low",
+          "height": 0.4,
+          "description": "Low tide"
+        },
+        {
+          "time": "21:30",
+          "type": "high",
+          "height": 1.6,
+          "description": "High tide"
+        }
+      ]
+    },
+    {
+      "station_id": "marunda",
+      "date": "2024-12-18",
+      "predictions": [
+        {
+          "time": "05:00",
+          "type": "high",
+          "height": 2.0,
+          "description": "High tide"
+        },
+        {
+          "time": "11:15",
+          "type": "low",
+          "height": 1.1,
+          "description": "Low tide"
+        },
+        {
+          "time": "17:30",
+          "type": "high",
+          "height": 2.2,
+          "description": "High tide"
+        },
+        {
+          "time": "23:45",
+          "type": "low",
+          "height": 0.9,
+          "description": "Low tide"
+        }
+      ]
+    }
+  ]
+}

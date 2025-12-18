@@ -15,6 +15,8 @@
 #include <QMap>
 #include <QVector>
 
+// Forward declarations
+class TideManager;
 
 // SevenCs Kernel EC2007
 #ifdef _WIN32
@@ -46,6 +48,8 @@
 
 class CPATCPAPanel;
 class RouteSafetyFeature;
+class CurrentVisualisation; // Forward declaration for current visualization
+class VisualisationPanel; // Forward declaration for visualization panel
 
 struct AISTargetData {
     QString mmsi;
@@ -197,6 +201,18 @@ public:
     GnomonicProjection = EC_GEO_PROJECTION_GNOMONIC,
     StereographicProjection = EC_GEO_PROJECTION_STEREOGRAPHIC
   };
+
+  // Visualization methods
+  void setCurrentVisualisation(CurrentVisualisation* visualisation) { m_currentVisualisation = visualisation; }
+  CurrentVisualisation* getCurrentVisualisation() const { return m_currentVisualisation; }
+
+  
+  // Toggle visualization display
+  void setShowCurrentArrows(bool show);
+  void setShowTideRectangles(bool show);
+  void refreshVisualization();
+  void setCurrentScale(double scale);
+  void setTideScale(double scale);
 
   // Navigation Functions
   enum ActiveFunction {
@@ -937,6 +953,13 @@ public:
 
   // EBL/VRM helpers
   void setEblVrmFixedTarget(double lat, double lon);
+
+  // Tidal station helpers
+  void drawTidalStations();
+  void setTidalStationsVisible(bool visible);
+  bool areTidalStationsVisible() const { return m_showTidalStations; }
+  void updateTidalStationClick(EcCoordinate lat, EcCoordinate lon);
+  void setTidalStationManager(class TideManager* manager) { m_tideManager = manager; }
 
   //
   int rangeNM = 0;
@@ -1733,6 +1756,14 @@ public:
   QTimer* poiAnimationTimer;
   bool hasVisibleManOverboardPOI();
 
+  // Tidal station visualization
+  bool m_showTidalStations = false;
+  class TideManager* m_tideManager = nullptr;
+
+  // Visualization components
+  CurrentVisualisation* m_currentVisualisation = nullptr;
+    bool m_showCurrentArrows = true;
+  bool m_showTideRectangles = true;
 
 }; // EcWidget
 
