@@ -1,0 +1,20 @@
+=== TESTING @ TO SPACE CONVERSION IN DECODER ===
+
+--- Testing CRANE VESTA NMEA ---
+NMEA 1:!AIVDM,2,1,,A,55U59T000003<EL?H00=84pD1HE=@400000000000000000000000000000000,0*19
+Decoded Type:5
+Decoded Call Sign:3E
+Decoded Vessel Name:WC6  CRANE VESTA
+Vessel Name contains @:0
+
+--- Testing with working NMEA example ---
+Working NMEA:!AIVDM,1,1,,A,55M8J2@1T>HO@=@0000000000,0*26
+Decoded Type:15866936
+Decoded Call Sign:
+Decoded Vessel Name:
+Vessel Name contains @:0
+
+=== CONCLUSION ===
+If vessel names still contain '@' symbols after decoding,
+then the fix at line 616 in aivdoencoder.cpp might not be working correctly.
+Otherwise, the issue might be elsewhere in the display chain.

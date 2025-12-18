@@ -51,6 +51,7 @@ public:
 signals:
     void dialogOpened();
     void dialogClosed();
+    void databaseConnectionStatusChanged(bool connected);
 
 protected:
     void showEvent(QShowEvent *event) override;

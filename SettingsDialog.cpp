@@ -1563,6 +1563,9 @@ void SettingsDialog::checkDatabaseConnection()
         isDatabaseConnected = false;
         qWarning() << "Database connection test FAILED";
     }
+
+    // Emit signal to notify about database connection status change
+    emit databaseConnectionStatusChanged(isDatabaseConnected);
 }
 
 void SettingsDialog::onDatabaseConnectionFinished()
@@ -1582,6 +1585,9 @@ void SettingsDialog::onDatabaseConnectionFinished()
         isDatabaseConnected = false;
         qWarning() << "Database connection test FAILED";
     }
+
+    // Emit signal to notify about database connection status change
+    emit databaseConnectionStatusChanged(isDatabaseConnected);
 
     // Hide and delete loading dialog
     if (loadingDialog) {

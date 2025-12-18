@@ -339,6 +339,23 @@ void MainWindow::createStatusBar(){
     // Tambahkan ke paling kiri status bar
     statusBar()->addWidget(moosStatusWidget);  // kiri
 
+    // POSTGRE CONNECTION STATUS
+    postgreLedCircle = new QLabel;
+    postgreLedCircle->setFixedSize(12, 12);  // lingkaran 12x12
+    postgreLedCircle->setStyleSheet("background-color: green; border-radius: 6px;");
+
+    postgreStatusText = new QLabel(" Postgre: Connected");
+    postgreStatusText->setStyleSheet("color: green; font-weight: bold;");
+
+    QWidget *postgreStatusWidget = new QWidget;
+    QHBoxLayout *postgreStatusLayout = new QHBoxLayout(postgreStatusWidget);
+    postgreStatusLayout->setContentsMargins(5, 0, 10, 0); // spasi antar widget
+    postgreStatusLayout->addWidget(postgreLedCircle);
+    postgreStatusLayout->addWidget(postgreStatusText);
+
+    // Tambahkan setelah MOOSDB status
+    statusBar()->addWidget(postgreStatusWidget);  // setelah MOOSDB
+
     connect(ecchart, &EcWidget::aisSubCreated, this, [this](AISSubscriber* sub) {
         qDebug() << "aisSub created, now connecting signal...";
         connect(sub, &AISSubscriber::connectionStatusChanged, this, [this](bool connected) {
@@ -383,7 +400,7 @@ void MainWindow::createStatusBar(){
     statusBar()->addPermanentWidget(new QLabel("Time", statusBar()));
     statusBar()->addPermanentWidget(clockEdit, 0);
 
-    // RECONNECTING STATUS BAR
+    // RECONNECTING STATUS BAR - Hidden (widget created but not added to status bar)
     reconnectStatusText = new QLabel("");
 
     QWidget *reconnectStatusWidget = new QWidget;
@@ -391,10 +408,10 @@ void MainWindow::createStatusBar(){
     reconnectStatusLayout->setContentsMargins(5, 0, 10, 0); // spasi antar widget
     reconnectStatusLayout->addWidget(reconnectStatusText);
 
-    // Tambahkan ke paling kiri status bar
-    statusBar()->addWidget(reconnectStatusWidget);
+    // NOT added to status bar - hidden from UI
+    // statusBar()->addWidget(reconnectStatusWidget);
 
-    // ROUTES STATUS BAR
+    // ROUTES STATUS BAR - Hidden (widget created but not added to status bar)
     routesStatusText = new QLabel("");
 
     QWidget *routesStatusWidget = new QWidget;
@@ -402,8 +419,8 @@ void MainWindow::createStatusBar(){
     routesStatusLayout->setContentsMargins(5, 0, 10, 0); // spasi antar widget
     routesStatusLayout->addWidget(routesStatusText);
 
-    // Tambahkan ke paling kiri status bar
-    statusBar()->addWidget(routesStatusWidget);
+    // NOT added to status bar - hidden from UI
+    // statusBar()->addWidget(routesStatusWidget);
 }
 
 // MENU BAR
@@ -1387,6 +1404,21 @@ void MainWindow::onDecreaseSpeedClickedDB()
     }
 }
 
+void MainWindow::onDatabaseConnectionStatusChanged(bool connected)
+{
+    if (connected) {
+        postgreStatusText->setText(" Postgre: Connected");
+        postgreStatusText->setStyleSheet("color: green; font-weight: bold;");
+        postgreLedCircle->setStyleSheet("background-color: green; border-radius: 6px;");
+        qDebug() << "PostgreSQL status updated: Connected";
+    } else {
+        postgreStatusText->setText(" Postgre: Disconnected");
+        postgreStatusText->setStyleSheet("color: red; font-weight: bold;");
+        postgreLedCircle->setStyleSheet("background-color: red; border-radius: 6px;");
+        qDebug() << "PostgreSQL status updated: Disconnected";
+    }
+}
+
 void MainWindow::processNextNmeaDataDB()
 {
     if (!m_nmeaDataQueueDB.isEmpty()) {
@@ -1900,6 +1932,13 @@ void MainWindow::openSettingsDialog() {
         if (aisSub){dlg.onConnectionStatusChanged(aisSub->hasData());}
         else {dlg.onConnectionStatusChanged(false);}
     }
+
+    // Connect database connection status signal
+    connect(&dlg, &SettingsDialog::databaseConnectionStatusChanged,
+            this, &MainWindow::onDatabaseConnectionStatusChanged);
+
+    // Initialize with current database status
+    onDatabaseConnectionStatusChanged(dlg.getDatabaseConnectionStatus());
 
     dlg.loadSettings();
 

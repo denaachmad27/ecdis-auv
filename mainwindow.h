@@ -82,12 +82,16 @@ public:
     void onNmeaReceived(const QString&);
     void oriEditSetText(const double&);
 
-    // ROUTES STATUS BAR
+    // ROUTES STATUS BAR - Hidden
     QLabel *routesStatusText;
 
-    // RECONNECT STATUS BAR
+    // RECONNECT STATUS BAR - Hidden
     QLabel *reconnectStatusText;
     void setReconnectStatusText(const QString);
+
+    // POSTGRE STATUS BAR
+    QLabel *postgreLedCircle;
+    QLabel *postgreStatusText;
     SettingsData getSettingsForwarder();
 
     // COMPASS
@@ -317,6 +321,9 @@ private slots:
     void processNextNmeaDataDB();
     void onIncreaseSpeedClickedDB();
     void onDecreaseSpeedClickedDB();
+
+    // Database connection status
+    void onDatabaseConnectionStatusChanged(bool connected);
 
 private:
     GuardZonePanel* guardZonePanel;
