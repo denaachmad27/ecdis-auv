@@ -15,6 +15,7 @@
 #endif
 
 #include "ecwidget.h"
+#include "src/currentvisualisation.h"
 #include "cpatcpacalculator.h"
 #include "ais.h"
 #include "waypointdialog.h"
@@ -6867,6 +6868,29 @@ void EcWidget::drawAISCell()
   // ROUTE FIX: Enhanced waypointDraw() to fix route and waypoint label flickering
   // Always ensure routes are drawn even when AIS cell operations occur
   waypointDraw();
+
+  // Draw current visualizations on overlay
+  if (m_currentVisualisation) {
+    QPainter p(&drawPixmap);
+    p.setRenderHint(QPainter::Antialiasing, true);
+    p.setClipRect(drawPixmap.rect());
+
+    if (m_showCurrentArrows) {
+      QList<CurrentStation> currentStations;
+      if (m_currentVisualisation) {
+        currentStations = m_currentVisualisation->generateSampleCurrentData();
+      }
+      m_currentVisualisation->drawCurrentArrows(&p, currentStations);
+    }
+
+    if (m_showTideRectangles) {
+      QList<TideVisualization> tideVisualizations;
+      if (m_currentVisualisation) {
+        tideVisualizations = m_currentVisualisation->generateSampleTideData();
+      }
+      m_currentVisualisation->drawTideRectangles(&p, tideVisualizations);
+    }
+  }
 
   // OWNSHIP DRAW
   ownShipDraw();
@@ -20772,6 +20796,44 @@ void EcWidget::updateTidalStationClick(EcCoordinate lat, EcCoordinate lon)
         QToolTip::showText(QCursor::pos(), info, this);
     } else {
         QToolTip::hideText();
+    }
+}
+
+// Visualization methods implementation
+void EcWidget::setShowCurrentArrows(bool show)
+{
+    m_showCurrentArrows = show;
+    update();  // Trigger repaint
+}
+
+void EcWidget::setShowTideRectangles(bool show)
+{
+    m_showTideRectangles = show;
+    update();  // Trigger repaint
+}
+
+void EcWidget::refreshVisualization()
+{
+    // Load sample data for visualization
+    if (m_currentVisualisation) {
+        m_currentVisualisation->updateCurrentData(m_currentVisualisation->generateSampleCurrentData());
+        m_currentVisualisation->updateTideData(m_currentVisualisation->generateSampleTideData());
+    }
+
+    update();  // Trigger repaint
+}
+
+void EcWidget::setCurrentScale(double scale)
+{
+    if (m_currentVisualisation) {
+        m_currentVisualisation->setCurrentScale(scale);
+    }
+}
+
+void EcWidget::setTideScale(double scale)
+{
+    if (m_currentVisualisation) {
+        m_currentVisualisation->setTideScale(scale);
     }
 }
 

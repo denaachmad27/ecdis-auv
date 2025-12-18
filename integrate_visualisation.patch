@@ -1,0 +1,148 @@
+--- a/ecwidget.h
++++ b/ecwidget.h
+@@ -50,6 +50,8 @@ struct RouteDeviationDetector;
+ struct AlertData;
+ class GuardZoneManager; // Forward declaration
+ class RouteDeviationDetector; // Forward declaration
++class CurrentVisualisation; // Forward declaration for current visualization
++class VisualisationPanel; // Forward declaration for visualization panel
+
+
+ // Defines for S-63 Chart Import
+@@ -190,6 +192,19 @@ public:
+     GnomonicProjection = EC_GEO_PROJECTION_GNOMONIC,
+     StereographicProjection = EC_GEO_PROJECTION_STEREOGRAPHIC
+   };
++
++  // Visualization methods
++  void setCurrentVisualisation(CurrentVisualisation* visualisation) { m_currentVisualisation = visualisation; }
++  CurrentVisualisation* getCurrentVisualisation() const { return m_currentVisualisation; }
++
++  void setVisualisationPanel(VisualisationPanel* panel) { m_visualisationPanel = panel; }
++  VisualisationPanel* getVisualisationPanel() const { return m_visualisationPanel; }
++
++  // Toggle visualization display
++  void setShowCurrentArrows(bool show);
++  void setShowTideRectangles(bool show);
++  void refreshVisualization();
+
+   EcWidget(QWidget *parent = (QWidget*)0, bool useGL = false);
+   virtual ~EcWidget();
+@@ -650,6 +665,11 @@ private:
+   EBLVRM *eblvrm;
+   bool eblEnabled = false;
+   bool vrmEnabled = false;
++
++  // Visualization components
++  CurrentVisualisation* m_currentVisualisation = nullptr;
++  VisualisationPanel* m_visualisationPanel = nullptr;
++  bool m_showCurrentArrows = true;
++  bool m_showTideRectangles = true;
+ };
+
+ #endif // _ec_widget_h_
+
+--- a/ecwidget.cpp
++++ b/ecwidget.cpp
+@@ -61,6 +61,8 @@
+ #include "currentcurvewidget.h"
+ #include "aitargettracker.h"
+
++#include "currentvisualisation.h"
++#include "visualisationpanel.h"
+
+ // SevenCs kernel includes
+ #ifdef _WIN32
+@@ -2587,6 +2589,15 @@ void EcWidget::drawWorks()
+   }
+
+   drawAISCell(p);
++
++  // Draw current visualizations
++  if (m_currentVisualisation) {
++      if (m_showCurrentArrows) {
++          m_currentVisualisation->drawCurrentArrows(p, m_currentVisualisation->generateSampleCurrentData());
++      }
++      if (m_showTideRectangles) {
++          m_currentVisualisation->drawTideRectangles(p, m_currentVisualisation->generateSampleTideData());
++      }
++  }
++
+   if(isTracking() == true){
+
+--- a/mainwindow.cpp
++++ b/mainwindow.cpp
+@@ -28,6 +28,8 @@
+ #include "cpatcpapanel.h"
+ #include "tidemanager.h"
+ #include "tidepanel.h"
++#include "currentvisualisation.h"
++#include "visualisationpanel.h"
+ #include "testpanel.h"
+
+ #include <QPluginLoader>
+@@ -243,6 +245,11 @@ MainWindow::MainWindow(QWidget *parent)
+     // Setup Testing Menu (di belakang setupUI() untuk memastikan semua sudah terinisiasi)
+     if (AppConfig::isDevelopment()) {
+         setupTestingMenu();
++
++        // Initialize visualization components
++        VisualisationPanel* visualPanel = new VisualisationPanel(this);
++        addDockWidget(Qt::RightDockWidgetArea, visualPanel);
++        ecchart->setVisualisationPanel(visualPanel);
+     }
+
+     qDebug() << "[MAIN] Setup tide panel after...";
+@@ -688,6 +695,28 @@ void MainWindow::setupMenus()
+     viewMenu->addSeparator();
+
+     // Add visualization menu options
++    QAction *showCurrentArrowsAction = viewMenu->addAction("Show Current Arrows");
++    showCurrentArrowsAction->setCheckable(true);
++    showCurrentArrowsAction->setChecked(true);
++    connect(showCurrentArrowsAction, &QAction::toggled, this, [this](bool checked) {
++        if (ecchart) {
++            ecchart->setShowCurrentArrows(checked);
++        }
++    });
++
++    QAction *showTideRectanglesAction = viewMenu->addAction("Show Tide Rectangles");
++    showTideRectanglesAction->setCheckable(true);
++    showTideRectanglesAction->setChecked(true);
++    connect(showTideRectanglesAction, &QAction::toggled, this, [this](bool checked) {
++        if (ecchart) {
++            ecchart->setShowTideRectangles(checked);
++        }
++    });
++
++    viewMenu->addSeparator();
++
++    // Add Visualization Control Panel to UI Panels menu
++    if (visualPanel) {
++        viewMenu->addAction(visualPanel->toggleViewAction());
++    }
++
+     // Add Tide & Current menu action
+     if (tideDock) {
+         QAction* tideAction = tideDock->toggleViewAction();
+
+--- a/MainWindow.pro
++++ b/MainWindow.pro
+@@ -238,6 +238,8 @@ HEADERS += \
+     src/cpatcpapanel.h \
+     src/tidemanager.h \
+     src/tidepanel.h \
++    src/currentvisualisation.h \
++    src/visualisationpanel.h \
+     src/pickwindow.h \
+     src/obstacledetectionpanel.h \
+     src/chartmanagerpanel.h \
+@@ -266,6 +268,8 @@ SOURCES += \
+     src/cpatcpapanel.cpp \
+     src/tidemanager.cpp \
+     src/tidepanel.cpp \
++    src/currentvisualisation.cpp \
++    src/visualisationpanel.cpp \
+     src/pickwindow.cpp \
+     src/obstacledetectionpanel.cpp \
+     src/chartmanagerpanel.cpp \

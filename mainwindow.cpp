@@ -42,6 +42,7 @@
 #include "appconfig.h"
 #include "compasswidget.h"
 #include "aoi.h"
+#include "src/currentvisualisation.h"
 
 #include <dwmapi.h>
 #pragma comment(lib, "Dwmapi.lib")
@@ -723,6 +724,25 @@ void MainWindow::createMenuBar(){
             update(); // misalnya untuk redraw
         });
 
+        // Add visualization menu options
+        QAction *showCurrentArrowsAction = viewMenu->addAction("Show Current Arrows");
+        showCurrentArrowsAction->setCheckable(true);
+        showCurrentArrowsAction->setChecked(true);
+        connect(showCurrentArrowsAction, &QAction::toggled, this, [this](bool checked) {
+            if (ecchart) {
+                ecchart->setShowCurrentArrows(checked);
+            }
+        });
+
+        QAction *showTideRectanglesAction = viewMenu->addAction("Show Tide Rectangles");
+        showTideRectanglesAction->setCheckable(true);
+        showTideRectanglesAction->setChecked(true);
+        connect(showTideRectanglesAction, &QAction::toggled, this, [this](bool checked) {
+            if (ecchart) {
+                ecchart->setShowTideRectangles(checked);
+            }
+        });
+
         viewMenu->addSeparator();
     }
 
@@ -784,6 +804,10 @@ void MainWindow::createMenuBar(){
 
     // Setup Tide Panel
     setupTidePanel();
+
+    // Initialize visualization components
+    ecchart->setCurrentVisualisation(new CurrentVisualisation(ecchart));
+    ecchart->refreshVisualization();  // Load sample data
 
     // Ensure Chart Manager panel is available regardless of dev mode
     setupChartManagerPanel();

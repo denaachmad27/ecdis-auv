@@ -1,0 +1,23 @@
+# Add these lines to your CMakeLists.txt to include the new visualization components
+
+# Add to the sources list
+set(SOURCES
+    # ... existing sources ...
+    src/currentvisualisation.cpp
+    src/visualisationpanel.cpp
+    # ... other sources ...
+)
+
+# Add to the headers list
+set(HEADERS
+    # ... existing headers ...
+    src/currentvisualisation.h
+    src/visualisationpanel.h
+    # ... other headers ...
+)
+
+# Make sure Qt modules are included
+find_package(Qt5 COMPONENTS Widgets Core Gui REQUIRED)
+
+# If using Qt6 instead:
+# find_package(Qt6 COMPONENTS Widgets Core Gui REQUIRED)
