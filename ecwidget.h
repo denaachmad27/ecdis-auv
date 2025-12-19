@@ -734,6 +734,7 @@ public:
 
   // Swiches the display of AIS targets on or off (only if AIS telegrams are read)
   void ShowAIS(bool on);
+  void ShowOwnship(bool on);
 
   // Swiches the track of AIS Target
   void TrackTarget(QString mmsi);
@@ -1179,6 +1180,7 @@ public:
   bool             geoSymLoaded;
   bool             showGrid;
   bool             showAIS;
+  bool             showOwnship;
   bool             showNationalText;
   EcCoordinate     currentLat, currentLon;
   int              currentLookupTable;

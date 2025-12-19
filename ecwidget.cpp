@@ -216,6 +216,9 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   guardianFillColor = QColor(255, 0, 0, 50);
   guardianBorderColor = QColor(255, 0, 0, 150);
   redDotGuardianEnabled = false;
+
+  // Initialize display settings
+  showOwnship = true;
   redDotGuardianId = -1;
   redDotGuardianName = "";
 
@@ -1218,6 +1221,11 @@ void EcWidget::ShowAIS(bool on)
   {
     EcChartSetViewingGroup(view, EC_VG_CLEAR, &vg, 1);
   }
+}
+
+void EcWidget::ShowOwnship(bool on)
+{
+  showOwnship = on;
 }
 
 void EcWidget::TrackTarget(QString mmsi){
@@ -6893,7 +6901,9 @@ void EcWidget::drawAISCell()
   }
 
   // OWNSHIP DRAW
-  ownShipDraw();
+  if (showOwnship) {
+    ownShipDraw();
+  }
 
   update();
 

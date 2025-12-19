@@ -147,6 +147,7 @@ protected slots:
 
     void onAIS();
     void onAIS(bool);
+    void onOwnship(bool);
     void onTrack(bool);
 
     void onSearch();
@@ -255,7 +256,8 @@ protected:
     QString      impPath;
 
     int lookupTable, displayCategory;
-    bool showLights, showText, showNationalText, showSoundings, showGrid, showAIS, trackShip, showDangerTarget;
+    bool showLights, showText, showNationalText, showSoundings, showGrid, showAIS, trackShip, showDangerTarget, showOwnship;
+    bool savedDangerTargetState; // Store previous state when ownship is disabled
 
     QActionGroup *dencActionGroup;
     QAction *autoProjectionAction, *mercatorAction, *gnomonicAction, *stereographicAction;
@@ -267,6 +269,7 @@ protected:
     QAction* startAisRecAction;
     QAction* stopAisRecAction;
     QAction* attachToShipAction;
+    QAction* aisDangerAction = nullptr; // AIS Dangerous Box action pointer
     // Measurement actions to sync check state
     QAction* eblAction = nullptr;
     QAction* vrmAction = nullptr;

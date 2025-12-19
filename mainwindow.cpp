@@ -720,7 +720,12 @@ void MainWindow::createMenuBar(){
     aisAction->setChecked(showAIS);
     connect(aisAction, SIGNAL(toggled(bool)), this, SLOT(onAIS(bool)));
 
-    QAction *aisDangerAction = viewMenu->addAction("AIS Dangerous Box");
+    QAction *ownshipAction = viewMenu->addAction("Ownship");
+    ownshipAction->setCheckable(true);
+    ownshipAction->setChecked(showOwnship);
+    connect(ownshipAction, SIGNAL(toggled(bool)), this, SLOT(onOwnship(bool)));
+
+    aisDangerAction = viewMenu->addAction("AIS Dangerous Box");
     aisDangerAction->setCheckable(true);
     aisDangerAction->setChecked(showDangerTarget);
     connect(aisDangerAction, SIGNAL(toggled(bool)), this, SLOT(onShowDangerTargets(bool)));
@@ -1118,7 +1123,7 @@ void MainWindow::createMenuBar(){
     // ================================== ABOUT MENU
     QMenu *aboutMenu = menuBar()->addMenu("&About");
     aboutMenu->addAction("Release Notes", this, SLOT(openReleaseNotesDialog()) );
-    aboutMenu->addAction("Debug", this, SLOT(fetchNmea()) );
+    //aboutMenu->addAction("Debug", this, SLOT(fetchNmea()) );
 
     // Set default dark
     if (AppConfig::isDark()){
@@ -2305,8 +2310,10 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL), m_i
   showSoundings = false;
   showGrid = false;
   showAIS = true;
+  showOwnship = true;
   trackShip = true;
   showDangerTarget = true;
+  savedDangerTargetState = true; // Initialize with same value as showDangerTarget
   ecchart->SetLookupTable(lookupTable);
   ecchart->SetDisplayCategory(displayCategory);
   ecchart->ShowLights(showLights);
@@ -2314,6 +2321,7 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL), m_i
   ecchart->ShowSoundings(showSoundings);
   ecchart->ShowGrid(showGrid);
   ecchart->ShowAIS(showAIS);
+  ecchart->ShowOwnship(showOwnship);
   ecchart->TrackShip(trackShip);
   ecchart->ShowDangerTarget(showDangerTarget);
 
@@ -2857,6 +2865,40 @@ void MainWindow::onAIS()
 void MainWindow::onAIS(bool on)
 {
   ecchart->ShowAIS(on);
+  DrawChart();
+}
+
+void MainWindow::onOwnship(bool on)
+{
+  showOwnship = on;
+  ecchart->ShowOwnship(on);
+
+  // Handle AIS Dangerous Box dependency on ownship
+  if (aisDangerAction) {
+    if (!on) {
+      // Ownship disabled -> save current AIS Dangerous Box state and disable it
+      savedDangerTargetState = aisDangerAction->isChecked();
+      aisDangerAction->setChecked(false);
+      aisDangerAction->setEnabled(false); // Disable the menu item
+
+      // Update actual showDangerTarget state
+      showDangerTarget = false;
+      ecchart->ShowDangerTarget(false);
+
+      qDebug() << "Ownship disabled - AIS Dangerous Box disabled and state saved:" << savedDangerTargetState;
+    } else {
+      // Ownship enabled -> restore AIS Dangerous Box state and enable it
+      aisDangerAction->setEnabled(true); // Enable the menu item
+      aisDangerAction->setChecked(savedDangerTargetState);
+
+      // Update actual showDangerTarget state
+      showDangerTarget = savedDangerTargetState;
+      ecchart->ShowDangerTarget(savedDangerTargetState);
+
+      qDebug() << "Ownship enabled - AIS Dangerous Box restored to:" << savedDangerTargetState;
+    }
+  }
+
   DrawChart();
 }
 
@@ -4621,7 +4663,7 @@ void MainWindow::setupTidePanel()
         tidePanel->setTideManager(tideManager);
 
         // Create dock widget
-        tideDock = new QDockWidget(tr("Tide & Current"), this);
+        tideDock = new QDockWidget(tr("Tide and Current"), this);
         tideDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
         tideDock->setWidget(tidePanel);
 
@@ -5675,7 +5717,14 @@ void MainWindow::onShowCPATargets(bool enabled)
 
 void MainWindow::onShowDangerTargets(bool enabled)
 {
+    // Update saved state only when ownship is enabled
+    if (showOwnship) {
+        savedDangerTargetState = enabled;
+    }
+
+    showDangerTarget = enabled;
     ecchart->ShowDangerTarget(enabled);
+    DrawChart();
 }
 
 void MainWindow::onShowTCPAInfo(bool enabled)
