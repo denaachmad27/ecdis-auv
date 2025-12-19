@@ -206,6 +206,14 @@ bool AisDatabaseManager::connectFromSettings()
     return connect(dbSettings.host, port, dbSettings.dbName, dbSettings.user, dbSettings.password);
 }
 
+void AisDatabaseManager::disconnect()
+{
+    if (db.isOpen()) {
+        db.close();
+        qDebug() << "AisDatabaseManager: Disconnected from database";
+    }
+}
+
 bool AisDatabaseManager::isConnected() const
 {
     return db.isOpen();

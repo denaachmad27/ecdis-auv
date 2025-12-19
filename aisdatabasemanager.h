@@ -34,6 +34,9 @@ public:
     // Connect using settings from config file
     bool connectFromSettings();
 
+    // Disconnect from database
+    void disconnect();
+
     // Check if database is connected
     bool isConnected() const;
 

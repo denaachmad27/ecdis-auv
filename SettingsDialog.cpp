@@ -4,6 +4,7 @@
 #include "mainwindow.h"
 #include "qsqlerror.h"
 #include "routesafetyfeature.h"
+#include "aisdatabasemanager.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -1616,12 +1617,33 @@ void SettingsDialog::onDatabaseConnectionFinished()
         dbStatusLabel->setText("Connected");
         dbStatusLabel->setStyleSheet("QLabel { color: green; font-weight: bold; }");
         isDatabaseConnected = true;
-        qDebug() << "Database connection test: SUCCESS";
+
+        // Update AisDatabaseManager instance with new connection parameters
+        // This ensures that recording and playback functions use the updated database connection
+        bool dbManagerConnected = AisDatabaseManager::instance().connect(
+            dbHostLineEdit->text(),
+            dbPortLineEdit->text().toInt(),
+            dbNameLineEdit->text(),
+            dbUserLineEdit->text(),
+            dbPasswordLineEdit->text()
+        );
+
+        if (dbManagerConnected) {
+            qDebug() << "Database connection test: SUCCESS - AisDatabaseManager updated";
+        } else {
+            qWarning() << "Database connection test: SUCCESS but AisDatabaseManager update FAILED";
+            isDatabaseConnected = false;
+            dbStatusLabel->setText("Disconnected");
+            dbStatusLabel->setStyleSheet("QLabel { color: red; font-weight: bold; }");
+        }
     } else {
         dbStatusLabel->setText("Disconnected");
         dbStatusLabel->setStyleSheet("QLabel { color: red; font-weight: bold; }");
         isDatabaseConnected = false;
-        qWarning() << "Database connection test FAILED";
+
+        // Explicitly disconnect AisDatabaseManager to ensure consistency
+        AisDatabaseManager::instance().disconnect();
+        qWarning() << "Database connection test FAILED - AisDatabaseManager disconnected";
     }
 
     // Emit signal to notify about database connection status change
