@@ -25,6 +25,7 @@ private slots:
     void onUpdateS63All();
     void onUpdateS63PerTile();
     void onSelectionChanged();
+    void onHeaderClicked(int column);
 
     private:
         struct TileRow {
@@ -41,6 +42,16 @@ private slots:
     QPushButton* m_updateS63AllBtn;
     QPushButton* m_updateS63PerTileBtn;
 
+    enum SortColumn {
+        SortByTileId = 0,
+        SortByISDT = 1,
+        SortByLastUpdate = 2,
+        SortByCatalogPath = 3
+    };
+
+    Qt::SortOrder m_sortOrder;
+    int m_sortColumn;
+
     QList<TileRow> scanTiles() const;
         void populate();
         bool selectedTile(TileRow& out) const;
@@ -53,6 +64,10 @@ private slots:
     QString tileCatalogTargetPath(const QString& tileId) const;
     bool copyCatalogForTile(const QString& tileId, const QString& exchangeSetDir) const;
     // No data date parsing needed anymore
+
+    // Sorting helper methods
+    bool compareISDT(const QString& a, const QString& b, Qt::SortOrder order) const;
+    bool compareDateTime(const QString& a, const QString& b, Qt::SortOrder order) const;
 };
 
 #endif // CHARTMANAGERPANEL_H

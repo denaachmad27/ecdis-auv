@@ -52,7 +52,7 @@ static QString fmtTime(const QDateTime& dt) {
 }
 
 ChartManagerPanel::ChartManagerPanel(EcWidget* ecw, const QString& dencPath, QWidget* parent)
-    : QWidget(parent), m_ecw(ecw), m_dencPath(dencPath)
+    : QWidget(parent), m_ecw(ecw), m_dencPath(dencPath), m_sortOrder(Qt::AscendingOrder), m_sortColumn(SortByISDT)
 {
     m_table = new QTableWidget(this);
     m_table->setColumnCount(4);
@@ -61,6 +61,7 @@ ChartManagerPanel::ChartManagerPanel(EcWidget* ecw, const QString& dencPath, QWi
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_table->setSortingEnabled(false);
 
     m_refreshBtn = new QPushButton("Refresh", this);
     m_updateS63PerTileBtn = new QPushButton("Update Selected", this);
@@ -94,6 +95,7 @@ ChartManagerPanel::ChartManagerPanel(EcWidget* ecw, const QString& dencPath, QWi
     connect(m_updateS63PerTileBtn, &QPushButton::clicked, this, &ChartManagerPanel::onUpdateS63PerTile);
     connect(m_table, &QTableWidget::itemDoubleClicked, this, &ChartManagerPanel::onDoubleClick);
     connect(m_table, &QTableWidget::itemSelectionChanged, this, &ChartManagerPanel::onSelectionChanged);
+    connect(m_table->horizontalHeader(), &QHeaderView::sectionClicked, this, &ChartManagerPanel::onHeaderClicked);
     populate();
     updateButtonsEnabled();
 }
@@ -151,7 +153,21 @@ QList<ChartManagerPanel::TileRow> ChartManagerPanel::scanTiles() const
         }
     }
 
-    std::sort(rows.begin(), rows.end(), [](const TileRow& a, const TileRow& b){ return a.id < b.id; });
+    // Sort based on current sort column and order
+    std::sort(rows.begin(), rows.end(), [this](const TileRow& a, const TileRow& b) {
+        switch (m_sortColumn) {
+        case SortByTileId:
+            return m_sortOrder == Qt::AscendingOrder ? a.id < b.id : a.id > b.id;
+        case SortByISDT:
+            return compareISDT(a.isdt, b.isdt, m_sortOrder);
+        case SortByLastUpdate:
+            return compareDateTime(a.lastUpdate, b.lastUpdate, m_sortOrder);
+        case SortByCatalogPath:
+            return m_sortOrder == Qt::AscendingOrder ? a.catalogPath < b.catalogPath : a.catalogPath > b.catalogPath;
+        default:
+            return a.id < b.id;
+        }
+    });
     return rows;
 }
 
@@ -167,6 +183,32 @@ void ChartManagerPanel::populate()
         row++;
     }
     m_table->resizeColumnsToContents();
+
+    // Update header text with sort indicator
+    QStringList headers;
+    switch (m_sortColumn) {
+    case SortByTileId:
+        headers = QStringList() << (QString("Tile ID ") + (m_sortOrder == Qt::AscendingOrder ? "▲" : "▼"))
+                               << "ISDT" << "Last Update" << "Catalog Path";
+        break;
+    case SortByISDT:
+        headers = QStringList() << "Tile ID" << (QString("ISDT ") + (m_sortOrder == Qt::AscendingOrder ? "▲" : "▼"))
+                               << "Last Update" << "Catalog Path";
+        break;
+    case SortByLastUpdate:
+        headers = QStringList() << "Tile ID" << "ISDT"
+                               << (QString("Last Update ") + (m_sortOrder == Qt::AscendingOrder ? "▲" : "▼"))
+                               << "Catalog Path";
+        break;
+    case SortByCatalogPath:
+        headers = QStringList() << "Tile ID" << "ISDT" << "Last Update"
+                               << (QString("Catalog Path ") + (m_sortOrder == Qt::AscendingOrder ? "▲" : "▼"));
+        break;
+    default:
+        headers = QStringList() << "Tile ID" << "ISDT" << "Last Update" << "Catalog Path";
+        break;
+    }
+    m_table->setHorizontalHeaderLabels(headers);
 }
 
 bool ChartManagerPanel::selectedTile(TileRow& out) const
@@ -495,4 +537,40 @@ void ChartManagerPanel::updateButtonsEnabled()
     const bool hasRows = m_table->rowCount() > 0;
     if (m_updateS63PerTileBtn) m_updateS63PerTileBtn->setEnabled(hasSelection);
     if (m_updateS63AllBtn) m_updateS63AllBtn->setEnabled(hasRows);
+}
+
+void ChartManagerPanel::onHeaderClicked(int column)
+{
+    if (column < 0 || column >= 4) return;
+
+    if (m_sortColumn == column) {
+        // Toggle sort order if same column clicked
+        m_sortOrder = (m_sortOrder == Qt::AscendingOrder) ? Qt::DescendingOrder : Qt::AscendingOrder;
+    } else {
+        // New column, set to ascending order
+        m_sortColumn = column;
+        m_sortOrder = Qt::AscendingOrder;
+    }
+
+    populate();
+}
+
+bool ChartManagerPanel::compareISDT(const QString& a, const QString& b, Qt::SortOrder order) const
+{
+    if (a.isEmpty() && b.isEmpty()) return false;
+    if (a.isEmpty()) return order == Qt::AscendingOrder;
+    if (b.isEmpty()) return order == Qt::DescendingOrder;
+
+    // Both dates are in "yyyy-MM-dd" format, so string comparison works
+    return order == Qt::AscendingOrder ? a < b : a > b;
+}
+
+bool ChartManagerPanel::compareDateTime(const QString& a, const QString& b, Qt::SortOrder order) const
+{
+    if (a.isEmpty() && b.isEmpty()) return false;
+    if (a.isEmpty()) return order == Qt::AscendingOrder;
+    if (b.isEmpty()) return order == Qt::DescendingOrder;
+
+    // Format is "yyyy-MM-dd HH:mm", string comparison works for this format too
+    return order == Qt::AscendingOrder ? a < b : a > b;
 }
