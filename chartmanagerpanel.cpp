@@ -1,5 +1,6 @@
 #include "chartmanagerpanel.h"
 #include "ecwidget.h"
+#include "SettingsManager.h"
 
 #include <QHeaderView>
 #include <QFileDialog>
@@ -180,6 +181,16 @@ void ChartManagerPanel::populate()
 
     const QDate currentDate = QDate::currentDate();
 
+    // Get ISDT expiration days from settings (default: 7)
+    int isdtExpirationDays = 7;
+    try {
+        isdtExpirationDays = SettingsManager::instance().data().isdtExpirationDays;
+        if (isdtExpirationDays <= 0) isdtExpirationDays = 7; // Fallback to default if invalid
+    } catch (...) {
+        // If settings are not accessible, use default
+        isdtExpirationDays = 7;
+    }
+
     int row=0; for (const auto& r : rows) {
         // Create table items
         QTableWidgetItem* idItem = new QTableWidgetItem(r.id);
@@ -187,12 +198,12 @@ void ChartManagerPanel::populate()
         QTableWidgetItem* updateItem = new QTableWidgetItem(r.lastUpdate);
         QTableWidgetItem* catalogItem = new QTableWidgetItem(r.catalogPath.isEmpty() ? "-" : r.catalogPath);
 
-        // Check if ISDT is expired (older than 7 days)
+        // Check if ISDT is expired (using configurable expiration days)
         bool isExpired = false;
         if (!r.isdt.isEmpty() && r.isdt != "-") {
             QDate isdtDate = QDate::fromString(r.isdt, "yyyy-MM-dd");
             if (isdtDate.isValid()) {
-                QDate expiryDate = isdtDate.addDays(7);
+                QDate expiryDate = isdtDate.addDays(isdtExpirationDays);
                 isExpired = currentDate > expiryDate;
             }
         }
@@ -260,6 +271,12 @@ bool ChartManagerPanel::selectedTile(TileRow& out) const
     // Column 2 holds Last Update after reordering columns
     out.lastUpdate = m_table->item(row, 2) ? m_table->item(row, 2)->text() : QString();
     return true;
+}
+
+void ChartManagerPanel::refreshChartManager()
+{
+    populate();
+    updateButtonsEnabled();
 }
 
 void ChartManagerPanel::onRefresh()

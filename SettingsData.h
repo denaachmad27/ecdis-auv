@@ -30,6 +30,9 @@ struct SettingsData {
     // CHART
     QString chartMode;
 
+    // CHART MANAGER
+    int isdtExpirationDays;      // ISDT expiration duration in days (default: 7)
+
     // GUARDZONE
     int defaultShipTypeFilter;
     int defaultAlertDirection;

@@ -18,6 +18,9 @@ class ChartManagerPanel : public QWidget
 public:
     explicit ChartManagerPanel(EcWidget* ecw, const QString& dencPath, QWidget* parent = nullptr);
 
+public slots:
+    void refreshChartManager();
+
 private slots:
     void onRefresh();
     void onFocusSelected();

@@ -48,6 +48,9 @@ void SettingsManager::load() {
 
     // DISPLAY
     m_data.chartMode = settings.value("Display/move", "Drag").toString();
+
+    // CHART MANAGER - ISDT Expiration
+    m_data.isdtExpirationDays = settings.value("ChartManager/isdt_expiration_days", 7).toInt();
     
     // GUARDZON
     m_data.defaultShipTypeFilter = settings.value("GuardZone/default_ship_type", 0).toInt();
@@ -143,6 +146,9 @@ void SettingsManager::save(const SettingsData& data) {
 
     // CHART
     settings.setValue("Display/move", data.chartMode);
+
+    // CHART MANAGER - ISDT Expiration
+    settings.setValue("ChartManager/isdt_expiration_days", data.isdtExpirationDays);
 
     // GUARDZONE
     settings.setValue("GuardZone/default_ship_type", data.defaultShipTypeFilter);

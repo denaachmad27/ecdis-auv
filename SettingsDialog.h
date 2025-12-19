@@ -108,6 +108,9 @@ private:
     QComboBox *displayModeCombo;
     QComboBox *themeModeCombo;
 
+    // Chart Manager
+    QSpinBox *isdtExpirationDaysSpin;
+
     // GuardZone
     QButtonGroup *shipTypeButtonGroup;
     QButtonGroup *alertDirectionButtonGroup;

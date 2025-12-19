@@ -2004,10 +2004,15 @@ void MainWindow::openSettingsDialog() {
     if (dlg.exec() == QDialog::Accepted) {
         dlg.saveSettings();
         //setDisplay();
-        
+
         // Apply default guardzone filters to existing guardzones
         if (ecchart && ecchart->getGuardZoneManager()) {
             ecchart->getGuardZoneManager()->applyDefaultFiltersToExistingGuardZones();
+        }
+
+        // Refresh Chart Manager to apply new ISDT expiration settings
+        if (chartManagerPanel) {
+            chartManagerPanel->refreshChartManager();
         }
     }
 }

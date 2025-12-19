@@ -591,17 +591,29 @@ void SettingsDialog::setupUI() {
     themeModeCombo->addItems({"Light", "Dim", "Dark"});
     themeForm->addRow(tr("Default UI Theme:"), themeModeCombo);
 
+    // Chart Manager group
+    QGroupBox *chartManagerGroup = new QGroupBox(tr("Chart Manager"));
+    QFormLayout *chartManagerForm = new QFormLayout(chartManagerGroup);
+
+    isdtExpirationDaysSpin = new QSpinBox;
+    isdtExpirationDaysSpin->setRange(1, 365);
+    isdtExpirationDaysSpin->setValue(7);
+    isdtExpirationDaysSpin->setSuffix(" days");
+    isdtExpirationDaysSpin->setToolTip(tr("Number of days before ISDT (Issue Date) is considered expired"));
+    chartManagerForm->addRow(tr("ISDT Expiration:"), isdtExpirationDaysSpin);
+
     // Merge Navigation Mode from Own Ship with Chart Move Mode
     chartCombo = new QComboBox;
     chartCombo->addItem("Drag", "Drag");
     chartCombo->addItem("Pan", "Pan");
     chartDisplayForm->addRow(tr("Chart Move Mode:"), chartCombo);
 
-    // Display tab section order: Navigation Mode, Data View Format, Theme
+    // Display tab section order: Navigation Mode, Data View Format, Theme, Chart Manager
     displayLayout->addRow(chartDisplayGroup);
     // Add Data View Format group to Display tab
     displayLayout->addRow(dataViewGroup);
     displayLayout->addRow(themeGroup);
+    displayLayout->addRow(chartManagerGroup);
 
     // Align Display tab fields so inputs start at the same x as
     // the "Default Chart Theme:" input by normalizing label widths
@@ -627,6 +639,7 @@ void SettingsDialog::setupUI() {
         applyLabelWidth(themeForm);
         applyLabelWidth(chartDisplayForm);
         applyLabelWidth(dataViewForm);
+        applyLabelWidth(chartManagerForm);
     }
     displayTab->setLayout(displayLayout);
 
@@ -879,6 +892,9 @@ void SettingsDialog::loadSettings() {
         displayModeCombo->setCurrentIndex(0); // fallback default
     }
 
+    // Chart Manager - ISDT Expiration
+    isdtExpirationDaysSpin->setValue(settings.value("ChartManager/isdt_expiration_days", 7).toInt());
+
     QString themeMode = settings.value("Display/theme", "Dark").toString();
     int themeIndex = themeModeCombo->findText(themeMode);
     if (themeIndex >= 0) {
@@ -1096,6 +1112,9 @@ void SettingsDialog::saveSettings() {
     settings.setValue("Display/mode", displayModeCombo->currentText());
     settings.setValue("Display/theme", themeModeCombo->currentText());
 
+    // Chart Manager - ISDT Expiration
+    settings.setValue("ChartManager/isdt_expiration_days", isdtExpirationDaysSpin->value());
+
     // Chart
     settings.setValue("Display/move", chartCombo->currentText());
 
@@ -1191,6 +1210,9 @@ SettingsData SettingsDialog::loadSettingsFromFile(const QString &filePath) {
     // Chart
     data.chartMode = settings.value("Display/move", "Drag").toString();
 
+    // Chart Manager - ISDT Expiration
+    data.isdtExpirationDays = settings.value("ChartManager/isdt_expiration_days", 7).toInt();
+
     // Guardzone
     data.defaultShipTypeFilter = settings.value("GuardZone/default_ship_type", 0).toInt();
     data.defaultAlertDirection = settings.value("GuardZone/default_alert_direction", 0).toInt();
@@ -1242,6 +1264,9 @@ void SettingsDialog::accept() {
     // Display
     data.displayMode = displayModeCombo->currentText();
     data.themeMode = theme(themeModeCombo->currentData().toString());
+
+    // Chart Manager - ISDT Expiration
+    data.isdtExpirationDays = isdtExpirationDaysSpin->value();
 
     // Chart
     data.chartMode = chartCombo->currentText();
