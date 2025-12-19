@@ -112,9 +112,14 @@ public:
     static QString _latestNmea; // Cache untuk NMEA terakhir yang masuk
     static QMutex _nmeaMutex;
 
+    static EcAISTargetInfo* _latestTi;
+    static QMutex _tiMutex;
+
     // Fungsi untuk NMEA cache management
     void cacheLatestNmea(const QString& nmea);
     QString getLatestNmea();
+
+    EcAISTargetInfo* getLatestTi();
 
     static Ais* instance();                       // untuk ambil pointer dari class lain
 
@@ -176,7 +181,7 @@ private:
 
     void deleteOldOwnShipFeature();
     void handleOwnShipUpdate(EcAISTargetInfo *ti);
-    void handleAISTargetUpdate(EcAISTargetInfo *ti, const QString nmeaCopy);
+    void handleAISTargetUpdate(EcAISTargetInfo *ti);
 
     QDateTime lastTrailDrawTime;
 

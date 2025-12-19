@@ -56,6 +56,8 @@ public:
     // Enhanced recording with parsed AIS data (with throttling)
     bool insertParsedAisData(const QString& nmea, const QString& dataSource,
                            quint32 mmsi, const EcAISTargetInfo& targetInfo);
+    bool insertParsedAisDataRev(const QString& nmea, const QString& dataSource,
+                             quint32 mmsi, const EcAISTargetInfo& targetInfo);
     bool insertParsedOwnshipData(const QString& nmea, const QString& dataSource,
                                double lat, double lon, double sog, double cog, double heading);
 
@@ -135,6 +137,8 @@ private:
     // Fast insert functions (no trigger overhead)
     bool insertParsedAisDataFast(const QString& nmea, const QString& dataSource,
                                 quint32 mmsi, const EcAISTargetInfo& targetInfo);
+    bool insertParsedAisDataFastRev(const QString& nmea, const QString& dataSource,
+                                 quint32 mmsi, const EcAISTargetInfo& targetInfo);
     bool insertParsedOwnshipDataFast(const QString& nmea, const QString& dataSource,
                                     double lat, double lon, double sog, double cog, double heading);
 

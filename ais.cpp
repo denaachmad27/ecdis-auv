@@ -14,6 +14,9 @@ bool Ais::_isShuttingDown = false;
 QString Ais::_latestNmea = "";
 QMutex Ais::_nmeaMutex;
 
+EcAISTargetInfo* Ais::_latestTi = nullptr;
+QMutex Ais::_tiMutex;
+
 Ais::Ais( EcWidget *parent, EcView *view, EcDictInfo *dict,
          EcCoordinate ownShipLat, EcCoordinate ownShipLon,
          double oSpd, double oCrs,
@@ -98,6 +101,8 @@ Ais::~Ais(){
     // Bersihkan NMEA cache
     _latestNmea.clear();
     _latestNmeaTime = QDateTime();
+
+    _latestTi = nullptr;
 
     if (_myAis == this){
         _myAis = nullptr;
@@ -397,7 +402,7 @@ void Ais::AISTargetUpdateCallback( EcAISTargetInfo *ti )
 
     // 2. Handle AIS targets (bukan ownship)
     else if (ti->ownShip == False) {
-        _myAis->handleAISTargetUpdate(ti, "");
+        _myAis->handleAISTargetUpdate(ti);
 
         // KURANGI emit signal - hanya emit sekali per detik atau sesuai kebutuhan
         // static QDateTime lastEmit = QDateTime::currentDateTime();
@@ -480,16 +485,14 @@ void Ais::AISTargetUpdateCallbackThread(EcAISTargetInfo *ti)
         // ===== Database update via queued connection (non-blocking) =====
         EcAISTargetInfo* tiCopyPtr = new EcAISTargetInfo(tiCopy); // allocate on heap
 
-        QString nmeaCopy;
-        {
-            QMutexLocker locker(&_nmeaMutex);
-            nmeaCopy = _latestNmea;             // FAST: microseconds operation
-        }
+        // QMetaObject::invokeMethod(_myAis, [tiCopyPtr]() {
+        //     _myAis->handleAISTargetUpdate(tiCopyPtr);
+        //     delete tiCopyPtr; // clean up after processing
+        // }, Qt::QueuedConnection);
 
-        QMetaObject::invokeMethod(_myAis, [tiCopyPtr, nmeaCopy]() {
-            _myAis->handleAISTargetUpdate(tiCopyPtr, nmeaCopy);
-            delete tiCopyPtr; // clean up after processing
-        }, Qt::QueuedConnection);
+        // MUTEX TI
+        QMutexLocker locker(&_tiMutex);
+        _latestTi = ti;
 
         // Gunakan MMSI dari trackTarget di EcWidget untuk memastikan konsistensi
         QString trackedMMSI = _wParent->getTrackMMSI();
@@ -520,9 +523,6 @@ void Ais::AISTargetUpdateCallbackThread(EcAISTargetInfo *ti)
 // Fungsi khusus untuk handle ownship update
 void Ais::handleOwnShipUpdate(EcAISTargetInfo *ti)
 {
-    // DEBUG COMMENT TEMP
-    //qDebug() << "Processing OWNSHIP update - MMSI:" << ti->mmsi;
-
     if (ti->ownShip != True) return;
 
     if (abs(ti->latitude) < 90 * 60 * 10000 &&
@@ -591,7 +591,7 @@ void Ais::handleOwnShipUpdate(EcAISTargetInfo *ti)
 }
 
 // Fungsi khusus untuk handle AIS targets (bukan ownship)
-void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti, const QString nmeaCopy)
+void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
 {
     if (ti->ownShip == True) return; // Skip jika ini ownship
 
@@ -698,60 +698,9 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti, const QString nmeaCopy)
 
                 data.rawInfo = *ti;
                 _myAis->postTargetUpdate(data);
-
-                if (AisDatabaseManager::instance().isConnected()){
-                    try {
-                        // Performance measurement - only for error/delay detection
-                        QElapsedTimer timer;
-                        timer.start();
-
-                        // Gunakan NMEA asli dari cache, bukan reconstructed
-                        //QString originalNmea = getLatestNmea();
-                        QString originalNmea = nmeaCopy;
-
-                        // Fallback: jika tidak ada di cache, gunakan NMEA dari parsed data
-                        if (originalNmea.isEmpty()) {
-                            return;
-                        }
-
-                        // This function automatically handles both:
-                        // 1. nmea_records table (dynamic data with timestamp)
-                        // 2. target_references cache (static data) via async processing
-                        bool success = AisDatabaseManager::instance().insertParsedAisData(
-                            originalNmea,
-                            "aistarget",
-                            ti->mmsi,
-                            *ti
-                        );
-
-                        qint64 elapsed = timer.elapsed();
-                        if (!success) {
-                            qWarning() << "DATABASE INSERT FAILED for MMSI:" << ti->mmsi;
-                        } else if (elapsed > 10) {
-                            // Only log if database operation is slow (more than 10ms)
-                            qWarning() << "SLOW DATABASE INSERT: MMSI:" << ti->mmsi << "took" << elapsed << "ms";
-                        }
-                        // Normal successful inserts are silent for clean logging
-                    } catch (const std::exception& e) {
-                        qWarning() << "Error recording AIS data:" << e.what();
-                    }
-                }
-
-                // Ais::instance()->_aisTargetInfoMap[ti->mmsi] = *ti;
-                // Ais::instance()->_aisTargetMap[ti->mmsi] = data;
             }
-
-            // EMIT KE CPA/TCPA PANEL
-
-            // Legacy database insert (commented out - using unified table instead)
-            // AisDatabaseManager::instance().insertOrUpdateAisTarget(*ti); // EcAISTargetInfo
         }
     }
-
-    // Emit signal untuk refresh chart display
-    //EcCoordinate ownLat, ownLon;
-    //_myAis->getTargetPos(ownLat, ownLon);
-    //_myAis->emitSignalTarget(ownLat, ownLon);
 }
 
 void Ais::postTargetUpdate(const AISTargetData& info){
@@ -1277,13 +1226,6 @@ void Ais::readAISVariableString( const QString &data )
     QString line = data + "\r\n";
     extractNMEA(line);
 
-    if (line.contains("!AIVDM")){
-        QMutexLocker locker(&_nmeaMutex);
-        _latestNmea = line;
-    }
-
-    // qDebug() << data;
-
     if( EcAISAddTransponderOutput( _transponder, (unsigned char*)line.toStdString().c_str(), line.count() ) == False )
     {
         addLogFileEntry( QString( "Error in readAISLogfile(): EcAISAddTransponderOutput() failed in input line %1" ).arg( iLineNo ) );
@@ -1539,6 +1481,16 @@ QString Ais::getLatestNmea()
     }
 
     return QString(); // Kosong jika tidak ada
+}
+
+EcAISTargetInfo* Ais::getLatestTi()
+{
+    // Kembalikan latest NMEA tanpa timeout
+    if (_latestTi != nullptr) {
+        return _latestTi;
+    }
+
+    return nullptr; // Kosong jika tidak ada
 }
 
 void Ais::updateRecordingStatusUI(bool shouldRecord, const QString& reason)

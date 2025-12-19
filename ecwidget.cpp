@@ -6513,14 +6513,44 @@ void EcWidget::processAis(QString ais)
                 dvr->recordRawNmea(sentence);
             }
 
-            // Cache NMEA asli untuk digunakan di callback nanti
-            // Kita cache NMEA terakhir dan akan mengasosiasikannya dengan MMSI di callback
-            // if (sentence.startsWith("!AIVDM")) {
-            //     _aisObj->cacheLatestNmea(sentence);
-            // }
-
             // Process AIS sentence - recording will happen in SevenCs callback
             _aisObj->readAISVariableString(sentence);
+        }
+
+        // Record AIS target data to database
+        if (AisDatabaseManager::instance().isConnected()){
+            try {
+                QElapsedTimer timer;
+                timer.start();
+
+                EcAISTargetInfo* originalTi;
+                {
+                    QMutexLocker locker(&_aisObj->_tiMutex);
+                    originalTi = _aisObj->getLatestTi();
+                }
+
+                if (sentence.isEmpty()) {
+                    return;
+                }
+
+                bool success = AisDatabaseManager::instance().insertParsedAisDataRev(
+                    sentence,
+                    "aistarget",
+                    originalTi->mmsi,
+                    *originalTi
+                );
+
+                qint64 elapsed = timer.elapsed();
+                if (!success) {
+                    qWarning() << "DATABASE INSERT FAILED for MMSI:" << originalTi->mmsi;
+                } else if (elapsed > 10) {
+                    // Only log if database operation is slow (more than 10ms)
+                    qWarning() << "SLOW DATABASE INSERT: MMSI:" << originalTi->mmsi << "took" << elapsed << "ms";
+                }
+                // Normal successful inserts are silent for clean logging
+            } catch (const std::exception& e) {
+                qWarning() << "Error recording AIS data:" << e.what();
+            }
         }
     }
 }

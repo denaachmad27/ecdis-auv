@@ -504,6 +504,37 @@ bool AisDatabaseManager::insertParsedAisData(const QString& nmea, const QString&
     return success;
 }
 
+bool AisDatabaseManager::insertParsedAisDataRev(const QString& nmea, const QString& dataSource,
+                                             quint32 mmsi, const EcAISTargetInfo& targetInfo)
+{
+    // Add protection against infinite recursion
+    static QAtomicInt recordingDepth(0);
+    if (recordingDepth.load() > 5) {
+        qWarning() << "Too many database operations in progress, skipping recording";
+        return false;
+    }
+
+    // Increment depth counter atomically for infinite loop protection
+    if (recordingDepth.fetchAndAddOrdered(1) > 5) {
+        qWarning() << "Too many database operations in progress, skipping recording";
+        recordingDepth.fetchAndAddOrdered(-1);
+        return false;
+    }
+
+    if (!db.isOpen()) {
+        qWarning() << "Database not open for parsed AIS recording";
+        recordingDepth.fetchAndAddOrdered(-1);
+        return false;
+    }
+
+    // Use high-performance fast insert for 60+ records/second capability
+    bool success = insertParsedAisDataFastRev(nmea, dataSource, mmsi, targetInfo);
+
+    recordingDepth.fetchAndAddOrdered(-1);
+    return success;
+}
+
+
 bool AisDatabaseManager::insertParsedOwnshipData(const QString& nmea, const QString& dataSource,
                                                 double lat, double lon, double sog, double cog, double heading)
 {
@@ -954,6 +985,72 @@ bool AisDatabaseManager::insertParsedAisDataFast(const QString& nmea, const QStr
 
     return success;
 }
+
+bool AisDatabaseManager::insertParsedAisDataFastRev(const QString& nmea, const QString& dataSource,
+                                                 quint32 mmsi, const EcAISTargetInfo& targetInfo) {
+    // Quick validation
+    if (nmea.isEmpty() || mmsi == 0) {
+        return false;
+    }
+
+    QDateTime currentTime = QDateTime::currentDateTimeUtc();
+
+    // Extract additional data from targetInfo
+    QString callSign = QString::fromUtf8(targetInfo.callSign).replace("'", "''");
+
+    QString messageType = "NULL";
+    QStringList parts = nmea.split(',');
+    if (parts.length() >= 6 && !parts[1].isEmpty()) {
+        messageType = QString("'%1'").arg(parts[1]); // Message type is field 2 (index 1)
+    }
+
+    QString callSignSql = callSign.isEmpty() ? "NULL" : QString("'%1'").arg(callSign);
+
+    QSqlQuery query(db);
+    QString sql = QString(
+                      "INSERT INTO nmea_records ("
+                      "nmea, data_source, mmsi, "
+                      "vessel_name, message_type, "
+                      "call_sign) "
+                      "VALUES ("
+                      "'%1', '%2', %3, "
+                      "'%4', %5, "
+                      "%6)"
+                      ).arg(QString(nmea).replace("'", "''"))
+                      .arg(dataSource)
+                      .arg(mmsi)
+                      .arg(QString::fromUtf8(targetInfo.shipName).replace("'", "''"))
+                      .arg(messageType)
+                      .arg(callSignSql);
+
+    bool success = query.exec(sql);
+
+    if (success) {
+        // Update cache for async processing - use received_at timestamp
+        QMutexLocker locker(&cacheMutex);
+        TargetReferenceRecord& record = targetReferenceCache[mmsi];
+        if (record.mmsi == 0) { // New record
+            record.mmsi = mmsi;
+            record.vesselName = QString::fromUtf8(targetInfo.shipName);
+            record.callSign = QString::fromUtf8(targetInfo.callSign);
+            record.imo = targetInfo.imoNumber;
+            record.shipType = targetInfo.shipType;
+            record.timestamp = currentTime;
+        } else {
+            record.sourceCount++;
+            record.timestamp = currentTime;
+        }
+        // Normal successful inserts are silent for clean logging
+    } else {
+        qWarning() << "Fast AIS insert failed for MMSI:" << mmsi;
+        qWarning() << "SQL Error:" << query.lastError().text();
+        // Only show partial SQL query to avoid log spam
+        qWarning() << "SQL Query (first 100 chars):" << sql.left(100) << "...";
+    }
+
+    return success;
+}
+
 
 bool AisDatabaseManager::insertParsedOwnshipDataFast(const QString& nmea, const QString& dataSource,
                                                     double lat, double lon, double sog, double cog, double heading) {
