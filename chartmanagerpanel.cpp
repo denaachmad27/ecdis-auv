@@ -17,6 +17,8 @@
 #include <QtConcurrent/QtConcurrent>
 #include <QFutureWatcher>
 #include <QProgressDialog>
+#include <QBrush>
+#include <QColor>
 
 namespace {
 struct UpdateAllResult {
@@ -175,11 +177,49 @@ void ChartManagerPanel::populate()
 {
     const auto rows = scanTiles();
     m_table->setRowCount(rows.size());
+
+    const QDate currentDate = QDate::currentDate();
+
     int row=0; for (const auto& r : rows) {
-        m_table->setItem(row, 0, new QTableWidgetItem(r.id));
-        m_table->setItem(row, 1, new QTableWidgetItem(r.isdt.isEmpty() ? "-" : r.isdt));
-        m_table->setItem(row, 2, new QTableWidgetItem(r.lastUpdate));
-        m_table->setItem(row, 3, new QTableWidgetItem(r.catalogPath.isEmpty() ? "-" : r.catalogPath));
+        // Create table items
+        QTableWidgetItem* idItem = new QTableWidgetItem(r.id);
+        QTableWidgetItem* isdtItem = new QTableWidgetItem(r.isdt.isEmpty() ? "-" : r.isdt);
+        QTableWidgetItem* updateItem = new QTableWidgetItem(r.lastUpdate);
+        QTableWidgetItem* catalogItem = new QTableWidgetItem(r.catalogPath.isEmpty() ? "-" : r.catalogPath);
+
+        // Check if ISDT is expired (older than 7 days)
+        bool isExpired = false;
+        if (!r.isdt.isEmpty() && r.isdt != "-") {
+            QDate isdtDate = QDate::fromString(r.isdt, "yyyy-MM-dd");
+            if (isdtDate.isValid()) {
+                QDate expiryDate = isdtDate.addDays(7);
+                isExpired = currentDate > expiryDate;
+            }
+        }
+
+        // Apply styling for expired rows
+        if (isExpired) {
+            // Light red background for expired rows
+            QColor redColor(255, 220, 220); // Very light red
+            QBrush expiredBackground(redColor);
+            idItem->setBackground(expiredBackground);
+            isdtItem->setBackground(expiredBackground);
+            updateItem->setBackground(expiredBackground);
+            catalogItem->setBackground(expiredBackground);
+
+            // Set text color to black for better contrast
+            QBrush blackText(Qt::black);
+            idItem->setForeground(blackText);
+            isdtItem->setForeground(blackText);
+            updateItem->setForeground(blackText);
+            catalogItem->setForeground(blackText);
+        }
+
+        // Add items to table
+        m_table->setItem(row, 0, idItem);
+        m_table->setItem(row, 1, isdtItem);
+        m_table->setItem(row, 2, updateItem);
+        m_table->setItem(row, 3, catalogItem);
         row++;
     }
     m_table->resizeColumnsToContents();
@@ -558,8 +598,8 @@ void ChartManagerPanel::onHeaderClicked(int column)
 bool ChartManagerPanel::compareISDT(const QString& a, const QString& b, Qt::SortOrder order) const
 {
     if (a.isEmpty() && b.isEmpty()) return false;
-    if (a.isEmpty()) return order == Qt::AscendingOrder;
-    if (b.isEmpty()) return order == Qt::DescendingOrder;
+    if (a.isEmpty() || a == "-") return order == Qt::AscendingOrder;
+    if (b.isEmpty() || b == "-") return order == Qt::DescendingOrder;
 
     // Both dates are in "yyyy-MM-dd" format, so string comparison works
     return order == Qt::AscendingOrder ? a < b : a > b;
