@@ -125,6 +125,31 @@ void SettingsDialog::setupUI() {
 
     databaseLayout->addLayout(dbStatusLayout);
 
+    // Align Connection tab fields so inputs start at the same x as
+    // the "MOOSDB IP:" input by normalizing label widths
+    {
+        int refWidth = 0;
+        if (QLayoutItem* moosdbLabelItem = moosdbForm->itemAt(0, QFormLayout::LabelRole)) {
+            if (QWidget* moosdbLabel = moosdbLabelItem->widget()) refWidth = moosdbLabel->sizeHint().width();
+        }
+        if (refWidth == 0) {
+            QFontMetrics fm(moosdbGroup->font());
+            refWidth = fm.horizontalAdvance(tr("MOOSDB IP:"));
+        }
+
+        auto applyLabelWidth = [&](QFormLayout* form) {
+            if (!form) return;
+            for (int i = 0; i < form->rowCount(); ++i) {
+                if (QLayoutItem* li = form->itemAt(i, QFormLayout::LabelRole)) {
+                    if (QWidget* w = li->widget()) w->setMinimumWidth(refWidth);
+                }
+            }
+        };
+
+        applyLabelWidth(moosdbForm);
+        applyLabelWidth(databaseForm);
+    }
+
     connectionLayout->addWidget(moosdbGroup);
     connectionLayout->addWidget(databaseGroup);
     connectionLayout->addStretch();
