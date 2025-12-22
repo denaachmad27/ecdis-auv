@@ -485,10 +485,11 @@ void Ais::AISTargetUpdateCallbackThread(EcAISTargetInfo *ti)
         // ===== Database update via queued connection (non-blocking) =====
         EcAISTargetInfo* tiCopyPtr = new EcAISTargetInfo(tiCopy); // allocate on heap
 
-        // QMetaObject::invokeMethod(_myAis, [tiCopyPtr]() {
-        //     _myAis->handleAISTargetUpdate(tiCopyPtr);
-        //     delete tiCopyPtr; // clean up after processing
-        // }, Qt::QueuedConnection);
+        // FLAG UNTUK PARALEL RECORDING & PLAYBACK
+        QMetaObject::invokeMethod(_myAis, [tiCopyPtr]() {
+            _myAis->handleAISTargetUpdate(tiCopyPtr);
+            delete tiCopyPtr; // clean up after processing
+        }, Qt::QueuedConnection);
 
         // MUTEX TI
         QMutexLocker locker(&_tiMutex);
