@@ -459,6 +459,18 @@ void Ais::AISTargetUpdateCallbackThread(EcAISTargetInfo *ti)
 
     EcAISTargetInfo tiCopy = *ti; // copy biar aman
 
+    // =================== DISPLAY: MODE AWARE ===================
+    // During playback: skip MOOSDB data display, allow database data display
+    // During normal mode: allow MOOSDB data display, skip database data display
+    QString currentSource = Ais::_currentDataSource;
+    bool isPlaybackMode = Ais::_isPlaybackMode;
+
+    // Skip display if data source doesn't match current mode
+    if ((isPlaybackMode && currentSource == "MOOSDB") ||
+        (!isPlaybackMode && currentSource == "DATABASE")) {
+        return; // Skip display for data that doesn't match current mode
+    }
+
     // =================== OWN SHIP ===================
     if (tiCopy.ownShip == True)
     {
@@ -1509,5 +1521,34 @@ void Ais::updateRecordingStatusUI(bool shouldRecord, const QString& reason)
         //         Q_ARG(QString, reason));
         // }
     }
+}
+
+// Static member variable definitions
+bool Ais::_isPlaybackMode = false;
+QString Ais::_currentDataSource = "MOOSDB";
+
+// Mode control functions implementation
+void Ais::setParallelMode(bool isPlayback, const QString& dataSource) {
+    _isPlaybackMode = isPlayback;
+    _currentDataSource = dataSource;
+
+    qDebug() << "Parallel mode changed:"
+             << "Playback:" << isPlayback
+             << "Source:" << dataSource;
+}
+
+// Getter functions implementation
+bool Ais::isPlaybackMode() {
+    return _isPlaybackMode;
+}
+
+QString Ais::getCurrentDataSource() {
+    return _currentDataSource;
+}
+
+bool Ais::shouldDisplayCurrentData() {
+    // Legacy function - kept for compatibility
+    // Returns true if MOOSDB data should be displayed (during normal mode)
+    return !_isPlaybackMode;
 }
 

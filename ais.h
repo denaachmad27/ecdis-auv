@@ -121,6 +121,16 @@ public:
 
     EcAISTargetInfo* getLatestTi();
 
+    // Paralel recording & playback mode control functions
+    static void setParallelMode(bool isPlayback, const QString& dataSource = "MOOSDB");
+    static bool isPlaybackMode();
+    static QString getCurrentDataSource();
+    static bool shouldDisplayCurrentData();
+
+    // Static members untuk parallel mode
+    static bool _isPlaybackMode;
+    static QString _currentDataSource;
+
     static Ais* instance();                       // untuk ambil pointer dari class lain
 
     EcAISTransponder    *_transponder;

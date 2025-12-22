@@ -6178,16 +6178,19 @@ void EcWidget::stopAllThread()
 void EcWidget::processData(double lat, double lon, double cog, double sog, double hdg, double spd, double dep, double yaw, double z){
     QString nmea = AIVDOEncoder::encodeAIVDO1(lat, lon, cog, sog, hdg, 0, 1);
 
-    _aisObj->readAISVariableThread({nmea});
+    // Skip AIS processing during playback mode (MOOSDB data should not be displayed)
+    if (!Ais::isPlaybackMode()) {
+        _aisObj->readAISVariableThread({nmea});
+    }
 
-    // Legacy recording (keep for compatibility)
+    // Legacy recording (keep for compatibility) - record even during playback
     IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
     if (dvr && dvr->isRecording() && !nmea.isEmpty()) {
         dvr->recordRawNmea(nmea);
     }
 
-    // Record ownship data to database
-    if (AisDatabaseManager::instance().isConnected()){
+    // Record ownship data to database (record even during playback for parallel operation)
+    if (AisDatabaseManager::instance().isConnected()) {
         try {
             static QDateTime lastOwnshipRecord;
             QDateTime currentTime = QDateTime::currentDateTime();
@@ -6507,17 +6510,20 @@ void EcWidget::processAis(QString ais)
 
     for (const QString &sentence : sentences) {
         if (sentence.startsWith("!AIVDM")) {
-            // Legacy recording (keep for compatibility)
+            // Legacy recording (keep for compatibility) - record even during playback
             IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
             if (dvr && dvr->isRecording() && !sentence.isEmpty()) {
                 dvr->recordRawNmea(sentence);
             }
 
-            // Process AIS sentence - recording will happen in SevenCs callback
-            _aisObj->readAISVariableString(sentence);
+            // Skip AIS processing during playback mode (MOOSDB data should not be displayed)
+            if (!Ais::isPlaybackMode()) {
+                // Process AIS sentence - recording will happen in SevenCs callback
+                _aisObj->readAISVariableString(sentence);
+            }
         }
 
-        // Record AIS target data to database
+        // Record AIS target data to database (record even during playback for parallel operation)
         if (AisDatabaseManager::instance().isConnected()){
             try {
                 QElapsedTimer timer;

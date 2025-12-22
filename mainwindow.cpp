@@ -38,6 +38,7 @@
 #include "chartmanagerpanel.h"
 
 #include "aisdecoder.h"
+#include "ais.h"
 #include "aivdoencoder.h"
 #include "appconfig.h"
 #include "compasswidget.h"
@@ -1276,6 +1277,10 @@ void MainWindow::fetchNmea(){
 void MainWindow::onPlayClickedDB()
 {
     ecchart->setCustomOwnship(true);
+
+    // Set playback mode saat play (global, persistent)
+    Ais::setParallelMode(true, "DATABASE");
+
     if (m_isPlayingDB) {
         // Logika PAUSE: Hentikan timer, ubah tombol menjadi 'Play'
         m_playbackTimerDB->stop();
@@ -1373,6 +1378,9 @@ void MainWindow::onPlayClickedDB()
 void MainWindow::onStopClickedDB()
 {
     qDebug() << "onStopClickedDB() called";
+
+    // Reset ke normal mode saat stop
+    Ais::setParallelMode(false, "MOOSDB");
 
     ecchart->setCustomOwnship(false);
     ecchart->clearAisTargets();
@@ -1489,6 +1497,9 @@ void MainWindow::processNextNmeaDataDB()
         QDateTime timestamp = data.at(0).toDateTime();
         QString nmea = data.at(1).toString();
         QString dataSource = data.at(2).toString(); // New field from unified table
+
+        // === PLAYBACK: SET MODE DATABASE DATA ===
+        // Mode sudah diset global di onPlayClickedDB
 
         if(ecchart && !ecchart->isDragging){
             ecchart->readAISVariableString(nmea);
