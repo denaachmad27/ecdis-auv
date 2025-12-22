@@ -114,6 +114,9 @@ public slots:
     void onMoosConnectionStatusChanged(bool connected);
     bool isMoosConnected() const { return conn; }
 
+    // Tracking status update
+    void updateTrackingStatus(const QString& mode);
+
 protected slots:
     void onReload();
 
@@ -251,6 +254,9 @@ protected:
     EcDictInfo  *dict;
     EcWidget    *ecchart;
     QLineEdit   *rngEdit, *posEdit, *proEdit, *sclEdit, *oriEdit, *clockEdit;
+
+    // Top-right tracking status widget
+    QLabel *trackingStatusWidget;
 
     QString      dencPath;
     QString      impPath;

@@ -291,6 +291,51 @@ void MainWindow::onMoosConnectionStatusChanged(bool connected)
     // If connected, the recording status will be updated by the AIS processing logic
 }
 
+// Tracking status update
+void MainWindow::updateTrackingStatus(const QString& mode)
+{
+    // Determine if we're tracking an AIS target or ownship
+    QString displayStatus;
+    if (ecchart && ecchart->isTrackTarget()) {
+        // We're tracking an AIS target, include MMSI
+        QString trackedMMSI = ecchart->getTrackMMSI();
+        displayStatus = QString("Tracking AIS Target MMSI: %1").arg(trackedMMSI);
+    } else {
+        // Default to ownship tracking
+        displayStatus = "Tracking Ownship";
+    }
+
+    QString displayText = QString("[%1] - %2").arg(mode, displayStatus);
+    trackingStatusWidget->setText(displayText);
+
+    // Adaptive colors that work for all themes (dark, light, dim)
+    // Use theme-aware colors that provide good contrast in all modes
+    if (mode.toUpper() == "PLAYBACK") {
+        // Use a theme-aware red that works in all themes
+        trackingStatusWidget->setStyleSheet(
+            "color: #E74C3C; font-weight: bold; background: transparent; "
+            "border: none; padding: 0 15px;"
+        );
+    } else {
+        // Use a theme-aware green that works in all themes
+        trackingStatusWidget->setStyleSheet(
+            "color: #27AE60; font-weight: bold; background: transparent; "
+            "border: none; padding: 0 15px;"
+        );
+    }
+
+    // Make text responsive with proper sizing to prevent truncation
+    QFontMetrics fm(trackingStatusWidget->font());
+    int textWidth = fm.horizontalAdvance(displayText) + 30; // Add padding
+    trackingStatusWidget->setMinimumWidth(textWidth);
+    trackingStatusWidget->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Preferred);
+    trackingStatusWidget->setWordWrap(false); // Prevent text wrapping
+    trackingStatusWidget->adjustSize(); // Adjust widget size to fit text
+
+    // Update menu bar to ensure proper layout
+    menuBar()->adjustSize();
+}
+
 // STATUS BAR
 void MainWindow::createStatusBar(){
     // Status bar
@@ -1281,6 +1326,9 @@ void MainWindow::onPlayClickedDB()
     // Set playback mode saat play (global, persistent)
     Ais::setParallelMode(true, "DATABASE");
 
+    // Update tracking status display
+    updateTrackingStatus("Playback");
+
     if (m_isPlayingDB) {
         // Logika PAUSE: Hentikan timer, ubah tombol menjadi 'Play'
         m_playbackTimerDB->stop();
@@ -1357,7 +1405,18 @@ void MainWindow::onPlayClickedDB()
                 qDebug() << "Failed to retrieve NMEA data from database - continuing without data";
                 // No error popup - playback will simply not have data to process
             }
-        } else {
+
+            // 3. Unfollow AIS target jika sedang follow
+            if (ecchart->isTrackTarget()) {
+                QString trackedMMSI = ecchart->getTrackMMSI();
+                if (!trackedMMSI.isEmpty()) {
+                    ecchart->TrackTarget("");
+                    ecchart->TrackShip(false);
+                    qDebug() << "Unfollowed AIS target:" << trackedMMSI;
+                }
+            }
+        }
+        else {
             // Jika antrean tidak kosong, artinya ini adalah RESUME
             m_isPlayingDB = true;
             m_playButtonDB->setText("Pause");
@@ -1381,6 +1440,9 @@ void MainWindow::onStopClickedDB()
 
     // Reset ke normal mode saat stop
     Ais::setParallelMode(false, "MOOSDB");
+
+    // Update tracking status display
+    updateTrackingStatus("Live");
 
     ecchart->setCustomOwnship(false);
     ecchart->clearAisTargets();
@@ -2354,6 +2416,17 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL), m_i
   // STATUS BAR
   createStatusBar();
 
+  // Create tracking status widget as corner widget in menu bar
+  trackingStatusWidget = new QLabel("[Live] - Tracking Ownship");
+  trackingStatusWidget->setStyleSheet("color: lightgreen; font-weight: bold; background: transparent; border: none; padding: 0 10px;");
+  trackingStatusWidget->setFont(QFont("Segoe UI", 10, QFont::Bold));
+
+  // Add as corner widget to the right side of menu bar
+  menuBar()->setCornerWidget(trackingStatusWidget, Qt::TopRightCorner);
+
+  // Initialize tracking status to Live mode
+  updateTrackingStatus("Live");
+
   // MENU BAR
   AppConfig::setTheme(SettingsManager::instance().data().themeMode);
   createMenuBar();
@@ -3064,10 +3137,6 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
 
         aisText->setHtml("");
 
-        // if (!ownShipTemp->toPlainText().trimmed().isEmpty()){
-        //     ownShipText->setHtml(ownShipTemp->toHtml());
-        // }
-
         return;
     }
     else {
@@ -3304,6 +3373,7 @@ void MainWindow::closeEvent(QCloseEvent *e)
 
   e->accept();
 }
+
 
 /*---------------------------------------------------------------------------*/
 

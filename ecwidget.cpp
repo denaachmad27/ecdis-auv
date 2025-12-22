@@ -2369,70 +2369,16 @@ void EcWidget::paintEvent (QPaintEvent *e)
 
   }
   // =======================================
-
-  if (!getTrackMMSI().isEmpty() && trackShip)
-  {
-      QFont font("Segoe UI", 10, QFont::Bold);
-      painter.setFont(font);
-
-      QString mmsiText = QString("Tracking AIS Target MMSI: %1").arg(getTrackMMSI());
-      QRect chartRect = contentsRect();
-      int margin = 10;
-
-      // Hitung posisi kanan atas
-      QFontMetrics fm(font);
-      int textWidth = fm.horizontalAdvance(mmsiText);
-      int textHeight = fm.height();
-
-      QPoint topRight(chartRect.right() - margin, chartRect.top() + margin + textHeight);
-      QPoint textPos(topRight.x() - textWidth, topRight.y());
-
-      // Buat path dari teks
-      QPainterPath path;
-      path.addText(textPos, font, mmsiText);
-
-      // Outline putih
-      painter.setRenderHint(QPainter::Antialiasing);
-      painter.setPen(QPen(Qt::white, 1.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-      painter.setBrush(Qt::NoBrush);
-      painter.drawPath(path);
-
-      // Isi merah
-      painter.setPen(Qt::NoPen);
-      painter.setBrush(Qt::red);
-      painter.drawPath(path);
+  // UPDATE TRACK STATUS
+  QString mode;
+  if (Ais::isPlaybackMode()){
+      mode = "Playback";
   }
-  else if (navShip.lat != 0 && navShip.lat != 0) {
-      QFont font("Segoe UI", 10, QFont::Bold);
-      painter.setFont(font);
-
-      QString mmsiText = "Tracking Ownship";
-      QRect chartRect = contentsRect();
-      int margin = 10;
-
-      // Hitung posisi kanan atas
-      QFontMetrics fm(font);
-      int textWidth = fm.horizontalAdvance(mmsiText);
-      int textHeight = fm.height();
-
-      QPoint topRight(chartRect.right() - margin, chartRect.top() + margin + textHeight);
-      QPoint textPos(topRight.x() - textWidth, topRight.y());
-
-      // Buat path dari teks
-      QPainterPath path;
-      path.addText(textPos, font, mmsiText);
-
-      // Outline putih
-      painter.setRenderHint(QPainter::Antialiasing);
-      painter.setPen(QPen(Qt::white, 1.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-      painter.setBrush(Qt::NoBrush);
-      painter.drawPath(path);
-
-      // Isi merah
-      painter.setPen(Qt::NoPen);
-      painter.setBrush(Qt::red);
-      painter.drawPath(path);
+  else {
+      mode = "Live";
   }
+
+  mainWindow->updateTrackingStatus(mode);
 
   // Draw tidal stations on top of everything
   if (m_showTidalStations && m_tideManager) {
