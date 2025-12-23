@@ -26,7 +26,8 @@
         <file>images/route.png</file>
         <file>images/route-white.png</file>
         <file>icon/ship_white.png</file>
-        <file>icon/ship.svg</file>
+        <file>icon/ship-dark.svg</file>
+        <file>icon/ship-light.svg</file>
         <file>icon/create_route.svg</file>
         <file>icon/create_wp.svg</file>
         <file>icon/delete_route.svg</file>

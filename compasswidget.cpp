@@ -1,4 +1,5 @@
 #include "CompassWidget.h"
+#include "appconfig.h"
 #include "qdebug.h"
 #include "qpainterpath.h"
 #include <QtMath>
@@ -57,13 +58,15 @@ void CompassWidget::paintEvent(QPaintEvent *) {
     };
 
     // lingkaran kompas
-    p.setPen(QPen(Qt::white, 1));
+    QColor compassColor = (AppConfig::theme() == AppConfig::AppTheme::Light) ? Qt::black : Qt::white;
+    p.setPen(QPen(compassColor, 1));
     p.drawEllipse(center, r, r);
 
     // huruf arah
     QFont letterFont = p.font();
     letterFont.setPointSize(11);
     p.setFont(letterFont);
+    p.setPen(compassColor);  // gunakan warna yang sama dengan lingkaran
     const int offsetLabel = 12;
     auto drawLabel = [&](double deg, const QString& txt) {
         QPoint pt = polar(deg, offsetLabel);
@@ -76,7 +79,20 @@ void CompassWidget::paintEvent(QPaintEvent *) {
     drawLabel(270-rotate, "W");
 
     // === Gambar kapal pakai SVG ===
-    static QSvgRenderer shipSvg(QString(":/icon/ship.svg"));
+    static QSvgRenderer shipSvgDark(QString(":/icon/ship-dark.svg"));
+    static QSvgRenderer shipSvgLight(QString(":/icon/ship-light.svg"));
+
+    QSvgRenderer* shipSvg = nullptr;
+    switch (AppConfig::theme()) {
+        case AppConfig::AppTheme::Light:
+            shipSvg = &shipSvgLight;
+            break;
+        case AppConfig::AppTheme::Dim:
+        case AppConfig::AppTheme::Dark:
+        default:
+            shipSvg = &shipSvgDark;
+            break;
+    }
 
     QSize shipSize(r * 1.4, r * 1.4);  // ukuran relatif
     QRect targetRect(-shipSize.width()/2, -shipSize.height()/2,
@@ -85,6 +101,6 @@ void CompassWidget::paintEvent(QPaintEvent *) {
     p.save();
     p.translate(center);
     p.rotate(heading);
-    shipSvg.render(&p, targetRect);
+    shipSvg->render(&p, targetRect);
     p.restore();
 }
