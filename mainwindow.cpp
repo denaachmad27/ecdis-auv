@@ -791,7 +791,7 @@ void MainWindow::createMenuBar(){
 
     QAction *showTideRectanglesAction = viewMenu->addAction("Tide");
     showTideRectanglesAction->setCheckable(true);
-    showTideRectanglesAction->setChecked(true);
+    showTideRectanglesAction->setChecked(false);
     connect(showTideRectanglesAction, &QAction::toggled, this, [this](bool checked) {
         if (ecchart) {
             ecchart->setShowTideRectangles(checked);
