@@ -497,6 +497,10 @@ private:
     double m_playbackSpeed = 1.0; // 1.0 = normal speed, 2.0 = 2x speed
     QDateTime m_lastPlaybackTimestamp; // Track last processed timestamp
 
+    // Store last displayed data for 2-line display
+    QString m_lastOwnshipLine;
+    QString m_lastAistargetLine;
+
     };
 
 #endif // _mainwindow_h_

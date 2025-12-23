@@ -1377,22 +1377,20 @@ void MainWindow::onPlayClickedDB()
 
             m_displayEditDB->clear();
 
+            // Reset display lines
+            m_lastOwnshipLine.clear();
+            m_lastAistargetLine.clear();
+
             // ENCODE TARGETS FOR START DATE (first play or after stop)
             QDateTime startOnly = m_dateEditDB->date().startOfDay();
             QList<AisDatabaseManager::TargetData> targets = AisDatabaseManager::instance().getTargetsForDateRev(startOnly);
             QStringList encodedNmeaList = AisDatabaseManager::instance().encodeTargetsToNMEA(targets);
 
-            // Feed encoded NMEA to ecchart and display
-            m_displayEditDB->append(QString("=== ENCODED TARGETS FOR %1 ===\n").arg(startOnly.toString("yyyy-MM-dd")));
-            m_displayEditDB->append(QString("Generated %1 NMEA strings:\n").arg(encodedNmeaList.size()));
-
+            // Feed encoded NMEA ke ecchart (tanpa display)
             for (const QString& nmea : encodedNmeaList) {
                 // Feed NMEA to ecchart
                 ecchart->readAISVariableString(nmea);
-                // Display NMEA in text area
-                m_displayEditDB->append(nmea);
             }
-            m_displayEditDB->append("\n");
 
             QSqlQuery query;
             // Gunakan unified table untuk get kedua ownship dan AIS target data
@@ -1608,12 +1606,65 @@ void MainWindow::processNextNmeaDataDB()
             }
         }
 
-        m_displayEditDB->append(QString("<span style='color:%1;'>[%2] %3 %4: %5</span>")
+        // Truncate NMEA dengan ellipsis jika melebihi lebar textbox
+        QString displayNmea = nmea;
+
+        // Hitung berapa karakter yang muat berdasarkan lebar widget
+        QFontMetrics fontMetrics(m_displayEditDB->font());
+
+        // Ambil lebar actual content area (dikurangi viewport margins)
+        QScrollBar *vScrollBar = m_displayEditDB->verticalScrollBar();
+        int scrollBarWidth = vScrollBar ? vScrollBar->width() : 0;
+        int frameWidth = m_displayEditDB->frameWidth() * 2;
+        int availableWidth = m_displayEditDB->width() - scrollBarWidth - frameWidth - 70;  // Extra margin yang lebih besar
+
+        // Hitung lebar teks dengan ellipsis
+        QString ellipsis = "...";
+        int ellipsisWidth = fontMetrics.horizontalAdvance(ellipsis);
+
+        // Cari panjang teks yang muat
+        int fittingChars = displayNmea.length();
+        for (int i = displayNmea.length(); i > 0; --i) {
+            int textWidth = fontMetrics.horizontalAdvance(displayNmea.left(i));
+            if (textWidth + ellipsisWidth <= availableWidth) {
+                fittingChars = i;
+                break;
+            }
+        }
+
+        // Jika teks terlalu panjang, truncate dengan ellipsis
+        if (fittingChars < displayNmea.length()) {
+            displayNmea = displayNmea.left(fittingChars) + ellipsis;
+        }
+
+        // Format line baru dengan HTML color
+        QString newLine = QString("<span style='color:%1;'>[%2] %3 %4: %5</span>")
             .arg(color)
             .arg(timestamp.toString("hh:mm:ss.zzz"))
             .arg(sourceIcon)
             .arg(dataSource.toUpper())
-            .arg(nmea.left(60) + "..."));
+            .arg(displayNmea);
+
+        // Update the stored line
+        if (dataSource == "ownship") {
+            m_lastOwnshipLine = newLine;
+        } else if (dataSource == "aistarget") {
+            m_lastAistargetLine = newLine;
+        }
+
+        // Rebuild entire display
+        m_displayEditDB->clear();
+        if (!m_lastOwnshipLine.isEmpty()) {
+            m_displayEditDB->append(m_lastOwnshipLine);
+        }
+        if (!m_lastAistargetLine.isEmpty()) {
+            m_displayEditDB->append(m_lastAistargetLine);
+        }
+
+        // Scroll ke bottom untuk melihat update terbaru
+        QTextCursor scrollCursor(m_displayEditDB->document());
+        scrollCursor.movePosition(QTextCursor::End);
+        m_displayEditDB->setTextCursor(scrollCursor);
 
         // Calculate next interval based on timestamp difference
         if (!m_nmeaDataQueueDB.isEmpty()) {
@@ -1638,6 +1689,9 @@ void MainWindow::processNextNmeaDataDB()
             m_isPlayingDB = false;
             m_playButtonDB->setText("Play");
             m_playButtonDB->setIcon(QIcon(":/icon/play.svg"));
+
+            // Tampilkan pesan "Playback Selesai" dengan warna oranye tua
+            m_displayEditDB->append(QString("<br><div style='color:#FF8C00; font-weight:bold;'>Playback Selesai</div>"));
             qDebug() << "Playback selesai.";
         }
     } else {
@@ -1646,6 +1700,9 @@ void MainWindow::processNextNmeaDataDB()
         m_isPlayingDB = false;
         m_playButtonDB->setText("Play");
         m_playButtonDB->setIcon(QIcon(":/icon/play.svg"));
+
+        // Tampilkan pesan "Playback Selesai" dengan warna oranye tua
+        m_displayEditDB->append(QString("<br><div style='color:#FF8C00; font-weight:bold;'>Playback Selesai</div>"));
         qDebug() << "Playback selesai.";
     }
 }
