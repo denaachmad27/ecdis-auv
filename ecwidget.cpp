@@ -2368,6 +2368,7 @@ void EcWidget::paintEvent (QPaintEvent *e)
   if (testGuardZoneEnabled) {
 
   }
+
   // =======================================
   // UPDATE TRACK STATUS
   QString mode;
@@ -2375,7 +2376,17 @@ void EcWidget::paintEvent (QPaintEvent *e)
       mode = "Playback";
   }
   else {
-      mode = "Live";
+      if (subscriber) {
+          if(subscriber->hasData()){
+              mode = "Live";
+          }
+          else {
+              mode = "Disconnected";
+          }
+      }
+      else {
+          mode = "";
+      }
   }
 
   mainWindow->updateTrackingStatus(mode);
@@ -7128,26 +7139,7 @@ bool EcWidget::deleteAISCell()
 /////////////////////////////////////////////
 void EcWidget::slotRefreshChartDisplay( double lat, double lon, double head )
 {
-  //qDebug() << "slotRefreshChartDisplay called with lat:" << lat << "lon:" << lon;
-
-    /*
-  if(showAIS)
-  {
-    // check if center position is out of defined frame, requires drawing of chart as well
-    double maxDist = GetRange(currentScale) / 60 / 2;
-
-    if((lat != 0 && lon != 0) && (fabs(currentLat - lat) > maxDist || fabs(currentLon - lon) > maxDist))
-    {
-        if (trackTarget.isEmpty() && trackShip){
-            SetCenter( lat, lon );
-        }
-        draw(true);
-    }
-    slotUpdateAISTargets( true );
-  }
-  */
-
-     bool hasRoutes = !waypointList.isEmpty();
+    bool hasRoutes = !waypointList.isEmpty();
     if (showAIS)
     {
         if ((lat != 0 && lon != 0) && trackTarget.isEmpty())
@@ -7394,12 +7386,6 @@ void EcWidget::slotRefreshCenter( double lat, double lon )
 {
   if (showAIS)
   {
-    // check if center position is out of defined frame, requires drawing of chart as well
-    // double maxDist = GetRange(currentScale) / 60 / 2;
-
-    // if((lat != 0 && lon != 0) && (fabs(currentLat - lat) > maxDist || fabs(currentLon - lon) > maxDist))
-    // {
-
     if(lat != 0 && lon != 0)
     {
         if (trackShip && !trackTarget.isEmpty()){

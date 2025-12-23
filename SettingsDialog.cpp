@@ -409,7 +409,9 @@ void SettingsDialog::setupUI() {
     enableCollisionRiskCheckBox->setToolTip(tr("Display collision risk warnings during navigation"));
     collisionHeaderLayout->addWidget(collisionHeaderLabel);
     collisionHeaderLayout->addStretch();
-    collisionHeaderLayout->addWidget(enableCollisionRiskCheckBox);
+    if (AppConfig::isDevelopment()){
+        collisionHeaderLayout->addWidget(enableCollisionRiskCheckBox);
+    }
 
     // Collision Risk content
     QGroupBox *collisionRiskGroup = new QGroupBox("");
@@ -433,7 +435,9 @@ void SettingsDialog::setupUI() {
     criticalRiskDistanceSpin->setSingleStep(0.01);
     criticalRiskDistanceSpin->setValue(0.1);
     criticalRiskDistanceSpin->setSuffix(" NM");
-    collisionRiskForm->addRow(tr("Critical Distance:"), criticalRiskDistanceSpin);
+    if (AppConfig::isDevelopment()){
+        collisionRiskForm->addRow(tr("Critical Distance:"), criticalRiskDistanceSpin);
+    }
 
     highRiskDistanceSpin = new QDoubleSpinBox;
     highRiskDistanceSpin->setRange(0.1, 2.0);
@@ -441,7 +445,9 @@ void SettingsDialog::setupUI() {
     highRiskDistanceSpin->setSingleStep(0.05);
     highRiskDistanceSpin->setValue(0.25);
     highRiskDistanceSpin->setSuffix(" NM");
-    collisionRiskForm->addRow(tr("High Risk Distance:"), highRiskDistanceSpin);
+    if (AppConfig::isDevelopment()){
+        collisionRiskForm->addRow(tr("High Risk Distance:"), highRiskDistanceSpin);
+    }
 
     criticalTimeSpin = new QDoubleSpinBox;
     criticalTimeSpin->setRange(0.5, 10.0);
@@ -449,7 +455,9 @@ void SettingsDialog::setupUI() {
     criticalTimeSpin->setSingleStep(0.5);
     criticalTimeSpin->setValue(2.0);
     criticalTimeSpin->setSuffix(" min");
-    collisionRiskForm->addRow(tr("Critical Time:"), criticalTimeSpin);
+    if (AppConfig::isDevelopment()){
+        collisionRiskForm->addRow(tr("Critical Time:"), criticalTimeSpin);
+    }
 
     // CPA/TCPA Threshold fields (merged into Collision Risk Indication)
     cpaSpin = new QDoubleSpinBox;
@@ -481,12 +489,14 @@ void SettingsDialog::setupUI() {
     // Place remaining checkboxes at the bottom (three rows)
     QWidget *riskBottomWidget = new QWidget;
     QVBoxLayout *riskBottomLayout = new QVBoxLayout(riskBottomWidget);
-    riskBottomLayout->setContentsMargins(0, 0, 0, 0);
-    riskBottomLayout->setSpacing(4);
-    riskBottomLayout->addWidget(showRiskSymbolsCheckBox);
-    riskBottomLayout->addWidget(enableAudioAlertsCheckBox);
-    riskBottomLayout->addWidget(enablePulsingWarningsCheckBox);
-    collisionRiskForm->addRow("", riskBottomWidget);
+    if (AppConfig::isDevelopment()){
+        riskBottomLayout->setContentsMargins(0, 0, 0, 0);
+        riskBottomLayout->setSpacing(4);
+        riskBottomLayout->addWidget(showRiskSymbolsCheckBox);
+        riskBottomLayout->addWidget(enableAudioAlertsCheckBox);
+        riskBottomLayout->addWidget(enablePulsingWarningsCheckBox);
+        collisionRiskForm->addRow("", riskBottomWidget);
+    }
 
     // Place groups into appropriate tabs
     // CollisionRisk moved to AIS Target tab below

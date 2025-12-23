@@ -310,13 +310,20 @@ void MainWindow::updateTrackingStatus(const QString& mode)
 
     // Adaptive colors that work for all themes (dark, light, dim)
     // Use theme-aware colors that provide good contrast in all modes
-    if (mode.toUpper() == "PLAYBACK") {
+    if (mode.toUpper() == "DISCONNECTED") {
         // Use a theme-aware red that works in all themes
         trackingStatusWidget->setStyleSheet(
             "color: #E74C3C; font-weight: bold; background: transparent; "
             "border: none; padding: 0 15px;"
         );
-    } else {
+    }
+    else if (mode.toUpper() == "PLAYBACK") {
+        trackingStatusWidget->setStyleSheet(
+            "color: #FFA239; font-weight: bold; background: transparent; "
+            "border: none; padding: 0 15px;"
+        );
+    }
+    else {
         // Use a theme-aware green that works in all themes
         trackingStatusWidget->setStyleSheet(
             "color: #27AE60; font-weight: bold; background: transparent; "
@@ -420,10 +427,14 @@ void MainWindow::createStatusBar(){
                     moosStatusText->setText(" MOOSDB: Connected");
                     moosStatusText->setStyleSheet("color: green; font-weight: bold;");
                 }
+
+                updateTrackingStatus("Live");
             } else {
                 moosLedCircle->setStyleSheet("background-color: red; border-radius: 6px;");
                 moosStatusText->setText(" MOOSDB: Disconnected");
                 moosStatusText->setStyleSheet("color: red; font-weight: bold;");
+
+                updateTrackingStatus("Disconnected");
             }
         });
 
@@ -1473,7 +1484,6 @@ void MainWindow::onStopClickedDB()
         QString trackedMMSI = ecchart->getTrackMMSI();
         if (!trackedMMSI.isEmpty()) {
             ecchart->TrackTarget("");
-            ecchart->TrackShip(false);
             qDebug() << "Unfollowed AIS target:" << trackedMMSI;
         }
     }
@@ -2425,7 +2435,7 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL), m_i
   menuBar()->setCornerWidget(trackingStatusWidget, Qt::TopRightCorner);
 
   // Initialize tracking status to Live mode
-  updateTrackingStatus("Live");
+  updateTrackingStatus("Disconnected");
 
   // MENU BAR
   AppConfig::setTheme(SettingsManager::instance().data().themeMode);
