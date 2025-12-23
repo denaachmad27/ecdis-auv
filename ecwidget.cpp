@@ -2371,25 +2371,25 @@ void EcWidget::paintEvent (QPaintEvent *e)
 
   // =======================================
   // UPDATE TRACK STATUS
-  QString mode;
-  if (Ais::isPlaybackMode()){
-      mode = "Playback";
-  }
-  else {
-      if (subscriber) {
-          if(subscriber->hasData()){
-              mode = "Live";
-          }
-          else {
-              mode = "Disconnected";
-          }
-      }
-      else {
-          mode = "";
-      }
-  }
+  // QString mode;
+  // if (Ais::isPlaybackMode()){
+  //     mode = "Playback";
+  // }
+  // else {
+  //     if (subscriber) {
+  //         if(subscriber->hasData()){
+  //             mode = "Live";
+  //         }
+  //         else {
+  //             mode = "Disconnected";
+  //         }
+  //     }
+  //     else {
+  //         mode = "";
+  //     }
+  // }
 
-  mainWindow->updateTrackingStatus(mode);
+  // mainWindow->updateTrackingStatus(mode, false);
 
   // Draw tidal stations on top of everything
   if (m_showTidalStations && m_tideManager) {
@@ -4120,7 +4120,28 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
                         setAISTrack(track);
                         TrackTarget(mmsi);
                     }
-                } else if (chosen == targetAct) {
+
+                    QString mode;
+                    if (Ais::isPlaybackMode()){
+                        mode = "Playback";
+                    }
+                    else {
+                        if (subscriber) {
+                            if(subscriber->hasData()){
+                                mode = "Live";
+                            }
+                            else {
+                                mode = "Disconnected";
+                            }
+                        }
+                        else {
+                            mode = "";
+                        }
+                    }
+
+                    mainWindow->updateTrackingStatus(mode, true);
+                }
+                else if (chosen == targetAct) {
                     if (currentlyAITargeting) {
                         clearAITarget();
                     } else {
@@ -7388,6 +7409,7 @@ void EcWidget::slotRefreshCenter( double lat, double lon )
   {
     if(lat != 0 && lon != 0)
     {
+        qCritical() << trackShip << "  " << trackTarget;
         if (trackShip && !trackTarget.isEmpty()){
             SetCenter( lat, lon );
         }

@@ -292,7 +292,7 @@ void MainWindow::onMoosConnectionStatusChanged(bool connected)
 }
 
 // Tracking status update
-void MainWindow::updateTrackingStatus(const QString& mode)
+void MainWindow::updateTrackingStatus(const QString& mode, const bool& change)
 {
     // Determine if we're tracking an AIS target or ownship
     QString displayStatus;
@@ -331,16 +331,18 @@ void MainWindow::updateTrackingStatus(const QString& mode)
         );
     }
 
-    // Make text responsive with proper sizing to prevent truncation
-    QFontMetrics fm(trackingStatusWidget->font());
-    int textWidth = fm.horizontalAdvance(displayText) + 30; // Add padding
-    trackingStatusWidget->setMinimumWidth(textWidth);
-    trackingStatusWidget->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Preferred);
-    trackingStatusWidget->setWordWrap(false); // Prevent text wrapping
-    trackingStatusWidget->adjustSize(); // Adjust widget size to fit text
+    if (change){
+        // Make text responsive with proper sizing to prevent truncation
+        QFontMetrics fm(trackingStatusWidget->font());
+        int textWidth = fm.horizontalAdvance(displayText) + 30; // Add padding
+        trackingStatusWidget->setMinimumWidth(textWidth);
+        trackingStatusWidget->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Preferred);
+        trackingStatusWidget->setWordWrap(false); // Prevent text wrapping
+        trackingStatusWidget->adjustSize(); // Adjust widget size to fit text
 
-    // Update menu bar to ensure proper layout
-    menuBar()->adjustSize();
+        // Update menu bar to ensure proper layout
+        menuBar()->adjustSize();
+    }
 }
 
 // STATUS BAR
@@ -428,13 +430,13 @@ void MainWindow::createStatusBar(){
                     moosStatusText->setStyleSheet("color: green; font-weight: bold;");
                 }
 
-                updateTrackingStatus("Live");
+                updateTrackingStatus("Live", true);
             } else {
                 moosLedCircle->setStyleSheet("background-color: red; border-radius: 6px;");
                 moosStatusText->setText(" MOOSDB: Disconnected");
                 moosStatusText->setStyleSheet("color: red; font-weight: bold;");
 
-                updateTrackingStatus("Disconnected");
+                updateTrackingStatus("Disconnected", true);
             }
         });
 
@@ -1344,9 +1346,6 @@ void MainWindow::onPlayClickedDB()
     // Set playback mode saat play (global, persistent)
     Ais::setParallelMode(true, "DATABASE");
 
-    // Update tracking status display
-    updateTrackingStatus("Playback");
-
     if (m_isPlayingDB) {
         // Logika PAUSE: Hentikan timer, ubah tombol menjadi 'Play'
         m_playbackTimerDB->stop();
@@ -1428,7 +1427,6 @@ void MainWindow::onPlayClickedDB()
                 QString trackedMMSI = ecchart->getTrackMMSI();
                 if (!trackedMMSI.isEmpty()) {
                     ecchart->TrackTarget("");
-                    ecchart->TrackShip(false);
                     qDebug() << "Unfollowed AIS target:" << trackedMMSI;
                 }
             }
@@ -1449,6 +1447,9 @@ void MainWindow::onPlayClickedDB()
             qDebug() << "Playback dilanjutkan dengan speed:" << m_playbackSpeed << "x";
         }
     }
+
+    // Update tracking status display
+    updateTrackingStatus("Playback", true);
 }
 
 void MainWindow::onStopClickedDB()
@@ -1457,9 +1458,6 @@ void MainWindow::onStopClickedDB()
 
     // Reset ke normal mode saat stop
     Ais::setParallelMode(false, "MOOSDB");
-
-    // Update tracking status display
-    updateTrackingStatus("Live");
 
     ecchart->setCustomOwnship(false);
     ecchart->clearAisTargets();
@@ -1498,6 +1496,9 @@ void MainWindow::onStopClickedDB()
     m_playbackSpeed = 1.0;
     m_speedLabelDB->setText("1x");
     m_lastPlaybackTimestamp = QDateTime(); // Clear timestamp
+
+    // Update tracking status display
+    updateTrackingStatus("Live", true);
 
     qDebug() << "Basic stop completed successfully";
 }
@@ -2491,21 +2492,21 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL), m_i
   // STATUS BAR
   createStatusBar();
 
+  // MENU BAR (dibuat dulu sebelum setCornerWidget)
+  AppConfig::setTheme(SettingsManager::instance().data().themeMode);
+  createMenuBar();
+  setDisplay();
+
   // Create tracking status widget as corner widget in menu bar
   trackingStatusWidget = new QLabel("[Live] - Tracking Ownship");
   trackingStatusWidget->setStyleSheet("color: lightgreen; font-weight: bold; background: transparent; border: none; padding: 0 10px;");
   trackingStatusWidget->setFont(QFont("Segoe UI", 10, QFont::Bold));
 
-  // Add as corner widget to the right side of menu bar
+  // Add as corner widget to the right side of menu bar (setelah createMenuBar agar tidak ter-overwrite)
   menuBar()->setCornerWidget(trackingStatusWidget, Qt::TopRightCorner);
 
   // Initialize tracking status to Live mode
-  updateTrackingStatus("Disconnected");
-
-  // MENU BAR
-  AppConfig::setTheme(SettingsManager::instance().data().themeMode);
-  createMenuBar();
-  setDisplay();
+  updateTrackingStatus("Disconnected", true);
 
   // DOCK
   //createDockWindows();

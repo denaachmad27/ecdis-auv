@@ -1765,7 +1765,7 @@ public:
   // Visualization components
   CurrentVisualisation* m_currentVisualisation = nullptr;
     bool m_showCurrentArrows = true;
-  bool m_showTideRectangles = true;
+  bool m_showTideRectangles = false;
 
 }; // EcWidget
 

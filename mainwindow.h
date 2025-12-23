@@ -43,7 +43,7 @@ class QFile;
 // data server id
 
 #define DSID "0"
-#define APP_TITLE "ECDIS AUV v1.5"
+#define APP_TITLE "ECDIS AUV v1.6"
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
@@ -115,7 +115,7 @@ public slots:
     bool isMoosConnected() const { return conn; }
 
     // Tracking status update
-    void updateTrackingStatus(const QString& mode);
+    void updateTrackingStatus(const QString& mode, const bool& change);
 
 protected slots:
     void onReload();
