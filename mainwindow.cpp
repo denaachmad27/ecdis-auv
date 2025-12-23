@@ -1250,7 +1250,12 @@ void MainWindow::fetchNmea(){
     m_displayEditDB = new QTextEdit();
     m_displayEditDB->setReadOnly(true);
 
-    // === 2. Buat layout horizontal untuk kontrol kecepatan dan tombol pemutaran ===
+    // === 2. Buat form layout untuk waktu (label sejajar, input memanjang) ===
+    QFormLayout *timeFormLayout = new QFormLayout();
+    timeFormLayout->addRow(startTimeLabel, m_startTimeEditDB);
+    timeFormLayout->addRow(endTimeLabel, m_endTimeEditDB);
+
+    // === 3. Buat layout horizontal untuk kontrol kecepatan dan tombol pemutaran ===
     QHBoxLayout *controlLayout = new QHBoxLayout();
     controlLayout->addWidget(m_playButtonDB);
     controlLayout->addWidget(m_stopButtonDB);
@@ -1260,13 +1265,10 @@ void MainWindow::fetchNmea(){
     controlLayout->addWidget(m_increaseSpeedButtonDB);
     controlLayout->addStretch();
 
-    // === 3. Tambahkan layout dan widget ke layout utama ===
+    // === 4. Tambahkan layout dan widget ke layout utama ===
     mainLayout->addWidget(dateLabel);
     mainLayout->addWidget(m_dateEditDB);
-    mainLayout->addWidget(startTimeLabel);
-    mainLayout->addWidget(m_startTimeEditDB);
-    mainLayout->addWidget(endTimeLabel);
-    mainLayout->addWidget(m_endTimeEditDB);
+    mainLayout->addLayout(timeFormLayout);
     mainLayout->addLayout(controlLayout);
     mainLayout->addWidget(m_displayEditDB);
 
