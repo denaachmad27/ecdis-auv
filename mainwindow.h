@@ -483,8 +483,9 @@ private:
     QPushButton *m_stopButtonDB;
     QPushButton *m_increaseSpeedButtonDB;
     QPushButton *m_decreaseSpeedButtonDB;
-    QDateTimeEdit *m_startEditDB;
-    QDateTimeEdit *m_endEditDB;
+    QDateEdit *m_dateEditDB;
+    QTimeEdit *m_startTimeEditDB;
+    QTimeEdit *m_endTimeEditDB;
     QTextEdit *m_displayEditDB;
     QLabel *m_speedLabelDB;
 

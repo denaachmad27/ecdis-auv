@@ -1222,15 +1222,18 @@ void MainWindow::fetchNmea(){
     QWidget *dockWidgetContents = new QWidget();
     QVBoxLayout *mainLayout = new QVBoxLayout(dockWidgetContents);
 
-    QLabel *startLabel = new QLabel("Waktu Mulai:");
-    m_startEditDB = new QDateTimeEdit(QDateTime::currentDateTime().addSecs(-3600));
-    m_startEditDB->setCalendarPopup(true);
-    m_startEditDB->setDisplayFormat("yyyy-MM-dd hh:mm:ss");
+    QLabel *dateLabel = new QLabel("Tanggal:");
+    m_dateEditDB = new QDateEdit(QDate::currentDate());
+    m_dateEditDB->setCalendarPopup(true);
+    m_dateEditDB->setDisplayFormat("dd-MM-yyyy");
 
-    QLabel *endLabel = new QLabel("Waktu Selesai:");
-    m_endEditDB = new QDateTimeEdit(QDateTime::currentDateTime());
-    m_endEditDB->setCalendarPopup(true);
-    m_endEditDB->setDisplayFormat("yyyy-MM-dd hh:mm:ss");
+    QLabel *startTimeLabel = new QLabel("Waktu Mulai:");
+    m_startTimeEditDB = new QTimeEdit(QTime(0, 0));  // Default 00:00
+    m_startTimeEditDB->setDisplayFormat("hh:mm");
+
+    QLabel *endTimeLabel = new QLabel("Waktu Selesai:");
+    m_endTimeEditDB = new QTimeEdit(QTime(23, 59));  // Default 23:59
+    m_endTimeEditDB->setDisplayFormat("hh:mm");
 
     m_playButtonDB = new QPushButton("Play");
     m_stopButtonDB = new QPushButton("Stop");
@@ -1258,10 +1261,12 @@ void MainWindow::fetchNmea(){
     controlLayout->addStretch();
 
     // === 3. Tambahkan layout dan widget ke layout utama ===
-    mainLayout->addWidget(startLabel);
-    mainLayout->addWidget(m_startEditDB);
-    mainLayout->addWidget(endLabel);
-    mainLayout->addWidget(m_endEditDB);
+    mainLayout->addWidget(dateLabel);
+    mainLayout->addWidget(m_dateEditDB);
+    mainLayout->addWidget(startTimeLabel);
+    mainLayout->addWidget(m_startTimeEditDB);
+    mainLayout->addWidget(endTimeLabel);
+    mainLayout->addWidget(m_endTimeEditDB);
     mainLayout->addLayout(controlLayout);
     mainLayout->addWidget(m_displayEditDB);
 
@@ -1359,8 +1364,9 @@ void MainWindow::onPlayClickedDB()
         // Logika PLAY: Ada dua kemungkinan (melanjutkan atau mulai baru)
         // Jika antrean kosong, artinya ini adalah pemutaran pertama atau setelah di-stop total
         if (m_nmeaDataQueueDB.isEmpty()) {
-            QDateTime startTime = m_startEditDB->dateTime();
-            QDateTime endTime = m_endEditDB->dateTime();
+            // Gabungkan tanggal dan waktu
+            QDateTime startTime = QDateTime(m_dateEditDB->date(), m_startTimeEditDB->time());
+            QDateTime endTime = QDateTime(m_dateEditDB->date(), m_endTimeEditDB->time());
 
             if (startTime >= endTime) {
                 QMessageBox::warning(this, "Rentang Waktu Tidak Valid", "Waktu mulai harus sebelum waktu selesai.");
@@ -1370,7 +1376,7 @@ void MainWindow::onPlayClickedDB()
             m_displayEditDB->clear();
 
             // ENCODE TARGETS FOR START DATE (first play or after stop)
-            QDateTime startOnly = QDateTime(startTime.date());
+            QDateTime startOnly = m_dateEditDB->date().startOfDay();
             QList<AisDatabaseManager::TargetData> targets = AisDatabaseManager::instance().getTargetsForDateRev(startOnly);
             QStringList encodedNmeaList = AisDatabaseManager::instance().encodeTargetsToNMEA(targets);
 
