@@ -3,7 +3,6 @@
 #include "appconfig.h"
 #include "mainwindow.h"
 #include "qsqlerror.h"
-#include "routesafetyfeature.h"
 #include "aisdatabasemanager.h"
 
 #ifdef _WIN32
@@ -1505,19 +1504,16 @@ void SettingsDialog::updatePrimaryGpsCombo()
 
 void SettingsDialog::onNavDepthChanged(double value)
 {
-    RouteSafetyFeature::setNavDepth(value);
     qDebug() << "[SETTINGS] NAV_DEPTH changed to:" << value;
 }
 
 void SettingsDialog::onNavDraftChanged(double value)
 {
-    RouteSafetyFeature::setNavDraft(value);
     qDebug() << "[SETTINGS] NAV_DRAFT changed to:" << value;
 }
 
 void SettingsDialog::onNavDraftBelowKeelChanged(double value)
 {
-    RouteSafetyFeature::setNavDraftBelowKeel(value);
     qDebug() << "[SETTINGS] NAV_DRAFT_BELOW_KEEL changed to:" << value;
 }
 

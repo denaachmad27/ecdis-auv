@@ -21,7 +21,6 @@
 #include "waypointdialog.h"
 #include "routeformdialog.h"
 #include "routequickformdialog.h"
-#include "routesafetyfeature.h"
 #include "routedeviationdetector.h"
 #include "alertsystem.h"
 #include "ais.h"
@@ -159,7 +158,6 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   newGuardZoneShape = GUARD_ZONE_CIRCLE;
 
   guardZoneManager = new GuardZoneManager(this);
-  routeSafetyFeature = new RouteSafetyFeature(this, this);
   routeDeviationDetector = nullptr; // Will be initialized later
   connect(guardZoneManager, &GuardZoneManager::editModeChanged,
           [this](bool isEditing) {
@@ -4938,15 +4936,6 @@ void EcWidget::mouseMoveEvent(QMouseEvent *e)
         }
     }
 
-    if (routeSafetyFeature && routeSafeMode) {
-        QString hazardTip = routeSafetyFeature->tooltipForPosition(lastMousePos);
-        if (!hazardTip.isEmpty()) {
-            QToolTip::showText(e->globalPos(), hazardTip, this);
-        } else if (!QToolTip::text().isEmpty()) {
-            QToolTip::hideText();
-        }
-    }
-
     // Panggil handling yang sudah ada
     if (guardZoneManager && guardZoneManager->handleMouseMove(e)) {
         return;
@@ -8016,10 +8005,6 @@ void EcWidget::setRouteCustomColor(int routeId, const QColor& color)
 
 bool EcWidget::deleteRoute(int routeId)
 {
-    if (routeSafetyFeature && routeSafeMode) {
-        routeSafetyFeature->invalidateRoute(routeId);
-    }
-
     qDebug() << "[DEBUG] Deleting route" << routeId;
 
     if (routeId <= 0) {
@@ -10580,12 +10565,8 @@ void EcWidget::drawRouteLinesOverlay(QPainter& painter)
     try {
         painter.setRenderHint(QPainter::Antialiasing, true);
 
-        if (routeSafetyFeature && routeSafeMode) {
-            routeSafetyFeature->startFrame();
-        }
-
-    // Group waypoints by route ID first
-    QMap<int, QList<int>> routeWaypoints; // routeId -> list of waypoint indices
+        // Group waypoints by route ID first
+        QMap<int, QList<int>> routeWaypoints; // routeId -> list of waypoint indices
 
     for (int i = 0; i < waypointList.size(); ++i) {
         int routeId = waypointList[i].routeId;
@@ -10638,22 +10619,6 @@ void EcWidget::drawRouteLinesOverlay(QPainter& painter)
             }
         }
 
-        if (routeSafetyFeature && !activeIndices.isEmpty() && routeSafeMode) {
-            QVector<RouteSafetyFeature::RouteWaypointSample> safetyPoints;
-            safetyPoints.reserve(activeIndices.size());
-            for (int idx : activeIndices) {
-                RouteSafetyFeature::RouteWaypointSample sample;
-                const Waypoint& wp = waypointList[idx];
-                sample.lat = wp.lat;
-                sample.lon = wp.lon;
-                sample.active = wp.active;
-                safetyPoints.append(sample);
-            }
-            if (safetyPoints.size() >= 2) {
-                routeSafetyFeature->prepareForRoute(routeId, safetyPoints);
-            }
-        }
-
         // Draw lines between consecutive ACTIVE waypoints only
         for (int i = 0; i < activeIndices.size() - 1; ++i) {
             int idx1 = activeIndices[i];
@@ -10696,12 +10661,7 @@ void EcWidget::drawRouteLinesOverlay(QPainter& painter)
         }
     }
 
-        if (routeSafetyFeature && routeSafeMode) {
-            routeSafetyFeature->render(painter);
-            routeSafetyFeature->finishFrame();
-        }
-
-        drawAutoRoutePreview(painter);
+    drawAutoRoutePreview(painter);
 
         // Draw auto route start selection shadow
         drawAutoRouteStartShadow(painter);
@@ -10726,10 +10686,6 @@ void EcWidget::drawRouteLines()
             return;
         }
         painter.setRenderHint(QPainter::Antialiasing, true);
-
-        if (routeSafetyFeature && routeSafeMode) {
-            routeSafetyFeature->startFrame();
-        }
 
         // ROUTE FIX: Validate coordinate transformation is ready
         if (!view || !initialized) {
@@ -10796,22 +10752,6 @@ void EcWidget::drawRouteLines()
             }
         }
 
-        if (routeSafetyFeature && !activeIndices.isEmpty()) {
-            QVector<RouteSafetyFeature::RouteWaypointSample> safetyPoints;
-            safetyPoints.reserve(activeIndices.size());
-            for (int idx : activeIndices) {
-                RouteSafetyFeature::RouteWaypointSample sample;
-                const Waypoint& wp = waypointList[idx];
-                sample.lat = wp.lat;
-                sample.lon = wp.lon;
-                sample.active = wp.active;
-                safetyPoints.append(sample);
-            }
-            if (safetyPoints.size() >= 2) {
-                routeSafetyFeature->prepareForRoute(routeId, safetyPoints);
-            }
-        }
-
         // Draw lines between consecutive ACTIVE waypoints only
         for (int i = 0; i < activeIndices.size() - 1; ++i) {
             int idx1 = activeIndices[i];
@@ -10855,11 +10795,6 @@ void EcWidget::drawRouteLines()
                          //<< "in route" << routeId << "style:" << (originalStyle == Qt::SolidLine ? "solid" : "dash");
             }
         }
-    }
-
-    if (routeSafetyFeature && routeSafeMode) {
-        routeSafetyFeature->render(painter);
-        routeSafetyFeature->finishFrame();
     }
 
     painter.end();
@@ -11044,10 +10979,6 @@ void EcWidget::clearWaypoints()
     waypointList.clear();
     routeList.clear();
     routeVisibility.clear();
-
-    if (routeSafetyFeature && routeSafeMode) {
-        routeSafetyFeature->invalidateAll();
-    }
 
     // Reset route variables
     currentRouteId = 1;
@@ -19963,10 +19894,6 @@ void EcWidget::applyShipDimensions()
 
     // Memaksa penggambaran ulang untuk menerapkan perubahan visual
     forceRedraw();
-
-    if (routeSafetyFeature) {
-        routeSafetyFeature->invalidateAll();
-    }
 }
 
 // ========== ROUTE DEVIATION DETECTOR IMPLEMENTATION ==========
@@ -20381,7 +20308,7 @@ void EcWidget::drawCustomPOIIcon(QPainter &painter, const PoiEntry &poi, const Q
         painter.setPen(QPen(Qt::black, 1));
         QFont font = painter.font();
         font.setBold(true);
-        font.setPixelSize(6); // Smaller font for safety
+        font.setPixelSize(12); // Smaller font for safety
         painter.setFont(font);
 
         QRect textRect(screenPoint.x() - baseSize, screenPoint.y() + baseSize + 3,

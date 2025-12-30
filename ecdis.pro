@@ -75,7 +75,6 @@ HEADERS += mainwindow.h ecwidget.h pickwindow.h ais.h \
     poi.h \
     poipanel.h \
     routequickformdialog.h \
-    routesafetyfeature.h \
     routedeviationdetector.h \
     eblvrm.h \
     aitargettracker.h \
@@ -123,7 +122,6 @@ SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     aoipanel.cpp \
     poipanel.cpp \
     routequickformdialog.cpp \
-    routesafetyfeature.cpp \
     routedeviationdetector.cpp \
     eblvrm.cpp \
     aitargettracker.cpp \

@@ -47,7 +47,6 @@ class TideManager;
 #include <QHBoxLayout>
 
 class CPATCPAPanel;
-class RouteSafetyFeature;
 class CurrentVisualisation; // Forward declaration for current visualization
 class VisualisationPanel; // Forward declaration for visualization panel
 
@@ -1325,9 +1324,7 @@ private:
   QList<Route> routeList;
   AutoRoutePreviewState autoRoutePreview;
   AutoRouteStartSelectionState autoRouteStartSelection;
-  RouteSafetyFeature* routeSafetyFeature = nullptr;
   RouteDeviationDetector* routeDeviationDetector = nullptr;
-  bool routeSafeMode = false;  // Enable by default for safety
   QMap<int, bool> routeVisibility; // Track visibility per route
   int selectedRouteId = -1; // Currently selected route for visual feedback
   int moveSelectedIndex = -1; // -1 artinya belum ada waypoint dipilih
