@@ -595,21 +595,18 @@ EcWidget::~EcWidget ()
   maxZoomDragActive = false;
   maxZoomTriedUpDrag = false;
 
-  // Simulasi Guardzone
+  // Timers are automatically cleaned up by Qt because they have EcWidget as parent
+  // Just STOP them, DO NOT delete (prevents double deletion crash)
     if (simulationTimer) {
         simulationTimer->stop();
-        delete simulationTimer;
-        simulationTimer = nullptr;
     }
     simulationActive = false;
 
     if (ownShipTimer) {
         ownShipTimer->stop();
-        delete ownShipTimer;
-        ownShipTimer = nullptr;
     }
 
-    // Cleanup Alert System
+    // Cleanup Alert System (no parent, needs manual delete)
     if (alertSystem) {
         delete alertSystem;
         alertSystem = nullptr;
@@ -617,14 +614,10 @@ EcWidget::~EcWidget ()
 
     if (alertCheckTimer) {
         alertCheckTimer->stop();
-        delete alertCheckTimer;
-        alertCheckTimer = nullptr;
     }
 
     if (waypointAnimationTimer) {
         waypointAnimationTimer->stop();
-        delete waypointAnimationTimer;
-        waypointAnimationTimer = nullptr;
     }
 
     // Stop 1-second periodic timers to avoid callbacks during teardown
@@ -686,16 +679,36 @@ EcWidget::~EcWidget ()
     fclose(errlog);
   }
 
-  // Cleanup AIS tooltip
-  if (aisTooltip) {
-      delete aisTooltip;
-      aisTooltip = nullptr;
-  }
-
+  // Cleanup AIS tooltip and timer (have parent, just stop timer)
   if (aisTooltipTimer) {
       aisTooltipTimer->stop();
-      delete aisTooltipTimer;
-      aisTooltipTimer = nullptr;
+  }
+
+  // Cleanup Route Deviation Detector (no parent, needs manual delete)
+  if (routeDeviationDetector) {
+      delete routeDeviationDetector;
+      routeDeviationDetector = nullptr;
+  }
+
+  // Cleanup AISSubscriber - disconnect signals first
+  if (subscriber) {
+      QObject::disconnect(subscriber, 0, 0, 0);
+      subscriber->deleteLater();
+      subscriber = nullptr;
+  }
+
+  // Cleanup AIS thread
+  if (threadAIS) {
+      if (threadAIS->isRunning()) {
+          threadAIS->quit();
+          if (!threadAIS->wait(2000)) {
+              qWarning() << "[ECWIDGET] AIS thread did not quit gracefully, terminating...";
+              threadAIS->terminate();
+              threadAIS->wait(1000);
+          }
+      }
+      threadAIS->deleteLater();
+      threadAIS = nullptr;
   }
 }
 

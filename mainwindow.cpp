@@ -2598,32 +2598,25 @@ MainWindow::~MainWindow()
     // Clear queues
     m_nmeaDataQueueDB.clear();
 
-    // ========== CLEANUP GUARDZONE PANEL ==========
-    if (guardZonePanel) {
-        delete guardZonePanel;
-        guardZonePanel = nullptr;
-    }
-
-  if (guardZoneDock) {
-      delete guardZoneDock;
-      guardZoneDock = nullptr;
-  }
-  // ============================================
-
-  // ========== CLEANUP ALERT PANEL ==========
-  if (alertPanel) {
-      delete alertPanel;
-      alertPanel = nullptr;
-  }
-
-  if (alertDock) {
-      delete alertDock;
-      alertDock = nullptr;
-  }
-  // ========================================
+    // CRITICAL: Panels and Docks have MainWindow as parent
+    // Qt will automatically delete them. DO NOT delete manually!
+    // Just set pointers to nullptr to prevent double deletion crash
+    guardZonePanel = nullptr;
+    guardZoneDock = nullptr;
+    alertPanel = nullptr;
+    alertDock = nullptr;
 
   if (m_cpaUpdateTimer) {
       m_cpaUpdateTimer->stop();
+  }
+
+  // Stop other timers
+  if (m_playbackTimer) {
+      m_playbackTimer->stop();
+  }
+
+  if (m_drawTimer) {
+      m_drawTimer->stop();
   }
 
   delete m_logStream;

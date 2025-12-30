@@ -68,5 +68,14 @@ int main( int argc, char ** argv )
 
   a.connect( &a, SIGNAL(lastWindowClosed()), &a, SLOT(quit()) );
 
-  return a.exec();
+  int result = a.exec();
+
+  // CRITICAL: Proper cleanup order to prevent crash
+  // 1. Clear Logger's textEdit pointer FIRST before destroying MainWindow
+  Logger::cleanup();
+
+  // 2. Then destroy MainWindow (which contains logText widget)
+  delete mw;
+
+  return result;
 }

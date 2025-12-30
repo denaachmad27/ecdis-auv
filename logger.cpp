@@ -27,6 +27,24 @@ Logger::Logger(QTextEdit *widget, QObject *parent)
     qInstallMessageHandler(Logger::customHandler);
 }
 
+// CRITICAL: Destructor to properly cleanup resources
+Logger::~Logger()
+{
+    cleanup();
+}
+
+// CRITICAL: Cleanup method to prevent access to destroyed widgets
+void Logger::cleanup()
+{
+    // CRITICAL: Clear textEdit pointer FIRST to prevent access in customHandler
+    textEdit = nullptr;
+
+    // Close log file if open
+    if (logFile.isOpen()) {
+        logFile.close();
+    }
+}
+
 void Logger::rotateLogFileIfNeeded()
 {
     QString today = QDate::currentDate().toString("yyyy-MM-dd");
@@ -92,6 +110,8 @@ void Logger::customHandler(QtMsgType type, const QMessageLogContext &, const QSt
         out.flush();
     }
 
-    if (type == QtFatalMsg)
+    if (type == QtFatalMsg) {
+        cleanup();  // CRITICAL: Cleanup before abort
         abort();  // fatal error
+    }
 }

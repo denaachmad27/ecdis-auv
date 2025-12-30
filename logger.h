@@ -10,8 +10,12 @@ class Logger : public QObject
     Q_OBJECT
 public:
     explicit Logger(QTextEdit *widget = nullptr, QObject *parent = nullptr);
+    ~Logger(); // CRITICAL: Add destructor to prevent crash
 
     static void customHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg);
+
+    // CRITICAL: Add cleanup method for safe shutdown
+    static void cleanup();
 
 private:
     static QTextEdit *textEdit;
