@@ -29,7 +29,7 @@ int main( int argc, char ** argv )
 {
   QApplication a( argc, argv );
 
-  a.setWindowIcon(QIcon(":/icon/dummy_icon.png"));
+  //a.setWindowIcon(QIcon(":/icon/dummy_icon.png"));
 
   // PERBAIKAN: Install message filter
   qInstallMessageHandler(messageFilter);
