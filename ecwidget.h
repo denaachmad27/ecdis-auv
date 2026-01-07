@@ -431,6 +431,7 @@ public:
   void toggleAOIVisibility(int id);
   void setAOIVisibility(int id, bool visible);
   void setAOILabelVisibility(int id, bool showLabel);
+  bool updateAOI(const AOI& aoi);
   void drawAOIs(QPainter& painter);
   void startAOICreation(const QString& name, AOIType type);
   void startAOICreationWithColor(const QString& name, AOIColorChoice colorChoice);
@@ -982,6 +983,7 @@ public slots:
   void createSeparateRouteWaypoint(const Waypoint &waypoint);
   void createSingleWaypoint(const Waypoint &waypoint);
   void insertWaypointAt(EcCoordinate lat, EcCoordinate lon);
+  bool insertWaypointAtPosition(int routeId, const Waypoint& newWaypoint, int position);
   double distanceToLineSegment(double px, double py, double x1, double y1, double x2, double y2);
   void updateRouteLabels(int routeId);
   QColor getRouteColor(int routeId);

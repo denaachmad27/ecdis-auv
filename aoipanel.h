@@ -14,6 +14,8 @@
 #include <QTextEdit>
 #include <QDialog>
 #include <QFormLayout>
+#include <QMenu>
+#include <QDialogButtonBox>
 
 #include "aoi.h"
 
@@ -42,6 +44,8 @@ signals:
       void onAttach();
       void onDetach();
       void onCurrentItemChanged(QTreeWidgetItem* current, QTreeWidgetItem* previous);
+      void onTreeContextMenu(const QPoint& pos);
+      void onEditAOI();
 
 private:
     EcWidget* ecWidget;

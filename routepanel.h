@@ -213,6 +213,7 @@ protected:
     
     // Waypoint operations
     void showWaypointEditDialog(int routeId, int waypointIndex = -1);
+    void showInsertWaypointDialog(int routeId, int insertIndex, double defaultLat, double defaultLon);
     void reorderWaypoint(int routeId, int fromIndex, int toIndex);
     void duplicateWaypoint(int routeId, int waypointIndex);
     void toggleWaypointActiveStatus(int routeId, int waypointIndex);
