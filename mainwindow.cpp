@@ -3211,10 +3211,12 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
     else {
         // ROUTE / POI
         QMenu contextMenu(this);
+        boolean loc = (!std::isnan(navShip.lat) && !std::isnan(navShip.lon) &&
+                       navShip.lat != 0.0 && navShip.lon != 0.0);
 
         // Create Route option
         contextMenu.addAction(ecchart->createRouteAction);
-        if (ecchart->goHereAutoRouteAction) {
+        if (ecchart->goHereAutoRouteAction && loc) {
             contextMenu.addAction(ecchart->goHereAutoRouteAction);
         }
         contextMenu.addSeparator();
@@ -3227,8 +3229,10 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
         contextMenu.addSeparator();
         contextMenu.addAction(ecchart->pickInfoAction);
         contextMenu.addAction(ecchart->warningInfoAction);
-        contextMenu.addSeparator();
-        contextMenu.addAction(ecchart->measureEblVrmAction);
+        if (loc){
+            contextMenu.addSeparator();
+            contextMenu.addAction(ecchart->measureEblVrmAction);
+        }
 
         // Execute menu
         QAction* selectedAction = contextMenu.exec(ecchart->mapToGlobal(pos));

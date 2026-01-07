@@ -9456,6 +9456,9 @@ void EcWidget::showMapContextMenu(const QPoint& pos)
     contextMenu.addAction(pickInfoAction);
     contextMenu.addAction(warningInfoAction);
     contextMenu.addSeparator();
+
+    // Measure/EBL/VRM
+    measureEblVrmAction->setEnabled(true);
     contextMenu.addAction(measureEblVrmAction);
 
     // Execute menu
