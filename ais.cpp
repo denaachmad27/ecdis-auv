@@ -71,6 +71,8 @@ Ais::Ais( EcWidget *parent, EcView *view, EcDictInfo *dict,
 }
 
 Ais::~Ais(){
+    qDebug() << "[AIS] Destructor START";
+
     // Set shutdown flag to prevent callbacks
     _isShuttingDown = true;
 
@@ -82,20 +84,22 @@ Ais::~Ais(){
         _transponder = NULL;
     }
 
-    // Putuskan dan bebaskan socket secara aman
+    // Putuskan socket secara aman - JANGAN delete during shutdown!
     if( _tcpSocket ){
         _tcpSocket->abort();
         _tcpSocket->disconnect(this);
-        delete _tcpSocket;
+        _tcpSocket->deleteLater(); // Use deleteLater instead of delete
         _tcpSocket = nullptr;
     }
 
     if( _errLog ){
         delete _errLog;
+        _errLog = nullptr;
     }
 
     if( _fAisFile ){
         delete _fAisFile;
+        _fAisFile = nullptr;
     }
 
     // Bersihkan NMEA cache
@@ -107,6 +111,8 @@ Ais::~Ais(){
     if (_myAis == this){
         _myAis = nullptr;
     }
+
+    qDebug() << "[AIS] Destructor END";
 }
 
 void Ais::setOwnShipPos(EcCoordinate lat, EcCoordinate lon)

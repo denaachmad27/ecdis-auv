@@ -30,10 +30,11 @@ public:
 
 private:
     PluginManager() = default;
-    ~PluginManager() = default;
+    ~PluginManager(); // CRITICAL: Need proper destructor to unload plugins
 
     PluginManager(const PluginManager&) = delete;
     PluginManager& operator=(const PluginManager&) = delete;
 
     QMap<QString, QObject*> m_plugins;
+    QMap<QString, QPluginLoader*> m_loaders; // CRITICAL: Keep loaders to properly unload plugins
 };

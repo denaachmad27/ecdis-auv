@@ -70,12 +70,27 @@ int main( int argc, char ** argv )
 
   int result = a.exec();
 
-  // CRITICAL: Proper cleanup order to prevent crash
-  // 1. Clear Logger's textEdit pointer FIRST before destroying MainWindow
-  Logger::cleanup();
+  // DEBUG: Track cleanup sequence
+  qDebug() << "=== [SHUTDOWN] Starting cleanup sequence ===";
 
-  // 2. Then destroy MainWindow (which contains logText widget)
+  // CRITICAL: Proper cleanup order to prevent crash
+  // 1. Uninstall message handler FIRST to prevent callbacks
+  qDebug() << "[SHUTDOWN] Step 1: Uninstalling message handler...";
+  qInstallMessageHandler(nullptr);
+  qDebug() << "[SHUTDOWN] Message handler uninstalled";
+
+  // 2. Clear Logger's textEdit pointer
+  qDebug() << "[SHUTDOWN] Step 2: Cleaning up Logger...";
+  Logger::cleanup();
+  qDebug() << "[SHUTDOWN] Logger cleanup complete";
+
+  // 3. Then destroy MainWindow (which contains logText widget)
+  qDebug() << "[SHUTDOWN] Step 3: Deleting MainWindow...";
   delete mw;
+  mw = nullptr;
+  qDebug() << "[SHUTDOWN] MainWindow deleted";
+
+  qDebug() << "=== [SHUTDOWN] Cleanup sequence complete ===";
 
   return result;
 }

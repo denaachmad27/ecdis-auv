@@ -49,14 +49,44 @@ bool PluginManager::loadPlugin(const QString& pluginPath, const QString& key) {
         return false;
     }
 
-    QPluginLoader loader(fullPath);
-    QObject* rawPlugin = loader.instance();
+    // CRITICAL: Keep loader alive for proper plugin unloading
+    QPluginLoader* loader = new QPluginLoader(fullPath);
+    QObject* rawPlugin = loader->instance();
     if (!rawPlugin) {
-        qCritical() << "[PLUGIN MANAGER] Failed to load plugin at" << fullPath << ":" << loader.errorString();
+        qCritical() << "[PLUGIN MANAGER] Failed to load plugin at" << fullPath << ":" << loader->errorString();
+        delete loader;
         return false;
     }
 
     m_plugins[key] = rawPlugin;
+    m_loaders[key] = loader; // CRITICAL: Store loader for proper cleanup
     qCritical() << "[PLUGIN MANAGER] Loaded plugin:" << fullPath << "as key:" << key;
     return true;
+}
+
+// CRITICAL: Destructor to properly unload all plugins
+PluginManager::~PluginManager() {
+    qDebug() << "[PLUGIN MANAGER] Unloading all plugins...";
+
+    // First unload all plugins using their loaders
+    for (QPluginLoader* loader : m_loaders) {
+        if (loader) {
+            loader->unload(); // Properly unload the plugin
+            delete loader;
+            loader = nullptr;
+        }
+    }
+
+    m_loaders.clear();
+
+    // Also delete plugin instances
+    for (QObject* plugin : m_plugins) {
+        if (plugin) {
+            delete plugin;
+            plugin = nullptr;
+        }
+    }
+
+    m_plugins.clear();
+    qDebug() << "[PLUGIN MANAGER] All plugins unloaded";
 }

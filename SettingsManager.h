@@ -14,6 +14,9 @@ class SettingsManager {
 
     private:
         SettingsManager() = default;
+        ~SettingsManager() {
+            qDebug() << "[SETTINGS MANAGER] Destructor called";
+        }
         SettingsData m_data;
 };
 

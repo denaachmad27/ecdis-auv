@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <QSettings>
+#include <QDebug>
 
 class CPATCPASettings : public QObject
 {
@@ -39,6 +40,9 @@ signals:
 
 private:
     explicit CPATCPASettings(QObject *parent = nullptr);
+    ~CPATCPASettings() {
+        qDebug() << "[CPATCPA SETTINGS] Destructor called";
+    }
 
     // Default values
     static const double DEFAULT_CPA_THRESHOLD;

@@ -620,6 +620,25 @@ EcWidget::~EcWidget ()
         waypointAnimationTimer->stop();
     }
 
+    // CRITICAL: Stop POI animation timer (active with 100ms interval!)
+    if (poiAnimationTimer) {
+        poiAnimationTimer->stop();
+    }
+
+    // CRITICAL: Stop other timers that may be active
+    if (chartFlashTimer) {
+        chartFlashTimer->stop();
+    }
+    if (aisTooltipUpdateTimer) {
+        aisTooltipUpdateTimer->stop();
+    }
+    if (shipGuardianCheckTimer) {
+        shipGuardianCheckTimer->stop();
+    }
+    if (guardZoneAutoCheckTimer) {
+        guardZoneAutoCheckTimer->stop();
+    }
+
     // Stop 1-second periodic timers to avoid callbacks during teardown
     allTimer.stop();
     dbTimer.stop();

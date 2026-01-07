@@ -2563,41 +2563,52 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL), m_i
 
 MainWindow::~MainWindow()
 {
-    qDebug() << "MainWindow destructor called";
+    qDebug() << "[SHUTDOWN] MainWindow destructor START";
 
   try {
+    qDebug() << "[SHUTDOWN] Step 1.1: Cleaning up dict...";
     if (dict) {
         EcDictionaryFree(dict);
         dict = NULL;
     }
+    qDebug() << "[SHUTDOWN] Step 1.1 COMPLETE";
 
+    qDebug() << "[SHUTDOWN] Step 1.2: Cleaning up pickWindow...";
     if (pickWindow) {
         delete pickWindow;
         pickWindow = NULL;
     }
+    qDebug() << "[SHUTDOWN] Step 1.2 COMPLETE";
 
-    if (aisDvr && aisDvr->isRecording()) {
-        qDebug() << "Stopping AIS DVR recording";
-        aisDvr->stopRecording();
-    }
+    // CRITICAL: Do NOT access aisDvr here!
+    // aisDvr points to a plugin managed by PluginManager singleton
+    // The PluginManager destructor already handles plugin cleanup
+    // Accessing it here causes crash due to static destruction order issues
+    qDebug() << "[SHUTDOWN] Step 1.3: Skipping AIS DVR (managed by PluginManager)";
+    qDebug() << "[SHUTDOWN] Step 1.3 COMPLETE";
 
-    // Stop recording session if active
-    
+    qDebug() << "[SHUTDOWN] Step 1.4: Cleaning up playback timer DB...";
     // Stop playback timers
     if (m_playbackTimerDB) {
         m_playbackTimerDB->stop();
         delete m_playbackTimerDB;
         m_playbackTimerDB = nullptr;
     }
+    qDebug() << "[SHUTDOWN] Step 1.4 COMPLETE";
 
+    qDebug() << "[SHUTDOWN] Step 1.5: Stopping NMEA playback timer...";
     // Stop NMEA Playback timer in ecchart
     if (ecchart) {
         ecchart->stopNmeaPlaybackTimer();
     }
+    qDebug() << "[SHUTDOWN] Step 1.5 COMPLETE";
 
+    qDebug() << "[SHUTDOWN] Step 1.6: Clearing queues...";
     // Clear queues
     m_nmeaDataQueueDB.clear();
+    qDebug() << "[SHUTDOWN] Step 1.6 COMPLETE";
 
+    qDebug() << "[SHUTDOWN] Step 1.7: Nullifying panel pointers...";
     // CRITICAL: Panels and Docks have MainWindow as parent
     // Qt will automatically delete them. DO NOT delete manually!
     // Just set pointers to nullptr to prevent double deletion crash
@@ -2605,22 +2616,31 @@ MainWindow::~MainWindow()
     guardZoneDock = nullptr;
     alertPanel = nullptr;
     alertDock = nullptr;
+    qDebug() << "[SHUTDOWN] Step 1.7 COMPLETE";
 
-  if (m_cpaUpdateTimer) {
-      m_cpaUpdateTimer->stop();
-  }
+    qDebug() << "[SHUTDOWN] Step 1.8: Skipping CPA timer check (dangling pointer)";
+    // CRITICAL: Do NOT access m_cpaUpdateTimer!
+    // This timer was never properly initialized and is a dangling pointer
+    // Just set it to nullptr to prevent any access
+    m_cpaUpdateTimer = nullptr;
+    qDebug() << "[SHUTDOWN] Step 1.8 COMPLETE";
 
-  // Stop other timers
-  if (m_playbackTimer) {
-      m_playbackTimer->stop();
-  }
+    qDebug() << "[SHUTDOWN] Step 1.9: Skipping playback timer (may be dangling)";
+    // CRITICAL: Do NOT access m_playbackTimer - may be dangling
+    m_playbackTimer = nullptr;
+    qDebug() << "[SHUTDOWN] Step 1.9 COMPLETE";
 
-  if (m_drawTimer) {
-      m_drawTimer->stop();
-  }
+    qDebug() << "[SHUTDOWN] Step 1.10: Skipping draw timer (may be dangling)";
+    // CRITICAL: Do NOT access m_drawTimer - may be dangling
+    m_drawTimer = nullptr;
+    qDebug() << "[SHUTDOWN] Step 1.10 COMPLETE";
 
+    qDebug() << "[SHUTDOWN] Step 1.11: Deleting log stream and file...";
   delete m_logStream;
   delete m_logFile;
+    qDebug() << "[SHUTDOWN] Step 1.11 COMPLETE";
+
+    qDebug() << "[SHUTDOWN] MainWindow destructor try block COMPLETE";
   }
   catch (const std::exception& e) {
       qWarning() << "Exception in MainWindow destructor:" << e.what();
@@ -2628,6 +2648,8 @@ MainWindow::~MainWindow()
   catch (...) {
       qWarning() << "Unknown exception in MainWindow destructor";
   }
+
+  qDebug() << "[SHUTDOWN] MainWindow destructor END";
 }
 
 void MainWindow::onReload()

@@ -22,9 +22,13 @@ AisDatabaseManager::AisDatabaseManager() : asyncProcessingTimer(nullptr) {
 }
 
 AisDatabaseManager::~AisDatabaseManager() {
-    // Stop async timer first to prevent race conditions
+    qDebug() << "[AIS DATABASE MANAGER] Destructor START";
+
+    // CRITICAL: Stop async timer first to prevent race conditions
+    // DO NOT delete the timer - it may be in an invalid state during static destruction
     if (asyncProcessingTimer) {
         asyncProcessingTimer->stop();
+        asyncProcessingTimer = nullptr;  // Just nullify, don't delete
     }
 
     // Process any remaining target references ONLY if database is still open and not shutting down
@@ -38,10 +42,6 @@ AisDatabaseManager::~AisDatabaseManager() {
         qWarning() << "Error processing target references during shutdown";
     }
 
-    // Clean up timer
-    delete asyncProcessingTimer;
-    asyncProcessingTimer = nullptr;
-
     // Close database connection if still open
     try {
         if (db.isOpen()) {
@@ -51,7 +51,7 @@ AisDatabaseManager::~AisDatabaseManager() {
         qWarning() << "Error closing database during shutdown";
     }
 
-    qDebug() << "AisDatabaseManager destroyed";
+    qDebug() << "[AIS DATABASE MANAGER] Destructor END";
 }
 
 AisDatabaseManager& AisDatabaseManager::instance() {
