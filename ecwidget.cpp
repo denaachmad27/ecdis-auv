@@ -19701,6 +19701,56 @@ void EcWidget::createWaypointFromForm(double lat, double lon, const QString& lab
              << "Lat:" << lat << "Lon:" << lon << "Route:" << routeId;
 }
 
+bool EcWidget::insertWaypointAtPosition(int routeId, const Waypoint& newWaypoint, int position)
+{
+    qDebug() << "[INSERT-WP-POSITION] Inserting waypoint at position" << position << "in route" << routeId;
+
+    // Validate input
+    if (routeId <= 0 || position < 0) {
+        qDebug() << "[ERROR] Invalid routeId or position:" << routeId << position;
+        return false;
+    }
+
+    // Get all waypoints for this route
+    QList<Waypoint> routeWaypoints;
+    for (const auto& wp : waypointList) {
+        if (wp.routeId == routeId) {
+            routeWaypoints.append(wp);
+        }
+    }
+
+    // Validate position
+    if (position > routeWaypoints.size()) {
+        position = routeWaypoints.size();
+    }
+
+    // Remove existing waypoints for this route
+    waypointList.erase(
+        std::remove_if(waypointList.begin(), waypointList.end(),
+            [routeId](const Waypoint& wp) { return wp.routeId == routeId; }),
+        waypointList.end());
+
+    // Insert new waypoint at position
+    routeWaypoints.insert(position, newWaypoint);
+
+    // Add all waypoints back
+    for (const auto& wp : routeWaypoints) {
+        waypointList.append(wp);
+    }
+
+    // Persist and update
+    saveWaypoints();
+    updateRouteList(routeId);
+    saveRoutes();
+    Draw();
+
+    emit waypointCreated();
+
+    qDebug() << "[INSERT-WP-POSITION] Waypoint inserted successfully at position" << position
+             << "in route" << routeId << "with label" << newWaypoint.label;
+    return true;
+}
+
 // Waypoint highlighting methods for route panel visualization
 void EcWidget::highlightWaypoint(int routeId, int waypointIndex)
 {
