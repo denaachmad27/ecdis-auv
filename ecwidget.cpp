@@ -2666,6 +2666,24 @@ void EcWidget::setAOILabelVisibility(int id, bool showLabel)
     }
 }
 
+bool EcWidget::updateAOI(const AOI& updatedAOI)
+{
+    for (auto& a : aoiList) {
+        if (a.id == updatedAOI.id) {
+            a.name = updatedAOI.name;
+            a.color = updatedAOI.color;
+            a.visible = updatedAOI.visible;
+            a.showLabel = updatedAOI.showLabel;
+            // vertices tetap sama
+            saveAOIs();
+            emit aoiListChanged();
+            Draw();
+            return true;
+        }
+    }
+    return false;
+}
+
 void EcWidget::drawAOIs(QPainter& painter)
 {
     if (aoiList.isEmpty()) return;

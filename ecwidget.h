@@ -431,6 +431,7 @@ public:
   void toggleAOIVisibility(int id);
   void setAOIVisibility(int id, bool visible);
   void setAOILabelVisibility(int id, bool showLabel);
+  bool updateAOI(const AOI& aoi);
   void drawAOIs(QPainter& painter);
   void startAOICreation(const QString& name, AOIType type);
   void startAOICreationWithColor(const QString& name, AOIColorChoice colorChoice);

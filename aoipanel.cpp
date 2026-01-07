@@ -8,6 +8,11 @@
 #include <QSignalBlocker>
 #include <QPainter>
 #include <QPixmap>
+#include <QCheckBox>
+#include <QComboBox>
+#include <QLineEdit>
+#include <QMenu>
+#include <QDialogButtonBox>
 
 AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
     : QWidget(parent), ecWidget(ecWidget)
@@ -31,6 +36,7 @@ AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
     tree->setColumnWidth(1, 110);
     tree->setColumnWidth(2, 60);
     tree->setColumnWidth(3, 60);
+    tree->setContextMenuPolicy(Qt::CustomContextMenu);
     v->addWidget(tree);
 
     // Arrange buttons into 2 columns; add rows as needed (max 3 rows here)
@@ -76,7 +82,7 @@ AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
 
     connect(attachBtn, &QPushButton::clicked, this, &AOIPanel::onAttach);
     connect(detachBtn, &QPushButton::clicked, this, &AOIPanel::onDetach);
-
+    connect(tree, &QTreeWidget::customContextMenuRequested, this, &AOIPanel::onTreeContextMenu);
 
     // Auto-refresh when AOI list changes in EcWidget (e.g., create-by-click finishes)
     // Use QueuedConnection to avoid re-entrant refresh while handling itemChanged
@@ -442,4 +448,120 @@ void AOIPanel::updateAttachButtons()
 
     // Export button always enabled if there are AOIs
     exportBtn->setEnabled(tree->topLevelItemCount() > 0);
+}
+
+void AOIPanel::onTreeContextMenu(const QPoint& pos)
+{
+    QTreeWidgetItem* item = tree->itemAt(pos);
+    if (!item || !ecWidget) return;
+
+    // Check if AOI is attached - disable editing if attached
+    int id = item->data(0, Qt::UserRole).toInt();
+    bool isAttached = ecWidget->isAOIAttachedToShip(id);
+
+    QMenu contextMenu(this);
+    QAction* editAction = contextMenu.addAction(tr("Edit"));
+    QAction* deleteAction = contextMenu.addAction(tr("Delete"));
+
+    editAction->setEnabled(!isAttached);
+    deleteAction->setEnabled(!isAttached);
+
+    QAction* selectedAction = contextMenu.exec(tree->mapToGlobal(pos));
+
+    if (selectedAction == editAction) {
+        onEditAOI();
+    } else if (selectedAction == deleteAction) {
+        onDeleteAOI();
+    }
+}
+
+void AOIPanel::onEditAOI()
+{
+    QTreeWidgetItem* item = tree->currentItem();
+    if (!item || !ecWidget) return;
+
+    int aoiId = item->data(0, Qt::UserRole).toInt();
+    const auto aoiList = ecWidget->getAOIs();
+
+    // Find the AOI by ID
+    AOI editAOI;
+    bool found = false;
+    for (const auto& aoi : aoiList) {
+        if (aoi.id == aoiId) {
+            editAOI = aoi;
+            found = true;
+            break;
+        }
+    }
+    if (!found) return;
+
+    // Create edit dialog
+    QDialog dlg(this);
+    dlg.setWindowTitle("Edit Area Object");
+    QFormLayout* form = new QFormLayout(&dlg);
+
+    // Name field
+    QLineEdit* nameEdit = new QLineEdit(editAOI.name);
+
+    // Color dropdown
+    QComboBox* colorCombo = new QComboBox();
+    colorCombo->addItem("🔴 Red", "Red");
+    colorCombo->addItem("🔵 Blue", "Blue");
+    colorCombo->addItem("🟢 Green", "Green");
+    colorCombo->addItem("🟡 Yellow", "Yellow");
+    colorCombo->addItem("🟠 Orange", "Orange");
+
+    // Set current color - find matching color choice
+    AOIColorChoice currentColor = AOIColorChoice::Yellow; // default
+    if (editAOI.color == QColor(255, 0, 0)) currentColor = AOIColorChoice::Red;
+    else if (editAOI.color == QColor(0, 120, 255)) currentColor = AOIColorChoice::Blue;
+    else if (editAOI.color == QColor(0, 200, 0)) currentColor = AOIColorChoice::Green;
+    else if (editAOI.color == QColor(255, 220, 0)) currentColor = AOIColorChoice::Yellow;
+    else if (editAOI.color == QColor(255, 140, 0)) currentColor = AOIColorChoice::Orange;
+
+    QString currentColorStr = aoiColorChoiceToString(currentColor);
+    for (int i = 0; i < colorCombo->count(); ++i) {
+        if (colorCombo->itemData(i).toString() == currentColorStr) {
+            colorCombo->setCurrentIndex(i);
+            break;
+        }
+    }
+
+    // Visibility checkbox
+    QCheckBox* visibleCheck = new QCheckBox();
+    visibleCheck->setChecked(editAOI.visible);
+
+    // Show Label checkbox
+    QCheckBox* showLabelCheck = new QCheckBox();
+    showLabelCheck->setChecked(editAOI.showLabel);
+
+    // Add widgets to form
+    form->addRow("Name:", nameEdit);
+    form->addRow("Color:", colorCombo);
+    form->addRow("Visible:", visibleCheck);
+    form->addRow("Show Label:", showLabelCheck);
+
+    // Buttons
+    QDialogButtonBox* buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, Qt::Horizontal, &dlg);
+    form->addRow(buttons);
+
+    connect(buttons->button(QDialogButtonBox::Ok), &QPushButton::clicked, &dlg, &QDialog::accept);
+    connect(buttons->button(QDialogButtonBox::Cancel), &QPushButton::clicked, &dlg, &QDialog::reject);
+
+    if (dlg.exec() == QDialog::Accepted) {
+        // Update AOI with new values
+        editAOI.name = nameEdit->text().trimmed();
+        AOIColorChoice colorChoice = aoiColorChoiceFromString(colorCombo->currentData().toString());
+        editAOI.color = aoiColorFromChoice(colorChoice);
+        editAOI.visible = visibleCheck->isChecked();
+        editAOI.showLabel = showLabelCheck->isChecked();
+
+        // Update in EcWidget
+        ecWidget->updateAOI(editAOI);
+
+        // Refresh list
+        refreshList();
+        emit statusMessage(QString("Area Object '%1' updated").arg(editAOI.name));
+    }
 }
