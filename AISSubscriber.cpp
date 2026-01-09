@@ -4,6 +4,7 @@
 #include <QJsonValue>
 #include <QJsonParseError>
 #include <QDebug>
+#include <QPointer>
 #include "mainwindow.h"
 #include "SettingsManager.h"
 
@@ -57,7 +58,9 @@ AISSubscriber::AISSubscriber(QObject* parent)
 }
 
 AISSubscriber::~AISSubscriber() {
-    // Stop all timers to prevent race conditions during destruction
+    qDebug() << "[AISSUBSCRIBER] Destructor START";
+
+    // CRITICAL: Stop all timers FIRST to prevent any callbacks during destruction
     shuttingDown = true;
 
     if (countdownTimer) {
@@ -68,14 +71,24 @@ AISSubscriber::~AISSubscriber() {
         noDataTimer->stop();
     }
 
-    // Clean up socket
+    // Clean up socket - abort first to stop any pending operations
     if (socket) {
-        socket->disconnectFromHost();
+        qDebug() << "[AISSUBSCRIBER] Cleaning up socket...";
+
+        // Abort any pending operations
+        socket->abort();
+
+        // Disconnect all signals to prevent callbacks
+        socket->disconnect(this);
+
+        // Schedule for deletion - Qt will delete it when safe
         socket->deleteLater();
         socket = nullptr;
+
+        qDebug() << "[AISSUBSCRIBER] Socket cleanup complete";
     }
 
-    qDebug() << "AISSubscriber destroyed safely";
+    qDebug() << "[AISSUBSCRIBER] Destructor END";
 }
 
 void AISSubscriber::connectToHost(const QString &host, quint16 port) {
@@ -88,14 +101,18 @@ void AISSubscriber::connectToHost(const QString &host, quint16 port) {
     lastHost = dHost;
     lastPort = dPort;
 
+    // CRITICAL: Delete old socket SAFELY before creating new one
     if (socket) {
         socket->abort();  // pastikan socket bersih
+        socket->disconnect(this);  // Disconnect all signals FIRST
         socket->deleteLater();
+        socket = nullptr;  // Nullify BEFORE creating new socket
     }
 
     hasReceivedData = false;
     dataFlag = false;
 
+    // Create new socket AFTER old one is cleaned up
     socket = new QTcpSocket(this);
 
     connect(socket, &QTcpSocket::readyRead, this, &AISSubscriber::onReadyRead);
@@ -121,13 +138,26 @@ void AISSubscriber::onConnected() {
     }
 
     // Timeout kalau 10 detik gak ada data (initial)
-    QTimer::singleShot(11000, this, [this]() {
-        if (!hasReceivedData && socket && socket->state() == QAbstractSocket::ConnectedState) {
+    // CRITICAL: Use QPointer to safely check if socket still exists when lambda executes
+    QPointer<QTcpSocket> socketPtr = socket;
+
+    QTimer::singleShot(11000, this, [this, socketPtr]() {
+        // Check if we're shutting down before accessing anything
+        if (shuttingDown) {
+            return;
+        }
+
+        // Check if socket still exists (using QPointer)
+        if (!socketPtr) {
+            return;  // Socket was deleted, don't access it
+        }
+
+        if (!hasReceivedData && socketPtr && socketPtr->state() == QAbstractSocket::ConnectedState) {
             QString qconnection = "MOOSDB not connected, reconnecting...";
             if (mainWindow){
                 mainWindow->setReconnectStatusText(qconnection);
             }
-            socket->disconnectFromHost();
+            socketPtr->disconnectFromHost();
             tryReconnect();
         }
     });
@@ -139,8 +169,9 @@ void AISSubscriber::onConnected() {
 void AISSubscriber::disconnectFromHost() {
     if (socket) {
         socket->disconnectFromHost();
-        socket->deleteLater();
-        socket = nullptr;
+        // Don't delete here - let the destructor handle cleanup
+        // socket->deleteLater();
+        // socket = nullptr;
 
         qDebug() << "Disconnected";
         dataFlag = false;
@@ -161,6 +192,11 @@ void AISSubscriber::setShuttingDown(bool v) {
 }
 
 void AISSubscriber::onReadyRead() {
+    // CRITICAL: Check if socket still exists and we're not shutting down
+    if (!socket || shuttingDown) {
+        return;
+    }
+
     QByteArray data = socket->readAll();
     data = data.simplified().trimmed().replace("\r", "");
 
@@ -327,6 +363,11 @@ void AISSubscriber::onReadyRead() {
 }
 
 void AISSubscriber::onSocketError(QAbstractSocket::SocketError) {
+    // CRITICAL: Check if socket still exists
+    if (!socket) {
+        return;
+    }
+
     emit errorOccurred(socket->errorString());
     hasReceivedData = false;
     dataFlag = false;

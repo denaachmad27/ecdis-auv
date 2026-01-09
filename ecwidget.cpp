@@ -588,6 +588,8 @@ bool EcWidget::isPointNearAITargetLine(const QPoint& clickPos, int tolerance)
 
 EcWidget::~EcWidget ()
 {
+  qDebug() << "[ECWIDGET] Destructor START";
+
   // Prevent input handlers from doing work during teardown
   shuttingDown = true;
 
@@ -709,26 +711,53 @@ EcWidget::~EcWidget ()
       routeDeviationDetector = nullptr;
   }
 
-  // Cleanup AISSubscriber - disconnect signals first
+  // Cleanup AISSubscriber - disconnect signals FIRST
   if (subscriber) {
+      qDebug() << "[ECWIDGET] Cleaning up AISSubscriber...";
+
+      // CRITICAL: Disconnect ALL signals immediately to prevent any callbacks during shutdown
       QObject::disconnect(subscriber, 0, 0, 0);
+
+      // Force disconnect from host if still connected
+      subscriber->disconnectFromHost();
+
+      // Give socket time to disconnect gracefully
+      QCoreApplication::processEvents();
+
+      // Use deleteLater for Qt-managed deletion
       subscriber->deleteLater();
       subscriber = nullptr;
+
+      qDebug() << "[ECWIDGET] AISSubscriber cleanup complete";
   }
 
-  // Cleanup AIS thread
+  // Cleanup AIS thread - wait longer for long-running connections
   if (threadAIS) {
+      qDebug() << "[ECWIDGET] Cleaning up AIS thread...";
+
       if (threadAIS->isRunning()) {
+          qDebug() << "[ECWIDGET] Thread is running, attempting graceful quit...";
+
+          // Try graceful quit first with longer timeout for long connections
           threadAIS->quit();
-          if (!threadAIS->wait(2000)) {
-              qWarning() << "[ECWIDGET] AIS thread did not quit gracefully, terminating...";
+
+          // Wait up to 5 seconds (increased from 2) for long-running connections
+          if (!threadAIS->wait(5000)) {
+              qWarning() << "[ECWIDGET] AIS thread did not quit gracefully in 5s, terminating...";
               threadAIS->terminate();
-              threadAIS->wait(1000);
+              threadAIS->wait(2000); // Wait 2s after terminate
           }
+
+          qDebug() << "[ECWIDGET] AIS thread stopped";
       }
+
       threadAIS->deleteLater();
       threadAIS = nullptr;
+
+      qDebug() << "[ECWIDGET] AIS thread cleanup complete";
   }
+
+  qDebug() << "[ECWIDGET] Destructor complete";
 }
 
 /*---------------------------------------------------------------------------*/
