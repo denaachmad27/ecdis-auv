@@ -711,9 +711,15 @@ EcWidget::~EcWidget ()
       routeDeviationDetector = nullptr;
   }
 
-  // Cleanup AISSubscriber - disconnect signals FIRST
+  // CRITICAL: Cleanup order matters!
+  // subscriber lives in threadAIS, so we must:
+  // 1. Disconnect signals from subscriber
+  // 2. Stop the thread FIRST (before deleting subscriber)
+  // 3. Then delete subscriber
+
+  // Step 1: Disconnect subscriber signals to prevent callbacks
   if (subscriber) {
-      qDebug() << "[ECWIDGET] Cleaning up AISSubscriber...";
+      qDebug() << "[ECWIDGET] Disconnecting AISSubscriber signals...";
 
       // CRITICAL: Disconnect ALL signals immediately to prevent any callbacks during shutdown
       QObject::disconnect(subscriber, 0, 0, 0);
@@ -724,14 +730,10 @@ EcWidget::~EcWidget ()
       // Give socket time to disconnect gracefully
       QCoreApplication::processEvents();
 
-      // Use deleteLater for Qt-managed deletion
-      subscriber->deleteLater();
-      subscriber = nullptr;
-
-      qDebug() << "[ECWIDGET] AISSubscriber cleanup complete";
+      qDebug() << "[ECWIDGET] AISSubscriber signals disconnected";
   }
 
-  // Cleanup AIS thread - wait longer for long-running connections
+  // Step 2: Stop AIS thread FIRST (subscriber lives in this thread!)
   if (threadAIS) {
       qDebug() << "[ECWIDGET] Cleaning up AIS thread...";
 
@@ -751,10 +753,22 @@ EcWidget::~EcWidget ()
           qDebug() << "[ECWIDGET] AIS thread stopped";
       }
 
+      // Delete the thread
       threadAIS->deleteLater();
       threadAIS = nullptr;
 
       qDebug() << "[ECWIDGET] AIS thread cleanup complete";
+  }
+
+  // Step 3: NOW safe to delete subscriber (thread is stopped)
+  if (subscriber) {
+      qDebug() << "[ECWIDGET] Cleaning up AISSubscriber...";
+
+      // Use deleteLater for Qt-managed deletion
+      subscriber->deleteLater();
+      subscriber = nullptr;
+
+      qDebug() << "[ECWIDGET] AISSubscriber cleanup complete";
   }
 
   qDebug() << "[ECWIDGET] Destructor complete";

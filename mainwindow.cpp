@@ -416,6 +416,15 @@ void MainWindow::createStatusBar(){
 
     connect(ecchart, &EcWidget::aisSubCreated, this, [this](AISSubscriber* sub) {
         qDebug() << "aisSub created, now connecting signal...";
+
+        // CRITICAL: Use the 'sub' parameter, NOT ecchart->getAisSub()
+        // to avoid potential dangling pointer issues
+        if (!sub) {
+            qWarning() << "[MainWindow] aisSubCreated signal emitted with null pointer!";
+            return;
+        }
+
+        // Connect first handler - UI updates
         connect(sub, &AISSubscriber::connectionStatusChanged, this, [this](bool connected) {
             qDebug() << "[MainWindow] connectionStatusChanged called, connected =" << connected;
             if (connected) {
@@ -440,8 +449,11 @@ void MainWindow::createStatusBar(){
             }
         });
 
-        connect(ecchart->getAisSub(), &AISSubscriber::connectionStatusChanged,
+        // Connect second handler - use 'sub' parameter, not getAisSub()
+        connect(sub, &AISSubscriber::connectionStatusChanged,
                 this, &MainWindow::onMoosConnectionStatusChanged);
+
+        qDebug() << "aisSub signals connected successfully";
     });
 
     statusBar()->addPermanentWidget(new QLabel("Chart Rotation:", statusBar()));
