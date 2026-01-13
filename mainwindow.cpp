@@ -3255,7 +3255,7 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
         }
         contextMenu.addSeparator();
 
-        const QIcon addAreaIcon = QIcon(AppConfig::isDark() ? ":/icon/add_area_white.svg" : ":/icon/add_area.svg");
+        const QIcon addAreaIcon = QIcon(!AppConfig::isLight() ? ":/icon/add_area_white.svg" : ":/icon/add_area.svg");
         QAction* addAreaAction = contextMenu.addAction(addAreaIcon, tr("Add Area Object"));
 
         const QIcon addPoiIcon = QIcon::fromTheme("add-poi", QIcon(":/icon/add_poi.svg"));
