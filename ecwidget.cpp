@@ -5912,10 +5912,12 @@ void EcWidget::startAISConnection()
     threadAIS = new QThread(this);
     subscriber = new AISSubscriber();
 
-    // TO TELL THE WORLD THAT U HAVE CREATE AISSUB!!
-    emit aisSubCreated(subscriber);
-
+    // CRITICAL: Move to thread FIRST before emitting any signals!
+    // This ensures thread affinity is set before any signal connections are made
     subscriber->moveToThread(threadAIS);
+
+    // Now safe to emit signal - subscriber already has correct thread affinity
+    emit aisSubCreated(subscriber);
 
     QString sshIP = SettingsManager::instance().data().moosIp;
     quint16 sshPort = 5000;

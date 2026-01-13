@@ -334,6 +334,9 @@ private slots:
     void processNextNmeaDataDB();
     void onIncreaseSpeedClickedDB();
     void onDecreaseSpeedClickedDB();
+    void showLoadingDialog();
+    void hideLoadingDialog();
+    void loadAndStartPlayback(const QDateTime& startTime, const QDateTime& endTime);
 
     // Database connection status
     void onDatabaseConnectionStatusChanged(bool connected);
@@ -488,10 +491,14 @@ private:
     QTimeEdit *m_endTimeEditDB;
     QTextEdit *m_displayEditDB;
     QLabel *m_speedLabelDB;
+    QProgressBar *m_progressBarDB;  // Progress bar for playback
+    QDialog *m_loadingDialog;  // Loading dialog for data fetch
 
     QTimer *m_playbackTimerDB;
     QQueue<QVariantList> m_nmeaDataQueueDB;
     bool m_isPlayingDB = false;
+    int m_totalNmeaDataCount = 0;  // Total data for progress tracking
+    bool m_isLoadingData = false;  // Flag to prevent re-entrancy during data loading
 
     // Playback speed and timing
     double m_playbackSpeed = 1.0; // 1.0 = normal speed, 2.0 = 2x speed

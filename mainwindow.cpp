@@ -1261,6 +1261,23 @@ void MainWindow::fetchNmea(){
     m_decreaseSpeedButtonDB->setFixedSize(smallButtonSize);
     m_increaseSpeedButtonDB->setFixedSize(smallButtonSize);
 
+    // Progress bar untuk tracking persentase playback
+    m_progressBarDB = new QProgressBar();
+    m_progressBarDB->setRange(0, 100);  // 0-100%
+    m_progressBarDB->setValue(0);       // Awal 0%
+    m_progressBarDB->setFormat("Playback: %p%");  // Teks format
+    m_progressBarDB->setMinimumHeight(20);  // Tinggi progress bar
+    m_progressBarDB->setTextVisible(true);  // Tampilkan persentase
+
+    // Initialize loading dialog as null (will be created when needed)
+    m_loadingDialog = nullptr;
+
+    // Initialize data counter
+    m_totalNmeaDataCount = 0;
+
+    // Initialize loading flag
+    m_isLoadingData = false;
+
     m_displayEditDB = new QTextEdit();
     m_displayEditDB->setReadOnly(true);
 
@@ -1284,6 +1301,7 @@ void MainWindow::fetchNmea(){
     mainLayout->addWidget(m_dateEditDB);
     mainLayout->addLayout(timeFormLayout);
     mainLayout->addLayout(controlLayout);
+    mainLayout->addWidget(m_progressBarDB);  // Progress bar di bawah tombol Play/Stop
     mainLayout->addWidget(m_displayEditDB);
 
     // Fix transparency: Ensure widget has solid background
@@ -1351,8 +1369,59 @@ void MainWindow::fetchNmea(){
     // }
 }
 
+void MainWindow::showLoadingDialog()
+{
+    // Create loading dialog if not exists
+    if (!m_loadingDialog) {
+        m_loadingDialog = new QDialog(this);
+        m_loadingDialog->setWindowTitle("Loading");
+        m_loadingDialog->setWindowModality(Qt::ApplicationModal);  // Block main window
+        m_loadingDialog->setWindowFlags(Qt::Dialog | Qt::CustomizeWindowHint | Qt::WindowTitleHint);
+        m_loadingDialog->setFixedSize(300, 100);
+
+        QVBoxLayout *layout = new QVBoxLayout(m_loadingDialog);
+
+        QLabel *label = new QLabel("Loading Data...\nPlease wait...", m_loadingDialog);
+        label->setAlignment(Qt::AlignCenter);
+        label->setStyleSheet("QLabel { font-size: 14px; font-weight: bold; }");
+
+        QProgressBar *progressBar = new QProgressBar(m_loadingDialog);
+        progressBar->setRange(0, 0);  // Indeterminate progress (spinning)
+        progressBar->setTextVisible(false);
+
+        layout->addWidget(label);
+        layout->addWidget(progressBar);
+        layout->setAlignment(Qt::AlignCenter);
+    }
+
+    m_loadingDialog->show();
+    m_loadingDialog->raise();  // Bring to front
+    m_loadingDialog->activateWindow();  // Activate window
+
+    // CRITICAL: Force immediate UI update with multiple processEvents calls
+    // This ensures the dialog is fully rendered before heavy database operations start
+    m_loadingDialog->repaint();
+    for (int i = 0; i < 10; i++) {  // More aggressive event processing
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+    }
+}
+
+void MainWindow::hideLoadingDialog()
+{
+    if (m_loadingDialog) {
+        m_loadingDialog->hide();
+        QCoreApplication::processEvents();  // Force UI update immediately
+    }
+}
+
 void MainWindow::onPlayClickedDB()
 {
+    // CRITICAL: Prevent re-entrancy - if already loading, ignore this call
+    if (m_isLoadingData) {
+        qDebug() << "[WARNING] onPlayClickedDB called while already loading data - IGNORING to prevent re-entrancy";
+        return;
+    }
+
     ecchart->setCustomOwnship(true);
 
     // Set playback mode saat play (global, persistent)
@@ -1392,47 +1461,43 @@ void MainWindow::onPlayClickedDB()
             m_lastOwnshipLine.clear();
             m_lastAistargetLine.clear();
 
-            // ENCODE TARGETS FOR START DATE (first play or after stop)
-            QDateTime startOnly = m_dateEditDB->date().startOfDay();
-            QList<AisDatabaseManager::TargetData> targets = AisDatabaseManager::instance().getTargetsForDateRev(startOnly);
-            QStringList encodedNmeaList = AisDatabaseManager::instance().encodeTargetsToNMEA(targets);
+            // CRITICAL: Set loading flag to prevent re-entrancy
+            m_isLoadingData = true;
 
-            // Feed encoded NMEA ke ecchart (tanpa display)
-            for (const QString& nmea : encodedNmeaList) {
-                // Feed NMEA to ecchart
-                ecchart->readAISVariableString(nmea);
-            }
+            // CRITICAL: Show loading dialog IMMEDIATELY before ANY heavy operations
+            showLoadingDialog();
 
-            QSqlQuery query;
-            // Gunakan unified table untuk get kedua ownship dan AIS target data
-            AisDatabaseManager::instance().getCombinedNmeaData(query, startTime, endTime, {"ownship", "aistarget"});
+            // CRITICAL: Use QTimer::singleShot to defer ALL heavy operations
+            // This allows the loading dialog to fully render BEFORE any blocking operations start
+            QTimer::singleShot(0, this, [this, startTime, endTime]() {
+                // ENCODE TARGETS FOR START DATE (first play or after stop)
+                // Moved here to prevent freeze before dialog appears
+                QDateTime startOnly = m_dateEditDB->date().startOfDay();
+                QList<AisDatabaseManager::TargetData> targets = AisDatabaseManager::instance().getTargetsForDateRev(startOnly);
 
-            if (query.isActive()) {
-                while (query.next()) {
-                    QVariantList row;
-                    row << query.value("timestamp") << query.value("nmea") << query.value("data_source");
-                    m_nmeaDataQueueDB.enqueue(row);
+                // Update dialog and process events to keep it responsive
+                if (m_loadingDialog) {
+                    m_loadingDialog->repaint();
+                    QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
                 }
 
-                if (!m_nmeaDataQueueDB.isEmpty()) {
-                    m_isPlayingDB = true;
-                    m_playButtonDB->setText("Pause");
-                    m_playButtonDB->setIcon(QIcon(":/icon/pause.svg"));
+                QStringList encodedNmeaList = AisDatabaseManager::instance().encodeTargetsToNMEA(targets);
 
-                    // Start NMEA Playback timer (khusus untuk playback, bukan MOOSDB)
-                    ecchart->startNmeaPlaybackTimer();
-
-                    // Start with immediate processing of first data
-                    processNextNmeaDataDB();
-                    qDebug() << "Playback dimulai dengan speed:" << m_playbackSpeed << "x";
-                } else {
-                    m_isPlayingDB = false;
-                    QMessageBox::information(this, "Data Kosong", "Tidak ada data NMEA dalam rentang waktu yang dipilih.");
+                // Feed encoded NMEA ke ecchart (tanpa display)
+                for (const QString& nmea : encodedNmeaList) {
+                    // Feed NMEA to ecchart
+                    ecchart->readAISVariableString(nmea);
                 }
-            } else {
-                qDebug() << "Failed to retrieve NMEA data from database - continuing without data";
-                // No error popup - playback will simply not have data to process
-            }
+
+                // Update dialog and process events again
+                if (m_loadingDialog) {
+                    m_loadingDialog->repaint();
+                    QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+                }
+
+                // Now load the actual playback data
+                loadAndStartPlayback(startTime, endTime);
+            });
 
             // 3. Unfollow AIS target jika sedang follow
             if (ecchart->isTrackTarget()) {
@@ -1464,6 +1529,66 @@ void MainWindow::onPlayClickedDB()
     updateTrackingStatus("Playback", true);
 }
 
+void MainWindow::loadAndStartPlayback(const QDateTime& startTime, const QDateTime& endTime)
+{
+    // This function is called via QTimer::singleShot, giving the loading dialog time to render
+
+    QSqlQuery query;
+    // Gunakan unified table untuk get kedua ownship dan AIS target data
+    AisDatabaseManager::instance().getCombinedNmeaData(query, startTime, endTime, {"ownship", "aistarget"});
+
+    if (query.isActive()) {
+        // Count total data for progress tracking
+        m_totalNmeaDataCount = 0;
+        int rowCount = 0;
+        while (query.next()) {
+            QVariantList row;
+            row << query.value("timestamp") << query.value("nmea") << query.value("data_source");
+            m_nmeaDataQueueDB.enqueue(row);
+            m_totalNmeaDataCount++;
+            rowCount++;
+
+            // Keep dialog responsive by processing events periodically
+            if (rowCount % 100 == 0 && m_loadingDialog) {
+                m_loadingDialog->repaint();
+                QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+            }
+        }
+
+        // Hide loading dialog after data is loaded
+        hideLoadingDialog();
+
+        // CRITICAL: Reset loading flag to allow future playback operations
+        m_isLoadingData = false;
+
+        // Reset progress bar saat mulai playback baru
+        m_progressBarDB->setValue(0);
+
+        if (!m_nmeaDataQueueDB.isEmpty()) {
+            m_isPlayingDB = true;
+            m_playButtonDB->setText("Pause");
+            m_playButtonDB->setIcon(QIcon(":/icon/pause.svg"));
+
+            // Start NMEA Playback timer (khusus untuk playback, bukan MOOSDB)
+            ecchart->startNmeaPlaybackTimer();
+
+            // Start with immediate processing of first data
+            processNextNmeaDataDB();
+            qDebug() << "Playback dimulai dengan speed:" << m_playbackSpeed << "x";
+        } else {
+            m_isPlayingDB = false;
+            m_isLoadingData = false;  // Reset flag even when no data
+            hideLoadingDialog();  // Hide dialog when no data
+            QMessageBox::information(this, "Data Kosong", "Tidak ada data NMEA dalam rentang waktu yang dipilih.");
+        }
+    } else {
+        qDebug() << "Failed to retrieve NMEA data from database - continuing without data";
+        m_isLoadingData = false;  // Reset flag on query failure
+        hideLoadingDialog();  // Hide dialog on query failure
+        // No error popup - playback will simply not have data to process
+    }
+}
+
 void MainWindow::onStopClickedDB()
 {
     qDebug() << "onStopClickedDB() called";
@@ -1484,6 +1609,10 @@ void MainWindow::onStopClickedDB()
     m_displayEditDB->clear();
     m_playButtonDB->setText("Play");
     m_playButtonDB->setIcon(QIcon(":/icon/play.svg"));
+
+    // Reset progress bar saat stop
+    m_progressBarDB->setValue(0);
+    m_totalNmeaDataCount = 0;
 
     // 1. Kosongkan AIS Target Detail
     if (aisText) {
@@ -1588,6 +1717,12 @@ void MainWindow::processNextNmeaDataDB()
         QDateTime timestamp = data.at(0).toDateTime();
         QString nmea = data.at(1).toString();
         QString dataSource = data.at(2).toString(); // New field from unified table
+
+        // === UPDATE PROGRESS BAR ===
+        // Hitung persentase: (total - remaining) / total * 100
+        int processedCount = m_totalNmeaDataCount - m_nmeaDataQueueDB.size();
+        int progress = (m_totalNmeaDataCount > 0) ? (processedCount * 100 / m_totalNmeaDataCount) : 0;
+        m_progressBarDB->setValue(progress);
 
         // === PLAYBACK: SET MODE DATABASE DATA ===
         // Mode sudah diset global di onPlayClickedDB
