@@ -75,6 +75,7 @@ struct AISTargetData {
 
 // Struktur untuk menyimpan data kapal
 struct ShipStruct {
+    QString name;       // Nama kapal
     double lat = std::numeric_limits<double>::quiet_NaN();           // Latitude
     double lon = std::numeric_limits<double>::quiet_NaN();          // Longitude
     double x = std::numeric_limits<double>::quiet_NaN();           // Pixel X
@@ -119,6 +120,9 @@ struct ActiveRouteStruct {
 extern ShipStruct navShip;
 extern ShipStruct mapShip;
 extern ActiveRouteStruct activeRoute;
+
+// Dynamic node ships storage: nodeShips["ARCHIE"] = ShipStruct
+extern QMap<QString, ShipStruct> nodeShips;
 
 extern QString bottomBarText;
 extern QString aivdo;

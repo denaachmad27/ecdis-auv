@@ -325,6 +325,7 @@ void AISSubscriber::onReadyRead() {
         extractString("NAV_LONG_DMS", [&](QString v){ emit navLongDmsReceived(v);});
         extractString("NAV_LAT_DMM", [&](QString v){ emit navLatDmmReceived(v);});
         extractString("NAV_LONG_DMM", [&](QString v){ emit navLongDmmReceived(v);});
+        extractString("NAV_NAME", [&](QString v){ emit navNameReceived(v);});
 
         extractDouble("NAV_SPEED_OVER_GROUND", [=](double v){ emit navSpeedOGReceived(v);});
         extractDouble("NAV_DEPTH", [=](double v){ emit navDepthReceived(v);});
@@ -342,6 +343,74 @@ void AISSubscriber::onReadyRead() {
         extractString("NAV_DR", [=](QString v){ emit navDeadReckonReceived(v);});
 
         extractString("MAP_INFO_REQ", [=](QString v){ emit mapInfoReqReceived(v);});
+
+        // NODE_NAME_ALL - Parse and store node names
+        extractString("NODE_NAME_ALL", [=](QString v){
+            if (!v.isEmpty()) {
+                // Parse the comma-separated node names
+                nodeNameList.clear();
+                QStringList names = v.split(',', Qt::SkipEmptyParts);
+                for (const QString &name : names) {
+                    nodeNameList.append(name.trimmed().toUpper());
+                }
+                emit nodeNameAllReceived(v);
+            }
+        });
+
+        // Dynamic NODE_REPORT_* extraction based on NODE_NAME_ALL content
+        if (!nodeNameList.isEmpty()) {
+            for (const QString &nodeName : nodeNameList) {
+                QString nodeReportKey = "NODE_REPORT_" + nodeName;
+                extractString(nodeReportKey, [=](QString v){
+                    if (!v.isEmpty()) {
+                        // Emit raw data first
+                        emit nodeReportReceived(nodeName, v);
+
+                        // Parse the NODE_REPORT data
+                        // Format: "NAME=archie,X=177.14,Y=183.33,SPD=2.87,HDG=29.98,DEP=0,LAT=-4.32439555,LON=70.32817697,TYPE=kayak,MODE=MODE:ACTIVE:SURVEYING,ALLSTOP=clear,INDEX=2879,YAW=1.0,TIME=1763534205.16,LENGTH=4"
+
+                        QString name, type, mode;
+                        double x = std::numeric_limits<double>::quiet_NaN();
+                        double y = std::numeric_limits<double>::quiet_NaN();
+                        double spd = std::numeric_limits<double>::quiet_NaN();
+                        double hdg = std::numeric_limits<double>::quiet_NaN();
+                        double dep = std::numeric_limits<double>::quiet_NaN();
+                        double lat = std::numeric_limits<double>::quiet_NaN();
+                        double lon = std::numeric_limits<double>::quiet_NaN();
+                        double yaw = std::numeric_limits<double>::quiet_NaN();
+                        double time = std::numeric_limits<double>::quiet_NaN();
+                        int index = 0;
+
+                        // Parse key=value pairs
+                        QStringList pairs = v.split(',', Qt::SkipEmptyParts);
+                        for (const QString &pair : pairs) {
+                            QStringList keyValue = pair.split('=', Qt::SkipEmptyParts);
+                            if (keyValue.size() == 2) {
+                                QString key = keyValue[0].trimmed();
+                                QString value = keyValue[1].trimmed();
+
+                                if (key == "NAME") name = value;
+                                else if (key == "X") x = value.toDouble();
+                                else if (key == "Y") y = value.toDouble();
+                                else if (key == "SPD") spd = value.toDouble();
+                                else if (key == "HDG") hdg = value.toDouble();
+                                else if (key == "DEP") dep = value.toDouble();
+                                else if (key == "LAT") lat = value.toDouble();
+                                else if (key == "LON") lon = value.toDouble();
+                                else if (key == "TYPE") type = value;
+                                else if (key == "MODE") mode = value;
+                                else if (key == "INDEX") index = value.toInt();
+                                else if (key == "YAW") yaw = value.toDouble();
+                                else if (key == "TIME") time = value.toDouble();
+                            }
+                        }
+
+                        // Emit parsed data
+                        emit nodeShipDataReceived(nodeName, name, x, y, spd, hdg, dep, lat, lon, type, mode, index, yaw, time);
+                    }
+                });
+            }
+        }
 
         if (hasLat && hasLon) {
             emit processingData(lat, lon, cog, sog, hdg, spd, dep, yaw, z);

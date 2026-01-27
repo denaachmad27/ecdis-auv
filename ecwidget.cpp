@@ -98,6 +98,7 @@ QTextEdit *ownShipTemp;
 ShipStruct mapShip = {};
 ShipStruct navShip = {};
 ActiveRouteStruct activeRoute = {};
+QMap<QString, ShipStruct> nodeShips;
 
 QString aivdo;
 QString nmea;
@@ -5998,6 +5999,10 @@ void EcWidget::startAISConnection()
 
     connect(subscriber, &AISSubscriber::navLatDmmReceived, this, [=](const QString &v) { navShip.lat_dmm = v;});
     connect(subscriber, &AISSubscriber::navLongDmmReceived, this, [=](const QString &v) { navShip.lon_dmm = v;});
+    connect(subscriber, &AISSubscriber::navNameReceived, this, [=](const QString &v) {
+        navShip.name = v;
+        qDebug() << "Ownship name received:" << v;
+    });
 
     connect(subscriber, &AISSubscriber::navSpeedOGReceived, this, [=](double speed_og) {
         navShip.speed_og = speed_og;
@@ -6037,6 +6042,52 @@ void EcWidget::startAISConnection()
     connect(subscriber, &AISSubscriber::mapInfoReqReceived, this, &EcWidget::processMapInfoReq);
     connect(subscriber, &AISSubscriber::processingAis, this, &EcWidget::processAis);
     connect(subscriber, &AISSubscriber::processingData, this, &EcWidget::processData);
+
+    // NODE REPORTS
+    connect(subscriber, &AISSubscriber::nodeNameAllReceived, this, [=](const QString nodeNames){
+        // Print the list of node names received
+        qDebug() << "NODE_NAME_ALL received:" << nodeNames;
+
+        // Print each NODE_REPORT_* subscription that will be created
+        if (!nodeNames.isEmpty()) {
+            QStringList names = nodeNames.split(',', Qt::SkipEmptyParts);
+            for (const QString &name : names) {
+                QString nodeNameUpper = name.trimmed().toUpper();
+                QString subscriptionKey = "NODE_REPORT_" + nodeNameUpper;
+                qDebug() << "Subscribed to:" << subscriptionKey;
+            }
+        }
+    });
+
+    connect(subscriber, &AISSubscriber::nodeReportReceived, this, [=](const QString nodeName, const QString reportData){
+        // Print individual node report data when received
+        QString subscriptionKey = "NODE_REPORT_" + nodeName;
+        qDebug() << "[" << subscriptionKey << "] Received:" << reportData;
+    });
+
+    connect(subscriber, &AISSubscriber::nodeShipDataReceived, this, [=](const QString nodeName, const QString name, double x, double y, double spd, double hdg, double dep, double lat, double lon, const QString type, const QString mode, int index, double yaw, double time){
+        // Create or update node ship data
+        ShipStruct &nodeShip = nodeShips[nodeName];
+
+        // Map NODE_REPORT variables to ShipStruct fields
+        nodeShip.name = name;              // NAME
+        nodeShip.x = x;                    // X
+        nodeShip.y = y;                    // Y
+        nodeShip.speed = spd;              // SPD
+        nodeShip.heading = hdg;            // HDG
+        nodeShip.depth = dep;              // DEP
+        nodeShip.lat = lat;                // LAT
+        nodeShip.lon = lon;                // LON
+        nodeShip.yaw = yaw;                // YAW
+        // spd, hdg, dep, lat, lon, yaw, time already mapped above
+
+        // Note: TYPE, MODE, INDEX, TIME are not in ShipStruct, so they're ignored
+        // Note: ALLSTOP, LENGTH are also not in ShipStruct
+
+        qDebug() << "Node ship updated:" << nodeName << "-" << name
+                 << "LAT:" << lat << "LON:" << lon
+                 << "SPD:" << spd << "HDG:" << hdg;
+    });
 
     // ROUTE INFORMATION
     connect(subscriber, &AISSubscriber::rteWpBrgReceived, this, [=](const double &v) { activeRoute.rteWpBrg = v;});

@@ -29,6 +29,7 @@ signals:
     void navLongDmsReceived(const QString lonDms);
     void navLatDmmReceived(const QString latDmm);
     void navLongDmmReceived(const QString lonDmm);
+    void navNameReceived(const QString name);
     void navDepthReceived(const double depth);
     void navHeadingReceived(const double heading);
     void navHeadingOGReceived(const double headingOg);
@@ -49,6 +50,11 @@ signals:
 
     void mapInfoReqReceived(QString map);
     void waisNmeaReceived(QString nmea);
+
+    // NODE REPORTS
+    void nodeNameAllReceived(const QString nodeNames);
+    void nodeReportReceived(const QString nodeName, const QString reportData);
+    void nodeShipDataReceived(const QString nodeName, const QString name, double x, double y, double spd, double hdg, double dep, double lat, double lon, const QString type, const QString mode, int index, double yaw, double time);
 
     // ROUTES INFORMATION
     void rteWpBrgReceived(const double &value);
@@ -89,6 +95,8 @@ private:
     QTcpSocket *socket = nullptr;
     bool hasReceivedData = false;
     bool shuttingDown = false;
+
+    QStringList nodeNameList;  // Stores parsed node names from NODE_NAME_ALL
 
     QTimer* countdownTimer;
     int countdownSeconds;
