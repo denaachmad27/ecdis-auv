@@ -117,6 +117,10 @@ public slots:
     // Tracking status update
     void updateTrackingStatus(const QString& mode, const bool& change);
 
+    // Node Ships Panel
+    void updateNodeShipsPanel();
+    bool getNodeShipVisibility(const QString& nodeName) const;
+
 protected slots:
     void onReload();
 
@@ -401,10 +405,21 @@ private:
     POIPanel* poiPanel = nullptr;
     QDockWidget* poiDock = nullptr;
 
+    // Node Ships Panel
+    QTableWidget* nodeShipsTable = nullptr;
+    QDockWidget* nodeShipsDock = nullptr;
+    QMap<QString, bool> nodeShipsVisibility; // Track visibility per node ship
+    QTimer* nodeShipsUpdateTimer = nullptr;  // Throttled update timer
+    bool nodeShipsNeedUpdate = false;
+
     // Helper methods untuk CPA/TCPA
     void setupCPATCPAPanel();
     void setupRoutePanel();
     void setupPOIPanel();
+    void setupNodeShipsPanel();
+    void onNodeShipVisibilityChanged(int row);
+    void onNavigateToNodeShip(int row);
+    void onNodeShipsUpdateTimer();  // Slot untuk timer update
 
     // Connection status bar
     QLabel *moosStatusLabel;

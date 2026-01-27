@@ -6087,6 +6087,11 @@ void EcWidget::startAISConnection()
         qDebug() << "Node ship updated:" << nodeName << "-" << name
                  << "LAT:" << lat << "LON:" << lon
                  << "SPD:" << spd << "HDG:" << hdg;
+
+        // Update Node Ships Panel in MainWindow
+        if (mainWindow) {
+            mainWindow->updateNodeShipsPanel();
+        }
     });
 
     // ROUTE INFORMATION
@@ -7242,9 +7247,12 @@ void EcWidget::ownShipDraw(){
                 continue;
             }
 
-            int shipX, shipY;
+            // Skip jika visibility false (dari panel)
+            if (mainWindow && !mainWindow->getNodeShipVisibility(nodeName)) {
+                continue;
+            }
 
-            qCritical() << nodeShip.lat << " " << nodeShip.lon;
+            int shipX, shipY;
 
             if (LatLonToXy(nodeShip.lat, nodeShip.lon, shipX, shipY)) {
                 QPainter nodePainter(&drawPixmap);
