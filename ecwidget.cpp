@@ -7090,6 +7090,21 @@ void EcWidget::ownShipDraw(){
                 // ⭐ PANGGIL DENGAN PARAMETER BARU: COG, Heading, SOG
                 drawOwnShipIcon(painter, x, y, cog, heading, ownShipData.sog);
 
+                // GAMBAR NAMA KAPAL DI ATAS ICON OWNSHIP
+                if (!navShip.name.isEmpty()) {
+                    painter.setPen(Qt::black);
+                    QFont font = painter.font();
+                    font.setBold(true);
+                    font.setPointSize(10);
+                    painter.setFont(font);
+
+                    QRect textRect = painter.fontMetrics().boundingRect(navShip.name);
+                    int textX = x - textRect.width() / 2;
+                    int textY = y - 20; // 40 pixels di atas icon
+
+                    painter.drawText(textX, textY, navShip.name);
+                }
+
                 // GAMBAR TURNING PREDICTION (menggunakan data navShip untuk ROT)
                 // Gunakan heading dan cog absolut (belum dikurangi GetHeading) untuk kalkulasi kernel
                 drawTurningPrediction(painter, ownShipData.lat, ownShipData.lon,
