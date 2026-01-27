@@ -7230,6 +7230,62 @@ void EcWidget::ownShipDraw(){
             }
         }
     }
+
+    // GAMBAR NODE SHIPS (Dynamic ships dari NODE_REPORT_*)
+    if (showAIS && !nodeShips.isEmpty()) {
+        for (auto it = nodeShips.begin(); it != nodeShips.end(); ++it) {
+            QString nodeName = it.key();
+            ShipStruct nodeShip = it.value();
+
+            // Skip jika tidak ada lat/lon yang valid
+            if (qIsNaN(nodeShip.lat) || qIsNaN(nodeShip.lon) || nodeShip.lat == 0.0 || nodeShip.lon == 0.0) {
+                continue;
+            }
+
+            int shipX, shipY;
+
+            qCritical() << nodeShip.lat << " " << nodeShip.lon;
+
+            if (LatLonToXy(nodeShip.lat, nodeShip.lon, shipX, shipY)) {
+                QPainter nodePainter(&drawPixmap);
+                nodePainter.setRenderHint(QPainter::Antialiasing, true);
+
+                // Hitung heading relatif terhadap heading view
+                double heading = nodeShip.heading - GetHeading();
+                while (heading < 0) heading += 360;
+                while (heading >= 360) heading -= 360;
+
+                // Gambar icon node ship dengan warna hijau tua
+                drawOwnShipIcon(nodePainter, shipX, shipY, heading, heading, nodeShip.speed, QColor(0, 180, 0), QColor(0, 180, 0));
+
+                // Gambar nama node ship di atas icon
+                if (!nodeShip.name.isEmpty()) {
+                    QFont font = nodePainter.font();
+                    font.setBold(true);
+                    font.setPointSize(10);
+                    nodePainter.setFont(font);
+
+                    QRect textRect = nodePainter.fontMetrics().boundingRect(nodeShip.name);
+                    int textX = shipX - textRect.width() / 2;
+                    int textY = shipY - 20; // 20 pixels di atas icon
+
+                    // Gambar outline putih (dengan offset tipis di semua arah)
+                    nodePainter.setPen(QPen(Qt::white, 2));
+                    for (int dx = -1; dx <= 1; dx++) {
+                        for (int dy = -1; dy <= 1; dy++) {
+                            nodePainter.drawText(textX + dx, textY + dy, nodeShip.name);
+                        }
+                    }
+
+                    // Gambar text utama hijau tua di atas outline
+                    nodePainter.setPen(QColor(0, 180, 0));
+                    nodePainter.drawText(textX, textY, nodeShip.name);
+                }
+
+                nodePainter.end();
+            }
+        }
+    }
 }
 
 void EcWidget::setCustomOwnship(bool state){
@@ -15428,7 +15484,7 @@ void EcWidget::updateTooltipIfVisible()
 }
 
 // icon ownship
-void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, double heading, double sog)
+void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, double heading, double sog, const QColor& outlineColor, const QColor& vectorColor)
 {
     // Selalu gunakan currentScale untuk perhitungan yang konsisten saat drag
     double viewRangeNM = GetRange(currentScale);
@@ -15461,7 +15517,9 @@ void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, doub
     // Jika zoom terlalu jauh, tampilkan dua lingkaran sebagai simbol ownship
     if (chartScale > 10000) {
         painter.save();
-        painter.setPen(QPen(Qt::black, 2));
+
+        // Gunakan warna sesuai parameter (hijau untuk node ships, hitam untuk ownship)
+        painter.setPen(QPen(outlineColor, 2));
 
         int r1 = 6;   // lingkaran dalam
         int r2 = 12;  // lingkaran luar
@@ -15516,9 +15574,8 @@ void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, doub
             // Kembali ke haluan
             outlinePath.lineTo(0, -halfLength);
 
-            // Gaya outline: garis solid, semi-transparan
-            //QPen outlinePen(QColor(0, 255, 0, 180), 2, Qt::SolidLine);  // Hijau transparan, solid line
-            QPen outlinePen(Qt::black, 1, Qt::SolidLine);  // Hijau transparan, solid line
+            // Gaya outline: gunakan warna dari parameter (hijau untuk node ships, hitam untuk ownship)
+            QPen outlinePen(outlineColor, 1, Qt::SolidLine);
             painter.setPen(outlinePen);
             painter.setBrush(Qt::NoBrush);  // Tanpa fill
             painter.drawPath(outlinePath);
@@ -15577,28 +15634,34 @@ void EcWidget::drawOwnShipIcon(QPainter& painter, int x, int y, double cog, doub
             shipPath.quadTo(control4, point6);
 
             // Gambar kapal
-            painter.setBrush(QBrush(QColor(120, 120, 120)));   // Abu-abu
-            painter.setPen(QPen(Qt::black, 1));
+            // Untuk node ships (hijau): fill kosong, hanya outline
+            // Untuk ownship (hitam): fill abu-abu
+            if (outlineColor == QColor(0, 180, 0)) {
+                painter.setBrush(Qt::NoBrush);  // Fill kosong untuk node ships
+            } else {
+                painter.setBrush(QBrush(QColor(120, 120, 120)));   // Fill abu-abu untuk ownship
+            }
+            painter.setPen(QPen(outlineColor, 2));  // Outline sesuai parameter warna
             painter.drawPath(shipPath);
 
             // Titik pusat kapal
             painter.setBrush(QBrush(Qt::black));
-            painter.setPen(QPen(Qt::black, 1));
+            painter.setPen(QPen(outlineColor, 1));  // Outline sesuai parameter warna
             painter.drawEllipse(-1, -1, 2, 2);
 
             // Garis heading
-            painter.setPen(QPen(Qt::black, 2));
+            painter.setPen(QPen(outlineColor, 2));  // Outline sesuai parameter warna
             painter.drawLine(0, 0, 0, -shipLength / 2 - int(10 * scaleFactor));
 
             painter.restore();
         }
 
         // Gambar vektor COG/SOG di luar rotasi
-        drawOwnShipVectors(painter, x, y, cog, heading, sog, actualLength, actualSize);
+        drawOwnShipVectors(painter, x, y, cog, heading, sog, actualLength, actualSize, vectorColor);
     }
 }
 
-void EcWidget::drawOwnShipVectors(QPainter& painter, int x, int y, double cog, double heading, double sog, double actualLength, bool actualSize)
+void EcWidget::drawOwnShipVectors(QPainter& painter, int x, int y, double cog, double heading, double sog, double actualLength, bool actualSize, const QColor& vectorColor)
 {
     // Jangan gambar vector jika kecepatan terlalu rendah
     if (sog < 0.5) return;
@@ -15628,17 +15691,19 @@ void EcWidget::drawOwnShipVectors(QPainter& painter, int x, int y, double cog, d
     painter.save();
     painter.setRenderHint(QPainter::Antialiasing, true);
 
-    // GARIS HIJAU PUTUS-PUTUS: Vector COG/SOG (arah pergerakan)
-    painter.setPen(QPen(QColor(0, 255, 0), 2, Qt::DashLine));
+    // GARIS VECTOR: Vector COG/SOG (arah pergerakan)
+    painter.setPen(QPen(vectorColor, 2, Qt::DashLine));
     double cogRad = cog * M_PI / 180.0;
     int cogEndX = x + (int)(sin(cogRad) * vectorLength);
     int cogEndY = y - (int)(cos(cogRad) * vectorLength);
     painter.drawLine(x, y, cogEndX, cogEndY);
 
-    // GARIS HIJAU SOLID: Vector Heading (arah kepala kapal)
+    // GARIS VECTOR: Vector Heading (arah kepala kapal)
     // Hanya tampilkan jika heading berbeda dari COG dengan toleransi 5 derajat
     if (angleDifference > 5.0) {
-        painter.setPen(QPen(QColor(0, 200, 0), 2, Qt::SolidLine));
+        // Gunakan versi lebih gelap dari vectorColor untuk solid line
+        QColor darkerColor = vectorColor.darker(150);
+        painter.setPen(QPen(darkerColor, 2, Qt::SolidLine));
         double headingRad = heading * M_PI / 180.0;
         int headingEndX = x + (int)(sin(headingRad) * vectorLength);
         int headingEndY = y - (int)(cos(headingRad) * vectorLength);

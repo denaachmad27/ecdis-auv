@@ -1556,8 +1556,8 @@ private:
   void showAISTooltipFromMMSI(const QPoint& position, unsigned int mmsi);
 
   // icon vessel
-  void drawOwnShipIcon(QPainter& painter, int x, int y, double cog, double heading, double sog);
-  void drawOwnShipVectors(QPainter& painter, int x, int y, double cog, double heading, double sog, double actualLength, bool actualSize);
+  void drawOwnShipIcon(QPainter& painter, int x, int y, double cog, double heading, double sog, const QColor& outlineColor = Qt::black, const QColor& vectorColor = QColor(0, 255, 0));
+  void drawOwnShipVectors(QPainter& painter, int x, int y, double cog, double heading, double sog, double actualLength, bool actualSize, const QColor& vectorColor = QColor(0, 255, 0));
   void drawTurningPrediction(QPainter& painter, double shipLat, double shipLon, double heading, double cog, double sog, double rot);
   void drawShipOutlineAt(QPainter& painter, int x, int y, double heading, double alpha = 100.0);
 
