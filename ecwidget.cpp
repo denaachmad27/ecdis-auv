@@ -28,6 +28,7 @@
 #include "aistooltip.h"
 #include "mainwindow.h"
 #include "aoi.h"
+#include "satellitetilelayer.h"
 #include "tidemanager.h"
 #include "gribmanager.h"
 
@@ -267,6 +268,13 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
       if (highlightedWaypoint.visible) {
           update(); // Trigger repaint for animation
       }
+  });
+
+  // Initialize satellite tile layer
+  satelliteLayer = new SatelliteTileLayer(this);
+  showSatelliteLayer = false;
+  connect(satelliteLayer, &SatelliteTileLayer::tileUpdated, this, [this](int, int, int) {
+      update(); // Trigger repaint when tiles are loaded
   });
 
   // Initialize alert system (delayed to ensure EcWidget is fully constructed)
@@ -1302,6 +1310,232 @@ void EcWidget::ShowOwnship(bool on)
   showOwnship = on;
 }
 
+/*---------------------------------------------------------------------------*/
+
+void EcWidget::ShowSatelliteLayer(bool on)
+{
+  showSatelliteLayer = on;
+  qDebug() << "[SATELLITE] ShowSatelliteLayer called:" << on;
+
+  satelliteLayer->setEnabled(on);
+  if (on) {
+      updateSatelliteTiles();
+  }
+  update();
+}
+
+/*---------------------------------------------------------------------------*/
+
+void EcWidget::updateSatelliteTiles()
+{
+  if (!showSatelliteLayer || !view) return;
+
+  // Get viewport bounds
+  EcCoordinate lat, lon;
+  double minLat, maxLat, minLon, maxLon;
+  XyToLatLon(0, 0, lat, lon);
+  maxLat = lat; minLon = lon;
+  XyToLatLon(width(), height(), lat, lon);
+  minLat = lat; maxLon = lon;
+
+  // Calculate zoom level based on chart range
+  int currentScale = GetScale();
+  double currentRangeNM = GetRange(currentScale);
+
+  int zoomLevel;
+  if (currentRangeNM > 5000) zoomLevel = 2;
+  else if (currentRangeNM > 2000) zoomLevel = 3;
+  else if (currentRangeNM > 1000) zoomLevel = 4;
+  else if (currentRangeNM > 500) zoomLevel = 5;
+  else if (currentRangeNM > 200) zoomLevel = 6;
+  else if (currentRangeNM > 100) zoomLevel = 7;
+  else if (currentRangeNM > 50) zoomLevel = 8;
+  else if (currentRangeNM > 20) zoomLevel = 9;
+  else if (currentRangeNM > 10) zoomLevel = 10;
+  else if (currentRangeNM > 5) zoomLevel = 11;
+  else if (currentRangeNM > 2) zoomLevel = 12;
+  else if (currentRangeNM > 1) zoomLevel = 13;
+  else if (currentRangeNM > 0.5) zoomLevel = 14;
+  else if (currentRangeNM > 0.2) zoomLevel = 15;
+  else zoomLevel = qMin(16, SatelliteTileLayer::MAX_ZOOM);
+
+  satelliteLayer->setViewport(minLat, maxLat, minLon, maxLon, zoomLevel);
+  satelliteLayer->setWidgetSize(width(), height());
+}
+
+/*---------------------------------------------------------------------------*/
+
+void EcWidget::drawSatelliteTilesOnPixmap()
+{
+    if (!view || !initialized) return;
+
+    // Calculate zoom level for satellite tiles
+    int currentScale = GetScale();
+    double currentRangeNM = GetRange(currentScale);
+
+    int zoomLevel;
+    if (currentRangeNM > 5000) zoomLevel = 2;
+    else if (currentRangeNM > 2000) zoomLevel = 3;
+    else if (currentRangeNM > 1000) zoomLevel = 4;
+    else if (currentRangeNM > 500) zoomLevel = 5;
+    else if (currentRangeNM > 200) zoomLevel = 6;
+    else if (currentRangeNM > 100) zoomLevel = 7;
+    else if (currentRangeNM > 50) zoomLevel = 8;
+    else if (currentRangeNM > 20) zoomLevel = 9;
+    else if (currentRangeNM > 10) zoomLevel = 10;
+    else if (currentRangeNM > 5) zoomLevel = 11;
+    else if (currentRangeNM > 2) zoomLevel = 12;
+    else if (currentRangeNM > 1) zoomLevel = 13;
+    else if (currentRangeNM > 0.5) zoomLevel = 14;
+    else if (currentRangeNM > 0.2) zoomLevel = 15;
+    else zoomLevel = qMin(16, SatelliteTileLayer::MAX_ZOOM);
+
+    // Get viewport bounds in chart coordinates
+    double minLat, maxLat, minLon, maxLon;
+    EcCoordinate lat, lon;
+    XyToLatLon(0, 0, lat, lon);
+    maxLat = lat; minLon = lon;
+    XyToLatLon(width(), height(), lat, lon);
+    minLat = lat; maxLon = lon;
+
+    // Update satellite layer with new viewport
+    satelliteLayer->setViewport(minLat, maxLat, minLon, maxLon, zoomLevel);
+
+    // Get tile range
+    int startX = SatelliteTileLayer::lonToTileX(minLon, zoomLevel);
+    int endX = SatelliteTileLayer::lonToTileX(maxLon, zoomLevel);
+    int startY = SatelliteTileLayer::latToTileY(maxLat, zoomLevel);
+    int endY = SatelliteTileLayer::latToTileY(minLat, zoomLevel);
+
+    // Clamp to valid tile range
+    int maxTile = 1 << zoomLevel;
+    startX = qMax(0, startX);
+    endX = qMin(maxTile - 1, endX);
+    startY = qMax(0, startY);
+    endY = qMin(maxTile - 1, endY);
+
+    if (endX < startX || endY < startY) return;
+
+    // Draw tiles directly to drawPixmap using chart coordinates
+    QPainter painter(&drawPixmap);
+    if (!painter.isActive()) {
+        qDebug() << "[SATELLITE] QPainter not active for drawPixmap";
+        return;
+    }
+
+    painter.setOpacity(0.85);
+
+    // For each tile, calculate its 4 corners in chart coordinates and draw
+    for (int tileX = startX; tileX <= endX; tileX++) {
+        for (int tileY = startY; tileY <= endY; tileY++) {
+            QPixmap tile = satelliteLayer->getTileWithFallback(tileX, tileY, zoomLevel);
+            if (!tile.isNull()) {
+                // Get tile bounds in geographic coordinates
+                double tileMinLon = SatelliteTileLayer::tileXToLon(tileX, zoomLevel);
+                double tileMaxLon = SatelliteTileLayer::tileXToLon(tileX + 1, zoomLevel);
+                double tileMaxLat = SatelliteTileLayer::tileYToLat(tileY, zoomLevel);
+                double tileMinLat = SatelliteTileLayer::tileYToLat(tileY + 1, zoomLevel);
+
+                // Convert tile corners to chart coordinates
+                int x1, y1, x2, y2, x3, y3, x4, y4;
+                bool valid1 = LatLonToXy(tileMaxLat, tileMinLon, x1, y1);  // Top-left
+                bool valid2 = LatLonToXy(tileMaxLat, tileMaxLon, x2, y2);  // Top-right
+                bool valid3 = LatLonToXy(tileMinLat, tileMaxLon, x3, y3);  // Bottom-right
+                bool valid4 = LatLonToXy(tileMinLat, tileMinLon, x4, y4);  // Bottom-left
+
+                if (valid1 && valid2 && valid3 && valid4) {
+                    // Create a polygon for the tile (handles projection distortion)
+                    QPolygon tilePoly;
+                    tilePoly << QPoint(x1, y1) << QPoint(x2, y2)
+                             << QPoint(x3, y3) << QPoint(x4, y4);
+
+                    // Get bounding rect for drawing
+                    QRect tileRect = tilePoly.boundingRect();
+
+                    // Scale the tile to fit the bounding rect
+                    painter.drawPixmap(tileRect, tile, QRectF(0, 0, 256, 256));
+                }
+            }
+        }
+    }
+
+    painter.end();
+}
+
+/*---------------------------------------------------------------------------*/
+
+void EcWidget::drawSatelliteTiles(QPainter& painter, int zoomLevel,
+                                  double viewMinLat, double viewMaxLat,
+                                  double viewMinLon, double viewMaxLon,
+                                  int offsetX, int offsetY)
+{
+    // Check projection compatibility - Web Mercator tiles align best with Mercator projection
+    static bool hasWarnedProjection = false;
+    if (!hasWarnedProjection && currentProjection != EC_GEO_PROJECTION_MERCATOR) {
+        qWarning() << "[SATELLITE] Chart projection is" << GetProjectionName()
+                   << "- tiles may not align perfectly with Mercator-based charts";
+        hasWarnedProjection = true;
+    }
+
+    // Convert viewport bounds to Web Mercator
+    double wmMinX, wmMinY, wmMaxX, wmMaxY;
+    SatelliteTileLayer::geographicToWebMercator(viewMinLat, viewMinLon, wmMinX, wmMinY);
+    SatelliteTileLayer::geographicToWebMercator(viewMaxLat, viewMaxLon, wmMaxX, wmMaxY);
+
+    // Ensure min/max are correct (Y is inverted in Web Mercator)
+    if (wmMinX > wmMaxX) qSwap(wmMinX, wmMaxX);
+    if (wmMinY > wmMaxY) qSwap(wmMinY, wmMaxY);
+
+    // Calculate scale: pixels per Web Mercator meter
+    // The visible viewport in WM coordinates
+    double wmWidth = wmMaxX - wmMinX;
+    double wmHeight = wmMaxY - wmMinY;
+
+    // Calculate tile size in Web Mercator at this zoom level
+    const double WM_EXTENT = 20037508.34;
+    double wmTileSize = (WM_EXTENT * 2.0) / (1 << zoomLevel);
+
+    // Calculate how many pixels each tile should occupy
+    // Use the larger dimension for more consistent scaling
+    double pixelsPerWM = width() / wmWidth;
+    double tilePixelSize = wmTileSize * pixelsPerWM;
+
+    // Calculate tile range using Web Mercator coordinates
+    int startTileX = (int)floor(SatelliteTileLayer::webMercatorXToTileX(wmMinX, zoomLevel));
+    int endTileX = (int)floor(SatelliteTileLayer::webMercatorXToTileX(wmMaxX, zoomLevel));
+    int startTileY = (int)floor(SatelliteTileLayer::webMercatorYToTileY(wmMaxY, zoomLevel));
+    int endTileY = (int)floor(SatelliteTileLayer::webMercatorYToTileY(wmMinY, zoomLevel));
+
+    // Clamp to valid tile range
+    int maxTile = 1 << zoomLevel;
+    startTileX = qMax(0, startTileX);
+    endTileX = qMin(maxTile - 1, endTileX);
+    startTileY = qMax(0, startTileY);
+    endTileY = qMin(maxTile - 1, endTileY);
+
+    for (int tileX = startTileX; tileX <= endTileX; tileX++) {
+        for (int tileY = startTileY; tileY <= endTileY; tileY++) {
+            // Use fallback to show lower-zoom tiles if current zoom not ready
+            QPixmap tile = satelliteLayer->getTileWithFallback(tileX, tileY, zoomLevel);
+            if (!tile.isNull()) {
+                // Get tile bounds in Web Mercator
+                double tileWMX = SatelliteTileLayer::tileXToWebMercatorX(tileX, zoomLevel);
+                double tileWMY = SatelliteTileLayer::tileYToWebMercatorY(tileY, zoomLevel);
+
+                // Calculate screen position relative to viewport
+                double screenX = (tileWMX - wmMinX) * pixelsPerWM + offsetX;
+                double screenY = (tileWMY - wmMinY) * pixelsPerWM + offsetY;
+
+                // Draw scaled tile
+                painter.drawPixmap(QRectF(screenX, screenY, tilePixelSize, tilePixelSize),
+                                  tile, QRectF(0, 0, 256, 256));
+            }
+        }
+    }
+}
+
+/*---------------------------------------------------------------------------*/
+
 void EcWidget::TrackTarget(QString mmsi){
     trackTarget = mmsi;
     // Clear AIS panel if tracking is cleared
@@ -1995,7 +2229,13 @@ void EcWidget::waypointDraw(){
     // Range < 123: Show full waypoint details
     bool showRouteNamesOnly = (currentRange >= 123.0);
 
-    // IMPORTANT: Draw route lines FIRST (bottom layer)
+    // IMPORTANT: Draw satellite tiles FIRST (bottom layer - directly to pixmap)
+    // This makes tiles part of the chart, so they move together during drag
+    if (showSatelliteLayer && satelliteLayer && satelliteLayer->isEnabled()) {
+        drawSatelliteTilesOnPixmap();
+    }
+
+    // IMPORTANT: Draw route lines AFTER tiles (on top of tiles)
     drawRouteLines();
 
     // Then draw labels AFTER (top layer) - proper z-index layering
@@ -2033,6 +2273,13 @@ void EcWidget::paintEvent (QPaintEvent *e)
     if (!initialized) return;
     QPainter painter(this);
 
+    // Debug: Show current mode (only log occasionally to avoid spam)
+    static int paintCount = 0;
+    if (++paintCount % 100 == 1) {
+        qDebug() << "[PAINT] dragMode=" << dragMode << "showSatelliteLayer=" << showSatelliteLayer
+                 << "satelliteLayer enabled=" << (satelliteLayer ? satelliteLayer->isEnabled() : false);
+    }
+
     if (dragMode){
         painter.fillRect(rect(), QColor(204,197,123));
 
@@ -2049,14 +2296,23 @@ void EcWidget::paintEvent (QPaintEvent *e)
         painter.translate(centerOffset);
 
         // gambar chart pixmap di (0,0)
+        // drawPixmap sudah berisi chart + satellite tiles (digambar di waypointDraw)
         painter.drawPixmap(0, 0, drawPixmap);
-
-        //painter.drawPixmap(e->rect(), drawPixmap, e->rect());
     }
     else {
         // ======== STABLE ========= //
+        // drawPixmap sudah berisi chart + satellite tiles (digambar di waypointDraw)
         painter.drawPixmap(e->rect(), drawPixmap, e->rect());
         // ======== STABLE ========= //
+    }
+
+    // Draw attribution text (on top of everything)
+    if (showSatelliteLayer && satelliteLayer && satelliteLayer->isEnabled()) {
+        painter.setPen(QColor(255, 255, 255, 200));
+        QString bundledDir = QCoreApplication::applicationDirPath() + "/tiles";
+        bool hasBundled = QDir(bundledDir).exists();
+        QString tileType = hasBundled ? "Satellite" : "Test";
+        painter.drawText(width() - 150, height() - 10, tileType);
     }
 
 
@@ -5333,7 +5589,7 @@ void EcWidget::mouseReleaseEvent(QMouseEvent *e)
         tempOffset = QPoint();  // reset drag offset
         unsetCursor();
 
-        Draw();             // redraw chart penuh
+        Draw();             // redraw chart penuh (termasuk waypointDraw yang menggambar tiles)
     }
 
     // Handle tidal station clicks

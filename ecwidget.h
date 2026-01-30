@@ -55,6 +55,7 @@ class CPATCPAPanel;
 class CurrentVisualisation; // Forward declaration for current visualization
 class VisualisationPanel; // Forward declaration for visualization panel
 class GribVisualisation; // Forward declaration for GRIB visualization
+class SatelliteTileLayer; // Forward declaration for satellite tile layer
 
 struct AISTargetData {
     QString mmsi;
@@ -162,6 +163,9 @@ class RouteDeviationDetector; // Forward declaration
 
 #define M_KEY "82115"
 #define MID "BF"
+
+// Satellite view display category (custom, not from SevenCs SDK)
+#define EC_SATELLITE 4
 
 // Waypoint
 #define PICKRADIUS  (0.03 * GetRange)
@@ -742,6 +746,14 @@ public:
   void ShowAIS(bool on);
   void ShowOwnship(bool on);
 
+  // Satellite view layer
+  void ShowSatelliteLayer(bool on);
+  bool isSatelliteLayerEnabled() const { return showSatelliteLayer; }
+  void updateSatelliteTiles();
+  void drawSatelliteTilesOnPixmap();  // Draw tiles directly to drawPixmap (like routes)
+  void drawSatelliteTiles(QPainter& painter, int zoomLevel, double viewMinLat, double viewMaxLat,
+                          double viewMinLon, double viewMaxLon, int offsetX, int offsetY);
+
   // Swiches the track of AIS Target
   void TrackTarget(QString mmsi);
   bool isTrackTarget();
@@ -1276,6 +1288,10 @@ public:
   // AOI render options
   bool enableAoiSegmentLabels = false; // safety default: off
   bool showAoiLabels = true;           // master toggle for AOI labels
+
+  // Satellite tile layer
+  SatelliteTileLayer *satelliteLayer;
+  bool showSatelliteLayer = false;     // Enable/disable satellite view
 
   // POI store
   QVector<PoiEntry> poiList;

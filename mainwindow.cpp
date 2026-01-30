@@ -969,15 +969,31 @@ void MainWindow::createMenuBar(){
     dayAction    = cActionGroup->addAction("Day");
     duskAction = cActionGroup->addAction("Dusk");
     nightAction = cActionGroup->addAction("Night");
+    satelliteAction = cActionGroup->addAction("Satellite");
     dayAction->setCheckable(true);
     duskAction->setCheckable(true);
     nightAction->setCheckable(true);
+    satelliteAction->setCheckable(true);
 
+    qDebug() << "[MENU] Chart Theme actions created:"
+             << "dayAction=" << dayAction
+             << "duskAction=" << duskAction
+             << "nightAction=" << nightAction
+             << "satelliteAction=" << satelliteAction;
+
+    // Original QActionGroup connection (this was working before)
     connect(cActionGroup, SIGNAL(triggered(QAction *)), this, SLOT(onColorScheme(QAction *)));
+
+    // Additional individual connections (backup)
+    connect(dayAction, SIGNAL(triggered()), this, SLOT(onDayClicked()));
+    connect(duskAction, SIGNAL(triggered()), this, SLOT(onDuskClicked()));
+    connect(nightAction, SIGNAL(triggered()), this, SLOT(onNightClicked()));
+    connect(satelliteAction, SIGNAL(triggered()), this, SLOT(onSatelliteClicked()));
 
     colorMenu->addAction(dayAction);
     colorMenu->addAction(duskAction);
     colorMenu->addAction(nightAction);
+    colorMenu->addAction(satelliteAction);
 
     colorMenu->addSeparator();
 
@@ -2449,6 +2465,11 @@ void MainWindow::setDisplay(){
         cs = EC_NIGHT;
         nightAction->setChecked(true);
     }
+    else if (displayCategory == EC_SATELLITE){
+        cs = EC_DAY_BRIGHT; // Use Day colors for satellite mode
+        satelliteAction->setChecked(true);
+        ecchart->ShowSatelliteLayer(true);
+    }
     else {
         dayAction->setChecked(true);
     }
@@ -2460,6 +2481,7 @@ void MainWindow::setDisplay(){
 }
 
 MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL), m_isDatabaseConnected(false){
+  qDebug() << "[MAINWINDOW] Constructor starting - NEW CODE VERSION 2025-01-30";
   // set the registration mode similar to the mode
   // for which the Kernel development license has been registered
   // EcKernelRegisterSetMode(EC_REGISTER_CHECK_DONGLE_7); // for Sentinel dongle
@@ -2605,6 +2627,9 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL), m_i
   else if (SettingsManager::instance().data().displayMode == "Dusk"){
       displayCategory = EC_DUSK;
   }
+  else if (SettingsManager::instance().data().displayMode == "Satellite"){
+      displayCategory = EC_SATELLITE;
+  }
   else {
       displayCategory = EC_STANDARD;
   }
@@ -2629,6 +2654,11 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL), m_i
   ecchart->ShowOwnship(showOwnship);
   ecchart->TrackShip(trackShip);
   ecchart->ShowDangerTarget(showDangerTarget);
+
+  // Initialize satellite layer if enabled
+  if (displayCategory == EC_SATELLITE) {
+      ecchart->ShowSatelliteLayer(true);
+  }
 
   // Create the window for the pick report
   pickWindow = new PickWindow(this, dict, ecchart->GetDENC());
@@ -3263,6 +3293,12 @@ void MainWindow::onSearch()
 
 void MainWindow::onColorScheme(QAction *a)
 {
+  qDebug() << "[COLOR SCHEME] onColorScheme called, action:" << a->text()
+           << "satelliteAction:" << (a == satelliteAction)
+           << "duskAction:" << (a == duskAction)
+           << "nightAction:" << (a == nightAction)
+           << "dayAction:" << (a == dayAction);
+
   int cs = EC_DAY_BRIGHT;
   if (a == duskAction)
     cs = EC_DUSK;
@@ -3272,7 +3308,42 @@ void MainWindow::onColorScheme(QAction *a)
   bool gm = ecchart->GetGreyMode();
   int  br = ecchart->GetBrightness();
   ecchart->SetColorScheme(cs, gm, br);
+
+  // Handle satellite mode
+  if (a == satelliteAction) {
+      qDebug() << "[COLOR SCHEME] Satellite mode selected!";
+      ecchart->ShowSatelliteLayer(true);
+  } else {
+      ecchart->ShowSatelliteLayer(false);
+  }
+
   DrawChart();
+}
+
+/*---------------------------------------------------------------------------*/
+
+void MainWindow::onDayClicked()
+{
+    qDebug() << "[THEME] Day clicked!";
+    onColorScheme(dayAction);
+}
+
+void MainWindow::onDuskClicked()
+{
+    qDebug() << "[THEME] Dusk clicked!";
+    onColorScheme(duskAction);
+}
+
+void MainWindow::onNightClicked()
+{
+    qDebug() << "[THEME] Night clicked!";
+    onColorScheme(nightAction);
+}
+
+void MainWindow::onSatelliteClicked()
+{
+    qDebug() << "[THEME] Satellite clicked!";
+    onColorScheme(satelliteAction);
 }
 
 /*---------------------------------------------------------------------------*/

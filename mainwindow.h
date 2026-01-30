@@ -158,6 +158,10 @@ protected slots:
     void onSearch();
 
     void onColorScheme(QAction *);
+    void onDayClicked();
+    void onDuskClicked();
+    void onNightClicked();
+    void onSatelliteClicked();
     void onGreyMode(bool);
 
     void onScale(int);
@@ -271,7 +275,7 @@ protected:
     QAction *autoProjectionAction, *mercatorAction, *gnomonicAction, *stereographicAction;
     QAction *baseAction, *standardAction, *otherAction;
     QAction *simplifiedAction, *fullChartAction;
-    QAction *dayAction, *duskAction, *nightAction;
+    QAction *dayAction, *duskAction, *nightAction, *satelliteAction;
     QAction *logfileAction, *serverAction;
 
     QAction* startAisRecAction;
