@@ -29,6 +29,7 @@
 #include "mainwindow.h"
 #include "aoi.h"
 #include "tidemanager.h"
+#include "gribmanager.h"
 
 // Waypoint
 #include "SettingsManager.h"
@@ -2102,6 +2103,11 @@ void EcWidget::paintEvent (QPaintEvent *e)
       drawRedDotTracker();
   }
 
+  // Draw GRIB wave data overlay (before AOIs)
+  if (m_showGribData) {
+      drawGribData(painter);
+  }
+
   // Draw AOIs always on top of chart
   drawAOIs(painter);
   drawPois(painter);
@@ -2744,6 +2750,39 @@ bool EcWidget::updateAOI(const AOI& updatedAOI)
         }
     }
     return false;
+}
+
+// ========== GRIB VISUALIZATION ==========
+
+void EcWidget::drawGribData(QPainter& painter)
+{
+    if (!m_gribManager || !m_gribManager->isLoaded()) {
+        return;
+    }
+
+    if (!initialized || !view) {
+        return;
+    }
+
+    // Create visualizer if not exists
+    if (!m_gribVisualisation) {
+        m_gribVisualisation = new GribVisualisation(this);
+    }
+
+    // Get current time step data
+    GribMessage message = m_gribManager->getCurrentMessage();
+    if (message.dataPoints.isEmpty()) {
+        return;
+    }
+
+    // Get viewport rectangle (the visible area)
+    QRect viewportRect = rect();
+
+    // Draw the GRIB data
+    m_gribVisualisation->draw(painter, this, message, viewportRect,
+                             m_gribManager->showHeatmap(),
+                             m_gribManager->showArrows(),
+                             m_gribManager->arrowDensity());
 }
 
 void EcWidget::drawAOIs(QPainter& painter)

@@ -898,6 +898,9 @@ void MainWindow::createMenuBar(){
     // Setup Tide Panel
     setupTidePanel();
 
+    // Setup GRIB Viewer Panel
+    setupGribPanel();
+
     // Initialize visualization components
     ecchart->setCurrentVisualisation(new CurrentVisualisation(ecchart));
     ecchart->refreshVisualization();  // Load sample data
@@ -1223,6 +1226,12 @@ void MainWindow::createMenuBar(){
     if (m_nmeaPlaybackDock) {
         viewMenu->addAction(m_nmeaPlaybackDock->toggleViewAction());
         qDebug() << "[MENU] Added AIS Playback Control to UI Panels menu";
+    }
+
+    // Add GRIB Viewer Panel to UI Panels menu
+    if (gribDock) {
+        viewMenu->addAction(gribDock->toggleViewAction());
+        qDebug() << "[MENU] Added GRIB Viewer Panel to UI Panels menu";
     }
 }
 
@@ -5186,6 +5195,68 @@ void MainWindow::setupTidePanel()
     } catch (const std::exception& e) {
         qDebug() << "[MAIN] ERROR setting up Tide panel - but Test Panel works!";
         // No error dialog - let Test Panel show it's possible
+    }
+}
+
+
+// ========== GRIB VIEWER PANEL ==========
+
+void MainWindow::setupGribPanel()
+{
+    qDebug() << "[MAIN] Setting up GRIB Viewer panel...";
+
+    try {
+        // Create GRIB Manager
+        gribManager = new GribManager(this);
+
+        // Create GRIB Panel
+        gribPanel = new GribPanel(ecchart, gribManager, this);
+
+        // Create dock widget
+        gribDock = new QDockWidget(tr("GRIB Viewer"), this);
+        gribDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+        gribDock->setWidget(gribPanel);
+
+        // Set object name for better identification
+        gribDock->setObjectName("GribViewerDock");
+
+        // Add to right dock area
+        addDockWidget(Qt::RightDockWidgetArea, gribDock);
+
+        // Pass GRIB manager to EcWidget for drawing
+        if (ecchart) {
+            ecchart->setGribManager(gribManager);
+        }
+
+        // Connect panel signals for map refresh
+        connect(gribPanel, &GribPanel::refreshRequested, this, [this]() {
+            if (ecchart) {
+                ecchart->update();
+            }
+        });
+
+        // Add to Sidebar menu
+        QList<QAction*> actions = menuBar()->actions();
+        bool sidebarFound = false;
+        for (QAction* action : actions) {
+            if (action->menu() && action->menu()->title() == tr("&Sidebar")) {
+                action->menu()->addAction(gribDock->toggleViewAction());
+                qDebug() << "[MAIN] GRIB Viewer Panel added to Sidebar menu successfully";
+                sidebarFound = true;
+                break;
+            }
+        }
+        if (!sidebarFound) {
+            qDebug() << "[MAIN] Warning: Sidebar menu not found for GRIB Viewer Panel";
+        }
+
+        // Hide by default
+        gribDock->hide();
+
+        qDebug() << "[MAIN] GRIB Viewer panel setup completed";
+
+    } catch (const std::exception& e) {
+        qDebug() << "[MAIN] ERROR setting up GRIB Viewer panel:" << e.what();
     }
 }
 

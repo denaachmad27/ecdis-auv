@@ -26,6 +26,8 @@
 #include "cpatcpapanel.h"
 #include "tidemanager.h"
 #include "tidepanel.h"
+#include "gribpanel.h"
+#include "gribmanager.h"
 #include "testpanel.h"
 
 // forward declerations
@@ -368,7 +370,12 @@ private:
     QDockWidget* tideDock;
     void setupTidePanel();
 
-    
+    // GRIB Viewer Panel
+    class GribPanel* gribPanel;
+    class GribManager* gribManager;
+    QDockWidget* gribDock;
+    void setupGribPanel();
+
     // Alert handling methods
     void onAlertTriggered(const AlertData& alert);
     void onCriticalAlertTriggered(const AlertData& alert);

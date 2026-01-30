@@ -39,6 +39,11 @@ class TideManager;
 #include "autoroutedialog.h"
 #include "poi.h"
 
+// GRIB visualization
+#include "gribvisualisation.h"
+#include "gribdata.h"
+class GribManager;
+
 //popup
 #include <QLabel>
 #include <QFrame>
@@ -49,6 +54,7 @@ class TideManager;
 class CPATCPAPanel;
 class CurrentVisualisation; // Forward declaration for current visualization
 class VisualisationPanel; // Forward declaration for visualization panel
+class GribVisualisation; // Forward declaration for GRIB visualization
 
 struct AISTargetData {
     QString mmsi;
@@ -1765,6 +1771,17 @@ public:
   CurrentVisualisation* m_currentVisualisation = nullptr;
     bool m_showCurrentArrows = true;
   bool m_showTideRectangles = false;
+
+  // GRIB Visualization components
+  GribVisualisation* m_gribVisualisation = nullptr;
+  GribManager* m_gribManager = nullptr;
+  bool m_showGribData = true;
+
+  // Method to set GRIB manager
+  void setGribManager(GribManager* manager) { m_gribManager = manager; }
+
+  // Method to draw GRIB data
+  void drawGribData(QPainter& painter);
 
 }; // EcWidget
 
