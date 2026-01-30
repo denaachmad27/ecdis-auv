@@ -750,7 +750,11 @@ public:
   void ShowSatelliteLayer(bool on);
   bool isSatelliteLayerEnabled() const { return showSatelliteLayer; }
   void updateSatelliteTiles();
-  void drawSatelliteTilesOnPixmap();  // Draw tiles directly to drawPixmap (like routes)
+  void drawSatelliteTilesOverlay();  // Draw tiles to drawPixmap with alpha blending
+  void drawSatelliteTilesToChart();  // Draw tiles to chartPixmap (no flicker)
+#ifdef _WIN32
+  void drawSatelliteTilesToHdc(HDC targetHdc);  // Draw tiles to HDC before chart (Windows only)
+#endif
   void drawSatelliteTiles(QPainter& painter, int zoomLevel, double viewMinLat, double viewMaxLat,
                           double viewMinLon, double viewMaxLon, int offsetX, int offsetY);
 

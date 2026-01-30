@@ -1365,7 +1365,7 @@ void EcWidget::updateSatelliteTiles()
 
 /*---------------------------------------------------------------------------*/
 
-void EcWidget::drawSatelliteTilesOnPixmap()
+void EcWidget::drawSatelliteTilesToChart()
 {
     if (!view || !initialized) return;
 
@@ -1416,14 +1416,24 @@ void EcWidget::drawSatelliteTilesOnPixmap()
 
     if (endX < startX || endY < startY) return;
 
-    // Draw tiles directly to drawPixmap using chart coordinates
-    QPainter painter(&drawPixmap);
+    // Draw tiles to chartPixmap
+    QPainter painter(&chartPixmap);
     if (!painter.isActive()) {
-        qDebug() << "[SATELLITE] QPainter not active for drawPixmap";
+        qDebug() << "[SATELLITE] QPainter not active for chartPixmap";
         return;
     }
 
-    painter.setOpacity(0.85);
+#ifdef _WIN32
+    // Windows: Solid satellite tiles - chart info (depth, symbols) will be covered
+    // But routes, POI, AOI, ownship, AIS are drawn later and will be visible
+    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+    painter.setOpacity(1.0);  // Solid - satellite tiles fully visible
+#else
+    // X11: Use DestinationOver to draw BEHIND existing chart content
+    // This works if X11 rendering creates image with alpha
+    painter.setCompositionMode(QPainter::CompositionMode_DestinationOver);
+    painter.setOpacity(1.0);
+#endif
 
     // For each tile, calculate its 4 corners in chart coordinates and draw
     for (int tileX = startX; tileX <= endX; tileX++) {
@@ -1461,6 +1471,232 @@ void EcWidget::drawSatelliteTilesOnPixmap()
 
     painter.end();
 }
+
+void EcWidget::drawSatelliteTilesOverlay()
+{
+    if (!view || !initialized) return;
+
+    // Calculate zoom level for satellite tiles
+    int currentScale = GetScale();
+    double currentRangeNM = GetRange(currentScale);
+
+    int zoomLevel;
+    if (currentRangeNM > 5000) zoomLevel = 2;
+    else if (currentRangeNM > 2000) zoomLevel = 3;
+    else if (currentRangeNM > 1000) zoomLevel = 4;
+    else if (currentRangeNM > 500) zoomLevel = 5;
+    else if (currentRangeNM > 200) zoomLevel = 6;
+    else if (currentRangeNM > 100) zoomLevel = 7;
+    else if (currentRangeNM > 50) zoomLevel = 8;
+    else if (currentRangeNM > 20) zoomLevel = 9;
+    else if (currentRangeNM > 10) zoomLevel = 10;
+    else if (currentRangeNM > 5) zoomLevel = 11;
+    else if (currentRangeNM > 2) zoomLevel = 12;
+    else if (currentRangeNM > 1) zoomLevel = 13;
+    else if (currentRangeNM > 0.5) zoomLevel = 14;
+    else if (currentRangeNM > 0.2) zoomLevel = 15;
+    else zoomLevel = qMin(16, SatelliteTileLayer::MAX_ZOOM);
+
+    // Get viewport bounds in chart coordinates
+    double minLat, maxLat, minLon, maxLon;
+    EcCoordinate lat, lon;
+    XyToLatLon(0, 0, lat, lon);
+    maxLat = lat; minLon = lon;
+    XyToLatLon(width(), height(), lat, lon);
+    minLat = lat; maxLon = lon;
+
+    // Update satellite layer with new viewport
+    satelliteLayer->setViewport(minLat, maxLat, minLon, maxLon, zoomLevel);
+
+    // Get tile range
+    int startX = SatelliteTileLayer::lonToTileX(minLon, zoomLevel);
+    int endX = SatelliteTileLayer::lonToTileX(maxLon, zoomLevel);
+    int startY = SatelliteTileLayer::latToTileY(maxLat, zoomLevel);
+    int endY = SatelliteTileLayer::latToTileY(minLat, zoomLevel);
+
+    // Clamp to valid tile range
+    int maxTile = 1 << zoomLevel;
+    startX = qMax(0, startX);
+    endX = qMin(maxTile - 1, endX);
+    startY = qMax(0, startY);
+    endY = qMin(maxTile - 1, endY);
+
+    if (endX < startX || endY < startY) return;
+
+    // Draw tiles to drawPixmap with alpha blending
+    QPainter painter(&drawPixmap);
+    if (!painter.isActive()) {
+        qDebug() << "[SATELLITE] QPainter not active for drawPixmap";
+        return;
+    }
+
+    // Use 0.6 opacity so chart info remains visible underneath
+    painter.setOpacity(0.6);
+
+    // For each tile, calculate its 4 corners in chart coordinates and draw
+    for (int tileX = startX; tileX <= endX; tileX++) {
+        for (int tileY = startY; tileY <= endY; tileY++) {
+            QPixmap tile = satelliteLayer->getTileWithFallback(tileX, tileY, zoomLevel);
+            if (!tile.isNull()) {
+                // Get tile bounds in geographic coordinates
+                double tileMinLon = SatelliteTileLayer::tileXToLon(tileX, zoomLevel);
+                double tileMaxLon = SatelliteTileLayer::tileXToLon(tileX + 1, zoomLevel);
+                double tileMaxLat = SatelliteTileLayer::tileYToLat(tileY, zoomLevel);
+                double tileMinLat = SatelliteTileLayer::tileYToLat(tileY + 1, zoomLevel);
+
+                // Convert tile corners to chart coordinates
+                int x1, y1, x2, y2, x3, y3, x4, y4;
+                bool valid1 = LatLonToXy(tileMaxLat, tileMinLon, x1, y1);  // Top-left
+                bool valid2 = LatLonToXy(tileMaxLat, tileMaxLon, x2, y2);  // Top-right
+                bool valid3 = LatLonToXy(tileMinLat, tileMaxLon, x3, y3);  // Bottom-right
+                bool valid4 = LatLonToXy(tileMinLat, tileMinLon, x4, y4);  // Bottom-left
+
+                if (valid1 && valid2 && valid3 && valid4) {
+                    // Create a polygon for the tile (handles projection distortion)
+                    QPolygon tilePoly;
+                    tilePoly << QPoint(x1, y1) << QPoint(x2, y2)
+                             << QPoint(x3, y3) << QPoint(x4, y4);
+
+                    // Get bounding rect for drawing
+                    QRect tileRect = tilePoly.boundingRect();
+
+                    // Scale the tile to fit the bounding rect
+                    painter.drawPixmap(tileRect, tile, QRectF(0, 0, 256, 256));
+                }
+            }
+        }
+    }
+
+    painter.end();
+}
+
+#ifdef _WIN32
+/*---------------------------------------------------------------------------*/
+void EcWidget::drawSatelliteTilesToHdc(HDC targetHdc)
+{
+    qDebug() << "[SATELLITE-HDC] drawSatelliteTilesToHdc called - view:" << view << "initialized:" << initialized << "targetHdc:" << targetHdc;
+    if (!view || !initialized || !targetHdc) return;
+
+    // Calculate zoom level for satellite tiles
+    int currentScale = GetScale();
+    double currentRangeNM = GetRange(currentScale);
+
+    int zoomLevel;
+    if (currentRangeNM > 5000) zoomLevel = 2;
+    else if (currentRangeNM > 2000) zoomLevel = 3;
+    else if (currentRangeNM > 1000) zoomLevel = 4;
+    else if (currentRangeNM > 500) zoomLevel = 5;
+    else if (currentRangeNM > 200) zoomLevel = 6;
+    else if (currentRangeNM > 100) zoomLevel = 7;
+    else if (currentRangeNM > 50) zoomLevel = 8;
+    else if (currentRangeNM > 20) zoomLevel = 9;
+    else if (currentRangeNM > 10) zoomLevel = 10;
+    else if (currentRangeNM > 5) zoomLevel = 11;
+    else if (currentRangeNM > 2) zoomLevel = 12;
+    else if (currentRangeNM > 1) zoomLevel = 13;
+    else if (currentRangeNM > 0.5) zoomLevel = 14;
+    else if (currentRangeNM > 0.2) zoomLevel = 15;
+    else zoomLevel = qMin(16, SatelliteTileLayer::MAX_ZOOM);
+
+    // Get viewport bounds in chart coordinates
+    double minLat, maxLat, minLon, maxLon;
+    EcCoordinate lat, lon;
+    XyToLatLon(0, 0, lat, lon);
+    maxLat = lat; minLon = lon;
+    XyToLatLon(width(), height(), lat, lon);
+    minLat = lat; maxLon = lon;
+
+    // Update satellite layer with new viewport
+    satelliteLayer->setViewport(minLat, maxLat, minLon, maxLon, zoomLevel);
+
+    // Get tile range
+    int startX = SatelliteTileLayer::lonToTileX(minLon, zoomLevel);
+    int endX = SatelliteTileLayer::lonToTileX(maxLon, zoomLevel);
+    int startY = SatelliteTileLayer::latToTileY(maxLat, zoomLevel);
+    int endY = SatelliteTileLayer::latToTileY(minLat, zoomLevel);
+
+    // Clamp to valid tile range
+    int maxTile = 1 << zoomLevel;
+    startX = qMax(0, startX);
+    endX = qMin(maxTile - 1, endX);
+    startY = qMax(0, startY);
+    endY = qMin(maxTile - 1, endY);
+
+    if (endX < startX || endY < startY) return;
+
+    qDebug() << "[SATELLITE-HDC] Drawing tiles - zoom:" << zoomLevel << "bounds X[" << startX << "-" << endX << "] Y[" << startY << "-" << endY << "]";
+
+    int drawnTiles = 0;
+    // Draw each tile directly to HDC
+    for (int tileX = startX; tileX <= endX; tileX++) {
+        for (int tileY = startY; tileY <= endY; tileY++) {
+            QPixmap tile = satelliteLayer->getTileWithFallback(tileX, tileY, zoomLevel);
+            if (!tile.isNull()) {
+                // Get tile bounds in geographic coordinates
+                double tileMinLon = SatelliteTileLayer::tileXToLon(tileX, zoomLevel);
+                double tileMaxLon = SatelliteTileLayer::tileXToLon(tileX + 1, zoomLevel);
+                double tileMaxLat = SatelliteTileLayer::tileYToLat(tileY, zoomLevel);
+                double tileMinLat = SatelliteTileLayer::tileYToLat(tileY + 1, zoomLevel);
+
+                // Convert tile corners to chart coordinates
+                int x1, y1, x2, y2, x3, y3, x4, y4;
+                bool valid1 = LatLonToXy(tileMaxLat, tileMinLon, x1, y1);  // Top-left
+                bool valid2 = LatLonToXy(tileMaxLat, tileMaxLon, x2, y2);  // Top-right
+                bool valid3 = LatLonToXy(tileMinLat, tileMaxLon, x3, y3);  // Bottom-right
+                bool valid4 = LatLonToXy(tileMinLat, tileMinLon, x4, y4);  // Bottom-left
+
+                if (valid1 && valid2 && valid3 && valid4) {
+                    // Create a polygon for the tile (handles projection distortion)
+                    QPolygon tilePoly;
+                    tilePoly << QPoint(x1, y1) << QPoint(x2, y2)
+                             << QPoint(x3, y3) << QPoint(x4, y4);
+
+                    // Get bounding rect for drawing
+                    QRect tileRect = tilePoly.boundingRect();
+
+                    // Scale tile to the target rect size
+                    QImage scaledImage = tile.scaled(tileRect.width(), tileRect.height(),
+                                                     Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
+                                                 .toImage();
+
+                    // Convert QImage to HBITMAP using bitmap bits directly
+                    BITMAPINFO bmi = {};
+                    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+                    bmi.bmiHeader.biWidth = scaledImage.width();
+                    bmi.bmiHeader.biHeight = -scaledImage.height();  // Negative for top-down
+                    bmi.bmiHeader.biPlanes = 1;
+                    bmi.bmiHeader.biBitCount = 32;
+                    bmi.bmiHeader.biCompression = BI_RGB;
+
+                    // Draw directly using StretchDIBits
+                    int result = StretchDIBits(targetHdc,
+                                               tileRect.x(), tileRect.y(),
+                                               tileRect.width(), tileRect.height(),
+                                               0, 0, scaledImage.width(), scaledImage.height(),
+                                               scaledImage.constBits(),
+                                               &bmi,
+                                               DIB_RGB_COLORS,
+                                               SRCCOPY);
+
+                    if (result > 0) {
+                        drawnTiles++;
+                    } else {
+                        qDebug() << "[SATELLITE-HDC] StretchDIBits failed - tileX:" << tileX << "tileY:" << tileY << "error:" << GetLastError();
+                    }
+                } else {
+                    qDebug() << "[SATELLITE-HDC] Invalid tile coordinates - tileX:" << tileX << "tileY:" << tileY;
+                }
+            } else {
+                qDebug() << "[SATELLITE-HDC] Tile is null - tileX:" << tileX << "tileY:" << tileY;
+            }
+        }
+    }
+    qDebug() << "[SATELLITE-HDC] Total tiles drawn to HDC:" << drawnTiles;
+}
+
+/*---------------------------------------------------------------------------*/
+
+#endif /* _WIN32 */
 
 /*---------------------------------------------------------------------------*/
 
@@ -2056,6 +2292,7 @@ void EcWidget::draw(bool upd)
     if(aisCellId != EC_NOCELLID)
         EcChartUnAssignCellFromView(view, aisCellId);
 
+    // Draw chart normally (without background bitmap - EcDrawNTDrawChart ignores it anyway)
     EcDrawNTDrawChart(view, hdc, NULL, dictInfo, catList, currentLat, currentLon, GetRange(currentScale), currentHeading);
 
     if(aisCellId != EC_NOCELLID)
@@ -2066,6 +2303,12 @@ void EcWidget::draw(bool upd)
 
     if(hBitmap)
         chartPixmap = QtWin::fromHBITMAP(hBitmap);
+
+    // Apply satellite tiles using same function as X11
+    // This draws tiles with DestinationOver composition mode
+    if (showSatelliteLayer && satelliteLayer && satelliteLayer->isEnabled()) {
+        drawSatelliteTilesToChart();
+    }
 
     drawPixmap = chartPixmap;
     SelectPalette(hdc, oldPal, false);
@@ -2080,6 +2323,12 @@ void EcWidget::draw(bool upd)
             EcDrawX11DrawGrid(view, drawGC, x11pixmap, chartPixmap.width(), chartPixmap.height(), 8, 8, True);
 
         chartPixmap = QPixmap::fromX11Pixmap(x11pixmap);
+
+        // Draw satellite tiles to chartPixmap (part of base chart, no flicker)
+        if (showSatelliteLayer && satelliteLayer && satelliteLayer->isEnabled()) {
+            drawSatelliteTilesToChart();
+        }
+
         drawPixmap = chartPixmap;
     #else
         if(!drawGC) { inDraw = false; return; }
@@ -2229,13 +2478,10 @@ void EcWidget::waypointDraw(){
     // Range < 123: Show full waypoint details
     bool showRouteNamesOnly = (currentRange >= 123.0);
 
-    // IMPORTANT: Draw satellite tiles FIRST (bottom layer - directly to pixmap)
-    // This makes tiles part of the chart, so they move together during drag
-    if (showSatelliteLayer && satelliteLayer && satelliteLayer->isEnabled()) {
-        drawSatelliteTilesOnPixmap();
-    }
+    // NOTE: Satellite tiles are now handled in draw() via background bitmap parameter
+    // They are drawn BEFORE chart info, so chart info appears ON TOP without transparency
 
-    // IMPORTANT: Draw route lines AFTER tiles (on top of tiles)
+    // IMPORTANT: Draw route lines
     drawRouteLines();
 
     // Then draw labels AFTER (top layer) - proper z-index layering
