@@ -898,6 +898,8 @@ void MainWindow::createMenuBar(){
     // Setup Tide Panel
     setupTidePanel();
 
+    // Setup Node Ships Panel
+    setupNodeShipsPanel();
     // Setup GRIB Viewer Panel
     setupGribPanel();
 
@@ -1244,7 +1246,12 @@ void MainWindow::createMenuBar(){
         qDebug() << "[MENU] Added AIS Playback Control to UI Panels menu";
     }
 
+    // Add Ownship List Panel to UI Panels menu
+    if (nodeShipsDock) {
+        viewMenu->addAction(nodeShipsDock->toggleViewAction());
+        qDebug() << "[MENU] Added Ownship List Panel to UI Panels menu";
     // Add GRIB Viewer Panel to UI Panels menu
+    
     if (gribDock) {
         viewMenu->addAction(gribDock->toggleViewAction());
         qDebug() << "[MENU] Added GRIB Viewer Panel to UI Panels menu";
