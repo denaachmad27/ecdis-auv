@@ -26,6 +26,8 @@
 #include "cpatcpapanel.h"
 #include "tidemanager.h"
 #include "tidepanel.h"
+#include "gribpanel.h"
+#include "gribmanager.h"
 #include "testpanel.h"
 
 // forward declerations
@@ -160,6 +162,10 @@ protected slots:
     void onSearch();
 
     void onColorScheme(QAction *);
+    void onDayClicked();
+    void onDuskClicked();
+    void onNightClicked();
+    void onSatelliteClicked();
     void onGreyMode(bool);
 
     void onScale(int);
@@ -273,7 +279,7 @@ protected:
     QAction *autoProjectionAction, *mercatorAction, *gnomonicAction, *stereographicAction;
     QAction *baseAction, *standardAction, *otherAction;
     QAction *simplifiedAction, *fullChartAction;
-    QAction *dayAction, *duskAction, *nightAction;
+    QAction *dayAction, *duskAction, *nightAction, *satelliteAction;
     QAction *logfileAction, *serverAction;
 
     QAction* startAisRecAction;
@@ -372,7 +378,12 @@ private:
     QDockWidget* tideDock;
     void setupTidePanel();
 
-    
+    // GRIB Viewer Panel
+    class GribPanel* gribPanel;
+    class GribManager* gribManager;
+    QDockWidget* gribDock;
+    void setupGribPanel();
+
     // Alert handling methods
     void onAlertTriggered(const AlertData& alert);
     void onCriticalAlertTriggered(const AlertData& alert);

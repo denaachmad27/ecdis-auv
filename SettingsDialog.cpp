@@ -619,7 +619,7 @@ void SettingsDialog::setupUI() {
     QGroupBox *themeGroup = new QGroupBox(tr("Theme"));
     QFormLayout *themeForm = new QFormLayout(themeGroup);
     displayModeCombo = new QComboBox;
-    displayModeCombo->addItems({"Day", "Dusk", "Night"});
+    displayModeCombo->addItems({"Day", "Dusk", "Night", "Satellite"});
     themeForm->addRow(tr("Default Chart Theme:"), displayModeCombo);
 
     themeModeCombo = new QComboBox;

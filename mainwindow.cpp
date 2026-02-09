@@ -898,8 +898,8 @@ void MainWindow::createMenuBar(){
     // Setup Tide Panel
     setupTidePanel();
 
-    // Setup Node Ships Panel
-    setupNodeShipsPanel();
+    // Setup GRIB Viewer Panel
+    setupGribPanel();
 
     // Initialize visualization components
     ecchart->setCurrentVisualisation(new CurrentVisualisation(ecchart));
@@ -969,15 +969,31 @@ void MainWindow::createMenuBar(){
     dayAction    = cActionGroup->addAction("Day");
     duskAction = cActionGroup->addAction("Dusk");
     nightAction = cActionGroup->addAction("Night");
+    satelliteAction = cActionGroup->addAction("Satellite");
     dayAction->setCheckable(true);
     duskAction->setCheckable(true);
     nightAction->setCheckable(true);
+    satelliteAction->setCheckable(true);
 
+    qDebug() << "[MENU] Chart Theme actions created:"
+             << "dayAction=" << dayAction
+             << "duskAction=" << duskAction
+             << "nightAction=" << nightAction
+             << "satelliteAction=" << satelliteAction;
+
+    // Original QActionGroup connection (this was working before)
     connect(cActionGroup, SIGNAL(triggered(QAction *)), this, SLOT(onColorScheme(QAction *)));
+
+    // Additional individual connections (backup)
+    connect(dayAction, SIGNAL(triggered()), this, SLOT(onDayClicked()));
+    connect(duskAction, SIGNAL(triggered()), this, SLOT(onDuskClicked()));
+    connect(nightAction, SIGNAL(triggered()), this, SLOT(onNightClicked()));
+    connect(satelliteAction, SIGNAL(triggered()), this, SLOT(onSatelliteClicked()));
 
     colorMenu->addAction(dayAction);
     colorMenu->addAction(duskAction);
     colorMenu->addAction(nightAction);
+    colorMenu->addAction(satelliteAction);
 
     colorMenu->addSeparator();
 
@@ -1228,10 +1244,10 @@ void MainWindow::createMenuBar(){
         qDebug() << "[MENU] Added AIS Playback Control to UI Panels menu";
     }
 
-    // Add Ownship List Panel to UI Panels menu
-    if (nodeShipsDock) {
-        viewMenu->addAction(nodeShipsDock->toggleViewAction());
-        qDebug() << "[MENU] Added Ownship List Panel to UI Panels menu";
+    // Add GRIB Viewer Panel to UI Panels menu
+    if (gribDock) {
+        viewMenu->addAction(gribDock->toggleViewAction());
+        qDebug() << "[MENU] Added GRIB Viewer Panel to UI Panels menu";
     }
 }
 
@@ -2449,6 +2465,11 @@ void MainWindow::setDisplay(){
         cs = EC_NIGHT;
         nightAction->setChecked(true);
     }
+    else if (displayCategory == EC_SATELLITE){
+        cs = EC_DAY_BRIGHT; // Use Day colors for satellite mode
+        satelliteAction->setChecked(true);
+        ecchart->ShowSatelliteLayer(true);
+    }
     else {
         dayAction->setChecked(true);
     }
@@ -2460,6 +2481,7 @@ void MainWindow::setDisplay(){
 }
 
 MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL), m_isDatabaseConnected(false){
+  qDebug() << "[MAINWINDOW] Constructor starting - NEW CODE VERSION 2025-01-30";
   // set the registration mode similar to the mode
   // for which the Kernel development license has been registered
   // EcKernelRegisterSetMode(EC_REGISTER_CHECK_DONGLE_7); // for Sentinel dongle
@@ -2605,6 +2627,9 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL), m_i
   else if (SettingsManager::instance().data().displayMode == "Dusk"){
       displayCategory = EC_DUSK;
   }
+  else if (SettingsManager::instance().data().displayMode == "Satellite"){
+      displayCategory = EC_SATELLITE;
+  }
   else {
       displayCategory = EC_STANDARD;
   }
@@ -2629,6 +2654,11 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL), m_i
   ecchart->ShowOwnship(showOwnship);
   ecchart->TrackShip(trackShip);
   ecchart->ShowDangerTarget(showDangerTarget);
+
+  // Initialize satellite layer if enabled
+  if (displayCategory == EC_SATELLITE) {
+      ecchart->ShowSatelliteLayer(true);
+  }
 
   // Create the window for the pick report
   pickWindow = new PickWindow(this, dict, ecchart->GetDENC());
@@ -3263,6 +3293,12 @@ void MainWindow::onSearch()
 
 void MainWindow::onColorScheme(QAction *a)
 {
+  qDebug() << "[COLOR SCHEME] onColorScheme called, action:" << a->text()
+           << "satelliteAction:" << (a == satelliteAction)
+           << "duskAction:" << (a == duskAction)
+           << "nightAction:" << (a == nightAction)
+           << "dayAction:" << (a == dayAction);
+
   int cs = EC_DAY_BRIGHT;
   if (a == duskAction)
     cs = EC_DUSK;
@@ -3272,7 +3308,42 @@ void MainWindow::onColorScheme(QAction *a)
   bool gm = ecchart->GetGreyMode();
   int  br = ecchart->GetBrightness();
   ecchart->SetColorScheme(cs, gm, br);
+
+  // Handle satellite mode
+  if (a == satelliteAction) {
+      qDebug() << "[COLOR SCHEME] Satellite mode selected!";
+      ecchart->ShowSatelliteLayer(true);
+  } else {
+      ecchart->ShowSatelliteLayer(false);
+  }
+
   DrawChart();
+}
+
+/*---------------------------------------------------------------------------*/
+
+void MainWindow::onDayClicked()
+{
+    qDebug() << "[THEME] Day clicked!";
+    onColorScheme(dayAction);
+}
+
+void MainWindow::onDuskClicked()
+{
+    qDebug() << "[THEME] Dusk clicked!";
+    onColorScheme(duskAction);
+}
+
+void MainWindow::onNightClicked()
+{
+    qDebug() << "[THEME] Night clicked!";
+    onColorScheme(nightAction);
+}
+
+void MainWindow::onSatelliteClicked()
+{
+    qDebug() << "[THEME] Satellite clicked!";
+    onColorScheme(satelliteAction);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -5195,6 +5266,68 @@ void MainWindow::setupTidePanel()
     } catch (const std::exception& e) {
         qDebug() << "[MAIN] ERROR setting up Tide panel - but Test Panel works!";
         // No error dialog - let Test Panel show it's possible
+    }
+}
+
+
+// ========== GRIB VIEWER PANEL ==========
+
+void MainWindow::setupGribPanel()
+{
+    qDebug() << "[MAIN] Setting up GRIB Viewer panel...";
+
+    try {
+        // Create GRIB Manager
+        gribManager = new GribManager(this);
+
+        // Create GRIB Panel
+        gribPanel = new GribPanel(ecchart, gribManager, this);
+
+        // Create dock widget
+        gribDock = new QDockWidget(tr("GRIB Viewer"), this);
+        gribDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+        gribDock->setWidget(gribPanel);
+
+        // Set object name for better identification
+        gribDock->setObjectName("GribViewerDock");
+
+        // Add to right dock area
+        addDockWidget(Qt::RightDockWidgetArea, gribDock);
+
+        // Pass GRIB manager to EcWidget for drawing
+        if (ecchart) {
+            ecchart->setGribManager(gribManager);
+        }
+
+        // Connect panel signals for map refresh
+        connect(gribPanel, &GribPanel::refreshRequested, this, [this]() {
+            if (ecchart) {
+                ecchart->update();
+            }
+        });
+
+        // Add to Sidebar menu
+        QList<QAction*> actions = menuBar()->actions();
+        bool sidebarFound = false;
+        for (QAction* action : actions) {
+            if (action->menu() && action->menu()->title() == tr("&Sidebar")) {
+                action->menu()->addAction(gribDock->toggleViewAction());
+                qDebug() << "[MAIN] GRIB Viewer Panel added to Sidebar menu successfully";
+                sidebarFound = true;
+                break;
+            }
+        }
+        if (!sidebarFound) {
+            qDebug() << "[MAIN] Warning: Sidebar menu not found for GRIB Viewer Panel";
+        }
+
+        // Hide by default
+        gribDock->hide();
+
+        qDebug() << "[MAIN] GRIB Viewer panel setup completed";
+
+    } catch (const std::exception& e) {
+        qDebug() << "[MAIN] ERROR setting up GRIB Viewer panel:" << e.what();
     }
 }
 

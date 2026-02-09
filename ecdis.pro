@@ -87,7 +87,12 @@ HEADERS += mainwindow.h ecwidget.h pickwindow.h ais.h \
     tidalcurvewidget_simple.h \
     testpanel.h \
     src/currentvisualisation.h \
-        
+    gribdata.h \
+    gribmanager.h \
+    gribpanel.h \
+    gribvisualisation.h \
+    satellitetilelayer.h \
+
 SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     chartmanagerpanel.cpp \
     AISSubscriber.cpp \
@@ -134,7 +139,12 @@ SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     tidalcurvewidget_simple.cpp \
     testpanel.cpp \
     src/currentvisualisation.cpp \
-        
+    gribdata.cpp \
+    gribmanager.cpp \
+    gribpanel.cpp \
+    gribvisualisation.cpp \
+    satellitetilelayer.cpp \
+
 RESOURCES += \
     resources.qrc
 

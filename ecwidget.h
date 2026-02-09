@@ -39,6 +39,11 @@ class TideManager;
 #include "autoroutedialog.h"
 #include "poi.h"
 
+// GRIB visualization
+#include "gribvisualisation.h"
+#include "gribdata.h"
+class GribManager;
+
 //popup
 #include <QLabel>
 #include <QFrame>
@@ -49,6 +54,8 @@ class TideManager;
 class CPATCPAPanel;
 class CurrentVisualisation; // Forward declaration for current visualization
 class VisualisationPanel; // Forward declaration for visualization panel
+class GribVisualisation; // Forward declaration for GRIB visualization
+class SatelliteTileLayer; // Forward declaration for satellite tile layer
 
 struct AISTargetData {
     QString mmsi;
@@ -160,6 +167,9 @@ class RouteDeviationDetector; // Forward declaration
 
 #define M_KEY "82115"
 #define MID "BF"
+
+// Satellite view display category (custom, not from SevenCs SDK)
+#define EC_SATELLITE 4
 
 // Waypoint
 #define PICKRADIUS  (0.03 * GetRange)
@@ -740,6 +750,18 @@ public:
   void ShowAIS(bool on);
   void ShowOwnship(bool on);
 
+  // Satellite view layer
+  void ShowSatelliteLayer(bool on);
+  bool isSatelliteLayerEnabled() const { return showSatelliteLayer; }
+  void updateSatelliteTiles();
+  void drawSatelliteTilesOverlay();  // Draw tiles to drawPixmap with alpha blending
+  void drawSatelliteTilesToChart();  // Draw tiles to chartPixmap (no flicker)
+#ifdef _WIN32
+  void drawSatelliteTilesToHdc(HDC targetHdc);  // Draw tiles to HDC before chart (Windows only)
+#endif
+  void drawSatelliteTiles(QPainter& painter, int zoomLevel, double viewMinLat, double viewMaxLat,
+                          double viewMinLon, double viewMaxLon, int offsetX, int offsetY);
+
   // Swiches the track of AIS Target
   void TrackTarget(QString mmsi);
   bool isTrackTarget();
@@ -1275,6 +1297,10 @@ public:
   bool enableAoiSegmentLabels = false; // safety default: off
   bool showAoiLabels = true;           // master toggle for AOI labels
 
+  // Satellite tile layer
+  SatelliteTileLayer *satelliteLayer;
+  bool showSatelliteLayer = false;     // Enable/disable satellite view
+
   // POI store
   QVector<PoiEntry> poiList;
   int nextPoiId = 1;
@@ -1769,6 +1795,17 @@ public:
   CurrentVisualisation* m_currentVisualisation = nullptr;
     bool m_showCurrentArrows = true;
   bool m_showTideRectangles = false;
+
+  // GRIB Visualization components
+  GribVisualisation* m_gribVisualisation = nullptr;
+  GribManager* m_gribManager = nullptr;
+  bool m_showGribData = true;
+
+  // Method to set GRIB manager
+  void setGribManager(GribManager* manager) { m_gribManager = manager; }
+
+  // Method to draw GRIB data
+  void drawGribData(QPainter& painter);
 
 }; // EcWidget
 
