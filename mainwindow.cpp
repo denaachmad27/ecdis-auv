@@ -1250,8 +1250,9 @@ void MainWindow::createMenuBar(){
     if (nodeShipsDock) {
         viewMenu->addAction(nodeShipsDock->toggleViewAction());
         qDebug() << "[MENU] Added Ownship List Panel to UI Panels menu";
+    }
+
     // Add GRIB Viewer Panel to UI Panels menu
-    
     if (gribDock) {
         viewMenu->addAction(gribDock->toggleViewAction());
         qDebug() << "[MENU] Added GRIB Viewer Panel to UI Panels menu";
@@ -7052,7 +7053,22 @@ void MainWindow::onNodeShipsUpdateTimer()
     // Save current selection
     int currentRow = nodeShipsTable->currentRow();
 
-    // Clear existing rows
+    // Cleanup existing widgets BEFORE clearing rows
+    // Ini penting untuk mencegah memory leak dan dangling pointers
+    for (int row = 0; row < nodeShipsTable->rowCount(); ++row) {
+        QWidget* checkboxWidget = nodeShipsTable->cellWidget(row, 2);
+        QPushButton* navigateBtn = qobject_cast<QPushButton*>(nodeShipsTable->cellWidget(row, 3));
+
+        // Delete widgets explicitly
+        if (checkboxWidget) {
+            delete checkboxWidget;
+        }
+        if (navigateBtn) {
+            delete navigateBtn;
+        }
+    }
+
+    // Now safe to clear rows
     nodeShipsTable->setRowCount(0);
 
     // Block signals to prevent feedback loop during rebuild
