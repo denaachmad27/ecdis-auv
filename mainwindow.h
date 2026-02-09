@@ -411,6 +411,8 @@ private:
     QMap<QString, bool> nodeShipsVisibility; // Track visibility per node ship
     QTimer* nodeShipsUpdateTimer = nullptr;  // Throttled update timer
     bool nodeShipsNeedUpdate = false;
+    QElapsedTimer nodeShipsUserInteractionTimer;  // Track user interaction
+    bool nodeShipsIsUpdating = false;  // Flag to prevent concurrent updates
 
     // Helper methods untuk CPA/TCPA
     void setupCPATCPAPanel();

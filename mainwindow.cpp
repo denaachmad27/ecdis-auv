@@ -6875,9 +6875,9 @@ void MainWindow::setupNodeShipsPanel()
         }
     }
 
-    // Setup throttled update timer (update every 500ms max)
+    // Setup throttled update timer (update every 1 second max)
     nodeShipsUpdateTimer = new QTimer(this);
-    nodeShipsUpdateTimer->setInterval(500);  // 500ms = 2Hz update rate
+    nodeShipsUpdateTimer->setInterval(1000);  // 1000ms = 1Hz update rate
     nodeShipsUpdateTimer->setSingleShot(false);
     connect(nodeShipsUpdateTimer, &QTimer::timeout, this, &MainWindow::onNodeShipsUpdateTimer);
     nodeShipsUpdateTimer->start();
@@ -6895,6 +6895,20 @@ void MainWindow::onNodeShipsUpdateTimer()
 {
     if (!nodeShipsTable || !nodeShipsNeedUpdate) return;
 
+    // Mencegah concurrent update
+    if (nodeShipsIsUpdating) return;
+
+    // Skip update jika user sedang berinteraksi (dalam 300ms terakhir)
+    if (nodeShipsUserInteractionTimer.isValid() &&
+        nodeShipsUserInteractionTimer.elapsed() < 300) {
+        // Coba lagi nanti
+        return;
+    }
+
+    // Flag update sedang berlangsung
+    nodeShipsNeedUpdate = false;
+    nodeShipsIsUpdating = true;
+
     // Save current selection
     int currentRow = nodeShipsTable->currentRow();
 
@@ -6903,6 +6917,64 @@ void MainWindow::onNodeShipsUpdateTimer()
 
     // Block signals to prevent feedback loop during rebuild
     nodeShipsTable->blockSignals(true);
+
+    // Add OWNSHIP (navShip) first
+    extern ShipStruct navShip;
+
+    // Check if ownship has valid position
+    bool ownshipActive = !qIsNaN(navShip.lat) && !qIsNaN(navShip.lon) &&
+                         navShip.lat != 0.0 && navShip.lon != 0.0;
+
+    int ownshipRow = nodeShipsTable->rowCount();
+    nodeShipsTable->insertRow(ownshipRow);
+
+    // Name
+    QTableWidgetItem* ownshipNameItem = new QTableWidgetItem(
+        navShip.name.isEmpty() ? "OWNSHIP" : navShip.name
+    );
+    // Make ownship name bold
+    QFont boldFont = ownshipNameItem->font();
+    boldFont.setBold(true);
+    ownshipNameItem->setFont(boldFont);
+    nodeShipsTable->setItem(ownshipRow, 0, ownshipNameItem);
+
+    // Active status
+    QTableWidgetItem* ownshipActiveItem = new QTableWidgetItem();
+    ownshipActiveItem->setTextAlignment(Qt::AlignCenter);
+    ownshipActiveItem->setText(ownshipActive ? "✓" : "-");
+    ownshipActiveItem->setForeground(ownshipActive ? QBrush(Qt::green) : QBrush(Qt::gray));
+    nodeShipsTable->setItem(ownshipRow, 1, ownshipActiveItem);
+
+    // Show/Hide - Always visible (no checkbox for ownship)
+    QTableWidgetItem* ownshipShowItem = new QTableWidgetItem("Always");
+    ownshipShowItem->setTextAlignment(Qt::AlignCenter);
+    ownshipShowItem->setForeground(QBrush(Qt::gray));
+    nodeShipsTable->setItem(ownshipRow, 2, ownshipShowItem);
+
+    // Navigate button - navigate to ownship position
+    QPushButton* ownshipNavigateBtn = new QPushButton("Navigate");
+    ownshipNavigateBtn->setEnabled(ownshipActive);
+    nodeShipsTable->setCellWidget(ownshipRow, 3, ownshipNavigateBtn);
+
+    // Connect navigate button
+    connect(ownshipNavigateBtn, &QPushButton::clicked, [this, ownshipRow]() {
+        // Start user interaction timer
+        nodeShipsUserInteractionTimer.start();
+        // Navigate to ownship position
+        if (ecchart && !qIsNaN(navShip.lat) && !qIsNaN(navShip.lon)) {
+            ecchart->SetCenter(navShip.lat, navShip.lon);
+            ecchart->update();
+            qDebug() << "Navigated to Ownship: LAT=" << navShip.lat << "LON=" << navShip.lon;
+        }
+    });
+
+    // Add separator (optional - visual distinction)
+    // QFrame* separator = new QFrame();
+    // separator->setFrameShape(QFrame::HLine);
+    // separator->setFrameShadow(QFrame::Sunken);
+    // nodeShipsTable->insertRow(nodeshipRow + 1);
+    // nodeShipsTable->setSpan(ownshipRow + 1, 0, 1, 4);
+    // nodeShipsTable->setCellWidget(ownshipRow + 1, 0, separator);
 
     // Get node ships from ecwidget
     extern QMap<QString, ShipStruct> nodeShips;
@@ -6936,17 +7008,28 @@ void MainWindow::onNodeShipsUpdateTimer()
         QWidget* checkboxWidget = new QWidget();
         QHBoxLayout* checkboxLayout = new QHBoxLayout(checkboxWidget);
         QCheckBox* checkbox = new QCheckBox();
+
+        // JANGAN block signals - biarkan natural agar user click langsung terdeteksi
         checkbox->setChecked(isVisible);
+
         checkboxLayout->addWidget(checkbox);
         checkboxLayout->setAlignment(Qt::AlignCenter);
         checkboxLayout->setContentsMargins(0, 0, 0, 0);
         nodeShipsTable->setCellWidget(row, 2, checkboxWidget);
 
         // Connect checkbox to visibility toggle
-        connect(checkbox, &QCheckBox::toggled, [this, row, nodeName](bool checked) {
-            nodeShipsVisibility[nodeName] = checked;
-            onNodeShipVisibilityChanged(row);
-        });
+        // Gunakan unique connection untuk menghindari double connect
+        connect(checkbox, &QCheckBox::clicked, this, [this, checkbox, row, nodeName](bool checked) {
+            // Start user interaction timer untuk mencegah rebuild segera
+            nodeShipsUserInteractionTimer.start();
+
+            // Cek apakah state benar-benar berubah
+            bool currentState = nodeShipsVisibility.value(nodeName, true);
+            if (currentState != checked) {
+                nodeShipsVisibility[nodeName] = checked;
+                onNodeShipVisibilityChanged(row);
+            }
+        }, Qt::UniqueConnection);
 
         // Navigate button
         QPushButton* navigateBtn = new QPushButton("Navigate");
@@ -6955,6 +7038,8 @@ void MainWindow::onNodeShipsUpdateTimer()
 
         // Connect navigate button
         connect(navigateBtn, &QPushButton::clicked, [this, row, nodeName]() {
+            // Start user interaction timer
+            nodeShipsUserInteractionTimer.start();
             onNavigateToNodeShip(row);
         });
     }
@@ -6967,16 +7052,17 @@ void MainWindow::onNodeShipsUpdateTimer()
     // Unblock signals
     nodeShipsTable->blockSignals(false);
 
-    nodeShipsNeedUpdate = false;
+    // Reset update flag
+    nodeShipsIsUpdating = false;
+
     qDebug() << "Node Ships Panel updated: " << nodeShipsTable->rowCount() << " ships";
 }
 
 void MainWindow::onNodeShipVisibilityChanged(int row)
 {
-    // Force redraw of chart
+    // Force redraw of chart - immediate update
     if (ecchart) {
         ecchart->update();
-        ecchart->repaint();  // Ensure immediate redraw
     }
 
     qDebug() << "Node ship visibility toggled for row" << row;
