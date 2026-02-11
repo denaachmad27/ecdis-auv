@@ -128,7 +128,7 @@ extern ShipStruct navShip;
 extern ShipStruct mapShip;
 extern ActiveRouteStruct activeRoute;
 
-// Dynamic node ships storage: nodeShips["ARCHIE"] = ShipStruct
+// Dynamic node ships storage
 extern QMap<QString, ShipStruct> nodeShips;
 
 extern QString bottomBarText;

@@ -6624,6 +6624,10 @@ void EcWidget::startAISConnection()
         if (mainWindow) {
             mainWindow->updateNodeShipsPanel();
         }
+
+        // NOTE: Do NOT call update() here to prevent paint storm!
+        // Node ship position will be updated by the throttled timer in MainWindow
+        // This prevents "not responding" when node data arrives rapidly
     });
 
     // ROUTE INFORMATION
@@ -7866,7 +7870,16 @@ void EcWidget::setLastNavigatedShip(const ShipStruct& ship, const QString& name)
         isNavigatingToShip = false;
     }
     else {
+        // Copy ship data but validate/fix NaN values to prevent crashes
         lastNavigatedShip = ship;
+
+        // Fix NaN values with safe defaults to prevent crashes in drawOwnShipIcon
+        if (qIsNaN(lastNavigatedShip.heading)) lastNavigatedShip.heading = 0.0;
+        if (qIsNaN(lastNavigatedShip.course_og)) lastNavigatedShip.course_og = 0.0;
+        if (qIsNaN(lastNavigatedShip.sog)) lastNavigatedShip.sog = 0.0;
+        if (qIsNaN(lastNavigatedShip.lat)) lastNavigatedShip.lat = 0.0;
+        if (qIsNaN(lastNavigatedShip.lon)) lastNavigatedShip.lon = 0.0;
+
         lastNavigatedShipName = name;
         isNavigatingToShip = true;
     }

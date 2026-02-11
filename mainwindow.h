@@ -424,6 +424,7 @@ private:
     bool nodeShipsNeedUpdate = false;
     QElapsedTimer nodeShipsUserInteractionTimer;  // Track user interaction
     bool nodeShipsIsUpdating = false;  // Flag to prevent concurrent updates
+    bool isNavigating = false;  // Flag to prevent concurrent navigation operations
 
     // Helper methods untuk CPA/TCPA
     void setupCPATCPAPanel();

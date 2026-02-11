@@ -2750,6 +2750,9 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL), m_i
   });
   timer->start(1000); // update tiap 1 detik
 
+  // Initialize navigation throttle timer
+  nodeShipsUserInteractionTimer.start();
+
   //userPermitGenerate();
 }
 
@@ -7059,13 +7062,23 @@ void MainWindow::onNodeShipsUpdateTimer()
         QWidget* checkboxWidget = nodeShipsTable->cellWidget(row, 2);
         QPushButton* navigateBtn = qobject_cast<QPushButton*>(nodeShipsTable->cellWidget(row, 3));
 
-        // Delete widgets explicitly
+        // Delete widgets explicitly using deleteLater() to prevent crash
+        // deleteLater() schedules deletion for next event loop iteration,
+        // giving time for pending lambda/slots to complete
         if (checkboxWidget) {
-            delete checkboxWidget;
+            checkboxWidget->deleteLater();
         }
         if (navigateBtn) {
-            delete navigateBtn;
+            // Disconnect all signals first to prevent pending slots
+            navigateBtn->disconnect();
+            navigateBtn->deleteLater();  // Safe deletion
         }
+    }
+
+    // Remove cell widgets immediately (but objects will be deleted later)
+    for (int row = 0; row < nodeShipsTable->rowCount(); ++row) {
+        nodeShipsTable->setCellWidget(row, 2, nullptr);
+        nodeShipsTable->setCellWidget(row, 3, nullptr);
     }
 
     // Now safe to clear rows
@@ -7120,8 +7133,11 @@ void MainWindow::onNodeShipsUpdateTimer()
     connect(ownshipNavigateBtn, &QPushButton::clicked, this, [this]() {
         qDebug() << "[Navigate] >>> CLICK EVENT RECEIVED for OWNSHIP";
 
-        // Start user interaction timer
-        nodeShipsUserInteractionTimer.start();
+        // Throttle: Ignore clicks within 250ms of last navigation
+        if (nodeShipsUserInteractionTimer.elapsed() < 250) {
+            qWarning() << "[Navigate] Click throttled (too soon)";
+            return;
+        }
 
         // Check if ecchart is valid
         if (!ecchart) {
@@ -7145,12 +7161,25 @@ void MainWindow::onNodeShipsUpdateTimer()
         qDebug() << "[Navigate] Navigating to OWNSHIP"
                  << "LAT:" << navShip.lat << "LON:" << navShip.lon;
 
-        ecchart->SetCenter(navShip.lat, navShip.lon);
-        ecchart->update();
-        ecchart->repaint();  // Force immediate repaint
+        // Use QPointer to safely access ecchart
+        QPointer<EcWidget> safeEcchart = ecchart;
+        if (!safeEcchart) {
+            qCritical() << "[Navigate] ecchart became NULL during navigation!";
+            return;
+        }
+
+        safeEcchart->SetCenter(navShip.lat, navShip.lon);
+        safeEcchart->update();  // Schedule async update
+
+        // Clear EBL/VRM measurement state to prevent ghost measurements
+        safeEcchart->eblvrm.liveHasCursor = false;
+        safeEcchart->eblvrm.measuringActive = false;
 
         // Store last navigated ship info (ownship) in EcWidget
-        ecchart->setLastNavigatedShip(navShip, ""); // Empty string indicates ownship
+        safeEcchart->setLastNavigatedShip(navShip, ""); // Empty string indicates ownship
+
+        // Reset throttle timer AFTER successful navigation
+        nodeShipsUserInteractionTimer.start();
 
         qDebug() << "[Navigate] >>> NAVIGATION COMPLETE for OWNSHIP";
     });
@@ -7232,8 +7261,11 @@ void MainWindow::onNodeShipsUpdateTimer()
         connect(navigateBtn, &QPushButton::clicked, this, [this, nodeName]() {
             qDebug() << "[Navigate] >>> CLICK EVENT RECEIVED for node:" << nodeName;
 
-            // Start user interaction timer
-            nodeShipsUserInteractionTimer.start();
+            // Throttle: Ignore clicks within 250ms of last navigation
+            if (nodeShipsUserInteractionTimer.elapsed() < 250) {
+                qWarning() << "[Navigate] Click throttled (too soon)";
+                return;
+            }
 
             // Check if ecchart is valid
             if (!ecchart) {
@@ -7265,13 +7297,26 @@ void MainWindow::onNodeShipsUpdateTimer()
                 qDebug() << "[Navigate] Navigating to" << displayName
                          << "LAT:" << ship.lat << "LON:" << ship.lon;
 
-                ecchart->SetCenter(ship.lat, ship.lon);
-                ecchart->update();
-                ecchart->repaint();  // Force immediate repaint
+                // Use QPointer to safely access ecchart
+                QPointer<EcWidget> safeEcchart = ecchart;
+                if (!safeEcchart) {
+                    qCritical() << "[Navigate] ecchart became NULL during navigation!";
+                    return;
+                }
+
+                safeEcchart->SetCenter(ship.lat, ship.lon);
+                safeEcchart->update();  // Schedule async update
+
+                // Clear EBL/VRM measurement state to prevent ghost measurements
+                safeEcchart->eblvrm.liveHasCursor = false;
+                safeEcchart->eblvrm.measuringActive = false;
 
                 // Store last navigated ship info in EcWidget
                 // Use displayName (original case) instead of nodeName (uppercase)
-                ecchart->setLastNavigatedShip(ship, displayName);
+                safeEcchart->setLastNavigatedShip(ship, displayName);
+
+                // Reset throttle timer AFTER successful navigation
+                nodeShipsUserInteractionTimer.start();
 
                 qDebug() << "[Navigate] >>> NAVIGATION COMPLETE for" << displayName;
             } else {
@@ -7290,6 +7335,11 @@ void MainWindow::onNodeShipsUpdateTimer()
 
     // Reset update flag
     nodeShipsIsUpdating = false;
+
+    // Update chart to show node ship icon movements
+    if (ecchart) {
+        ecchart->update();
+    }
 
     //qDebug() << "Node Ships Panel updated: " << nodeShipsTable->rowCount() << " ships";
 }
