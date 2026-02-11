@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QTcpSocket>
 #include <QTimer>
+#include <QElapsedTimer>
 
 // forward declerations1
 class MainWindow;
@@ -114,6 +115,13 @@ private:
     const int maxDelay;    // e.g., 3600000 ms
 
     bool dialogIsOpen;
+
+    // Streaming JSON parser buffer
+    QByteArray buffer;              // Persistent buffer for incomplete JSON
+    QElapsedTimer bufferTimer;       // Timeout detection
+    bool bufferWasEmpty = true;
+    int findCompleteJSON(const QByteArray &data);
+    bool shouldFlushBuffer(const QByteArray &buffer);
 };
 
 #endif // AISSUBSCRIBER_H

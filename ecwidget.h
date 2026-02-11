@@ -1316,9 +1316,21 @@ public:
   int lastBestSeg;
   EcCoordinate lastLat, lastLon;
 
+  // Last navigated ship tracking
+  ShipStruct lastNavigatedShip;  // ShipStruct of the last navigated ship
+  QString lastNavigatedShipName; // Name/key of the last navigated ship (empty for ownship)
+  bool isNavigatingToShip = false; // Flag to indicate if currently following a ship
+
 public:
   void setEnableAoiSegmentLabels(bool on) { enableAoiSegmentLabels = on; update(); }
   void setShowAoiLabels(bool on) { showAoiLabels = on; update(); }
+
+  // Last navigated ship tracking setters
+  void setLastNavigatedShip(const ShipStruct& ship, const QString& name = "");
+  void clearNavigatingShip() { isNavigatingToShip = false; }
+  ShipStruct getLastNavigatedShip() const { return lastNavigatedShip; }
+  QString getLastNavigatedShipName() const { return lastNavigatedShipName; }
+  bool getIsNavigatingToShip() const { return isNavigatingToShip; }
   // AOI hover segment label state (hover-only labeling)
   void updateAoiHoverLabel(const QPoint& mousePos);
   int hoverAoiId = -1;

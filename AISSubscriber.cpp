@@ -5,6 +5,7 @@
 #include <QJsonParseError>
 #include <QDebug>
 #include <QPointer>
+#include <QRandomGenerator>
 #include "mainwindow.h"
 #include "SettingsManager.h"
 
@@ -222,31 +223,46 @@ void AISSubscriber::onReadyRead() {
     // reset runtime no-data watchdog on every data
     if (noDataTimer) noDataTimer->start();
 
-    QList<QByteArray> lines;
+    // === STREAMING JSON PARSER ===
+    // Append new data to buffer
+    bool wasEmpty = buffer.isEmpty();
+    buffer.append(data);
 
-    int pos = 0;
-    while (pos < data.size()) {
-        int next = data.indexOf("}{", pos);
-        if (next == -1) {
-            lines << data.mid(pos);  // terakhir
-            break;
-        } else {
-            lines << data.mid(pos, next - pos + 1);  // include penutup '}'
-            pos = next + 1;  // mulai dari '{' berikutnya
-        }
+    // Reset/start buffer timer for timeout detection
+    if (wasEmpty) {
+        bufferTimer.start();
     }
 
-    // iterasi aman pakai indeks karena QList<QByteArray> bisa detach
-    for (int i = 0; i < lines.size(); ++i) {
-        const QByteArray &line = lines[i];
-        if (line.trimmed().isEmpty())
-            continue;
+    // Try to find and process complete JSON objects
+    while (true) {
+        // Check if we should flush the buffer (invalid data)
+        if (shouldFlushBuffer(buffer)) {
+            qWarning() << "[AISSubscriber] Flushing invalid buffer:" << buffer.left(200);
+            buffer.clear();
+            bufferTimer.start();
+            break;
+        }
 
+        // Try to find a complete JSON object
+        int jsonEnd = findCompleteJSON(buffer);
+        if (jsonEnd <= 0) {
+            // No complete JSON found, wait for more data
+            break;
+        }
+
+        // Extract the complete JSON object
+        QByteArray json = buffer.left(jsonEnd);
+        buffer.remove(0, jsonEnd);
+
+        // Reset timer since we made progress
+        bufferTimer.start();
+
+        // Parse and process the JSON
         QJsonParseError err;
-        QJsonDocument doc = QJsonDocument::fromJson(line, &err);
+        QJsonDocument doc = QJsonDocument::fromJson(json, &err);
 
         if (err.error != QJsonParseError::NoError || !doc.isObject()) {
-            qWarning() << "Invalid JSON:" << line;
+            qWarning() << "Invalid JSON:" << json;
             continue;
         }
 
@@ -511,4 +527,75 @@ bool AISSubscriber::hasData(){
 
 void AISSubscriber::setDialogOpen(bool open) {
     dialogIsOpen = open;
+}
+
+// === STREAMING JSON PARSER HELPER FUNCTIONS ===
+
+int AISSubscriber::findCompleteJSON(const QByteArray &data) {
+    if (data.isEmpty()) {
+        return 0;
+    }
+
+    // Find the first opening brace
+    int start = -1;
+    for (int i = 0; i < data.size(); ++i) {
+        if (data[i] == '{') {
+            start = i;
+            break;
+        }
+    }
+
+    if (start == -1) {
+        return 0;  // No opening brace found
+    }
+
+    // Count braces to find matching closing brace
+    int braceCount = 0;
+    for (int i = start; i < data.size(); ++i) {
+        if (data[i] == '{') {
+            braceCount++;
+        } else if (data[i] == '}') {
+            braceCount--;
+            if (braceCount == 0) {
+                return i + 1;  // Return position after closing brace
+            }
+        }
+    }
+
+    return -1;  // Incomplete JSON
+}
+
+bool AISSubscriber::shouldFlushBuffer(const QByteArray &buffer) {
+    if (buffer.isEmpty()) {
+        return false;
+    }
+
+    // Condition 3: Check for invalid patterns (NAV_, NODE_ without opening brace)
+    QString str = QString::fromUtf8(buffer).trimmed();
+    if (str.startsWith("NAV_") || str.startsWith("NODE_")) {
+        return true;  // Invalid data, flush buffer
+    }
+
+    // Condition 5: Large buffer (>50KB) - flush to prevent memory issues
+    if (buffer.size() > 50000) {
+        return true;
+    }
+
+    // Condition 6: Timeout (>10 seconds) - data is stale
+    if (bufferTimer.hasExpired(10000)) {
+        return true;
+    }
+
+    // Condition 1 & 2: Valid JSON patterns - don't flush
+    if (str.startsWith('{') || str.startsWith('"')) {
+        return false;
+    }
+
+    // Condition 4: Small unclear buffer - wait for more data
+    if (buffer.size() < 1000) {
+        return false;
+    }
+
+    // Default: flush unclear data
+    return true;
 }

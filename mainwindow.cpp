@@ -7110,18 +7110,49 @@ void MainWindow::onNodeShipsUpdateTimer()
     // Navigate button - navigate to ownship position
     QPushButton* ownshipNavigateBtn = new QPushButton("Navigate");
     ownshipNavigateBtn->setEnabled(ownshipActive);
+    ownshipNavigateBtn->setObjectName("NavigateBtn_OWNSHIP");  // Set object name for debugging
     nodeShipsTable->setCellWidget(ownshipRow, 3, ownshipNavigateBtn);
 
-    // Connect navigate button
-    connect(ownshipNavigateBtn, &QPushButton::clicked, [this, ownshipRow]() {
+    // Debug: Log button creation
+    qDebug() << "[Navigate] Created OWNSHIP button enabled:" << ownshipActive;
+
+    // Connect navigate button (ownship doesn't need nodeName parameter)
+    connect(ownshipNavigateBtn, &QPushButton::clicked, this, [this]() {
+        qDebug() << "[Navigate] >>> CLICK EVENT RECEIVED for OWNSHIP";
+
         // Start user interaction timer
         nodeShipsUserInteractionTimer.start();
-        // Navigate to ownship position
-        if (ecchart && !qIsNaN(navShip.lat) && !qIsNaN(navShip.lon)) {
-            ecchart->SetCenter(navShip.lat, navShip.lon);
-            ecchart->update();
-            qDebug() << "Navigated to Ownship: LAT=" << navShip.lat << "LON=" << navShip.lon;
+
+        // Check if ecchart is valid
+        if (!ecchart) {
+            qCritical() << "[Navigate] ERROR: ecchart is NULL!";
+            return;
         }
+
+        // Check if coordinates are valid (not NaN and not 0.0)
+        if (qIsNaN(navShip.lat) || qIsNaN(navShip.lon)) {
+            qWarning() << "[Navigate] Invalid ownship coordinates (NaN)"
+                       << "LAT:" << navShip.lat << "LON:" << navShip.lon;
+            return;
+        }
+
+        if (navShip.lat == 0.0 && navShip.lon == 0.0) {
+            qWarning() << "[Navigate] Invalid ownship coordinates (0.0, 0.0)";
+            return;
+        }
+
+        // All checks passed, navigate to ownship
+        qDebug() << "[Navigate] Navigating to OWNSHIP"
+                 << "LAT:" << navShip.lat << "LON:" << navShip.lon;
+
+        ecchart->SetCenter(navShip.lat, navShip.lon);
+        ecchart->update();
+        ecchart->repaint();  // Force immediate repaint
+
+        // Store last navigated ship info (ownship) in EcWidget
+        ecchart->setLastNavigatedShip(navShip, ""); // Empty string indicates ownship
+
+        qDebug() << "[Navigate] >>> NAVIGATION COMPLETE for OWNSHIP";
     });
 
     // Add separator (optional - visual distinction)
@@ -7190,13 +7221,62 @@ void MainWindow::onNodeShipsUpdateTimer()
         // Navigate button
         QPushButton* navigateBtn = new QPushButton("Navigate");
         navigateBtn->setEnabled(isActive);
+        navigateBtn->setObjectName("NavigateBtn_" + nodeName);  // Set object name for debugging
         nodeShipsTable->setCellWidget(row, 3, navigateBtn);
 
-        // Connect navigate button
-        connect(navigateBtn, &QPushButton::clicked, [this, row, nodeName]() {
+        // Debug: Log button creation
+        qDebug() << "[Navigate] Created button for" << nodeName << "enabled:" << isActive;
+
+        // Connect navigate button WITHOUT UniqueConnection (problematic with lambdas)
+        // The old button is already deleted, so no duplicate connection should occur
+        connect(navigateBtn, &QPushButton::clicked, this, [this, nodeName]() {
+            qDebug() << "[Navigate] >>> CLICK EVENT RECEIVED for node:" << nodeName;
+
             // Start user interaction timer
             nodeShipsUserInteractionTimer.start();
-            onNavigateToNodeShip(row);
+
+            // Check if ecchart is valid
+            if (!ecchart) {
+                qCritical() << "[Navigate] ERROR: ecchart is NULL!";
+                return;
+            }
+
+            // Navigate directly using nodeName (case-sensitive key from map)
+            extern QMap<QString, ShipStruct> nodeShips;
+            if (nodeShips.contains(nodeName)) {
+                ShipStruct ship = nodeShips[nodeName];
+
+                // Check if coordinates are valid (not NaN and not 0.0)
+                if (qIsNaN(ship.lat) || qIsNaN(ship.lon)) {
+                    qWarning() << "[Navigate] Invalid coordinates (NaN) for" << nodeName
+                               << "LAT:" << ship.lat << "LON:" << ship.lon;
+                    return;
+                }
+
+                if (ship.lat == 0.0 && ship.lon == 0.0) {
+                    qWarning() << "[Navigate] Invalid coordinates (0.0, 0.0) for" << nodeName;
+                    return;
+                }
+
+                // Use ship.name for display (original case) instead of nodeName (uppercase)
+                QString displayName = ship.name.isEmpty() ? nodeName : ship.name;
+
+                // All checks passed, navigate to ship
+                qDebug() << "[Navigate] Navigating to" << displayName
+                         << "LAT:" << ship.lat << "LON:" << ship.lon;
+
+                ecchart->SetCenter(ship.lat, ship.lon);
+                ecchart->update();
+                ecchart->repaint();  // Force immediate repaint
+
+                // Store last navigated ship info in EcWidget
+                // Use displayName (original case) instead of nodeName (uppercase)
+                ecchart->setLastNavigatedShip(ship, displayName);
+
+                qDebug() << "[Navigate] >>> NAVIGATION COMPLETE for" << displayName;
+            } else {
+                qWarning() << "[Navigate] Node ship not found in map:" << nodeName;
+            }
         });
     }
 
@@ -7211,7 +7291,7 @@ void MainWindow::onNodeShipsUpdateTimer()
     // Reset update flag
     nodeShipsIsUpdating = false;
 
-    qDebug() << "Node Ships Panel updated: " << nodeShipsTable->rowCount() << " ships";
+    //qDebug() << "Node Ships Panel updated: " << nodeShipsTable->rowCount() << " ships";
 }
 
 void MainWindow::onNodeShipVisibilityChanged(int row)
@@ -7228,7 +7308,23 @@ void MainWindow::onNavigateToNodeShip(int row)
 {
     if (!ecchart || !nodeShipsTable) return;
 
-    QString nodeName = nodeShipsTable->item(row, 0)->text();
+    // Check if row is valid and item exists
+    if (row < 0 || row >= nodeShipsTable->rowCount()) {
+        qWarning() << "[Navigate] Invalid row:" << row;
+        return;
+    }
+
+    QTableWidgetItem* item = nodeShipsTable->item(row, 0);
+    if (!item) {
+        qWarning() << "[Navigate] No item at row:" << row << "column 0";
+        return;
+    }
+
+    QString nodeName = item->text();
+    if (nodeName.isEmpty()) {
+        qWarning() << "[Navigate] Empty node name at row:" << row;
+        return;
+    }
 
     extern QMap<QString, ShipStruct> nodeShips;
 
@@ -7242,7 +7338,12 @@ void MainWindow::onNavigateToNodeShip(int row)
 
             qDebug() << "Navigated to node ship:" << nodeName
                      << "LAT:" << ship.lat << "LON:" << ship.lon;
+        } else {
+            qWarning() << "[Navigate] Invalid coordinates for node:" << nodeName
+                       << "LAT:" << ship.lat << "LON:" << ship.lon;
         }
+    } else {
+        qWarning() << "[Navigate] Node ship not found in map:" << nodeName;
     }
 }
 

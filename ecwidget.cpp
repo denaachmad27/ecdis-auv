@@ -6542,7 +6542,6 @@ void EcWidget::startAISConnection()
     connect(subscriber, &AISSubscriber::navLongDmmReceived, this, [=](const QString &v) { navShip.lon_dmm = v;});
     connect(subscriber, &AISSubscriber::navNameReceived, this, [=](const QString &v) {
         navShip.name = v;
-        qDebug() << "Ownship name received:" << v;
     });
 
     connect(subscriber, &AISSubscriber::navSpeedOGReceived, this, [=](double speed_og) {
@@ -6586,24 +6585,20 @@ void EcWidget::startAISConnection()
 
     // NODE REPORTS
     connect(subscriber, &AISSubscriber::nodeNameAllReceived, this, [=](const QString nodeNames){
-        // Print the list of node names received
-        qDebug() << "NODE_NAME_ALL received:" << nodeNames;
-
-        // Print each NODE_REPORT_* subscription that will be created
+        // Process NODE_NAME_ALL - create subscriptions for each node
         if (!nodeNames.isEmpty()) {
             QStringList names = nodeNames.split(',', Qt::SkipEmptyParts);
             for (const QString &name : names) {
                 QString nodeNameUpper = name.trimmed().toUpper();
                 QString subscriptionKey = "NODE_REPORT_" + nodeNameUpper;
-                qDebug() << "Subscribed to:" << subscriptionKey;
+                // Subscription will be created automatically
             }
         }
     });
 
     connect(subscriber, &AISSubscriber::nodeReportReceived, this, [=](const QString nodeName, const QString reportData){
-        // Print individual node report data when received
-        QString subscriptionKey = "NODE_REPORT_" + nodeName;
-        qDebug() << "[" << subscriptionKey << "] Received:" << reportData;
+        // Process individual node report - no debug logging
+        // Data will be parsed by nodeShipDataReceived
     });
 
     connect(subscriber, &AISSubscriber::nodeShipDataReceived, this, [=](const QString nodeName, const QString name, double x, double y, double spd, double hdg, double dep, double lat, double lon, const QString type, const QString mode, int index, double yaw, double time){
@@ -6624,10 +6619,6 @@ void EcWidget::startAISConnection()
 
         // Note: TYPE, MODE, INDEX, TIME are not in ShipStruct, so they're ignored
         // Note: ALLSTOP, LENGTH are also not in ShipStruct
-
-        qDebug() << "Node ship updated:" << nodeName << "-" << name
-                 << "LAT:" << lat << "LON:" << lon
-                 << "SPD:" << spd << "HDG:" << hdg;
 
         // Update Node Ships Panel in MainWindow
         if (mainWindow) {
@@ -7610,7 +7601,25 @@ void EcWidget::drawAISCell()
 void EcWidget::ownShipDraw(){
     // DRAWING OWNSHIP CUSTOM
     if (showCustomOwnShip && showAIS) {
-        AISTargetData ownShipData = Ais::instance()->getOwnShipVar();
+        AISTargetData ownShipData;
+        QString name;
+
+        if (isNavigatingToShip){
+            ownShipData.lat = lastNavigatedShip.lat;
+            ownShipData.lon = lastNavigatedShip.lon;
+            ownShipData.cog = lastNavigatedShip.course_og;
+            ownShipData.sog = lastNavigatedShip.sog;
+            ownShipData.heading = lastNavigatedShip.heading;
+            name = lastNavigatedShip.name;
+        }
+        else {
+            ownShipData.lat = Ais::instance()->getOwnShipVar().lat;
+            ownShipData.lon = Ais::instance()->getOwnShipVar().lon;
+            ownShipData.cog = Ais::instance()->getOwnShipVar().cog;
+            ownShipData.sog = Ais::instance()->getOwnShipVar().sog;
+            ownShipData.heading = Ais::instance()->getOwnShipVar().heading;
+            name = navShip.name;
+        }
 
         if (ownShipData.lat != 0.0 && ownShipData.lon != 0.0) {
             int x, y;
@@ -7637,18 +7646,18 @@ void EcWidget::ownShipDraw(){
                 drawOwnShipIcon(painter, x, y, cog, heading, ownShipData.sog);
 
                 // GAMBAR NAMA KAPAL DI ATAS ICON OWNSHIP
-                if (!navShip.name.isEmpty()) {
+                if (!name.isEmpty()) {
                     painter.setPen(Qt::black);
                     QFont font = painter.font();
                     font.setBold(true);
                     font.setPointSize(10);
                     painter.setFont(font);
 
-                    QRect textRect = painter.fontMetrics().boundingRect(navShip.name);
+                    QRect textRect = painter.fontMetrics().boundingRect(name);
                     int textX = x - textRect.width() / 2;
                     int textY = y - 20; // 40 pixels di atas icon
 
-                    painter.drawText(textX, textY, navShip.name);
+                    painter.drawText(textX, textY, name);
                 }
 
                 // GAMBAR TURNING PREDICTION (menggunakan data navShip untuk ROT)
@@ -7783,6 +7792,11 @@ void EcWidget::ownShipDraw(){
             QString nodeName = it.key();
             ShipStruct nodeShip = it.value();
 
+            // Skip jika nodeShip lagi di-track
+            if (nodeShip.name == lastNavigatedShipName){
+                continue;
+            }
+
             // Skip jika tidak ada lat/lon yang valid
             if (qIsNaN(nodeShip.lat) || qIsNaN(nodeShip.lon) || nodeShip.lat == 0.0 || nodeShip.lon == 0.0) {
                 continue;
@@ -7843,6 +7857,22 @@ void EcWidget::setCustomOwnship(bool state){
 
 void EcWidget::setMainWindow(MainWindow *mw) {
     mainWindow = mw;
+}
+
+void EcWidget::setLastNavigatedShip(const ShipStruct& ship, const QString& name) {
+    if (navShip.name == name){
+        lastNavigatedShip = {};
+        lastNavigatedShipName = "";
+        isNavigatingToShip = false;
+    }
+    else {
+        lastNavigatedShip = ship;
+        lastNavigatedShipName = name;
+        isNavigatingToShip = true;
+    }
+
+    // Print navigated ship info using qCritical
+    QString displayName = name.isEmpty() ? (ship.name.isEmpty() ? "OWNSHIP" : ship.name) : name;
 }
 
 // Create AIS overlay cell in RAM.
