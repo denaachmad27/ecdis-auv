@@ -383,7 +383,7 @@ void AISSubscriber::onReadyRead() {
                         emit nodeReportReceived(nodeName, v);
 
                         // Parse the NODE_REPORT data
-                        // Format: "NAME=archie,X=177.14,Y=183.33,SPD=2.87,HDG=29.98,DEP=0,LAT=-4.32439555,LON=70.32817697,TYPE=kayak,MODE=MODE:ACTIVE:SURVEYING,ALLSTOP=clear,INDEX=2879,YAW=1.0,TIME=1763534205.16,LENGTH=4"
+                        // Format: "NAME=archie,X=177.14,Y=183.33,SPD=2.87,HDG=29.98,HOG=30.5,DEP=0,LAT=-4.32439555,LON=70.32817697,TYPE=kayak,MODE=MODE:ACTIVE:SURVEYING,ALLSTOP=clear,INDEX=2879,YAW=1.0,TIME=1763534205.16,LENGTH=4,SOG=3.0,COG=31.2,DRAFT=1.5,Z=0.0,STW=2.8,DRIFT=0.2,DRIFT_ANGLE=5.0,SET=180,ROT=0.5"
 
                         QString name, type, mode;
                         double x = std::numeric_limits<double>::quiet_NaN();
@@ -395,6 +395,16 @@ void AISSubscriber::onReadyRead() {
                         double lon = std::numeric_limits<double>::quiet_NaN();
                         double yaw = std::numeric_limits<double>::quiet_NaN();
                         double time = std::numeric_limits<double>::quiet_NaN();
+                        double hog = std::numeric_limits<double>::quiet_NaN();
+                        double sog = std::numeric_limits<double>::quiet_NaN();
+                        double cog = std::numeric_limits<double>::quiet_NaN();
+                        double draft = std::numeric_limits<double>::quiet_NaN();
+                        double z = std::numeric_limits<double>::quiet_NaN();
+                        double stw = std::numeric_limits<double>::quiet_NaN();
+                        double drift = std::numeric_limits<double>::quiet_NaN();
+                        double drift_angle = std::numeric_limits<double>::quiet_NaN();
+                        double set = std::numeric_limits<double>::quiet_NaN();
+                        double rot = std::numeric_limits<double>::quiet_NaN();
                         int index = 0;
 
                         // Parse key=value pairs
@@ -410,6 +420,7 @@ void AISSubscriber::onReadyRead() {
                                 else if (key == "Y") y = value.toDouble();
                                 else if (key == "SPD") spd = value.toDouble();
                                 else if (key == "HDG") hdg = value.toDouble();
+                                else if (key == "HOG") hog = value.toDouble();
                                 else if (key == "DEP") dep = value.toDouble();
                                 else if (key == "LAT") lat = value.toDouble();
                                 else if (key == "LON") lon = value.toDouble();
@@ -418,11 +429,21 @@ void AISSubscriber::onReadyRead() {
                                 else if (key == "INDEX") index = value.toInt();
                                 else if (key == "YAW") yaw = value.toDouble();
                                 else if (key == "TIME") time = value.toDouble();
+                                else if (key == "SOG") sog = value.toDouble();
+                                else if (key == "COG") cog = value.toDouble();
+                                else if (key == "DRAFT") draft = value.toDouble();
+                                else if (key == "Z") z = value.toDouble();
+                                else if (key == "STW") stw = value.toDouble();
+                                else if (key == "DRIFT") drift = value.toDouble();
+                                else if (key == "DRIFT_ANGLE") drift_angle = value.toDouble();
+                                else if (key == "SET") set = value.toDouble();
+                                else if (key == "ROT") rot = value.toDouble();
                             }
                         }
 
-                        // Emit parsed data
-                        emit nodeShipDataReceived(nodeName, name, x, y, spd, hdg, dep, lat, lon, type, mode, index, yaw, time);
+                        // Emit parsed data with all navigation parameters
+                        emit nodeShipDataReceived(nodeName, name, x, y, spd, hdg, dep, lat, lon, type, mode, index, yaw, time,
+                                                  hog, sog, cog, draft, z, stw, drift, drift_angle, set, rot);
                     }
                 });
             }

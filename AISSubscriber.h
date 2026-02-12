@@ -55,7 +55,11 @@ signals:
     // NODE REPORTS
     void nodeNameAllReceived(const QString nodeNames);
     void nodeReportReceived(const QString nodeName, const QString reportData);
-    void nodeShipDataReceived(const QString nodeName, const QString name, double x, double y, double spd, double hdg, double dep, double lat, double lon, const QString type, const QString mode, int index, double yaw, double time);
+    void nodeShipDataReceived(const QString nodeName, const QString name, double x, double y, double spd,
+                              double hdg, double dep, double lat, double lon, const QString type,
+                              const QString mode, int index, double yaw, double time,
+                              double hog, double sog, double cog, double draft, double z,
+                              double stw, double drift, double drift_angle, double set, double rot);
 
     // ROUTES INFORMATION
     void rteWpBrgReceived(const double &value);

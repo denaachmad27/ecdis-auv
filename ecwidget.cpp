@@ -6601,7 +6601,9 @@ void EcWidget::startAISConnection()
         // Data will be parsed by nodeShipDataReceived
     });
 
-    connect(subscriber, &AISSubscriber::nodeShipDataReceived, this, [=](const QString nodeName, const QString name, double x, double y, double spd, double hdg, double dep, double lat, double lon, const QString type, const QString mode, int index, double yaw, double time){
+    connect(subscriber, &AISSubscriber::nodeShipDataReceived, this, [=](const QString nodeName, const QString name, double x, double y, double spd, double hdg, double dep, double lat, double lon, const QString type, const QString mode, int index, double yaw, double time,
+                                                                          double hog, double sog, double cog, double draft, double z,
+                                                                          double stw, double drift, double drift_angle, double set, double rot){
         // Create or update node ship data
         ShipStruct &nodeShip = nodeShips[nodeName];
 
@@ -6611,11 +6613,21 @@ void EcWidget::startAISConnection()
         nodeShip.y = y;                    // Y
         nodeShip.speed = spd;              // SPD
         nodeShip.heading = hdg;            // HDG
+        nodeShip.heading_og = hog;         // HOG
         nodeShip.depth = dep;              // DEP
         nodeShip.lat = lat;                // LAT
         nodeShip.lon = lon;                // LON
         nodeShip.yaw = yaw;                // YAW
-        // spd, hdg, dep, lat, lon, yaw, time already mapped above
+        nodeShip.speed_og = sog;           // SOG
+        nodeShip.sog = sog;                // SOG (duplicate for compatibility)
+        nodeShip.course_og = cog;          // COG
+        nodeShip.draft = draft;            // DRAFT
+        nodeShip.z = z;                    // Z
+        nodeShip.stw = stw;                // STW
+        nodeShip.drift = drift;            // DRIFT
+        nodeShip.drift_angle = drift_angle; // DRIFT_ANGLE
+        nodeShip.set = set;                // SET
+        nodeShip.rot = rot;                // ROT
 
         // Note: TYPE, MODE, INDEX, TIME are not in ShipStruct, so they're ignored
         // Note: ALLSTOP, LENGTH are also not in ShipStruct
