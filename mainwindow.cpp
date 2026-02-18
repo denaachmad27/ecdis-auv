@@ -7178,6 +7178,11 @@ void MainWindow::onNodeShipsUpdateTimer()
         // Store last navigated ship info (ownship) in EcWidget
         safeEcchart->setLastNavigatedShip(navShip, ""); // Empty string indicates ownship
 
+        // Publish to MOOSDB with SHIP_NAVIGATE variable
+        // For ownship, use static string "ownship"
+        safeEcchart->publishToMOOS("SHIP_NAVIGATE", "ownship");
+        qDebug() << "[Navigate] Published SHIP_NAVIGATE=ownship to MOOSDB";
+
         // Reset throttle timer AFTER successful navigation
         nodeShipsUserInteractionTimer.start();
 
@@ -7314,6 +7319,11 @@ void MainWindow::onNodeShipsUpdateTimer()
                 // Store last navigated ship info in EcWidget
                 // Use displayName (original case) instead of nodeName (uppercase)
                 safeEcchart->setLastNavigatedShip(ship, displayName);
+
+                // Publish to MOOSDB with SHIP_NAVIGATE variable
+                // For node ships, use the ship name (displayName)
+                safeEcchart->publishToMOOS("SHIP_NAVIGATE", displayName);
+                qDebug() << "[Navigate] Published SHIP_NAVIGATE=" << displayName << "to MOOSDB";
 
                 // Reset throttle timer AFTER successful navigation
                 nodeShipsUserInteractionTimer.start();
