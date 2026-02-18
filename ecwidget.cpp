@@ -7620,7 +7620,7 @@ void EcWidget::ownShipDraw(){
         AISTargetData ownShipData;
         QString name;
 
-        if (isNavigatingToShip){
+        if (isNavigatingToShip && lastNavigatedShip.name != navShip.name){
             ownShipData.lat = lastNavigatedShip.lat;
             ownShipData.lon = lastNavigatedShip.lon;
             ownShipData.cog = lastNavigatedShip.course_og;
