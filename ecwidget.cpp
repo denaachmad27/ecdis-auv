@@ -1306,6 +1306,11 @@ void EcWidget::ShowAIS(bool on)
   }
 }
 
+void EcWidget::ShowVessels(bool on)
+{
+  showVessels = on;
+}
+
 void EcWidget::ShowOwnship(bool on)
 {
   showOwnship = on;
@@ -7634,34 +7639,34 @@ void EcWidget::ownShipDraw(){
         AISTargetData ownShipData;
         QString name;
 
-        ownShipData.lat = Ais::instance()->getOwnShipVar().lat;
-        ownShipData.lon = Ais::instance()->getOwnShipVar().lon;
-        ownShipData.cog = Ais::instance()->getOwnShipVar().cog;
-        ownShipData.sog = Ais::instance()->getOwnShipVar().sog;
-        ownShipData.heading = Ais::instance()->getOwnShipVar().heading;
-        name = navShip.name;
+        // ownShipData.lat = Ais::instance()->getOwnShipVar().lat;
+        // ownShipData.lon = Ais::instance()->getOwnShipVar().lon;
+        // ownShipData.cog = Ais::instance()->getOwnShipVar().cog;
+        // ownShipData.sog = Ais::instance()->getOwnShipVar().sog;
+        // ownShipData.heading = Ais::instance()->getOwnShipVar().heading;
+        // name = navShip.name;
 
-        // if (isNavigatingToShip && lastNavigatedShip.name != navShip.name){
-        //     name = lastNavigatedShip.name;
-        //     qCritical() << hasNodeShip(name);
-        //     if (hasNodeShip(name)){
-        //         ShipStruct ship = getNodeShip(name);
+        if (isNavigatingToShip && lastNavigatedShip.name != navShip.name){
+            name = lastNavigatedShip.name;
+            qCritical() << hasNodeShip(name);
+            if (hasNodeShip(name)){
+                ShipStruct ship = getNodeShip(name);
 
-        //         ownShipData.lat = ship.lat;
-        //         ownShipData.lon = ship.lon;
-        //         ownShipData.cog = ship.course_og;
-        //         ownShipData.sog = ship.sog;
-        //         ownShipData.heading = ship.heading;
-        //     }
-        // }
-        // else {
-        //     ownShipData.lat = Ais::instance()->getOwnShipVar().lat;
-        //     ownShipData.lon = Ais::instance()->getOwnShipVar().lon;
-        //     ownShipData.cog = Ais::instance()->getOwnShipVar().cog;
-        //     ownShipData.sog = Ais::instance()->getOwnShipVar().sog;
-        //     ownShipData.heading = Ais::instance()->getOwnShipVar().heading;
-        //     name = navShip.name;
-        // }
+                ownShipData.lat = ship.lat;
+                ownShipData.lon = ship.lon;
+                ownShipData.cog = ship.course_og;
+                ownShipData.sog = ship.sog;
+                ownShipData.heading = ship.heading;
+            }
+        }
+        else {
+            ownShipData.lat = Ais::instance()->getOwnShipVar().lat;
+            ownShipData.lon = Ais::instance()->getOwnShipVar().lon;
+            ownShipData.cog = Ais::instance()->getOwnShipVar().cog;
+            ownShipData.sog = Ais::instance()->getOwnShipVar().sog;
+            ownShipData.heading = Ais::instance()->getOwnShipVar().heading;
+            name = navShip.name;
+        }
 
         if (ownShipData.lat != 0.0 && ownShipData.lon != 0.0) {
             int x, y;
@@ -7829,7 +7834,7 @@ void EcWidget::ownShipDraw(){
     }
 
     // GAMBAR NODE SHIPS (Dynamic ships dari NODE_REPORT_*)
-    if (showAIS && !nodeShips.isEmpty()) {
+    if (showVessels && showAIS && !nodeShips.isEmpty()) {
         for (auto it = nodeShips.begin(); it != nodeShips.end(); ++it) {
             QString nodeName = it.key();
             ShipStruct nodeShip = it.value();

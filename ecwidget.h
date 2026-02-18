@@ -748,6 +748,7 @@ public:
 
   // Swiches the display of AIS targets on or off (only if AIS telegrams are read)
   void ShowAIS(bool on);
+  void ShowVessels(bool on);
   void ShowOwnship(bool on);
 
   // Satellite view layer
@@ -1207,6 +1208,7 @@ public:
   bool             geoSymLoaded;
   bool             showGrid;
   bool             showAIS;
+  bool             showVessels;
   bool             showOwnship;
   bool             showNationalText;
   EcCoordinate     currentLat, currentLon;

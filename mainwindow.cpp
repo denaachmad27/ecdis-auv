@@ -796,6 +796,11 @@ void MainWindow::createMenuBar(){
     ownshipAction->setChecked(showOwnship);
     connect(ownshipAction, SIGNAL(toggled(bool)), this, SLOT(onOwnship(bool)));
 
+    QAction *vesselsAction = viewMenu->addAction("Other Vessels");
+    vesselsAction->setCheckable(true);
+    vesselsAction->setChecked(showVessels);
+    connect(vesselsAction, SIGNAL(toggled(bool)), this, SLOT(onVessels(bool)));
+
     aisDangerAction = viewMenu->addAction("AIS Dangerous Box");
     aisDangerAction->setCheckable(true);
     aisDangerAction->setChecked(showDangerTarget);
@@ -2648,6 +2653,7 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL), m_i
   showSoundings = false;
   showGrid = false;
   showAIS = true;
+  showVessels = false;
   showOwnship = true;
   trackShip = true;
   showDangerTarget = true;
@@ -2659,6 +2665,7 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL), m_i
   ecchart->ShowSoundings(showSoundings);
   ecchart->ShowGrid(showGrid);
   ecchart->ShowAIS(showAIS);
+  ecchart->ShowVessels(showVessels);
   ecchart->ShowOwnship(showOwnship);
   ecchart->TrackShip(trackShip);
   ecchart->ShowDangerTarget(showDangerTarget);
@@ -3234,9 +3241,22 @@ void MainWindow::onAIS()
   DrawChart();
 }
 
+void MainWindow::onVessels()
+{
+  // Simple toggle action for AIS
+  ecchart->ShowVessels(true);
+  DrawChart();
+}
+
 void MainWindow::onAIS(bool on)
 {
   ecchart->ShowAIS(on);
+  DrawChart();
+}
+
+void MainWindow::onVessels(bool on)
+{
+  ecchart->ShowVessels(on);
   DrawChart();
 }
 
@@ -7009,6 +7029,9 @@ void MainWindow::setupNodeShipsPanel()
 
     // Add dock to left side
     addDockWidget(Qt::LeftDockWidgetArea, nodeShipsDock);
+
+    // Hide panel by default
+    nodeShipsDock->hide();
 
     // Tabify with compass dock
     QList<QDockWidget*> leftDocks = findChildren<QDockWidget*>();

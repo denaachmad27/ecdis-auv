@@ -156,6 +156,8 @@ protected slots:
 
     void onAIS();
     void onAIS(bool);
+    void onVessels();
+    void onVessels(bool);
     void onOwnship(bool);
     void onTrack(bool);
 
@@ -272,7 +274,7 @@ protected:
     QString      impPath;
 
     int lookupTable, displayCategory;
-    bool showLights, showText, showNationalText, showSoundings, showGrid, showAIS, trackShip, showDangerTarget, showOwnship;
+    bool showLights, showText, showNationalText, showSoundings, showGrid, showAIS, showVessels, trackShip, showDangerTarget, showOwnship;
     bool savedDangerTargetState; // Store previous state when ownship is disabled
 
     QActionGroup *dencActionGroup;
