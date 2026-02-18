@@ -7353,7 +7353,7 @@ void EcWidget::publishToMOOSDB(QString varName, QString data){
     else if (varName == "WAYPT_NAV"){message = "Route";}
     else if (varName == "AREA_NAV"){message = "Area";}
 
-    if (success && !data.isEmpty() && varName != "OWNSHIP_OOB"){
+    if (success && !data.isEmpty() && varName != "OWNSHIP_OOB" && varName != "SHIP_NAVIGATE"){
         QMessageBox::information(this, tr("%1 Published").arg(message),
                                  tr("%1 has been published at %2 variable.").arg(message).arg(varName));
     }
@@ -7634,27 +7634,34 @@ void EcWidget::ownShipDraw(){
         AISTargetData ownShipData;
         QString name;
 
-        if (isNavigatingToShip && lastNavigatedShip.name != navShip.name){
-            name = lastNavigatedShip.name;
-            qCritical() << hasNodeShip(name);
-            if (hasNodeShip(name)){
-                ShipStruct ship = getNodeShip(name);
+        ownShipData.lat = Ais::instance()->getOwnShipVar().lat;
+        ownShipData.lon = Ais::instance()->getOwnShipVar().lon;
+        ownShipData.cog = Ais::instance()->getOwnShipVar().cog;
+        ownShipData.sog = Ais::instance()->getOwnShipVar().sog;
+        ownShipData.heading = Ais::instance()->getOwnShipVar().heading;
+        name = navShip.name;
 
-                ownShipData.lat = ship.lat;
-                ownShipData.lon = ship.lon;
-                ownShipData.cog = ship.course_og;
-                ownShipData.sog = ship.sog;
-                ownShipData.heading = ship.heading;
-            }
-        }
-        else {
-            ownShipData.lat = Ais::instance()->getOwnShipVar().lat;
-            ownShipData.lon = Ais::instance()->getOwnShipVar().lon;
-            ownShipData.cog = Ais::instance()->getOwnShipVar().cog;
-            ownShipData.sog = Ais::instance()->getOwnShipVar().sog;
-            ownShipData.heading = Ais::instance()->getOwnShipVar().heading;
-            name = navShip.name;
-        }
+        // if (isNavigatingToShip && lastNavigatedShip.name != navShip.name){
+        //     name = lastNavigatedShip.name;
+        //     qCritical() << hasNodeShip(name);
+        //     if (hasNodeShip(name)){
+        //         ShipStruct ship = getNodeShip(name);
+
+        //         ownShipData.lat = ship.lat;
+        //         ownShipData.lon = ship.lon;
+        //         ownShipData.cog = ship.course_og;
+        //         ownShipData.sog = ship.sog;
+        //         ownShipData.heading = ship.heading;
+        //     }
+        // }
+        // else {
+        //     ownShipData.lat = Ais::instance()->getOwnShipVar().lat;
+        //     ownShipData.lon = Ais::instance()->getOwnShipVar().lon;
+        //     ownShipData.cog = Ais::instance()->getOwnShipVar().cog;
+        //     ownShipData.sog = Ais::instance()->getOwnShipVar().sog;
+        //     ownShipData.heading = Ais::instance()->getOwnShipVar().heading;
+        //     name = navShip.name;
+        // }
 
         if (ownShipData.lat != 0.0 && ownShipData.lon != 0.0) {
             int x, y;
