@@ -14120,7 +14120,7 @@ void EcWidget::saveGuardZones()
     rootObject["version"] = "1.1";  // Increment version
     rootObject["saved_on"] = QDateTime::currentDateTime().toString(Qt::ISODate);
     rootObject["nextGuardZoneId"] = nextGuardZoneId;
-    rootObject["app_version"] = "ECDIS_v1.1";
+    rootObject["app_version"] = "ECDIS_v2.0";
     rootObject["statistics"] = QJsonObject{
         {"total_count", guardZones.size()},
         {"valid_count", validCount},
