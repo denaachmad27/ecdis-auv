@@ -6604,6 +6604,20 @@ void EcWidget::startAISConnection()
     connect(subscriber, &AISSubscriber::nodeShipDataReceived, this, [=](const QString nodeName, const QString name, double x, double y, double spd, double hdg, double dep, double lat, double lon, const QString type, const QString mode, int index, double yaw, double time,
                                                                           double hog, double sog, double cog, double draft, double z,
                                                                           double stw, double drift, double drift_angle, double set, double rot){
+        // Debug log untuk tracking data yang masuk
+        static int nodeDataCounter = 0;
+        if (++nodeDataCounter % 100 == 0) { // Log tiap 100 data
+            qDebug() << "[NODE DATA] Total ships in map:" << nodeShips.size()
+                     << "| Keys:" << nodeShips.keys().join(", ");
+        }
+
+        // Debug log khusus untuk tracked ship
+        if (isNavigatingToShip && nodeName == lastNavigatedShipName) {
+            qDebug() << "[NODE DATA] Received NODE_REPORT for tracked ship:" << nodeName
+                     << "lat:" << lat << "lon:" << lon << "heading:" << hdg
+                     << "| Map contains key:" << nodeShips.contains(nodeName);
+        }
+
         // Create or update node ship data
         ShipStruct &nodeShip = nodeShips[nodeName];
 
@@ -7621,12 +7635,17 @@ void EcWidget::ownShipDraw(){
         QString name;
 
         if (isNavigatingToShip && lastNavigatedShip.name != navShip.name){
-            ownShipData.lat = lastNavigatedShip.lat;
-            ownShipData.lon = lastNavigatedShip.lon;
-            ownShipData.cog = lastNavigatedShip.course_og;
-            ownShipData.sog = lastNavigatedShip.sog;
-            ownShipData.heading = lastNavigatedShip.heading;
             name = lastNavigatedShip.name;
+            qCritical() << hasNodeShip(name);
+            if (hasNodeShip(name)){
+                ShipStruct ship = getNodeShip(name);
+
+                ownShipData.lat = ship.lat;
+                ownShipData.lon = ship.lon;
+                ownShipData.cog = ship.course_og;
+                ownShipData.sog = ship.sog;
+                ownShipData.heading = ship.heading;
+            }
         }
         else {
             ownShipData.lat = Ais::instance()->getOwnShipVar().lat;
@@ -7873,6 +7892,58 @@ void EcWidget::setCustomOwnship(bool state){
 
 void EcWidget::setMainWindow(MainWindow *mw) {
     mainWindow = mw;
+}
+
+// Node Ships Helper Functions
+bool EcWidget::hasNodeShip(const QString& nodeName) const
+{
+    // ⭐ Case-insensitive search
+    for (auto it = nodeShips.begin(); it != nodeShips.end(); ++it) {
+        if (it.key().compare(nodeName, Qt::CaseInsensitive) == 0) {
+            qDebug() << "[hasNodeShip] FOUND (case-insensitive):" << nodeName
+                     << "| Matched with:" << it.key();
+            return true;
+        }
+    }
+
+    // Debug log jika tidak ditemukan
+    qWarning() << "[hasNodeShip] NOT FOUND:" << nodeName
+               << "| Total ships:" << nodeShips.size()
+               << "| Available keys:" << nodeShips.keys().join(", ");
+    return false;
+}
+
+ShipStruct EcWidget::getNodeShip(const QString& nodeName) const
+{
+    // ⭐ Case-insensitive search
+    for (auto it = nodeShips.begin(); it != nodeShips.end(); ++it) {
+        if (it.key().compare(nodeName, Qt::CaseInsensitive) == 0) {
+            ShipStruct result = it.value();
+
+            // Debug log
+            qDebug() << "[getNodeShip] Found:" << nodeName
+                     << "| Key in map:" << it.key()
+                     << "| Name:" << result.name
+                     << "| Lat:" << result.lat
+                     << "| Lon:" << result.lon;
+
+            return result;
+        }
+    }
+
+    // Debug log jika tidak ditemukan
+    qWarning() << "[getNodeShip] Ship NOT FOUND:" << nodeName
+                << "| Total ships:" << nodeShips.size()
+                << "| Available keys:" << nodeShips.keys().join(", ");
+
+    return ShipStruct{}; // Return empty ship if not found
+}
+
+QMap<QString, ShipStruct> EcWidget::getAllNodeShips() const
+{
+    qDebug() << "[getAllNodeShips] Returning" << nodeShips.size() << "ships"
+             << "| Keys:" << nodeShips.keys().join(", ");
+    return nodeShips;
 }
 
 void EcWidget::setLastNavigatedShip(const ShipStruct& ship, const QString& name) {

@@ -1331,6 +1331,11 @@ public:
   ShipStruct getLastNavigatedShip() const { return lastNavigatedShip; }
   QString getLastNavigatedShipName() const { return lastNavigatedShipName; }
   bool getIsNavigatingToShip() const { return isNavigatingToShip; }
+
+  // Node Ships helper functions
+  bool hasNodeShip(const QString& nodeName) const;  // ⭐ PENTING: Non-inline, case-insensitive
+  ShipStruct getNodeShip(const QString& nodeName) const;  // ⭐ PENTING: Non-inline, dengan debug
+  QMap<QString, ShipStruct> getAllNodeShips() const;  // ⭐ PENTING: Non-inline, dengan debug
   // AOI hover segment label state (hover-only labeling)
   void updateAoiHoverLabel(const QPoint& mousePos);
   int hoverAoiId = -1;
