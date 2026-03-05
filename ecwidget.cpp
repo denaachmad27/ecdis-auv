@@ -29,6 +29,7 @@
 #include "mainwindow.h"
 #include "aoi.h"
 #include "satellitetilelayer.h"
+#include "thematictilelayer.h"
 #include "tidemanager.h"
 #include "gribmanager.h"
 
@@ -114,6 +115,8 @@ QString nmea;
 EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
 : QWidget  (parent)
 {
+  qDebug() << "[EcWidget] Constructor started, parent=" << parent;
+
   denc              = NULL;
   dictInfo          = dict;
   currentLat        = qQNaN();
@@ -278,10 +281,15 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
       update(); // Trigger repaint when tiles are loaded
   });
 
-  // Initialize alert system (delayed to ensure EcWidget is fully constructed)
-  QTimer::singleShot(100, this, &EcWidget::initializeAlertSystem);
+  // Initialize thematic tile layer
+  thematicLayer = new ThematicTileLayer(this);
+  showThematicLayer = false;
+  connect(thematicLayer, &ThematicTileLayer::tileUpdated, this, [this](int, int, int, const QString&) {
+      update(); // Trigger repaint when tiles are loaded
+  });
 
-  // PERBAIKAN: Initialize AlertSystem SEBELUM other setup
+  // Initialize alert system
+  // NOTE: Only call ONCE - do NOT use QTimer::singleShot AND direct call together!
   qDebug() << "[ECWIDGET] About to initialize Alert System...";
   initializeAlertSystem();
 
@@ -350,12 +358,11 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   drawGC = NULL;
 #endif
 
-  QDesktopWidget *dt = QApplication::desktop();
+  // Get screen width for resolution selection
   int screenWidth = 1024;
-  if (dt) {
-    screenWidth = dt->width();
-  } else if (QGuiApplication::primaryScreen()) {
-    screenWidth = QGuiApplication::primaryScreen()->size().width();
+  QScreen *screen = QGuiApplication::primaryScreen();
+  if (screen) {
+    screenWidth = screen->size().width();
   }
   if (screenWidth > 1024)
     view = EcChartViewCreate (dictInfo, EC_RESOLUTION_HIGH);
@@ -370,12 +377,15 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   // Initialize S-52 color scheme for enhanced POI visualization
   setupS52ColorScheme();
 
+  qDebug() << "[EcWidget] About to call initColors()...";
   if (!initColors())
   {
+    qCritical() << "[EcWidget] initColors() FAILED!";
     EcChartViewDelete(view);
     view = NULL;
     throw Exception("Cannot read color definitions.");
   }
+  qDebug() << "[EcWidget] initColors() succeeded, hPalette=" << hPalette;
 
   // Initialize the AIS overlay cell
   aisCellId = EC_NOCELLID;
@@ -618,10 +628,11 @@ EcWidget::~EcWidget ()
         ownShipTimer->stop();
     }
 
-    // Cleanup Alert System (no parent, needs manual delete)
+    // AlertSystem has 'this' (EcWidget) as QObject parent, so Qt will auto-delete it.
+    // Just stop its timer and disconnect signals to prevent callbacks during teardown.
     if (alertSystem) {
-        delete alertSystem;
-        alertSystem = nullptr;
+        alertSystem->disconnect();
+        alertSystem = nullptr; // Qt handles deletion via parent-child ownership
     }
 
     if (alertCheckTimer) {
@@ -1231,9 +1242,24 @@ void EcWidget::SetColorScheme (int newScheme, bool greyMode, int brightness)
   currentBrightness  = brightness;
 
 #ifdef _WIN32
-  if (hPalette)
+  // IMPORTANT: Only proceed if hdc is initialized (not NULL)
+  // EcDrawNTSetColorSchemeExt requires valid hdc to work properly
+  if (hdc == NULL) {
+    // Still update the background color based on scheme (without HDC)
+    int red, green, blue;
+    EcDrawGetTokenRGB (view, const_cast<char*>("NODTA"), currentColorScheme, &red, &green, &blue);
+    bg.setRgb (red, green, blue);
+    return;
+  }
+
+  // Only delete old palette if it's a valid handle (not garbage memory)
+  if (hPalette != NULL && hPalette != (HPALETTE)0 && (ULONG_PTR)hPalette > 0xFFFF) {
     DeleteObject (hPalette);
-  hPalette = (HPALETTE)EcDrawNTSetColorSchemeExt (view, NULL, currentColorScheme, greyMode, brightness, 1);
+    hPalette = NULL;
+  }
+  // Create and set new palette
+  HPALETTE newPalette = (HPALETTE)EcDrawNTSetColorSchemeExt (view, NULL, currentColorScheme, greyMode, brightness, 1);
+  hPalette = newPalette;
 #else
   EcDrawX11SetColorScheme (view, dpy, cmap, currentColorScheme, greyMode, brightness);
 #endif
@@ -1249,6 +1275,7 @@ void EcWidget::SetColorScheme (int newScheme, bool greyMode, int brightness)
 
 void EcWidget::SetDisplayCategory(int dc)
 {
+  qDebug() << "[EcWidget] SetDisplayCategory called with dc=" << dc << "view=" << view << "hdc=" << hdc;
   EcChartSetViewClass(view, dc);
 }
 
@@ -1371,6 +1398,78 @@ void EcWidget::updateSatelliteTiles()
 
 /*---------------------------------------------------------------------------*/
 
+void EcWidget::ShowThematicLayer(bool on)
+{
+  showThematicLayer = on;
+  qDebug() << "[THEMATIC] ShowThematicLayer called:" << on;
+
+  thematicLayer->setEnabled(on);
+  if (on) {
+      updateThematicTiles();
+  }
+  update();
+}
+
+/*---------------------------------------------------------------------------*/
+
+void EcWidget::updateThematicTiles()
+{
+  if (!showThematicLayer || !view) return;
+
+  // Get viewport bounds
+  EcCoordinate lat, lon;
+  double minLat, maxLat, minLon, maxLon;
+  XyToLatLon(0, 0, lat, lon);
+  maxLat = lat; minLon = lon;
+  XyToLatLon(width(), height(), lat, lon);
+  minLat = lat; maxLon = lon;
+
+  // Calculate zoom level (same as satellite)
+  int currentScale = GetScale();
+  double currentRangeNM = GetRange(currentScale);
+
+  int zoomLevel;
+  if (currentRangeNM > 5000) zoomLevel = 2;
+  else if (currentRangeNM > 2000) zoomLevel = 3;
+  else if (currentRangeNM > 1000) zoomLevel = 4;
+  else if (currentRangeNM > 500) zoomLevel = 5;
+  else if (currentRangeNM > 200) zoomLevel = 6;
+  else if (currentRangeNM > 100) zoomLevel = 7;
+  else if (currentRangeNM > 50) zoomLevel = 8;
+  else if (currentRangeNM > 20) zoomLevel = 9;
+  else if (currentRangeNM > 10) zoomLevel = 10;
+  else if (currentRangeNM > 5) zoomLevel = 11;
+  else if (currentRangeNM > 2) zoomLevel = 12;
+  else if (currentRangeNM > 1) zoomLevel = 13;
+  else if (currentRangeNM > 0.5) zoomLevel = 14;
+  else if (currentRangeNM > 0.2) zoomLevel = 15;
+  else zoomLevel = qMin(16, 19);
+
+  thematicLayer->setViewport(minLat, maxLat, minLon, maxLon, zoomLevel);
+  thematicLayer->setWidgetSize(width(), height());
+}
+
+/*---------------------------------------------------------------------------*/
+
+void EcWidget::setActiveThematicLayers(const QStringList &layers)
+{
+  activeThematicLayers = layers;
+  thematicLayer->setActiveLayers(layers);
+  if (showThematicLayer) {
+      updateThematicTiles();
+  }
+  qDebug() << "[THEMATIC] Active layers set to:" << layers;
+}
+
+/*---------------------------------------------------------------------------*/
+
+QStringList EcWidget::getAvailableThematicLayers() const
+{
+  return thematicLayer->getAvailableLayers();
+}
+
+/*---------------------------------------------------------------------------*/
+
 void EcWidget::drawSatelliteTilesToChart()
 {
     if (!view || !initialized) return;
@@ -1477,6 +1576,123 @@ void EcWidget::drawSatelliteTilesToChart()
 
     painter.end();
 }
+
+/*---------------------------------------------------------------------------*/
+
+void EcWidget::drawThematicTilesToChart()
+{
+    if (!view || !initialized || !showThematicLayer) return;
+
+    // Calculate zoom level for thematic tiles (same as satellite)
+    int currentScale = GetScale();
+    double currentRangeNM = GetRange(currentScale);
+
+    int zoomLevel;
+    if (currentRangeNM > 5000) zoomLevel = 2;
+    else if (currentRangeNM > 2000) zoomLevel = 3;
+    else if (currentRangeNM > 1000) zoomLevel = 4;
+    else if (currentRangeNM > 500) zoomLevel = 5;
+    else if (currentRangeNM > 200) zoomLevel = 6;
+    else if (currentRangeNM > 100) zoomLevel = 7;
+    else if (currentRangeNM > 50) zoomLevel = 8;
+    else if (currentRangeNM > 20) zoomLevel = 9;
+    else if (currentRangeNM > 10) zoomLevel = 10;
+    else if (currentRangeNM > 5) zoomLevel = 11;
+    else if (currentRangeNM > 2) zoomLevel = 12;
+    else if (currentRangeNM > 1) zoomLevel = 13;
+    else if (currentRangeNM > 0.5) zoomLevel = 14;
+    else if (currentRangeNM > 0.2) zoomLevel = 15;
+    else zoomLevel = qMin(16, 19);
+
+    // Get viewport bounds in chart coordinates
+    double minLat, maxLat, minLon, maxLon;
+    EcCoordinate lat, lon;
+    XyToLatLon(0, 0, lat, lon);
+    maxLat = lat; minLon = lon;
+    XyToLatLon(width(), height(), lat, lon);
+    minLat = lat; maxLon = lon;
+
+    // Update thematic layer with new viewport
+    thematicLayer->setViewport(minLat, maxLat, minLon, maxLon, zoomLevel);
+
+    // Get tile range
+    int startX = ThematicTileLayer::lonToTileX(minLon, zoomLevel);
+    int endX = ThematicTileLayer::lonToTileX(maxLon, zoomLevel);
+    int startY = ThematicTileLayer::latToTileY(maxLat, zoomLevel);
+    int endY = ThematicTileLayer::latToTileY(minLat, zoomLevel);
+
+    // Clamp to valid tile range
+    int maxTile = 1 << zoomLevel;
+    startX = qMax(0, startX);
+    endX = qMin(maxTile - 1, endX);
+    startY = qMax(0, startY);
+    endY = qMin(maxTile - 1, endY);
+
+    if (endX < startX || endY < startY) return;
+
+    // Get active layers
+    QStringList layers = thematicLayer->getActiveLayers();
+    if (layers.isEmpty()) {
+        layers = thematicLayer->getAvailableLayers();
+    }
+    if (layers.isEmpty()) return;
+
+    // Draw tiles to chartPixmap
+    QPainter painter(&chartPixmap);
+    if (!painter.isActive()) {
+        qDebug() << "[THEMATIC] QPainter not active for chartPixmap";
+        return;
+    }
+
+#ifdef _WIN32
+    // Windows: Use semi-transparent composition
+    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+    painter.setOpacity(0.7);  // Semi-transparent to see chart underneath
+#else
+    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+    painter.setOpacity(0.7);
+#endif
+
+    // For each active layer, draw tiles
+    for (const QString &layerName : layers) {
+        for (int tileX = startX; tileX <= endX; tileX++) {
+            for (int tileY = startY; tileY <= endY; tileY++) {
+                QPixmap tile = thematicLayer->getTileWithFallback(tileX, tileY, zoomLevel, layerName);
+                if (!tile.isNull()) {
+                    // Get tile bounds in geographic coordinates
+                    double tileMinLon = ThematicTileLayer::tileXToLon(tileX, zoomLevel);
+                    double tileMaxLon = ThematicTileLayer::tileXToLon(tileX + 1, zoomLevel);
+                    double tileMaxLat = ThematicTileLayer::tileYToLat(tileY, zoomLevel);
+                    double tileMinLat = ThematicTileLayer::tileYToLat(tileY + 1, zoomLevel);
+
+                    // Convert tile corners to chart coordinates
+                    int x1, y1, x2, y2, x3, y3, x4, y4;
+                    bool valid1 = LatLonToXy(tileMaxLat, tileMinLon, x1, y1);  // Top-left
+                    bool valid2 = LatLonToXy(tileMaxLat, tileMaxLon, x2, y2);  // Top-right
+                    bool valid3 = LatLonToXy(tileMinLat, tileMaxLon, x3, y3);  // Bottom-right
+                    bool valid4 = LatLonToXy(tileMinLat, tileMinLon, x4, y4);  // Bottom-left
+
+                    if (valid1 && valid2 && valid3 && valid4) {
+                        // Create a polygon for the tile (handles projection distortion)
+                        QPolygon tilePoly;
+                        tilePoly << QPoint(x1, y1) << QPoint(x2, y2)
+                                 << QPoint(x3, y3) << QPoint(x4, y4);
+
+                        // Get bounding rect for drawing
+                        QRect tileRect = tilePoly.boundingRect();
+
+                        // Scale the tile to fit the bounding rect
+                        painter.drawPixmap(tileRect, tile, QRectF(0, 0, 256, 256));
+                    }
+                }
+            }
+        }
+    }
+
+    painter.end();
+}
+
+/*---------------------------------------------------------------------------*/
 
 void EcWidget::drawSatelliteTilesOverlay()
 {
@@ -1885,6 +2101,17 @@ bool EcWidget::CreateDENC(const QString & dp, bool updateCatalog)
   s63permitFileName = dencPath + "/S63permits.txt";
 
   return true;
+}
+
+/*---------------------------------------------------------------------------*/
+
+void EcWidget::SetDENC(EcDENC* newDenc)
+{
+  denc = newDenc;
+  // Note: initColors() requires hdc to be initialized first
+  // We'll let the first paintEvent handle initialization naturally
+  // Just trigger an update to ensure paintEvent is called
+  update();
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2316,6 +2543,11 @@ void EcWidget::draw(bool upd)
         drawSatelliteTilesToChart();
     }
 
+    // Apply thematic tiles (shapefile-based thematic maps)
+    if (showThematicLayer && thematicLayer && thematicLayer->isEnabled()) {
+        drawThematicTilesToChart();
+    }
+
     drawPixmap = chartPixmap;
     SelectPalette(hdc, oldPal, false);
 
@@ -2333,6 +2565,11 @@ void EcWidget::draw(bool upd)
         // Draw satellite tiles to chartPixmap (part of base chart, no flicker)
         if (showSatelliteLayer && satelliteLayer && satelliteLayer->isEnabled()) {
             drawSatelliteTilesToChart();
+        }
+
+        // Draw thematic tiles to chartPixmap
+        if (showThematicLayer && thematicLayer && thematicLayer->isEnabled()) {
+            drawThematicTilesToChart();
         }
 
         drawPixmap = chartPixmap;

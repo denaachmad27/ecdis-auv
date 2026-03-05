@@ -56,6 +56,7 @@ class CurrentVisualisation; // Forward declaration for current visualization
 class VisualisationPanel; // Forward declaration for visualization panel
 class GribVisualisation; // Forward declaration for GRIB visualization
 class SatelliteTileLayer; // Forward declaration for satellite tile layer
+class ThematicTileLayer; // Forward declaration for thematic tile layer
 
 struct AISTargetData {
     QString mmsi;
@@ -630,7 +631,10 @@ public:
   void InitS63();
 
   // Returns the DENC structure
-  EcDENC *GetDENC() const { return denc; } 
+  EcDENC *GetDENC() const { return denc; }
+
+  // Sets an existing DENC structure (for shared DENC across multiple views)
+  void SetDENC(EcDENC* newDenc);
 
   // Checks if the DENC is valid
   bool HasValidDENC() const { return denc != (EcDENC*)0; }
@@ -757,6 +761,15 @@ public:
   void updateSatelliteTiles();
   void drawSatelliteTilesOverlay();  // Draw tiles to drawPixmap with alpha blending
   void drawSatelliteTilesToChart();  // Draw tiles to chartPixmap (no flicker)
+
+  // Thematic view layer (shapefile-based thematic maps)
+  void ShowThematicLayer(bool on);
+  bool isThematicLayerEnabled() const { return showThematicLayer; }
+  void updateThematicTiles();
+  void setActiveThematicLayers(const QStringList &layers);
+  QStringList getActiveThematicLayers() const { return activeThematicLayers; }
+  QStringList getAvailableThematicLayers() const;
+  void drawThematicTilesToChart();
 #ifdef _WIN32
   void drawSatelliteTilesToHdc(HDC targetHdc);  // Draw tiles to HDC before chart (Windows only)
 #endif
@@ -1302,6 +1315,11 @@ public:
   // Satellite tile layer
   SatelliteTileLayer *satelliteLayer;
   bool showSatelliteLayer = false;     // Enable/disable satellite view
+
+  // Thematic tile layer (shapefile-based thematic maps)
+  ThematicTileLayer *thematicLayer;
+  bool showThematicLayer = false;      // Enable/disable thematic view
+  QStringList activeThematicLayers;    // Currently active thematic layers
 
   // POI store
   QVector<PoiEntry> poiList;

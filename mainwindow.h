@@ -30,6 +30,11 @@
 #include "gribmanager.h"
 #include "testpanel.h"
 
+// Multi-view support
+#include <QMdiArea>
+class ChartViewContainer;
+class ViewManager;
+
 // forward declerations
 class PickWindow;
 class SearchWindow;
@@ -168,6 +173,7 @@ protected slots:
     void onDuskClicked();
     void onNightClicked();
     void onSatelliteClicked();
+    void onThematicClicked();
     void onGreyMode(bool);
 
     void onScale(int);
@@ -284,6 +290,10 @@ protected:
     QAction *dayAction, *duskAction, *nightAction, *satelliteAction;
     QAction *logfileAction, *serverAction;
 
+    // Thematic layer actions
+    QAction *thematicAction;
+    QAction *thematicLayersAction;
+
     QAction* startAisRecAction;
     QAction* stopAisRecAction;
     QAction* attachToShipAction;
@@ -353,6 +363,16 @@ private slots:
     // Database connection status
     void onDatabaseConnectionStatusChanged(bool connected);
     bool getDatabaseConnectionStatus() const;
+
+    // Multi-View slots
+    void onNewS63View();
+    void onNewSatelliteView();
+    void onNewThematicView();
+    void onCloseCurrentView();
+    void onCloseAllViews();
+    void onTileViews();
+    void onCascadeViews();
+    void onTabViews();
 
 private:
     GuardZonePanel* guardZonePanel;
@@ -511,6 +531,15 @@ private:
     // MENU
     QMenu *viewTopMenu;
     QMenu *viewMenu;
+    QMenu *windowMenu;  // New Window menu for multi-view
+
+    // Multi-View Management
+    QMdiArea* mdiArea;
+    ViewManager* viewManager;
+    QList<EcWidget*> secondaryCharts;  // Track additional chart windows
+    int chartWindowCount = 0;          // Counter for naming chart windows
+    void setupMultiViewMenu();
+    void initializeMultiView();
 
     // PLAYBACK DB
     QPushButton *m_playButtonDB;

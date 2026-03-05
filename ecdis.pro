@@ -92,6 +92,9 @@ HEADERS += mainwindow.h ecwidget.h pickwindow.h ais.h \
     gribpanel.h \
     gribvisualisation.h \
     satellitetilelayer.h \
+    thematictilelayer.h \
+    chartviewcontainer.h \
+    viewmanager.h \
 
 SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     chartmanagerpanel.cpp \
@@ -144,6 +147,9 @@ SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
     gribpanel.cpp \
     gribvisualisation.cpp \
     satellitetilelayer.cpp \
+    thematictilelayer.cpp \
+    chartviewcontainer.cpp \
+    viewmanager.cpp \
 
 RESOURCES += \
     resources.qrc
