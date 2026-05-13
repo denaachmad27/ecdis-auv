@@ -3739,7 +3739,14 @@ void EcWidget::drawPois(QPainter& painter)
             textRect.moveLeft(screenPoint.x() + radius + 10);
             textRect.moveTop(screenPoint.y() - textRect.height() / 2);
 
-            QColor labelBg = QColor(20, 20, 20, active ? 170 : 110);
+            QColor labelBg;
+            if (isDragging && dragMode) {
+                // Match waypoint label transparency during drag
+                labelBg = QColor(20, 20, 20, 110);
+            } else {
+                labelBg = QColor(20, 20, 20, active ? 170 : 110);
+            }
+            
             painter.setPen(Qt::NoPen);
             painter.setBrush(labelBg);
             painter.drawRoundedRect(textRect, 4, 4);
@@ -3760,12 +3767,8 @@ void EcWidget::drawWaypointsOverlay(QPainter& painter)
     painter.setRenderHint(QPainter::Antialiasing, true);
 
     // Compute viewport adjusted for painter transform so culling matches translated space
-    QRect viewport = rect().adjusted(-60, -60, 60, 60);
-    const QTransform xf = painter.worldTransform();
-    if (!xf.isIdentity()) {
-        const QPoint t = xf.map(QPoint(0,0));
-        viewport.translate(-t.x(), -t.y());
-    }
+    // Expanded significantly to ensure waypoints moving into view during drag are not culled incorrectly
+    QRect viewport = rect().adjusted(-2000, -2000, 2000, 2000);
 
     // Clear label collision tracking for overlay to ensure clean label positioning
     usedLabelRects.clear();
@@ -7639,13 +7642,6 @@ void EcWidget::ownShipDraw(){
         AISTargetData ownShipData;
         QString name;
 
-        // ownShipData.lat = Ais::instance()->getOwnShipVar().lat;
-        // ownShipData.lon = Ais::instance()->getOwnShipVar().lon;
-        // ownShipData.cog = Ais::instance()->getOwnShipVar().cog;
-        // ownShipData.sog = Ais::instance()->getOwnShipVar().sog;
-        // ownShipData.heading = Ais::instance()->getOwnShipVar().heading;
-        // name = navShip.name;
-
         if (isNavigatingToShip && lastNavigatedShip.name != navShip.name){
             name = lastNavigatedShip.name;
             qCritical() << hasNodeShip(name);
@@ -9328,27 +9324,32 @@ void EcWidget::drawWaypointWithLabel(double lat, double lon, const QString& labe
 
     // Use POI-style label positioning (always to the right of waypoint)
     if (showLabelsAtThisZoom && !label.isEmpty()) {
-        // Setup font dan ukuran teks (same as POI)
-        QFont labelFont("Arial", 9, QFont::Bold);
-        painter.setFont(labelFont);
-        QFontMetrics fm(labelFont);
+        // Skip drawing label into static pixmap during drag to avoid double-drawing (solid/opaque glitch)
+        bool hideLabelForDrag = (isDragging && dragMode);
+        
+        if (!hideLabelForDrag) {
+            // Setup font dan ukuran teks (same as POI)
+            QFont labelFont("Arial", 9, QFont::Bold);
+            painter.setFont(labelFont);
+            QFontMetrics fm(labelFont);
 
-        // Position label to the right of waypoint like POI
-        const int radius = 8; // Waypoint radius
-        QRect textRect = fm.boundingRect(label);
-        textRect.adjust(-8, -4, 8, 4);
-        textRect.moveLeft(x + radius + 10);  // Same positioning as POI
-        textRect.moveTop(y - textRect.height() / 2);
+            // Position label to the right of waypoint like POI
+            const int radius = 8; // Waypoint radius
+            QRect textRect = fm.boundingRect(label);
+            textRect.adjust(-8, -4, 8, 4);
+            textRect.moveLeft(x + radius + 10);  // Same positioning as POI
+            textRect.moveTop(y - textRect.height() / 2);
 
-        // POI-style background (dark, no border)
-        QColor labelBg = QColor(20, 20, 20, 110); // Same transparency as inactive POI
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(labelBg);
-        painter.drawRoundedRect(textRect, 4, 4);  // Same radius as POI
+            // POI-style background (dark, no border)
+            QColor labelBg = QColor(20, 20, 20, 110); // Same transparency as inactive POI
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(labelBg);
+            painter.drawRoundedRect(textRect, 4, 4);  // Same radius as POI
 
-        // White text
-        painter.setPen(Qt::white);
-        painter.drawText(textRect, Qt::AlignCenter, label);
+            // White text
+            painter.setPen(Qt::white);
+            painter.drawText(textRect, Qt::AlignCenter, label);
+        }
     }
 
     painter.end();
