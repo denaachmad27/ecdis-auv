@@ -157,7 +157,12 @@ void MainWindow::setupMultiViewMenu()
 // Multi-View slots
 void MainWindow::onNewS63View()
 {
-    std::cout << "[MULTI-VIEW] Creating new S-63 chart window..." << std::endl;
+    // Ensure Multi-View is enabled
+    if (!mdiArea || !(AppConfig::isNextDev() || AppConfig::isDev())) {
+        qWarning() << "[MULTI-VIEW] Multi-view is disabled in current mode.";
+        return;
+    }
+
     qDebug() << "[MULTI-VIEW] Creating new S-63 chart window...";
 
     // Get libStr for EcWidget constructor
@@ -229,11 +234,9 @@ void MainWindow::onNewS63View()
         newEcWidget->ShowOwnship(showOwnship);
         newEcWidget->TrackShip(trackShip);
         newEcWidget->ShowDangerTarget(showDangerTarget);
-                // Copy color settings
+        // Copy color settings
         if(ecchart) {
-            newEcWidget->SetColorScheme(ecchart->GetColorScheme());
-            newEcWidget->SetGreyMode(ecchart->GetGreyMode());
-            newEcWidget->SetBrightness(ecchart->GetBrightness());
+            newEcWidget->SetColorScheme(ecchart->GetColorScheme(), ecchart->GetGreyMode(), ecchart->GetBrightness());
         }
         qDebug() << "[MULTI-VIEW] Settings copied successfully";
     }
@@ -1254,11 +1257,13 @@ void MainWindow::createMenuBar(){
     qDebug() << "[TABIFY] Setup panels for tab integration - GuardZone, AIS Target, Route, Obstacle Detection";
 
     // ================================== CHART WINDOWS SUB-MENU (under View)
-    QMenu *chartWindowsMenu = viewTopMenu->addMenu("&Chart Windows");
-    chartWindowsMenu->addAction("Add Second Chart", this, SLOT(onNewS63View()))->setShortcut(QKeySequence("Ctrl+Shift+N"));
-    chartWindowsMenu->addSeparator();
-    chartWindowsMenu->addAction("Tile Windows", this, SLOT(onTileViews()));
-    chartWindowsMenu->addAction("Close All Extra Windows", this, SLOT(onCloseAllViews()));
+    if (AppConfig::isNextDev() || AppConfig::isDev()) {
+        QMenu *chartWindowsMenu = viewTopMenu->addMenu("&Chart Windows");
+        chartWindowsMenu->addAction("Add Second Chart", this, SLOT(onNewS63View()))->setShortcut(QKeySequence("Ctrl+Shift+N"));
+        chartWindowsMenu->addSeparator();
+        chartWindowsMenu->addAction("Tile Windows", this, SLOT(onTileViews()));
+        chartWindowsMenu->addAction("Close All Extra Windows", this, SLOT(onCloseAllViews()));
+    }
 
     viewMenu->addSeparator();
 
@@ -1352,11 +1357,15 @@ void MainWindow::createMenuBar(){
     colorMenu->addSeparator();
 
     // Thematic layer toggle
-    thematicAction = new QAction("Thematic Layer", this);
-    thematicAction->setCheckable(true);
-    thematicAction->setChecked(false);
-    connect(thematicAction, SIGNAL(triggered(bool)), this, SLOT(onThematicClicked()));
-    colorMenu->addAction(thematicAction);
+    if (AppConfig::isNextDev() || AppConfig::isDev()) {
+        thematicAction = new QAction("Thematic Layer", this);
+        thematicAction->setCheckable(true);
+        thematicAction->setChecked(false);
+        connect(thematicAction, SIGNAL(triggered(bool)), this, SLOT(onThematicClicked()));
+        colorMenu->addAction(thematicAction);
+    } else {
+        thematicAction = nullptr;
+    }
 
     colorMenu->addSeparator();
 
@@ -1416,7 +1425,9 @@ void MainWindow::createMenuBar(){
     systemMenu->addAction("Settings Manager", this, SLOT(openSettingsDialog()) );
 
     // ================================== WINDOW MENU (Multi-View)
-    setupMultiViewMenu();
+    if (AppConfig::isNextDev() || AppConfig::isDev()) {
+        setupMultiViewMenu();
+    }
 
     createActions();
 
@@ -2933,7 +2944,9 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL), m_i
   if (! dict) throw Exception("Cannot read dictionary.");
 
   // Initialize Multi-View System (QMdiArea + ViewManager)
-  initializeMultiView();
+  if (AppConfig::isNextDev() || AppConfig::isDev()) {
+      initializeMultiView();
+  }
 
   // Create the default ecchart widget (will be wrapped in a ChartViewContainer)
   try
@@ -2949,7 +2962,7 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL), m_i
   // Create default view by wrapping ecchart directly into QMdiArea
   // NOTE: Do NOT use viewManager->createS63View() here because it creates
   // a redundant EcWidget that we'd have to delete, causing use-after-free crashes.
-  if (mdiArea) {
+  if (mdiArea && (AppConfig::isNextDev() || AppConfig::isDev())) {
       // Ensure SubWindowView mode for proper positioning
       mdiArea->setViewMode(QMdiArea::SubWindowView);
 
@@ -2963,6 +2976,8 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL), m_i
       // Connect signals to mainwindow
       connect(ecchart, SIGNAL(waypointCreated()), this, SLOT(onWaypointCreated()));
       connect(ecchart, SIGNAL(attachToShipStateChanged(bool)), this, SLOT(onAttachToShipStateChanged(bool)));
+  } else {
+      setCentralWidget(ecchart);
   }
 
   connect(ecchart, SIGNAL(waypointCreated()), this, SLOT(onWaypointCreated()));
@@ -3712,6 +3727,7 @@ void MainWindow::onSearch()
 
 void MainWindow::onColorScheme(QAction *a)
 {
+  if (!a) return;
   qDebug() << "[COLOR SCHEME] onColorScheme called, action:" << a->text()
            << "satelliteAction:" << (a == satelliteAction)
            << "duskAction:" << (a == duskAction)
@@ -3767,6 +3783,7 @@ void MainWindow::onSatelliteClicked()
 
 void MainWindow::onThematicClicked()
 {
+    if (!thematicAction) return;
     bool enabled = thematicAction->isChecked();
     qDebug() << "[THEME] Thematic layer" << (enabled ? "enabled" : "disabled");
 

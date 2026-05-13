@@ -269,8 +269,8 @@ protected:
 
     virtual void closeEvent(QCloseEvent *);
 
-    EcDictInfo  *dict;
-    EcWidget    *ecchart;
+    EcDictInfo  *dict = nullptr;
+    EcWidget    *ecchart = nullptr;
     QLineEdit   *rngEdit, *posEdit, *proEdit, *sclEdit, *oriEdit, *clockEdit;
 
     // Top-right tracking status widget
@@ -287,12 +287,12 @@ protected:
     QAction *autoProjectionAction, *mercatorAction, *gnomonicAction, *stereographicAction;
     QAction *baseAction, *standardAction, *otherAction;
     QAction *simplifiedAction, *fullChartAction;
-    QAction *dayAction, *duskAction, *nightAction, *satelliteAction;
-    QAction *logfileAction, *serverAction;
+    QAction *dayAction = nullptr, *duskAction = nullptr, *nightAction = nullptr, *satelliteAction = nullptr;
+    QAction *logfileAction = nullptr, *serverAction = nullptr;
 
     // Thematic layer actions
-    QAction *thematicAction;
-    QAction *thematicLayersAction;
+    QAction *thematicAction = nullptr;
+    QAction *thematicLayersAction = nullptr;
 
     QAction* startAisRecAction;
     QAction* stopAisRecAction;
@@ -534,8 +534,8 @@ private:
     QMenu *windowMenu;  // New Window menu for multi-view
 
     // Multi-View Management
-    QMdiArea* mdiArea;
-    ViewManager* viewManager;
+    QMdiArea* mdiArea = nullptr;
+    ViewManager* viewManager = nullptr;
     QList<EcWidget*> secondaryCharts;  // Track additional chart windows
     int chartWindowCount = 0;          // Counter for naming chart windows
     void setupMultiViewMenu();
