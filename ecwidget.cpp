@@ -128,6 +128,12 @@ EcWidget::EcWidget (EcDictInfo *dict, QString *libStr, QWidget *parent)
   currentColorScheme    = EC_DAY_BRIGHT;
   currentBrightness     = 100;
   currentGreyMode       = false;
+  
+  // Initialize NextDev/Dev pointers
+  m_currentVisualisation = nullptr;
+  m_gribVisualisation = nullptr;
+  m_gribManager = nullptr;
+  m_tideManager = nullptr;
 
   // Jangan set posisi ownship default saat init; biarkan 0 agar icon tidak tergambar
   if (!qIsNaN(currentLat) && !qIsNaN(currentLon)) {
@@ -1320,6 +1326,10 @@ void EcWidget::ShowOwnship(bool on)
 
 void EcWidget::ShowSatelliteLayer(bool on)
 {
+  if (!AppConfig::isNextDev() && !AppConfig::isDev()) {
+      showSatelliteLayer = false;
+      return;
+  }
   showSatelliteLayer = on;
   qDebug() << "[SATELLITE] ShowSatelliteLayer called:" << on;
 
@@ -2612,7 +2622,7 @@ void EcWidget::paintEvent (QPaintEvent *e)
   }
 
   // Draw GRIB wave data overlay (before AOIs)
-  if (m_showGribData) {
+  if (m_showGribData && (AppConfig::isNextDev() || AppConfig::isDev())) {
       drawGribData(painter);
   }
 
@@ -3689,7 +3699,8 @@ void EcWidget::drawPois(QPainter& painter)
         const QPoint t = xf.map(QPoint(0,0));
         viewport.translate(-t.x(), -t.y());
     }
-    QFont labelFont = painter.font();
+    QFont labelFont("Arial", 9, QFont::Bold);
+    painter.setFont(labelFont);
     QFontMetrics fm(labelFont);
 
     for (const auto& poi : poiList) {
@@ -7607,7 +7618,7 @@ void EcWidget::drawAISCell()
     p.setRenderHint(QPainter::Antialiasing, true);
     p.setClipRect(drawPixmap.rect());
 
-    if (m_showCurrentArrows) {
+    if (m_showCurrentArrows && AppConfig::isDev()) {
       QList<CurrentStation> currentStations;
       if (m_currentVisualisation) {
         currentStations = m_currentVisualisation->generateSampleCurrentData();
@@ -7615,7 +7626,7 @@ void EcWidget::drawAISCell()
       m_currentVisualisation->drawCurrentArrows(&p, currentStations);
     }
 
-    if (m_showTideRectangles) {
+    if (m_showTideRectangles && (AppConfig::isNextDev() || AppConfig::isDev())) {
       QList<TideVisualization> tideVisualizations;
       if (m_currentVisualisation) {
         tideVisualizations = m_currentVisualisation->generateSampleTideData();

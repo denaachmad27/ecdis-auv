@@ -1,4 +1,4 @@
-﻿// #include <QtGui>
+// #include <QtGui>
 #include <QtWidgets>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -398,21 +398,23 @@ void MainWindow::createStatusBar(){
     statusBar()->addWidget(moosStatusWidget);  // kiri
 
     // POSTGRE CONNECTION STATUS
-    postgreLedCircle = new QLabel;
-    postgreLedCircle->setFixedSize(12, 12);  // lingkaran 12x12
-    postgreLedCircle->setStyleSheet("background-color: green; border-radius: 6px;");
+    if (AppConfig::isNextDev() || AppConfig::isDev()) {
+        postgreLedCircle = new QLabel;
+        postgreLedCircle->setFixedSize(12, 12);  // lingkaran 12x12
+        postgreLedCircle->setStyleSheet("background-color: red; border-radius: 6px;");
 
-    postgreStatusText = new QLabel(" Postgre: Connected");
-    postgreStatusText->setStyleSheet("color: green; font-weight: bold;");
+        postgreStatusText = new QLabel(" Postgre: Disconnected");
+        postgreStatusText->setStyleSheet("color: red; font-weight: bold;");
 
-    QWidget *postgreStatusWidget = new QWidget;
-    QHBoxLayout *postgreStatusLayout = new QHBoxLayout(postgreStatusWidget);
-    postgreStatusLayout->setContentsMargins(5, 0, 10, 0); // spasi antar widget
-    postgreStatusLayout->addWidget(postgreLedCircle);
-    postgreStatusLayout->addWidget(postgreStatusText);
+        QWidget *postgreStatusWidget = new QWidget;
+        QHBoxLayout *postgreStatusLayout = new QHBoxLayout(postgreStatusWidget);
+        postgreStatusLayout->setContentsMargins(5, 0, 10, 0); // spasi antar widget
+        postgreStatusLayout->addWidget(postgreLedCircle);
+        postgreStatusLayout->addWidget(postgreStatusText);
 
-    // Tambahkan setelah MOOSDB status
-    statusBar()->addWidget(postgreStatusWidget);  // setelah MOOSDB
+        // Tambahkan setelah MOOSDB status
+        statusBar()->addWidget(postgreStatusWidget);  // setelah MOOSDB
+    }
 
     connect(ecchart, &EcWidget::aisSubCreated, this, [this](AISSubscriber* sub) {
         qDebug() << "aisSub created, now connecting signal...";
@@ -796,24 +798,28 @@ void MainWindow::createMenuBar(){
     ownshipAction->setChecked(showOwnship);
     connect(ownshipAction, SIGNAL(toggled(bool)), this, SLOT(onOwnship(bool)));
 
-    QAction *vesselsAction = viewMenu->addAction("Other Vessels");
-    vesselsAction->setCheckable(true);
-    vesselsAction->setChecked(showVessels);
-    connect(vesselsAction, SIGNAL(toggled(bool)), this, SLOT(onVessels(bool)));
+    if (AppConfig::isNextDev() || AppConfig::isDev()) {
+        QAction *vesselsAction = viewMenu->addAction("Other Vessels");
+        vesselsAction->setCheckable(true);
+        vesselsAction->setChecked(showVessels);
+        connect(vesselsAction, SIGNAL(toggled(bool)), this, SLOT(onVessels(bool)));
+    }
 
     aisDangerAction = viewMenu->addAction("AIS Dangerous Box");
     aisDangerAction->setCheckable(true);
     aisDangerAction->setChecked(showDangerTarget);
     connect(aisDangerAction, SIGNAL(toggled(bool)), this, SLOT(onShowDangerTargets(bool)));
 
-    QAction *showTideRectanglesAction = viewMenu->addAction("Tide");
-    showTideRectanglesAction->setCheckable(true);
-    showTideRectanglesAction->setChecked(false);
-    connect(showTideRectanglesAction, &QAction::toggled, this, [this](bool checked) {
-        if (ecchart) {
-            ecchart->setShowTideRectangles(checked);
-        }
-    });
+    if (AppConfig::isNextDev() || AppConfig::isDev()) {
+        QAction *showTideRectanglesAction = viewMenu->addAction("Tide");
+        showTideRectanglesAction->setCheckable(true);
+        showTideRectanglesAction->setChecked(false);
+        connect(showTideRectanglesAction, &QAction::toggled, this, [this](bool checked) {
+            if (ecchart) {
+                ecchart->setShowTideRectangles(checked);
+            }
+        });
+    }
 
     if (AppConfig::isDevelopment()) {
         QAction *trackAction = viewMenu->addAction("Track Ship");
@@ -824,7 +830,7 @@ void MainWindow::createMenuBar(){
 
     viewMenu->addSeparator();
 
-    if (AppConfig::isDevelopment()){
+    if (AppConfig::isDev()){
         QAction *trailAction = viewMenu->addAction("Clear Trail");
         connect(trailAction, &QAction::triggered, this, [=]() {
             ecchart->clearOwnShipTrail();
@@ -976,11 +982,16 @@ void MainWindow::createMenuBar(){
     dayAction    = cActionGroup->addAction("Day");
     duskAction = cActionGroup->addAction("Dusk");
     nightAction = cActionGroup->addAction("Night");
-    satelliteAction = cActionGroup->addAction("Satellite");
     dayAction->setCheckable(true);
     duskAction->setCheckable(true);
     nightAction->setCheckable(true);
-    satelliteAction->setCheckable(true);
+    if (AppConfig::isNextDev() || AppConfig::isDev()) {
+        satelliteAction = cActionGroup->addAction("Satellite");
+        satelliteAction->setCheckable(true);
+        connect(satelliteAction, SIGNAL(triggered()), this, SLOT(onSatelliteClicked()));
+    } else {
+        satelliteAction = nullptr;
+    }
 
     qDebug() << "[MENU] Chart Theme actions created:"
              << "dayAction=" << dayAction
@@ -1000,7 +1011,7 @@ void MainWindow::createMenuBar(){
     colorMenu->addAction(dayAction);
     colorMenu->addAction(duskAction);
     colorMenu->addAction(nightAction);
-    colorMenu->addAction(satelliteAction);
+    if (satelliteAction) colorMenu->addAction(satelliteAction);
 
     colorMenu->addSeparator();
 
@@ -1236,7 +1247,7 @@ void MainWindow::createMenuBar(){
         setLightMode();
     }
 
-    if (AppConfig::isBeta()){
+    if (AppConfig::isNextDev() || AppConfig::isDev()){
         fetchNmea();
     }
 
@@ -1270,6 +1281,7 @@ void MainWindow::debugPurpose(){
 }
 
 void MainWindow::fetchNmea(){
+    if (!AppConfig::isNextDev() && !AppConfig::isDev()) return;
     // === 1. Buat dan Inisialisasi Widget ===
     QWidget *dockWidgetContents = new QWidget();
     QVBoxLayout *mainLayout = new QVBoxLayout(dockWidgetContents);
@@ -1730,16 +1742,18 @@ void MainWindow::onDatabaseConnectionStatusChanged(bool connected)
 {
     m_isDatabaseConnected = connected; // Store the database connection status
 
-    if (connected) {
-        postgreStatusText->setText(" Postgre: Connected");
-        postgreStatusText->setStyleSheet("color: green; font-weight: bold;");
-        postgreLedCircle->setStyleSheet("background-color: green; border-radius: 6px;");
-        qDebug() << "PostgreSQL status updated: Connected";
-    } else {
-        postgreStatusText->setText(" Postgre: Disconnected");
-        postgreStatusText->setStyleSheet("color: red; font-weight: bold;");
-        postgreLedCircle->setStyleSheet("background-color: red; border-radius: 6px;");
-        qDebug() << "PostgreSQL status updated: Disconnected";
+    if (postgreStatusText && postgreLedCircle) {
+        if (connected) {
+            postgreStatusText->setText(" Postgre: Connected");
+            postgreStatusText->setStyleSheet("color: green; font-weight: bold;");
+            postgreLedCircle->setStyleSheet("background-color: green; border-radius: 6px;");
+            qDebug() << "PostgreSQL status updated: Connected";
+        } else {
+            postgreStatusText->setText(" Postgre: Disconnected");
+            postgreStatusText->setStyleSheet("color: red; font-weight: bold;");
+            postgreLedCircle->setStyleSheet("background-color: red; border-radius: 6px;");
+            qDebug() << "PostgreSQL status updated: Disconnected";
+        }
     }
 }
 
@@ -5086,6 +5100,7 @@ void MainWindow::setupObstacleDetectionPanel()
 
 void MainWindow::setupTidePanel()
 {
+    if (!AppConfig::isNextDev() && !AppConfig::isDev()) return;
     qDebug() << "[MAIN] Setting up Tide panel...";
 
     try {
@@ -5305,6 +5320,7 @@ void MainWindow::setupTidePanel()
 
 void MainWindow::setupGribPanel()
 {
+    if (!AppConfig::isNextDev() && !AppConfig::isDev()) return;
     qDebug() << "[MAIN] Setting up GRIB Viewer panel...";
 
     try {
@@ -7003,6 +7019,7 @@ void MainWindow::updateIcon(bool dark)
 // NODE SHIPS PANEL
 void MainWindow::setupNodeShipsPanel()
 {
+    if (!AppConfig::isNextDev() && !AppConfig::isDev()) return;
     // Create table widget
     nodeShipsTable = new QTableWidget();
     nodeShipsTable->setColumnCount(4);

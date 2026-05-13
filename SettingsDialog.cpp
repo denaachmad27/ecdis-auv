@@ -42,12 +42,20 @@
 #include <QtConcurrent>
 #include <QFutureWatcher>
 
-SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent), isDatabaseConnected(false), loadingDialog(nullptr), connectionWatcher(nullptr) {
+SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent), 
+    moosIpLineEdit(nullptr), moosPortLineEdit(nullptr),
+    dbHostLineEdit(nullptr), dbPortLineEdit(nullptr), dbNameLineEdit(nullptr), 
+    dbUserLineEdit(nullptr), dbPasswordLineEdit(nullptr), dbStatusLabel(nullptr), dbConnectButton(nullptr),
+    aisSourceCombo(nullptr), ipLabel(nullptr), ipAisLineEdit(nullptr), logFileLabel(nullptr), logFileLineEdit(nullptr),
+    isDatabaseConnected(false), loadingDialog(nullptr), connectionWatcher(nullptr) 
+{
     setupUI();
     loadSettings();
 
     // Connect button action
-    connect(dbConnectButton, &QPushButton::clicked, this, &SettingsDialog::onDbConnectClicked);
+    if (dbConnectButton) {
+        connect(dbConnectButton, &QPushButton::clicked, this, &SettingsDialog::onDbConnectClicked);
+    }
 
     // NOTE: Removed initial database connection check to speed up dialog opening
     // Connection status will be set from main window when dialog opens
@@ -58,12 +66,14 @@ void SettingsDialog::setDatabaseConnectionStatus(bool connected)
 {
     isDatabaseConnected = connected;
 
-    if (connected) {
-        dbStatusLabel->setText("Connected");
-        dbStatusLabel->setStyleSheet("QLabel { color: green; font-weight: bold; }");
-    } else {
-        dbStatusLabel->setText("Disconnected");
-        dbStatusLabel->setStyleSheet("QLabel { color: red; font-weight: bold; }");
+    if (dbStatusLabel) {
+        if (connected) {
+            dbStatusLabel->setText("Connected");
+            dbStatusLabel->setStyleSheet("QLabel { color: green; font-weight: bold; }");
+        } else {
+            dbStatusLabel->setText("Disconnected");
+            dbStatusLabel->setStyleSheet("QLabel { color: red; font-weight: bold; }");
+        }
     }
 }
 
@@ -73,6 +83,12 @@ void SettingsDialog::setupUI() {
 
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
     QTabWidget *tabWidget = new QTabWidget(this);
+
+    // Database UI pointers
+    QGroupBox *databaseGroup = nullptr;
+    QVBoxLayout *databaseLayout = nullptr;
+    QFormLayout *databaseForm = nullptr;
+    QHBoxLayout *dbStatusLayout = nullptr;
 
     // Make all QGroupBox titles bold without affecting child widget fonts
     this->setStyleSheet("QGroupBox::title { font-weight: bold; }");
@@ -91,38 +107,40 @@ void SettingsDialog::setupUI() {
     //moosdbForm->addRow("MOOSDB Port:", moosPortLineEdit);
 
     // Database Section
-    QGroupBox *databaseGroup = new QGroupBox(tr("Database"));
-    QVBoxLayout *databaseLayout = new QVBoxLayout(databaseGroup);
+    if (AppConfig::isNextDev() || AppConfig::isDev()) {
+        databaseGroup = new QGroupBox(tr("Database"));
+        databaseLayout = new QVBoxLayout(databaseGroup);
 
-    QFormLayout *databaseForm = new QFormLayout;
-    dbHostLineEdit = new QLineEdit;
-    dbPortLineEdit = new QLineEdit;
-    dbNameLineEdit = new QLineEdit;
-    dbUserLineEdit = new QLineEdit;
-    dbPasswordLineEdit = new QLineEdit;
-    dbPasswordLineEdit->setEchoMode(QLineEdit::Password);
+        databaseForm = new QFormLayout;
+        dbHostLineEdit = new QLineEdit;
+        dbPortLineEdit = new QLineEdit;
+        dbNameLineEdit = new QLineEdit;
+        dbUserLineEdit = new QLineEdit;
+        dbPasswordLineEdit = new QLineEdit;
+        dbPasswordLineEdit->setEchoMode(QLineEdit::Password);
 
-    databaseForm->addRow("Host:", dbHostLineEdit);
-    databaseForm->addRow("Port:", dbPortLineEdit);
-    databaseForm->addRow("DB Name:", dbNameLineEdit);
-    databaseForm->addRow("User:", dbUserLineEdit);
-    databaseForm->addRow("Password:", dbPasswordLineEdit);
+        databaseForm->addRow("Host:", dbHostLineEdit);
+        databaseForm->addRow("Port:", dbPortLineEdit);
+        databaseForm->addRow("DB Name:", dbNameLineEdit);
+        databaseForm->addRow("User:", dbUserLineEdit);
+        databaseForm->addRow("Password:", dbPasswordLineEdit);
 
-    databaseLayout->addLayout(databaseForm);
+        databaseLayout->addLayout(databaseForm);
 
-    // Database status and connect button
-    QHBoxLayout *dbStatusLayout = new QHBoxLayout;
+        // Database status and connect button
+        dbStatusLayout = new QHBoxLayout;
 
-    dbStatusLabel = new QLabel("Disconnected");
-    dbStatusLabel->setStyleSheet("QLabel { color: red; font-weight: bold; }");
-    dbConnectButton = new QPushButton("Connect");
-    dbConnectButton->setMaximumWidth(100);
+        dbStatusLabel = new QLabel("Disconnected");
+        dbStatusLabel->setStyleSheet("QLabel { color: red; font-weight: bold; }");
+        dbConnectButton = new QPushButton("Connect");
+        dbConnectButton->setMaximumWidth(100);
 
-    dbStatusLayout->addWidget(dbStatusLabel);
-    dbStatusLayout->addStretch();
-    dbStatusLayout->addWidget(dbConnectButton);
+        dbStatusLayout->addWidget(dbStatusLabel);
+        dbStatusLayout->addStretch();
+        dbStatusLayout->addWidget(dbConnectButton);
 
-    databaseLayout->addLayout(dbStatusLayout);
+        databaseLayout->addLayout(dbStatusLayout);
+    }
 
     // Align Connection tab fields so inputs start at the same x as
     // the "MOOSDB IP:" input by normalizing label widths
@@ -146,11 +164,11 @@ void SettingsDialog::setupUI() {
         };
 
         applyLabelWidth(moosdbForm);
-        applyLabelWidth(databaseForm);
+        if (databaseForm) applyLabelWidth(databaseForm);
     }
 
     connectionLayout->addWidget(moosdbGroup);
-    connectionLayout->addWidget(databaseGroup);
+    if (databaseGroup) connectionLayout->addWidget(databaseGroup);
     connectionLayout->addStretch();
 
     // =========== OWNSHIP TAB =========== //
@@ -619,7 +637,10 @@ void SettingsDialog::setupUI() {
     QGroupBox *themeGroup = new QGroupBox(tr("Theme"));
     QFormLayout *themeForm = new QFormLayout(themeGroup);
     displayModeCombo = new QComboBox;
-    displayModeCombo->addItems({"Day", "Dusk", "Night", "Satellite"});
+    displayModeCombo->addItems({"Day", "Dusk", "Night"});
+    if (AppConfig::isNextDev() || AppConfig::isDev()) {
+        displayModeCombo->addItem("Satellite");
+    }
     themeForm->addRow(tr("Default Chart Theme:"), displayModeCombo);
 
     themeModeCombo = new QComboBox;
@@ -895,11 +916,13 @@ void SettingsDialog::loadSettings() {
     moosPortLineEdit->setText(settings.value("MOOSDB/port", "9000").toString());
 
     // Database
-    dbHostLineEdit->setText(settings.value("Database/host", "localhost").toString());
-    dbPortLineEdit->setText(settings.value("Database/port", "5432").toString());
-    dbNameLineEdit->setText(settings.value("Database/name", "ecdis_ais").toString());
-    dbUserLineEdit->setText(settings.value("Database/user", "postgres").toString());
-    dbPasswordLineEdit->setText(settings.value("Database/password", "").toString());
+    if (dbHostLineEdit) {
+        dbHostLineEdit->setText(settings.value("Database/host", "localhost").toString());
+        dbPortLineEdit->setText(settings.value("Database/port", "5432").toString());
+        dbNameLineEdit->setText(settings.value("Database/name", "ecdis_ais").toString());
+        dbUserLineEdit->setText(settings.value("Database/user", "postgres").toString());
+        dbPasswordLineEdit->setText(settings.value("Database/password", "").toString());
+    }
 
     // AIS
     if (AppConfig::isDevelopment()){
@@ -1130,11 +1153,13 @@ void SettingsDialog::saveSettings() {
     settings.setValue("MOOSDB/port", moosPortLineEdit->text());
 
     // Database
-    settings.setValue("Database/host", dbHostLineEdit->text());
-    settings.setValue("Database/port", dbPortLineEdit->text());
-    settings.setValue("Database/name", dbNameLineEdit->text());
-    settings.setValue("Database/user", dbUserLineEdit->text());
-    settings.setValue("Database/password", dbPasswordLineEdit->text());
+    if (dbHostLineEdit) {
+        settings.setValue("Database/host", dbHostLineEdit->text());
+        settings.setValue("Database/port", dbPortLineEdit->text());
+        settings.setValue("Database/name", dbNameLineEdit->text());
+        settings.setValue("Database/user", dbUserLineEdit->text());
+        settings.setValue("Database/password", dbPasswordLineEdit->text());
+    }
 
     // AIS
     if (AppConfig::isDevelopment()){

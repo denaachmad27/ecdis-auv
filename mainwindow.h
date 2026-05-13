@@ -355,14 +355,14 @@ private slots:
     bool getDatabaseConnectionStatus() const;
 
 private:
-    GuardZonePanel* guardZonePanel;
-    QDockWidget* guardZoneDock;
+    GuardZonePanel* guardZonePanel = nullptr;
+    QDockWidget* guardZoneDock = nullptr;
     AOIPanel* aoiPanel = nullptr;
     QDockWidget* aoiDock = nullptr;
-    AISTargetPanel* aisTargetPanel;
-    QDockWidget* aisTargetDock;
-    ObstacleDetectionPanel* obstacleDetectionPanel;
-    QDockWidget* obstacleDetectionDock;
+    AISTargetPanel* aisTargetPanel = nullptr;
+    QDockWidget* aisTargetDock = nullptr;
+    ObstacleDetectionPanel* obstacleDetectionPanel = nullptr;
+    QDockWidget* obstacleDetectionDock = nullptr;
     void setupGuardZonePanel();
     void setupAOIPanel();
     void setupAISTargetPanel();
@@ -370,20 +370,20 @@ private:
     void setupTestingMenu();
 
     // Alert Panel
-    AlertPanel* alertPanel;
-    QDockWidget* alertDock;
+    AlertPanel* alertPanel = nullptr;
+    QDockWidget* alertDock = nullptr;
     void setupAlertPanel();
 
     // Tide Panel
-    TidePanel* tidePanel;
-    TideManager* tideManager;
-    QDockWidget* tideDock;
+    TidePanel* tidePanel = nullptr;
+    TideManager* tideManager = nullptr;
+    QDockWidget* tideDock = nullptr;
     void setupTidePanel();
 
     // GRIB Viewer Panel
-    class GribPanel* gribPanel;
-    class GribManager* gribManager;
-    QDockWidget* gribDock;
+    class GribPanel* gribPanel = nullptr;
+    class GribManager* gribManager = nullptr;
+    QDockWidget* gribDock = nullptr;
     void setupGribPanel();
 
     // Alert handling methods
@@ -411,10 +411,10 @@ private:
     QDockWidget* m_cpatcpaDock;
 
     // Route Panel
-    RoutePanel* routePanel;
-    QDockWidget* routeDock;
+    RoutePanel* routePanel = nullptr;
+    QDockWidget* routeDock = nullptr;
 
-    // POI Panel
+    // POIPanel
     POIPanel* poiPanel = nullptr;
     QDockWidget* poiDock = nullptr;
 
@@ -497,8 +497,8 @@ private:
 
     // --- State & File Handling ---
     PlayerState m_playerState;
-    QTimer *m_playbackTimer;
-    QTimer *m_drawTimer;
+    QTimer *m_playbackTimer = nullptr;
+    QTimer *m_drawTimer = nullptr;
 
     QString m_logDirectoryPath;
     QString m_selectedFilePath;
@@ -525,7 +525,7 @@ private:
     QProgressBar *m_progressBarDB;  // Progress bar for playback
     QDialog *m_loadingDialog;  // Loading dialog for data fetch
 
-    QTimer *m_playbackTimerDB;
+    QTimer *m_playbackTimerDB = nullptr;
     QQueue<QVariantList> m_nmeaDataQueueDB;
     bool m_isPlayingDB = false;
     int m_totalNmeaDataCount = 0;  // Total data for progress tracking

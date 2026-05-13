@@ -1,4 +1,4 @@
-// AppConfig.h
+ // AppConfig.h
 #pragma once
 
 class SettingsManager;
@@ -7,9 +7,9 @@ class AppConfig
 {
 public:
     enum class Mode {
-        Development,
-        Production,
-        Beta
+        Kssr,       // Mode terbatas fitur tertentu saja (Default)
+        NextDev,    // Mode full fitur yang sudah rilis
+        Dev         // Mode full fitur bahkan yang masih di-develop
     };
 
     enum class AppTheme {
@@ -20,9 +20,16 @@ public:
 
     static void setMode(Mode mode);
     static Mode mode();
-    static bool isDevelopment();
-    static bool isProduction();
-    static bool isBeta();
+    
+    // New specific mode checkers
+    static bool isKssr();
+    static bool isNextDev();
+    static bool isDev();
+
+    // Legacy support (to be phased out)
+    static bool isDevelopment(); // Maps to isDev()
+    static bool isProduction();  // Maps to isKssr()
+    static bool isBeta();        // Maps to isNextDev()
 
     static void setTheme(AppTheme theme);
     static AppTheme theme();

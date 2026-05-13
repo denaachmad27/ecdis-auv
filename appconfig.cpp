@@ -1,7 +1,7 @@
 // AppConfig.cpp
 #include "AppConfig.h"
 
-AppConfig::Mode AppConfig::_mode = AppConfig::Mode::Beta;
+AppConfig::Mode AppConfig::_mode = AppConfig::Mode::Kssr; // Default is KSSR
 
 void AppConfig::setMode(Mode mode) {
     _mode = mode;
@@ -11,16 +11,29 @@ AppConfig::Mode AppConfig::mode() {
     return _mode;
 }
 
+bool AppConfig::isKssr() {
+    return _mode == Mode::Kssr;
+}
+
+bool AppConfig::isNextDev() {
+    return _mode == Mode::NextDev;
+}
+
+bool AppConfig::isDev() {
+    return _mode == Mode::Dev;
+}
+
+// Legacy wrappers to prevent compilation errors in existing code
 bool AppConfig::isDevelopment() {
-    return _mode == Mode::Development;
+    return isDev();
 }
 
 bool AppConfig::isProduction() {
-    return _mode == Mode::Production;
+    return isKssr();
 }
 
 bool AppConfig::isBeta() {
-    return _mode == Mode::Beta;
+    return isNextDev();
 }
 
 AppConfig::AppTheme AppConfig::_theme = AppTheme::Dark;
