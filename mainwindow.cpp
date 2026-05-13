@@ -9,6 +9,7 @@
 #include <QLabel>
 #include <QtGlobal>
 #include <cmath>
+#include <iostream>
 #include "AppConfig.h"
 
 #include <QPluginLoader>
@@ -44,6 +45,10 @@
 #include "compasswidget.h"
 #include "aoi.h"
 #include "src/currentvisualisation.h"
+
+// Multi-view support
+#include "viewmanager.h"
+#include "chartviewcontainer.h"
 
 #include <dwmapi.h>
 #pragma comment(lib, "Dwmapi.lib")
@@ -82,6 +87,330 @@ void MainWindow::createDockWindows()
     // Tambahkan ke sidebar kiri
     addDockWidget(Qt::LeftDockWidgetArea, dock);
 }
+
+// ==================== MULTI-VIEW SUPPORT ====================
+
+void MainWindow::initializeMultiView()
+{
+    // Create QMdiArea as the central widget
+    mdiArea = new QMdiArea(this);
+    mdiArea->setViewMode(QMdiArea::SubWindowView);  // Default to subwindow mode
+    mdiArea->setTabPosition(QTabWidget::North);     // Tabs on top when in tabbed mode
+    mdiArea->setDocumentMode(true);                 // Enable document mode for better tab appearance
+    setCentralWidget(mdiArea);
+
+    // Create ViewManager
+    viewManager = new ViewManager(mdiArea, dict, this);
+
+    // Store libStr for ViewManager to use when creating views
+    static QString libStrStorage;
+    if (EcKernelGetEnv("LIB_7CS") != NULL) {
+        libStrStorage = QString(EcKernelGetEnv("LIB_7CS"));
+    }
+    viewManager->setLibraryString(&libStrStorage);
+
+    qDebug() << "[MULTI-VIEW] Initialized QMdiArea and ViewManager";
+}
+
+void MainWindow::setupMultiViewMenu()
+{
+    // Create Window menu
+    windowMenu = menuBar()->addMenu("&Window");
+
+    // New View submenu
+    QMenu *newViewMenu = windowMenu->addMenu("&New View");
+    newViewMenu->addAction("S-63 Chart", this, SLOT(onNewS63View()))->setShortcut(QKeySequence("Ctrl+1"));
+    newViewMenu->addAction("Satellite View", this, SLOT(onNewSatelliteView()))->setShortcut(QKeySequence("Ctrl+2"));
+    newViewMenu->addAction("Thematic View", this, SLOT(onNewThematicView()))->setShortcut(QKeySequence("Ctrl+3"));
+
+    windowMenu->addSeparator();
+
+    // Window arrangement
+    windowMenu->addAction("Tile Views", this, SLOT(onTileViews()))->setShortcut(QKeySequence("Ctrl+T"));
+    windowMenu->addAction("Cascade Views", this, SLOT(onCascadeViews()));
+    windowMenu->addAction("Tabbed Mode", this, SLOT(onTabViews()))->setShortcut(QKeySequence("Ctrl+Shift+T"));
+
+    windowMenu->addSeparator();
+
+    // Window management
+    windowMenu->addAction("Close Current", this, SLOT(onCloseCurrentView()))->setShortcut(QKeySequence("Ctrl+W"));
+    windowMenu->addAction("Close All", this, SLOT(onCloseAllViews()));
+
+    // Connect next/previous view shortcuts
+    QAction *nextViewAct = new QAction(this);
+    nextViewAct->setShortcut(QKeySequence("Ctrl+Tab"));
+    connect(nextViewAct, &QAction::triggered, this, [this]() {
+        if (viewManager) viewManager->activateNextView();
+    });
+    addAction(nextViewAct);
+
+    QAction *prevViewAct = new QAction(this);
+    prevViewAct->setShortcut(QKeySequence("Ctrl+Shift+Tab"));
+    connect(prevViewAct, &QAction::triggered, this, [this]() {
+        if (viewManager) viewManager->activatePreviousView();
+    });
+    addAction(prevViewAct);
+
+    qDebug() << "[MULTI-VIEW] Window menu created";
+}
+
+// Multi-View slots
+void MainWindow::onNewS63View()
+{
+    std::cout << "[MULTI-VIEW] Creating new S-63 chart window..." << std::endl;
+    qDebug() << "[MULTI-VIEW] Creating new S-63 chart window...";
+
+    // Get libStr for EcWidget constructor
+    static QString libStrForSecondChart;
+    if (libStrForSecondChart.isEmpty() && EcKernelGetEnv("LIB_7CS") != NULL) {
+        libStrForSecondChart = QString(EcKernelGetEnv("LIB_7CS"));
+    }
+
+    EcWidget* newEcWidget = nullptr;
+
+    // Create the EcWidget directly (bypass ChartViewContainer to avoid crash)
+    try {
+        newEcWidget = new EcWidget(dict, &libStrForSecondChart, nullptr);
+        qDebug() << "[MULTI-VIEW] EcWidget created successfully";
+    }
+    catch (EcWidget::Exception& e) {
+        qCritical() << "[MULTI-VIEW] Failed to create EcWidget:" << e.GetMessages();
+        QMessageBox::warning(this, "Error", "Cannot create second chart window:\n" + e.GetMessages().join("\n"));
+        return;
+    }
+    catch (std::exception& e) {
+        qCritical() << "[MULTI-VIEW] Standard exception creating EcWidget:" << e.what();
+        QMessageBox::warning(this, "Error", QString("Cannot create second chart window:\n%1").arg(e.what()));
+        if (newEcWidget) delete newEcWidget;
+        return;
+    }
+    catch (...) {
+        qCritical() << "[MULTI-VIEW] Unknown error creating EcWidget";
+        QMessageBox::warning(this, "Error", "Cannot create second chart window.");
+        if (newEcWidget) delete newEcWidget;
+        return;
+    }
+
+    if (!newEcWidget) return;
+
+    // Initialize DENC for the new chart (so it can display sea charts)
+    if (!dencPath.isEmpty()) {
+        try {
+            newEcWidget->CreateDENC(dencPath, true);
+            newEcWidget->InitS63();
+            qDebug() << "[MULTI-VIEW] DENC and S-63 initialized";
+        } catch (...) {
+            qWarning() << "[MULTI-VIEW] DENC/S-63 init failed (non-fatal)";
+        }
+    }
+
+    // Initialize AIS display
+    try {
+        newEcWidget->InitAIS(dict);
+    } catch (...) {
+        qWarning() << "[MULTI-VIEW] AIS init failed (non-fatal)";
+    }
+
+    // Copy viewport and display settings from main chart
+    if (ecchart) {
+        qDebug() << "[MULTI-VIEW] Copying settings from main chart to new widget...";
+        qDebug() << "[MULTI-VIEW] displayCategory=" << displayCategory << "showLights=" << showLights;
+        newEcWidget->SetCenter(ecchart->currentLat, ecchart->currentLon);
+        newEcWidget->SetScale(ecchart->currentScale);
+        newEcWidget->SetHeading(ecchart->currentHeading);
+        newEcWidget->SetProjection(EcWidget::MercatorProjection);
+        newEcWidget->SetLookupTable(ecchart->currentLookupTable);
+        newEcWidget->SetDisplayCategory(displayCategory);
+        newEcWidget->ShowLights(showLights);
+        newEcWidget->ShowText(showText);
+        newEcWidget->ShowSoundings(showSoundings);
+        newEcWidget->ShowGrid(showGrid);
+        newEcWidget->ShowAIS(showAIS);
+        newEcWidget->ShowOwnship(showOwnship);
+        newEcWidget->TrackShip(trackShip);
+        newEcWidget->ShowDangerTarget(showDangerTarget);
+                // Copy color settings
+        if(ecchart) {
+            newEcWidget->SetColorScheme(ecchart->GetColorScheme());
+            newEcWidget->SetGreyMode(ecchart->GetGreyMode());
+            newEcWidget->SetBrightness(ecchart->GetBrightness());
+        }
+        qDebug() << "[MULTI-VIEW] Settings copied successfully";
+    }
+
+    // Wrap in QMdiSubWindow and add to MDI area
+    chartWindowCount++;
+    QMdiSubWindow* subWindow = new QMdiSubWindow();
+    subWindow->setWidget(newEcWidget);
+    subWindow->setWindowTitle(QString("Second Chart %1").arg(chartWindowCount));
+    subWindow->setAttribute(Qt::WA_DeleteOnClose);
+    // Ensure the window can be resized and moved
+    subWindow->setWindowFlags(subWindow->windowFlags() | Qt::Window);
+    subWindow->setWindowModality(Qt::NonModal);
+
+    if (mdiArea) {
+        // Ensure we're in SubWindowView mode, not TabbedView
+        mdiArea->setViewMode(QMdiArea::SubWindowView);
+
+        // Find the main chart subwindow (ecchart is the main chart)
+        QMdiSubWindow* mainWindow = nullptr;
+        for (QMdiSubWindow* win : mdiArea->subWindowList()) {
+            if (win->widget() == ecchart) {
+                mainWindow = win;
+                break;
+            }
+        }
+
+        // Add new window to MDI area
+        mdiArea->addSubWindow(subWindow);
+
+        // Unmaximize the main window FIRST (before showing new window)
+        if (mainWindow && mainWindow->isMaximized()) {
+            mainWindow->showNormal();
+        }
+
+        // Show the new window in normal (not maximized) mode
+        subWindow->showNormal();
+
+        // Manually position windows: MAIN on LEFT, NEW on RIGHT
+        if (mainWindow) {
+            // Delay positioning to ensure windows are properly shown first
+            QTimer::singleShot(50, this, [this, mainWindow, subWindow, newEcWidget]() {
+                int halfWidth = mdiArea->width() / 2;
+                int fullHeight = mdiArea->height();
+
+                // Main chart on LEFT - 50% width
+                mainWindow->setGeometry(0, 0, halfWidth, fullHeight);
+
+                // New chart on RIGHT - 50% width
+                subWindow->setGeometry(halfWidth, 0, halfWidth, fullHeight);
+
+                // Force both windows to be in normal mode
+                mainWindow->showNormal();
+                subWindow->showNormal();
+
+                // The color scheme is already set correctly in the EcWidget constructor
+                // We just need to ensure the widget repaints with proper colors
+                if (ecchart && newEcWidget) {
+                    qDebug() << "[MULTI-VIEW] Calling update() on second chart to trigger repaint with colors...";
+                    newEcWidget->update();
+                }
+            });
+        }
+    }
+
+    // Track the new chart
+    secondaryCharts.append(newEcWidget);
+
+    // Clean up tracking when window is closed
+    connect(subWindow, &QMdiSubWindow::destroyed, this, [this, newEcWidget]() {
+        secondaryCharts.removeAll(newEcWidget);
+        qDebug() << "[MULTI-VIEW] Secondary chart closed, remaining:" << secondaryCharts.count();
+    });
+
+    qDebug() << "[MULTI-VIEW] Created S-63 chart window #" << chartWindowCount;
+}
+
+void MainWindow::onNewSatelliteView()
+{
+    if (viewManager) {
+        ChartViewContainer* view = viewManager->createSatelliteView();
+        if (view) {
+            EcWidget* newEcWidget = view->getEcWidget();
+            if (newEcWidget && ecchart) {
+                newEcWidget->SetCenter(ecchart->currentLat, ecchart->currentLon);
+                newEcWidget->SetScale(ecchart->currentScale);
+                newEcWidget->SetHeading(ecchart->currentHeading);
+                newEcWidget->SetLookupTable(ecchart->currentLookupTable);
+                newEcWidget->SetDisplayCategory(EC_DAY_WHITEBACK);  // Use bright background for satellite
+                newEcWidget->ShowLights(showLights);
+                newEcWidget->ShowText(showText);
+                newEcWidget->ShowSoundings(showSoundings);
+                newEcWidget->ShowGrid(showGrid);
+                newEcWidget->ShowAIS(showAIS);
+                newEcWidget->ShowOwnship(showOwnship);
+                newEcWidget->TrackShip(trackShip);
+                newEcWidget->ShowDangerTarget(showDangerTarget);
+                // Delay color scheme setting until after widget is shown
+                QTimer::singleShot(100, this, [this, newEcWidget]() {
+                    if (ecchart && newEcWidget) {
+                        newEcWidget->SetColorScheme(ecchart->GetColorScheme(), ecchart->GetGreyMode(), ecchart->GetBrightness());
+                    }
+                });
+            }
+        }
+    }
+}
+
+void MainWindow::onNewThematicView()
+{
+    if (viewManager) {
+        ChartViewContainer* view = viewManager->createThematicView();
+        if (view) {
+            EcWidget* newEcWidget = view->getEcWidget();
+            if (newEcWidget && ecchart) {
+                newEcWidget->SetCenter(ecchart->currentLat, ecchart->currentLon);
+                newEcWidget->SetScale(ecchart->currentScale);
+                newEcWidget->SetHeading(ecchart->currentHeading);
+                newEcWidget->SetLookupTable(ecchart->currentLookupTable);
+                newEcWidget->SetDisplayCategory(displayCategory);
+                newEcWidget->ShowLights(showLights);
+                newEcWidget->ShowText(showText);
+                newEcWidget->ShowSoundings(showSoundings);
+                newEcWidget->ShowGrid(showGrid);
+                newEcWidget->ShowAIS(showAIS);
+                newEcWidget->ShowOwnship(showOwnship);
+                newEcWidget->TrackShip(trackShip);
+                newEcWidget->ShowDangerTarget(showDangerTarget);
+                // Delay color scheme setting until after widget is shown
+                QTimer::singleShot(100, this, [this, newEcWidget]() {
+                    if (ecchart && newEcWidget) {
+                        newEcWidget->SetColorScheme(ecchart->GetColorScheme(), ecchart->GetGreyMode(), ecchart->GetBrightness());
+                    }
+                });
+            }
+        }
+    }
+}
+
+void MainWindow::onCloseCurrentView()
+{
+    if (viewManager) {
+        viewManager->closeCurrentView();
+    }
+}
+
+void MainWindow::onCloseAllViews()
+{
+    if (viewManager) {
+        viewManager->closeAllViews();
+    }
+}
+
+void MainWindow::onTileViews()
+{
+    if (viewManager) {
+        mdiArea->setViewMode(QMdiArea::SubWindowView);
+        viewManager->tileViews();
+    }
+}
+
+void MainWindow::onCascadeViews()
+{
+    if (viewManager) {
+        mdiArea->setViewMode(QMdiArea::SubWindowView);
+        viewManager->cascadeViews();
+    }
+}
+
+void MainWindow::onTabViews()
+{
+    if (viewManager) {
+        viewManager->tabViews();
+    }
+}
+
+// ==================================================================
 
 void MainWindow::setCompassHeading(const int &hdg){
     if (compass != nullptr){
@@ -924,6 +1253,13 @@ void MainWindow::createMenuBar(){
 
     qDebug() << "[TABIFY] Setup panels for tab integration - GuardZone, AIS Target, Route, Obstacle Detection";
 
+    // ================================== CHART WINDOWS SUB-MENU (under View)
+    QMenu *chartWindowsMenu = viewTopMenu->addMenu("&Chart Windows");
+    chartWindowsMenu->addAction("Add Second Chart", this, SLOT(onNewS63View()))->setShortcut(QKeySequence("Ctrl+Shift+N"));
+    chartWindowsMenu->addSeparator();
+    chartWindowsMenu->addAction("Tile Windows", this, SLOT(onTileViews()));
+    chartWindowsMenu->addAction("Close All Extra Windows", this, SLOT(onCloseAllViews()));
+
     viewMenu->addSeparator();
 
     // Add Tide & Current menu action
@@ -1015,6 +1351,15 @@ void MainWindow::createMenuBar(){
 
     colorMenu->addSeparator();
 
+    // Thematic layer toggle
+    thematicAction = new QAction("Thematic Layer", this);
+    thematicAction->setCheckable(true);
+    thematicAction->setChecked(false);
+    connect(thematicAction, SIGNAL(triggered(bool)), this, SLOT(onThematicClicked()));
+    colorMenu->addAction(thematicAction);
+
+    colorMenu->addSeparator();
+
     QAction *greyAction = colorMenu->addAction("Grey Mode");
     greyAction->setCheckable(true);
     connect(greyAction, SIGNAL(toggled(bool)), this, SLOT(onGreyMode(bool)));
@@ -1069,6 +1414,9 @@ void MainWindow::createMenuBar(){
 
     // ================================== SETTINGS MANAGER MENU
     systemMenu->addAction("Settings Manager", this, SLOT(openSettingsDialog()) );
+
+    // ================================== WINDOW MENU (Multi-View)
+    setupMultiViewMenu();
 
     createActions();
 
@@ -2584,7 +2932,10 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL), m_i
   dict = EcDictionaryReadModule(module, NULL);
   if (! dict) throw Exception("Cannot read dictionary.");
 
-  // create the ecchart widget and pass the dictionary and value of LIB_7CS to it
+  // Initialize Multi-View System (QMdiArea + ViewManager)
+  initializeMultiView();
+
+  // Create the default ecchart widget (will be wrapped in a ChartViewContainer)
   try
   {
     ecchart = new EcWidget(dict, &libStr, this);
@@ -2594,7 +2945,25 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL), m_i
   {
     throw Exception(e.GetMessages(), "Cannot create ECDIS Widget");
   }
-  setCentralWidget(ecchart);
+
+  // Create default view by wrapping ecchart directly into QMdiArea
+  // NOTE: Do NOT use viewManager->createS63View() here because it creates
+  // a redundant EcWidget that we'd have to delete, causing use-after-free crashes.
+  if (mdiArea) {
+      // Ensure SubWindowView mode for proper positioning
+      mdiArea->setViewMode(QMdiArea::SubWindowView);
+
+      QMdiSubWindow* subWindow = new QMdiSubWindow();
+      subWindow->setWidget(ecchart);
+      subWindow->setWindowTitle("S-63 Chart");
+      subWindow->setWindowIcon(QIcon(":/icon/chart.png"));
+      mdiArea->addSubWindow(subWindow);
+      subWindow->showMaximized();  // Full screen initially
+
+      // Connect signals to mainwindow
+      connect(ecchart, SIGNAL(waypointCreated()), this, SLOT(onWaypointCreated()));
+      connect(ecchart, SIGNAL(attachToShipStateChanged(bool)), this, SLOT(onAttachToShipStateChanged(bool)));
+  }
 
   connect(ecchart, SIGNAL(waypointCreated()), this, SLOT(onWaypointCreated()));
   connect(ecchart, SIGNAL(attachToShipStateChanged(bool)), this, SLOT(onAttachToShipStateChanged(bool)));
@@ -2614,6 +2983,11 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL), m_i
     // Create and initialize the DENC structure
         if (ecchart->CreateDENC(dencPath, true) == false)
             throw Exception("Cannot create DENC Structure (check write access!)");
+
+        // Share DENC with all views
+        if (viewManager) {
+            viewManager->setSharedDENC(ecchart->GetDENC());
+        }
   }
   // if (!tmpPath.exists())
   // {
@@ -3389,6 +3763,25 @@ void MainWindow::onSatelliteClicked()
 {
     qDebug() << "[THEME] Satellite clicked!";
     onColorScheme(satelliteAction);
+}
+
+void MainWindow::onThematicClicked()
+{
+    bool enabled = thematicAction->isChecked();
+    qDebug() << "[THEME] Thematic layer" << (enabled ? "enabled" : "disabled");
+
+    if (ecchart) {
+        ecchart->ShowThematicLayer(enabled);
+
+        // Load all available layers by default
+        if (enabled) {
+            QStringList availableLayers = ecchart->getAvailableThematicLayers();
+            qDebug() << "[THEME] Available thematic layers:" << availableLayers;
+            ecchart->setActiveThematicLayers(availableLayers);
+        }
+    }
+
+    DrawChart();
 }
 
 /*---------------------------------------------------------------------------*/
