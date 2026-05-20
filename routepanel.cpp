@@ -699,8 +699,6 @@ void RoutePanel::setupConnections()
             // Attach this route to ship (detaches others)
             ecWidget->attachRouteToShip(selectedRouteId);
             publishToMOOSDB();
-            ecWidget->clearOwnShipTrail();
-            ecWidget->setOwnShipTrail(true);
             
             // Update button states
             addToShipButton->setEnabled(false);
@@ -727,7 +725,6 @@ void RoutePanel::setupConnections()
             // Detach this route from ship (this will make all routes blue again)
             ecWidget->attachRouteToShip(-1); // Detach all routes
             ecWidget->publishToMOOS("WAYPT_NAV", "");
-            ecWidget->setOwnShipTrail(false);
 
             // Clear deviation alert when detaching
             if (ecWidget->getRouteDeviationDetector()) {

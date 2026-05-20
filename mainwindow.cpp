@@ -773,11 +773,21 @@ void MainWindow::createStatusBar(){
                     moosStatusText->setStyleSheet("color: green; font-weight: bold;");
                 }
 
+                // Aktifkan trail hijau saat MOOSDB terkoneksi
+                if (ecchart) {
+                    ecchart->setOwnShipTrail(true);
+                }
+
                 updateTrackingStatus("Live", true);
             } else {
                 moosLedCircle->setStyleSheet("background-color: red; border-radius: 6px;");
                 moosStatusText->setText(" MOOSDB: Disconnected");
                 moosStatusText->setStyleSheet("color: red; font-weight: bold;");
+
+                // Nonaktifkan trail hijau saat MOOSDB terputus
+                // if (ecchart) {
+                //     ecchart->setOwnShipTrail(false);
+                // }
 
                 updateTrackingStatus("Disconnected", true);
             }
