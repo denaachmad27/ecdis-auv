@@ -1176,6 +1176,7 @@ void MainWindow::createMenuBar(){
     connect(clearOwnshipTrailAction, &QAction::triggered, this, [=]() {
         if (ecchart) {
             ecchart->clearOwnShipTrail();
+            ecchart->Draw();
         }
     });
 
