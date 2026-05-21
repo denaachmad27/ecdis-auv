@@ -1172,6 +1172,15 @@ void MainWindow::createMenuBar(){
 
     viewMenu->addSeparator();
 
+    QAction *clearOwnshipTrailAction = viewMenu->addAction("Clear Ownship Trail");
+    connect(clearOwnshipTrailAction, &QAction::triggered, this, [=]() {
+        if (ecchart) {
+            ecchart->clearOwnShipTrail();
+        }
+    });
+
+    viewMenu->addSeparator();
+
     if (AppConfig::isDev()){
         QAction *trailAction = viewMenu->addAction("Clear Trail");
         connect(trailAction, &QAction::triggered, this, [=]() {
