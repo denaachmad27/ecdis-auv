@@ -225,6 +225,12 @@ void AOIPanel::onDeleteAOI()
     auto* item = this->tree->currentItem();
     if (!item) return;
     int id = item->data(0, Qt::UserRole).toInt();
+    QString aoiName = item->text(0);
+    QMessageBox::StandardButton confirm = QMessageBox::question(this,
+        tr("Delete Area Object"),
+        tr("Are you sure you want to delete \"%1\"?").arg(aoiName),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (confirm != QMessageBox::Yes) return;
     ecWidget->removeAOI(id);
     refreshList();
     ecWidget->update();
