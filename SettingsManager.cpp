@@ -142,7 +142,10 @@ void SettingsManager::save(const SettingsData& data) {
 
     // DISPLAY
     settings.setValue("Display/mode", data.displayMode);
-    settings.setValue("Display/theme", static_cast<int>(data.themeMode));
+    QString themeStr = "Light";
+    if (data.themeMode == AppConfig::AppTheme::Dark) themeStr = "Dark";
+    else if (data.themeMode == AppConfig::AppTheme::Dim) themeStr = "Dim";
+    settings.setValue("Display/theme", themeStr);
 
     // CHART
     settings.setValue("Display/move", data.chartMode);

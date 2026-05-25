@@ -933,21 +933,21 @@ void MainWindow::createMenuBar(){
     orientationGroup->setExclusive(true); // Hanya satu yang bisa aktif
 
     // NORTH UP
-    QAction *northUpAction = displayOrientationMenu->addAction("North Up");
+    northUpAction = displayOrientationMenu->addAction("North Up");
     northUpAction->setCheckable(true);
     northUpAction->setChecked(ecchart->orientation == EcWidget::NorthUp);
     orientationGroup->addAction(northUpAction);
     connect(northUpAction, SIGNAL(triggered(bool)), this, SLOT(onNorthUp(bool)));
 
     // HEAD UP
-    QAction *headUpAction = displayOrientationMenu->addAction("Head Up");
+    headUpAction = displayOrientationMenu->addAction("Head Up");
     headUpAction->setCheckable(true);
     headUpAction->setChecked(ecchart->orientation == EcWidget::HeadUp);
     orientationGroup->addAction(headUpAction);
     connect(headUpAction, SIGNAL(triggered(bool)), this, SLOT(onHeadUp(bool)));
 
     // COURSE UP
-    QAction *courseUpAction = displayOrientationMenu->addAction("Course Up");
+    courseUpAction = displayOrientationMenu->addAction("Course Up");
     courseUpAction->setCheckable(true);
     courseUpAction->setChecked(ecchart->orientation == EcWidget::CourseUp);
     orientationGroup->addAction(courseUpAction);
@@ -961,28 +961,28 @@ void MainWindow::createMenuBar(){
     centeringGroup->setExclusive(true); // Hanya satu yang bisa aktif
 
     // AUTO RECENTER
-    QAction *autoRecenterAction = osCenteringMenu->addAction("Auto Recenter");
+    autoRecenterAction = osCenteringMenu->addAction("Auto Recenter");
     autoRecenterAction->setCheckable(true);
     autoRecenterAction->setChecked(ecchart->centering == EcWidget::AutoRecenter);
     centeringGroup->addAction(autoRecenterAction);
     connect(autoRecenterAction, SIGNAL(triggered(bool)), this, SLOT(onAutoRecenter(bool)));
 
     // CENTERING
-    QAction *centeringAction = osCenteringMenu->addAction("Centered");
+    centeringAction = osCenteringMenu->addAction("Centered");
     centeringAction->setCheckable(true);
     centeringAction->setChecked(ecchart->centering == EcWidget::Centered);
     centeringGroup->addAction(centeringAction);
     connect(centeringAction, SIGNAL(triggered(bool)), this, SLOT(onCentered(bool)));
 
     // LOOK AHEAD
-    QAction *lookAheadAction = osCenteringMenu->addAction("Look-Ahead");
+    lookAheadAction = osCenteringMenu->addAction("Look-Ahead");
     lookAheadAction->setCheckable(true);
     lookAheadAction->setChecked(ecchart->centering == EcWidget::LookAhead);
     centeringGroup->addAction(lookAheadAction);
     connect(lookAheadAction, SIGNAL(triggered(bool)), this, SLOT(onLookAhead(bool)));
 
     // MANUAL OFFSET
-    QAction *manualAction = osCenteringMenu->addAction("Manual Offset");
+    manualAction = osCenteringMenu->addAction("Manual Offset");
     manualAction->setCheckable(true);
     manualAction->setChecked(ecchart->centering == EcWidget::Manual);
     centeringGroup->addAction(manualAction);
@@ -1405,15 +1405,15 @@ void MainWindow::createMenuBar(){
     themeGroup->setExclusive(true);
 
 
-    QAction *lightAction = themeMenu->addAction("Light");
+    lightAction = themeMenu->addAction("Light");
     lightAction->setCheckable(true);
     themeGroup->addAction(lightAction);
 
-    QAction *dimAction = themeMenu->addAction("Dim");
+    dimAction = themeMenu->addAction("Dim");
     dimAction->setCheckable(true);
     themeGroup->addAction(dimAction);
 
-    QAction *darkAction = themeMenu->addAction("Dark");
+    darkAction = themeMenu->addAction("Dark");
     darkAction->setCheckable(true);
     themeGroup->addAction(darkAction);
 
@@ -2737,7 +2737,103 @@ void MainWindow::openSettingsDialog() {
 
     if (dlg.exec() == QDialog::Accepted) {
         dlg.saveSettings();
-        //setDisplay();
+        
+        // Apply settings immediately
+        if (ecchart) {
+            ecchart->defaultSettingsStartUp();
+            ecchart->applyShipDimensions();
+        }
+
+        const SettingsData& settings = SettingsManager::instance().data();
+
+        // Apply Default Centering
+        if (ecchart) {
+            switch (settings.centeringMode) {
+                case EcWidget::AutoRecenter:
+                    if (autoRecenterAction) {
+                        autoRecenterAction->setChecked(true);
+                        onAutoRecenter(true);
+                    }
+                    break;
+                case EcWidget::Centered:
+                    if (centeringAction) {
+                        centeringAction->setChecked(true);
+                        onCentered(true);
+                    }
+                    break;
+                case EcWidget::LookAhead:
+                    if (lookAheadAction) {
+                        lookAheadAction->setChecked(true);
+                        onLookAhead(true);
+                    }
+                    break;
+                case EcWidget::Manual:
+                    if (manualAction) {
+                        manualAction->setChecked(true);
+                        onManual(true);
+                    }
+                    break;
+            }
+        }
+
+        // Apply Default Orientation
+        if (ecchart) {
+            switch (settings.orientationMode) {
+                case EcWidget::NorthUp:
+                    if (northUpAction) {
+                        northUpAction->setChecked(true);
+                        onNorthUp(true);
+                    }
+                    break;
+                case EcWidget::HeadUp:
+                    if (headUpAction) {
+                        headUpAction->setChecked(true);
+                        onHeadUp(true);
+                    }
+                    break;
+                case EcWidget::CourseUp:
+                    if (courseUpAction) {
+                        courseUpAction->setChecked(true);
+                        onCourseUp(true);
+                    }
+                    break;
+            }
+        }
+
+        // Apply Default Chart Theme
+        QString chartTheme = settings.displayMode;
+        if (chartTheme == "Night") {
+            displayCategory = EC_NIGHT;
+        } else if (chartTheme == "Dusk") {
+            displayCategory = EC_DUSK;
+        } else if (chartTheme == "Satellite") {
+            displayCategory = EC_SATELLITE;
+        } else {
+            displayCategory = EC_STANDARD;
+        }
+        setDisplay();
+
+        // Apply Default UI Theme
+        switch (settings.themeMode) {
+            case AppConfig::AppTheme::Light:
+                if (lightAction) {
+                    lightAction->setChecked(true);
+                    setLightMode();
+                }
+                break;
+            case AppConfig::AppTheme::Dim:
+                if (dimAction) {
+                    dimAction->setChecked(true);
+                    setDimMode();
+                }
+                break;
+            case AppConfig::AppTheme::Dark:
+                if (darkAction) {
+                    darkAction->setChecked(true);
+                    setDarkMode();
+                }
+                break;
+        }
 
         // Apply default guardzone filters to existing guardzones
         if (ecchart && ecchart->getGuardZoneManager()) {
@@ -2867,24 +2963,29 @@ void MainWindow::setDisplay(){
 
     if (displayCategory == EC_DUSK){
         cs = EC_DUSK;
-        duskAction->setChecked(true);
+        if (duskAction) duskAction->setChecked(true);
+        if (ecchart) ecchart->ShowSatelliteLayer(false);
     }
     else if (displayCategory == EC_NIGHT){
         cs = EC_NIGHT;
-        nightAction->setChecked(true);
+        if (nightAction) nightAction->setChecked(true);
+        if (ecchart) ecchart->ShowSatelliteLayer(false);
     }
     else if (displayCategory == EC_SATELLITE){
         cs = EC_DAY_BRIGHT; // Use Day colors for satellite mode
-        satelliteAction->setChecked(true);
-        ecchart->ShowSatelliteLayer(true);
+        if (satelliteAction) satelliteAction->setChecked(true);
+        if (ecchart) ecchart->ShowSatelliteLayer(true);
     }
     else {
-        dayAction->setChecked(true);
+        if (dayAction) dayAction->setChecked(true);
+        if (ecchart) ecchart->ShowSatelliteLayer(false);
     }
 
-    bool gm = ecchart->GetGreyMode();
-    int  br = ecchart->GetBrightness();
-    ecchart->SetColorScheme(cs, gm, br);
+    if (ecchart) {
+        bool gm = ecchart->GetGreyMode();
+        int  br = ecchart->GetBrightness();
+        ecchart->SetColorScheme(cs, gm, br);
+    }
     DrawChart();
 }
 

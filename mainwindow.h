@@ -289,6 +289,9 @@ protected:
     QAction *simplifiedAction, *fullChartAction;
     QAction *dayAction = nullptr, *duskAction = nullptr, *nightAction = nullptr, *satelliteAction = nullptr;
     QAction *logfileAction = nullptr, *serverAction = nullptr;
+    QAction *northUpAction = nullptr, *headUpAction = nullptr, *courseUpAction = nullptr;
+    QAction *autoRecenterAction = nullptr, *centeringAction = nullptr, *lookAheadAction = nullptr, *manualAction = nullptr;
+    QAction *lightAction = nullptr, *dimAction = nullptr, *darkAction = nullptr;
 
     // Thematic layer actions
     QAction *thematicAction = nullptr;

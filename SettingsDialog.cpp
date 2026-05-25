@@ -41,7 +41,6 @@
 #include <QApplication>
 #include <QtConcurrent>
 #include <QFutureWatcher>
-
 SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent), 
     moosIpLineEdit(nullptr), moosPortLineEdit(nullptr),
     dbHostLineEdit(nullptr), dbPortLineEdit(nullptr), dbNameLineEdit(nullptr), 
@@ -1323,7 +1322,7 @@ void SettingsDialog::accept() {
 
     // Display
     data.displayMode = displayModeCombo->currentText();
-    data.themeMode = theme(themeModeCombo->currentData().toString());
+    data.themeMode = theme(themeModeCombo->currentText());
 
     // Chart Manager - ISDT Expiration
     data.isdtExpirationDays = isdtExpirationDaysSpin->value();
