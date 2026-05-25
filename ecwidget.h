@@ -467,6 +467,7 @@ public:
   void finishEditAOI();
   void cancelEditAOI();
   bool exportAOIsToFile(const QString& filename);
+  bool importAOIsFromFile(const QString& filename);
   // AOI persistence
   void saveAOIs();
   void loadAOIs();

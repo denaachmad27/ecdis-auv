@@ -40,6 +40,7 @@ signals:
       void onCreateByClick();
       void onDeleteAOI();
       void onExportAOI();
+      void onImportAOI();
       void onItemChanged(QTreeWidgetItem* item, int column);
       void onAttach();
       void onDetach();
@@ -55,6 +56,7 @@ private:
       QPushButton* editBtn;
       QPushButton* deleteBtn;
       QPushButton* exportBtn;
+    QPushButton* importBtn;
 
     QPushButton* attachBtn;
     QPushButton* detachBtn;

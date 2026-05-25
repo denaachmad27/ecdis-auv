@@ -46,6 +46,7 @@ AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
     editBtn = new QPushButton("Edit");
     deleteBtn = new QPushButton("Delete");
     exportBtn = new QPushButton("Export");
+    importBtn = new QPushButton("Import");
 
     attachBtn = new QPushButton("Attach");
     detachBtn = new QPushButton("Detach");
@@ -60,11 +61,13 @@ AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
     btns->addWidget(addBtn,           0, 0);
     btns->addWidget(createByClickBtn, 0, 1);
     // Row 2
-    btns->addWidget(exportBtn,        1, 0);
-    btns->addWidget(deleteBtn,        1, 1);
+    btns->addWidget(importBtn,       1, 0);
+    btns->addWidget(exportBtn,       1, 1);
     // Row 3
-    btns->addWidget(attachBtn,        2, 0);
-    btns->addWidget(detachBtn,        2, 1);
+    btns->addWidget(deleteBtn,        2, 0);
+    // Row 4
+    btns->addWidget(attachBtn,        3, 0);
+    btns->addWidget(detachBtn,        3, 1);
 
     //btns->addWidget(editBtn,          1, 0);
 
@@ -79,6 +82,7 @@ AOIPanel::AOIPanel(EcWidget* ecWidget, QWidget* parent)
     connect(tree, &QTreeWidget::itemChanged, this, &AOIPanel::onItemChanged);
     connect(tree, &QTreeWidget::currentItemChanged, this, &AOIPanel::onCurrentItemChanged);
     connect(exportBtn, &QPushButton::clicked, this, &AOIPanel::onExportAOI);
+    connect(importBtn, &QPushButton::clicked, this, &AOIPanel::onImportAOI);
 
     connect(attachBtn, &QPushButton::clicked, this, &AOIPanel::onAttach);
     connect(detachBtn, &QPushButton::clicked, this, &AOIPanel::onDetach);
@@ -238,6 +242,21 @@ void AOIPanel::onExportAOI()
     if (!filename.endsWith(".json", Qt::CaseInsensitive)) filename += ".json";
     bool ok = ecWidget->exportAOIsToFile(filename);
     if (ok) emit statusMessage(tr("Areas exported to %1").arg(QFileInfo(filename).fileName()));
+}
+
+void AOIPanel::onImportAOI()
+{
+    if (!ecWidget) return;
+    QString filename = QFileDialog::getOpenFileName(this,
+                                                   tr("Import Areas from JSON"),
+                                                   QDir::homePath(),
+                                                   tr("JSON Files (*.json);;All Files (*.*)"));
+    if (filename.isEmpty()) return;
+    bool ok = ecWidget->importAOIsFromFile(filename);
+    if (ok) {
+        refreshList();
+        emit statusMessage(tr("Areas imported from %1").arg(QFileInfo(filename).fileName()));
+    }
 }
 
 void AOIPanel::onCreateByClick()
@@ -405,6 +424,7 @@ void AOIPanel::updateAttachButtons()
         addBtn->setEnabled(false);
         createByClickBtn->setEnabled(false);
         exportBtn->setEnabled(false);
+        importBtn->setEnabled(false);
         return;
     }
 
@@ -420,6 +440,7 @@ void AOIPanel::updateAttachButtons()
         addBtn->setEnabled(true);
         createByClickBtn->setEnabled(true);
         exportBtn->setEnabled(tree->topLevelItemCount() > 0);
+        importBtn->setEnabled(true);
         return;
     }
 
@@ -448,6 +469,7 @@ void AOIPanel::updateAttachButtons()
 
     // Export button always enabled if there are AOIs
     exportBtn->setEnabled(tree->topLevelItemCount() > 0);
+    importBtn->setEnabled(true);
 }
 
 void AOIPanel::onTreeContextMenu(const QPoint& pos)
