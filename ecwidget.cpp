@@ -4431,6 +4431,63 @@ bool EcWidget::exportAOIsToFile(const QString& filename)
     return true;
 }
 
+bool EcWidget::importAOIsFromFile(const QString& filename)
+{
+    QFile file(filename);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QMessageBox::critical(this, tr("Import Failed"),
+                              tr("Failed to read %1: %2").arg(filename, file.errorString()));
+        return false;
+    }
+
+    QByteArray data = file.readAll();
+    file.close();
+
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
+    if (doc.isNull()) {
+        QMessageBox::critical(this, tr("Import Failed"),
+                              tr("Invalid JSON in %1: %2").arg(filename, parseError.errorString()));
+        return false;
+    }
+
+    QJsonObject rootObj = doc.object();
+    QJsonArray arr = rootObj.value("aois").toArray();
+    if (arr.isEmpty()) {
+        QMessageBox::warning(this, tr("Import AOIs"), tr("No AOIs found in the file."));
+        return false;
+    }
+
+    int importedCount = 0;
+    for (const auto& v : arr) {
+        QJsonObject o = v.toObject();
+        AOI a;
+        a.name = o.value("name").toString();
+        a.type = aoiTypeFromString(o.value("type").toString());
+        a.visible = o.value("visible").toBool(true);
+        a.showLabel = o.contains("showLabel") ? o.value("showLabel").toBool(true) : true;
+        QString colorStr = o.value("color").toString();
+        QColor c(colorStr);
+        a.color = c.isValid() ? c : aoiDefaultColor(a.type);
+        QJsonArray verts = o.value("vertices").toArray();
+        for (const auto& vv : verts) {
+            QJsonObject vo = vv.toObject();
+            a.vertices.append(QPointF(vo.value("lat").toDouble(), vo.value("lon").toDouble()));
+        }
+        if (a.vertices.size() < 3) continue;
+        a.id = -1;
+        addAOI(a);
+        importedCount++;
+    }
+
+    QMessageBox::information(this, tr("Import Successful"),
+                            tr("Imported %1 Area Object(s) from %2")
+                                .arg(importedCount)
+                                .arg(QFileInfo(filename).fileName()));
+    update();
+    return true;
+}
+
 void EcWidget::saveAOIs()
 {
     QJsonArray aoiArray;

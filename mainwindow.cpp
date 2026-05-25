@@ -1172,11 +1172,22 @@ void MainWindow::createMenuBar(){
 
     viewMenu->addSeparator();
 
-    QAction *trailAction = viewMenu->addAction("Clear Trail");
-    connect(trailAction, &QAction::triggered, this, [=]() {
-        ecchart->clearOwnShipTrail();
-        update(); // misalnya untuk redraw
+    QAction *clearOwnshipTrailAction = viewMenu->addAction("Clear Ownship Trail");
+    connect(clearOwnshipTrailAction, &QAction::triggered, this, [=]() {
+        if (ecchart) {
+            ecchart->clearOwnShipTrail();
+            ecchart->Draw();
+        }
     });
+
+    viewMenu->addSeparator();
+
+    if (AppConfig::isDev()){
+        QAction *trailAction = viewMenu->addAction("Clear Trail");
+        connect(trailAction, &QAction::triggered, this, [=]() {
+            ecchart->clearOwnShipTrail();
+            update(); // misalnya untuk redraw
+        });
 
     if (AppConfig::isDev()){
         // Add visualization menu options
