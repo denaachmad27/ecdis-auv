@@ -717,7 +717,7 @@ void MainWindow::createStatusBar(){
     moosLedCircle->setFixedSize(12, 12);  // lingkaran 12x12
     moosLedCircle->setStyleSheet("background-color: red; border-radius: 6px;");
 
-    moosStatusText = new QLabel(" MOOSDB: Disconnected");
+    moosStatusText = new QLabel(" SAMUDRA: Disconnected");
     moosStatusText->setStyleSheet("color: red; font-weight: bold;");
 
     QWidget *moosStatusWidget = new QWidget;
@@ -764,12 +764,12 @@ void MainWindow::createStatusBar(){
             if (connected) {
                 if (navShip.deadReckon == "TRUE"){
                     moosLedCircle->setStyleSheet("background-color: orange; border-radius: 6px;");
-                    moosStatusText->setText(" MOOSDB: Connected - Dead Reckoning");
+                    moosStatusText->setText(" SAMUDRA: Connected - Dead Reckoning");
                     moosStatusText->setStyleSheet("color: orange; font-weight: bold;");
                 }
                 else {
                     moosLedCircle->setStyleSheet("background-color: green; border-radius: 6px;");
-                    moosStatusText->setText(" MOOSDB: Connected");
+                    moosStatusText->setText(" SAMUDRA: Connected");
                     moosStatusText->setStyleSheet("color: green; font-weight: bold;");
                 }
 
@@ -781,7 +781,7 @@ void MainWindow::createStatusBar(){
                 updateTrackingStatus("Live", true);
             } else {
                 moosLedCircle->setStyleSheet("background-color: red; border-radius: 6px;");
-                moosStatusText->setText(" MOOSDB: Disconnected");
+                moosStatusText->setText(" SAMUDRA: Disconnected");
                 moosStatusText->setStyleSheet("color: red; font-weight: bold;");
 
                 // Nonaktifkan trail hijau saat MOOSDB terputus
@@ -1172,13 +1172,13 @@ void MainWindow::createMenuBar(){
 
     viewMenu->addSeparator();
 
-    if (AppConfig::isDev()){
-        QAction *trailAction = viewMenu->addAction("Clear Trail");
-        connect(trailAction, &QAction::triggered, this, [=]() {
-            ecchart->clearOwnShipTrail();
-            update(); // misalnya untuk redraw
-        });
+    QAction *trailAction = viewMenu->addAction("Clear Trail");
+    connect(trailAction, &QAction::triggered, this, [=]() {
+        ecchart->clearOwnShipTrail();
+        update(); // misalnya untuk redraw
+    });
 
+    if (AppConfig::isDev()){
         // Add visualization menu options
         QAction *showCurrentArrowsAction = viewMenu->addAction("Show Current Arrows");
         showCurrentArrowsAction->setCheckable(true);

@@ -7609,6 +7609,7 @@ void EcWidget::publishToMOOSDB(QString varName, QString data){
     else if (varName == "WAYPT_NAV"){message = "Route";}
     else if (varName == "AREA_NAV"){message = "Area";}
 
+    /*
     if (success && !data.isEmpty() && varName != "OWNSHIP_OOB" && varName != "SHIP_NAVIGATE"){
         QMessageBox::information(this, tr("%1 Published").arg(message),
                                  tr("%1 has been published at %2 variable.").arg(message).arg(varName));
@@ -7617,6 +7618,7 @@ void EcWidget::publishToMOOSDB(QString varName, QString data){
         QMessageBox::information(this, tr("%1 is NOT Published").arg(message),
                                  tr("There is something wrong with the MOOSDB connection."));
     }
+    */
 }
 
 // FOR EMIT PUPROSE

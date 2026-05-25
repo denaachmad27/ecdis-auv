@@ -154,9 +154,13 @@ SOURCES += main.cpp mainwindow.cpp ecwidget.cpp pickwindow.cpp ais.cpp \
 RESOURCES += \
     resources.qrc
 
+DISTFILES += \
+    icon/icon.ico
+
 SUBDIRS += \
 
 CONFIG += plugin
 
 LIBS += -ldwmapi
 
+win32:RC_ICONS += icon.ico
