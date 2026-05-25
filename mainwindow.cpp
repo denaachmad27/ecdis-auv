@@ -1188,6 +1188,7 @@ void MainWindow::createMenuBar(){
             ecchart->clearOwnShipTrail();
             update(); // misalnya untuk redraw
         });
+    }
 
     if (AppConfig::isDev()){
         // Add visualization menu options
@@ -3941,7 +3942,7 @@ void MainWindow::onMouseRightClick(const QPoint& pos)
 
         // Create Route option
         contextMenu.addAction(ecchart->createRouteAction);
-        if (ecchart->goHereAutoRouteAction && loc) {
+        if ((AppConfig::isNextDev() || AppConfig::isDev()) && ecchart->goHereAutoRouteAction && loc) {
             contextMenu.addAction(ecchart->goHereAutoRouteAction);
         }
         contextMenu.addSeparator();

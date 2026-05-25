@@ -2836,8 +2836,13 @@ void EcWidget::paintEvent (QPaintEvent *e)
   }
 
   // Draw auto route start selection shadow marker
-  if (autoRouteStartSelection.active) {
+  if (autoRouteStartSelection.active && (AppConfig::isNextDev() || AppConfig::isDev())) {
       drawAutoRouteStartShadow(painter);
+  }
+
+  // Draw auto route preview if active
+  if (autoRoutePreview.active && (AppConfig::isNextDev() || AppConfig::isDev())) {
+      drawAutoRoutePreview(painter);
   }
 
   if (AppConfig::isDevelopment()){
@@ -5043,16 +5048,22 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
                 // Add Follow/Unfollow action
                 QAction* followAct = menu.addAction(currentlyTracking ? tr("Unfollow") : tr("Follow"));
 
-                // Add Target/Remove Target action
-                QString targetText = currentlyAITargeting ? tr("Remove Target") : tr("Add Target");
-                QAction* targetAct = menu.addAction(targetText);
+                QAction* targetAct = nullptr;
+                if (AppConfig::isDev()) {
+                    // Add Target/Remove Target action
+                    QString targetText = currentlyAITargeting ? tr("Remove Target") : tr("Add Target");
+                    targetAct = menu.addAction(targetText);
+                }
 
-                // Add separator
-                menu.addSeparator();
+                QAction* infoAct = nullptr;
+                if (AppConfig::isDev()) {
+                    // Add separator
+                    menu.addSeparator();
 
-                // Add target info
-                QAction* infoAct = menu.addAction(tr("Target Info"));
-                infoAct->setEnabled(false); // Just for display
+                    // Add target info
+                    infoAct = menu.addAction(tr("Target Info"));
+                    infoAct->setEnabled(false); // Just for display
+                }
 
                 QAction* chosen = menu.exec(mapToGlobal(e->pos()));
                 if (chosen == followAct) {
@@ -5087,7 +5098,7 @@ void EcWidget::mousePressEvent(QMouseEvent *e)
 
                     mainWindow->updateTrackingStatus(mode, true);
                 }
-                else if (chosen == targetAct) {
+                else if (targetAct && chosen == targetAct) {
                     if (currentlyAITargeting) {
                         clearAITarget();
                     } else {
@@ -10646,7 +10657,7 @@ void EcWidget::showMapContextMenu(const QPoint& pos)
 
     // Route options
     contextMenu.addAction(createRouteAction);
-    if (goHereAutoRouteAction) {
+    if ((AppConfig::isNextDev() || AppConfig::isDev()) && goHereAutoRouteAction) {
         goHereAutoRouteAction->setEnabled(true);
         goHereAutoRouteAction->setVisible(true);
         contextMenu.addAction(goHereAutoRouteAction);
