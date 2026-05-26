@@ -2767,19 +2767,16 @@ void EcWidget::waypointDraw(){
                 continue; // Skip waypoints from hidden routes
             }
 
-    // Always draw waypoints (with/without labels managed inside drawWaypointWithLabel)
-    for (const Waypoint &wp : waypointList)
-    {
-        // Check visibility - skip hidden routes
-        if (wp.routeId > 0 && !isRouteVisible(wp.routeId)) {
-            continue; // Skip waypoints from hidden routes
-        }
+            QColor waypointColor;
+            if (wp.active) {
+                waypointColor = getRouteColor(wp.routeId);
+            } else {
+                waypointColor = QColor(128, 128, 128); // Grey for inactive waypoints
+            }
 
             // Show full details with labels only when zoomed in enough
             drawWaypointWithLabel(wp.lat, wp.lon, wp.label, waypointColor);
         }
-
-        drawWaypointWithLabel(wp.lat, wp.lon, wp.label, waypointColor);
     }
 
     drawLeglineLabels();
