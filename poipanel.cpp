@@ -14,6 +14,9 @@
 #include <cmath>
 #include <QHeaderView>
 #include <QTimer>
+#include <QStyledItemDelegate>
+#include <QStyleOptionViewItem>
+#include <QPainter>
 
 #include "ecwidget.h"
 
@@ -24,7 +27,46 @@ constexpr int kColumnDepth = 2;
 constexpr int kColumnNotes = 3;
 constexpr int kColumnShow = 4;
 constexpr int kColumnLabel = 5;
+constexpr int kNotesColumnWidth = 200;
 }
+
+class NotesDelegate : public QStyledItemDelegate {
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+
+    QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override {
+        QStyleOptionViewItem opt = option;
+        initStyleOption(&opt, index);
+        const QFontMetrics fm(opt.font);
+        const int textWidth = option.rect.width() > 10 ? option.rect.width() : kNotesColumnWidth;
+        if (opt.text.isEmpty()) {
+            return QSize(textWidth, fm.height() + 4);
+        }
+        const QRect bound = fm.boundingRect(
+            0, 0, textWidth - 4, 0,
+            Qt::AlignLeft | Qt::TextWordWrap, opt.text);
+        return QSize(textWidth, qMax(fm.height() + 6, bound.height() + 4));
+    }
+
+    void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override {
+        QStyleOptionViewItem opt = option;
+        initStyleOption(&opt, index);
+        painter->save();
+        if (opt.state & QStyle::State_Selected) {
+            painter->fillRect(opt.rect, opt.palette.highlight());
+            painter->setPen(opt.palette.highlightedText().color());
+        } else {
+            if (opt.features & QStyleOptionViewItem::Alternate) {
+                painter->fillRect(opt.rect, opt.palette.alternateBase());
+            }
+            painter->setPen(opt.palette.text().color());
+        }
+        painter->setFont(opt.font);
+        const QRect textRect = opt.rect.adjusted(4, 2, -4, -2);
+        painter->drawText(textRect, Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap, opt.text);
+        painter->restore();
+    }
+};
 
 POIPanel::POIPanel(EcWidget* ecWidget, QWidget* parent)
     : QWidget(parent)
@@ -46,9 +88,11 @@ POIPanel::POIPanel(EcWidget* ecWidget, QWidget* parent)
     tree->setRootIsDecorated(false);
     tree->setAlternatingRowColors(true);
     tree->setSelectionMode(QAbstractItemView::SingleSelection);
-    tree->setUniformRowHeights(true);
     tree->header()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    tree->header()->setSectionResizeMode(kColumnNotes, QHeaderView::Fixed);
+    tree->setColumnWidth(kColumnNotes, kNotesColumnWidth);
     tree->header()->setStretchLastSection(true);
+    tree->setItemDelegateForColumn(kColumnNotes, new NotesDelegate(tree));
     layout->addWidget(tree, 1);
 
     connect(tree, &QTreeWidget::itemSelectionChanged, this, &POIPanel::onSelectionChanged);
@@ -124,6 +168,7 @@ void POIPanel::populateTree()
     }
 
     for (int col = 0; col < tree->columnCount(); ++col) {
+        if (col == kColumnNotes) continue;
         tree->resizeColumnToContents(col);
     }
 

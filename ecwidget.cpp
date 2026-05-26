@@ -2727,9 +2727,12 @@ void EcWidget::waypointDraw(){
     double currentRange = GetRange(currentScale);
 
     // Adaptive zoom levels based on range:
-    // Range >= 123: Show route name only (zoomed out to specific threshold)
-    // Range < 123: Show full waypoint details
-    bool showRouteNamesOnly = (currentRange >= 123.0);
+    // Range < 50: Full detail (waypoint labels shown)
+    // 50 <= Range < 123: Route name only (waypoint labels hidden)
+    // Range >= 123: All route labels hidden
+    bool showLabelsAtThisZoom = (currentRange < 50.0);
+    bool showRouteNamesOnly = (currentRange >= 50.0 && currentRange < 123.0);
+    bool hideAllRouteLabels = (currentRange >= 123.0);
 
     // NOTE: Satellite tiles are now handled in draw() via background bitmap parameter
     // They are drawn BEFORE chart info, so chart info appears ON TOP without transparency
@@ -2738,11 +2741,13 @@ void EcWidget::waypointDraw(){
     drawRouteLines();
 
     // Then draw labels AFTER (top layer) - proper z-index layering
-    if (showRouteNamesOnly) {
-        // Range >= 123: Show route names only at center of routes
+    if (hideAllRouteLabels) {
+        // Range >= 123: All route labels hidden
+    } else if (showRouteNamesOnly) {
+        // 50 <= Range < 123: Show route names only at center of routes
         drawRouteNamesOnly();
     } else {
-        // Range < 123: Full details with waypoint labels
+        // Range < 50: Full details with waypoint labels
         for (const Waypoint &wp : waypointList)
         {
             // Check visibility - skip hidden routes
@@ -2757,7 +2762,7 @@ void EcWidget::waypointDraw(){
                 waypointColor = QColor(128, 128, 128); // Grey for inactive waypoints
             }
 
-            // Always show full details with labels when range < 123
+            // Show full details with labels only when zoomed in enough
             drawWaypointWithLabel(wp.lat, wp.lon, wp.label, waypointColor);
         }
     }
@@ -4029,10 +4034,9 @@ void EcWidget::drawWaypointsOverlay(QPainter& painter)
     // Decide label density based on range (mirror logic from waypointDraw)
     int currentScale = GetScale();
     double currentRange = GetRange(currentScale);
-    bool showRouteNamesOnly = (currentRange >= 123.0);
-
-    // Hide labels when zoomed out beyond certain level (same as POI)
     bool showLabelsAtThisZoom = (currentRange < 50.0);
+    bool showRouteNamesOnly = (currentRange >= 50.0 && currentRange < 123.0);
+    bool hideAllRouteLabels = (currentRange >= 123.0);
 
     QFont labelFont("Arial", 9, QFont::Bold);
     painter.setFont(labelFont);
@@ -4047,7 +4051,7 @@ void EcWidget::drawWaypointsOverlay(QPainter& painter)
         painter.drawEllipse(QPoint(x,y), 8, 8);
 
         // Draw label with POI-style positioning during drag
-        if (!showRouteNamesOnly && showLabelsAtThisZoom && !wp.label.isEmpty()) {
+        if (!hideAllRouteLabels && !showRouteNamesOnly && showLabelsAtThisZoom && !wp.label.isEmpty()) {
             // Use POI-style label positioning (always to the right)
             QFontMetrics fm(labelFont);
             const int radius = 8; // Waypoint radius
@@ -11591,10 +11595,10 @@ void EcWidget::drawLeglineLabels()
     if (waypointList.size() < 2)
         return;
 
-    // Hide distance and bearing labels when range >= 123
+    // Hide distance and bearing labels when range >= 50 (zone 2 and 3)
     int currentScale = GetScale();
     double currentRange = GetRange(currentScale);
-    if (currentRange >= 123.0) {
+    if (currentRange >= 50.0) {
         return; // Don't draw legline labels when zoomed out
     }
 
