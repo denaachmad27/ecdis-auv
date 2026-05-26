@@ -816,6 +816,18 @@ double EcWidget::GetRange (int scaleVal) const
   return EcDrawScaleToRange (view, scaleVal);
 }
 
+double EcWidget::GetVisibleRange() const
+{
+    double r = GetRange(currentScale);
+    if (isDragging && dragMode) {
+        int margin = effectivePanMargin();
+        if (height() + 2 * margin > 0) {
+            r = r * (double)height() / (double)(height() + 2 * margin);
+        }
+    }
+    return r;
+}
+
 /*---------------------------------------------------------------------------*/
 
 
@@ -2724,12 +2736,7 @@ void EcWidget::waypointDraw(){
 
     // Get current range for adaptive rendering
     int currentScale = GetScale();
-    double currentRange = GetRange(currentScale);
-
-    // Adaptive zoom levels based on range:
-    // Range >= 123: Show route name only (zoomed out to specific threshold)
-    // Range < 123: Show full waypoint details
-    bool showRouteNamesOnly = (currentRange >= 123.0);
+    double currentRange = GetVisibleRange();
 
     // NOTE: Satellite tiles are now handled in draw() via background bitmap parameter
     // They are drawn BEFORE chart info, so chart info appears ON TOP without transparency
@@ -2737,29 +2744,27 @@ void EcWidget::waypointDraw(){
     // IMPORTANT: Draw route lines
     drawRouteLines();
 
-    // Then draw labels AFTER (top layer) - proper z-index layering
-    if (showRouteNamesOnly) {
-        // Range >= 123: Show route names only at center of routes
+    // Show Route names only if 10.0 < range <= 50.0
+    if (currentRange > 10.0 && currentRange <= 25.0) {
         drawRouteNamesOnly();
-    } else {
-        // Range < 123: Full details with waypoint labels
-        for (const Waypoint &wp : waypointList)
-        {
-            // Check visibility - skip hidden routes
-            if (wp.routeId > 0 && !isRouteVisible(wp.routeId)) {
-                continue; // Skip waypoints from hidden routes
-            }
+    }
 
-            QColor waypointColor;
-            if (wp.active) {
-                waypointColor = getRouteColor(wp.routeId);
-            } else {
-                waypointColor = QColor(128, 128, 128); // Grey for inactive waypoints
-            }
-
-            // Always show full details with labels when range < 123
-            drawWaypointWithLabel(wp.lat, wp.lon, wp.label, waypointColor);
+    // Always draw waypoints (with/without labels managed inside drawWaypointWithLabel)
+    for (const Waypoint &wp : waypointList)
+    {
+        // Check visibility - skip hidden routes
+        if (wp.routeId > 0 && !isRouteVisible(wp.routeId)) {
+            continue; // Skip waypoints from hidden routes
         }
+
+        QColor waypointColor;
+        if (wp.active) {
+            waypointColor = getRouteColor(wp.routeId);
+        } else {
+            waypointColor = QColor(128, 128, 128); // Grey for inactive waypoints
+        }
+
+        drawWaypointWithLabel(wp.lat, wp.lon, wp.label, waypointColor);
     }
 
     drawLeglineLabels();
@@ -3250,6 +3255,9 @@ void EcWidget::paintEvent (QPaintEvent *e)
       painter.setRenderHint(QPainter::Antialiasing, true);
       painter.setRenderHint(QPainter::TextAntialiasing, true);
 
+      double currentRange = GetVisibleRange();
+      bool showTideLabels = (currentRange <= 25.0);
+
       for (const TideStation &station : stations) {
         // Convert lat/lon to screen coordinates
         EcCoordinate lat = station.location.latitude;
@@ -3272,45 +3280,47 @@ void EcWidget::paintEvent (QPaintEvent *e)
           painter.drawEllipse(screenPoint, 2, 2);
           painter.setBrush(stationBrush);
 
-          // Calculate text bounds for proper sizing
-          QFontMetrics fontMetrics(painter.font());
-          QRect textBounds = fontMetrics.boundingRect(station.name);
+          if (showTideLabels) {
+              // Calculate text bounds for proper sizing
+              QFontMetrics fontMetrics(painter.font());
+              QRect textBounds = fontMetrics.boundingRect(station.name);
 
-          // Add padding around text
-          int padding = 4;
-          int textWidth = textBounds.width() + padding * 2;
-          int textHeight = textBounds.height() + padding;
+              // Add padding around text
+              int padding = 4;
+              int textWidth = textBounds.width() + padding * 2;
+              int textHeight = textBounds.height() + padding;
 
-          // Smart text positioning - try right first, then left if out of bounds
-          int textX = screenPoint.x() + 12; // Default: right of station
-          int textY = screenPoint.y() - textHeight/2;
+              // Smart text positioning - try right first, then left if out of bounds
+              int textX = screenPoint.x() + 12; // Default: right of station
+              int textY = screenPoint.y() - textHeight/2;
 
-          // Check if text goes beyond right screen edge
-          if (textX + textWidth > width()) {
-              // Position text to the left of station
-              textX = screenPoint.x() - textWidth - 2;
+              // Check if text goes beyond right screen edge
+              if (textX + textWidth > width()) {
+                  // Position text to the left of station
+                  textX = screenPoint.x() - textWidth - 2;
+              }
+
+              // Ensure text doesn't go beyond left screen edge
+              if (textX < 0) {
+                  textX = 2; // Minimum margin from left edge
+              }
+
+              // Ensure text stays within vertical bounds
+              if (textY < 2) textY = 2;
+              if (textY + textHeight > height()) textY = height() - textHeight - 2;
+
+              QRect textRect(textX, textY, textWidth, textHeight);
+
+              // Draw station name background with slightly rounded appearance
+              painter.fillRect(textRect, QColor(255, 255, 255, 240));
+              painter.setPen(QPen(QColor(0, 100, 200), 1)); // Blue border
+              painter.drawRect(textRect);
+
+              // Draw station name with proper alignment
+              painter.setPen(Qt::black);
+              painter.drawText(textRect, Qt::AlignCenter, station.name);
+              painter.setPen(stationPen);
           }
-
-          // Ensure text doesn't go beyond left screen edge
-          if (textX < 0) {
-              textX = 2; // Minimum margin from left edge
-          }
-
-          // Ensure text stays within vertical bounds
-          if (textY < 2) textY = 2;
-          if (textY + textHeight > height()) textY = height() - textHeight - 2;
-
-          QRect textRect(textX, textY, textWidth, textHeight);
-
-          // Draw station name background with slightly rounded appearance
-          painter.fillRect(textRect, QColor(255, 255, 255, 240));
-          painter.setPen(QPen(QColor(0, 100, 200), 1)); // Blue border
-          painter.drawRect(textRect);
-
-          // Draw station name with proper alignment
-          painter.setPen(Qt::black);
-          painter.drawText(textRect, Qt::AlignCenter, station.name);
-          painter.setPen(stationPen);
         }
       }
     }
@@ -3670,7 +3680,10 @@ void EcWidget::drawAOIs(QPainter& painter)
         // Compose area label without prefix, e.g., "11.68 NM²"
         QString areaLine = QString::fromUtf8("%1 NM²").arg(QString::number(areaNM2, 'f', 2));
 
-        if (showAoiLabels && a.showLabel) {
+        double currentRange = GetVisibleRange();
+        bool showLabelsAtThisZoom = (currentRange <= 25.0);
+
+        if (showAoiLabels && a.showLabel && showLabelsAtThisZoom) {
             // Draw AOI name centered at centroid (baseline positioning)
             int nameW = fm.horizontalAdvance(a.name);
             int nameH = fm.height();
@@ -3684,7 +3697,7 @@ void EcWidget::drawAOIs(QPainter& painter)
         }
 
         // Draw AOI segment distance labels for all visible AOIs (obey showAoiLabels)
-        if (showAoiLabels && a.showLabel) {
+        if (showAoiLabels && a.showLabel && showLabelsAtThisZoom) {
             painter.save();
             QFont distFont("Arial", 9, QFont::Bold);
             painter.setFont(distFont);
@@ -3979,8 +3992,8 @@ void EcWidget::drawPois(QPainter& painter)
 
         // Check zoom level for label visibility
         int currentScale = GetScale();
-        double currentRange = GetRange(currentScale);
-        bool showLabelsAtThisZoom = (currentRange < 50.0); // Hide labels when zoomed out beyond 50 NM
+        double currentRange = GetVisibleRange();
+        bool showLabelsAtThisZoom = (currentRange <= 25.0); // Hide labels when zoomed out beyond 50 NM
 
         if (showPoiLabels && poi.showLabel && showLabelsAtThisZoom) {
             const QString labelText = poi.label.isEmpty()
@@ -4028,11 +4041,10 @@ void EcWidget::drawWaypointsOverlay(QPainter& painter)
 
     // Decide label density based on range (mirror logic from waypointDraw)
     int currentScale = GetScale();
-    double currentRange = GetRange(currentScale);
-    bool showRouteNamesOnly = (currentRange >= 123.0);
+    double currentRange = GetVisibleRange();
 
-    // Hide labels when zoomed out beyond certain level (same as POI)
-    bool showLabelsAtThisZoom = (currentRange < 50.0);
+    // Hide labels when zoomed out beyond 10 NM
+    bool showLabelsAtThisZoom = (currentRange <= 10.0);
 
     QFont labelFont("Arial", 9, QFont::Bold);
     painter.setFont(labelFont);
@@ -4047,7 +4059,7 @@ void EcWidget::drawWaypointsOverlay(QPainter& painter)
         painter.drawEllipse(QPoint(x,y), 8, 8);
 
         // Draw label with POI-style positioning during drag
-        if (!showRouteNamesOnly && showLabelsAtThisZoom && !wp.label.isEmpty()) {
+        if (showLabelsAtThisZoom && !wp.label.isEmpty()) {
             // Use POI-style label positioning (always to the right)
             QFontMetrics fm(labelFont);
             const int radius = 8; // Waypoint radius
@@ -8007,7 +8019,7 @@ void EcWidget::ownShipDraw(){
                 drawOwnShipIcon(painter, x, y, cog, heading, ownShipData.sog);
 
                 // GAMBAR NAMA KAPAL DI ATAS ICON OWNSHIP
-                if (!name.isEmpty()) {
+                if (!name.isEmpty() && GetVisibleRange() <= 50.0) {
                     painter.setPen(Qt::black);
                     QFont font = painter.font();
                     font.setBold(true);
@@ -9624,10 +9636,10 @@ void EcWidget::drawWaypointWithLabel(double lat, double lon, const QString& labe
         return; // Waypoint is off-screen, don't draw label
     }
 
-    // Check zoom level for label visibility (same as POI)
+    // Check zoom level for label visibility (only show when range <= 10.0)
     int currentScale = GetScale();
-    double currentRange = GetRange(currentScale);
-    bool showLabelsAtThisZoom = (currentRange < 50.0); // Hide labels when zoomed out beyond 50 NM
+    double currentRange = GetVisibleRange();
+    bool showLabelsAtThisZoom = (currentRange <= 10.0);
 
     QPainter painter(&drawPixmap);
     painter.setRenderHint(QPainter::Antialiasing, true);
@@ -11591,10 +11603,10 @@ void EcWidget::drawLeglineLabels()
     if (waypointList.size() < 2)
         return;
 
-    // Hide distance and bearing labels when range >= 123
+    // Hide distance and bearing labels when range > 10.0
     int currentScale = GetScale();
-    double currentRange = GetRange(currentScale);
-    if (currentRange >= 123.0) {
+    double currentRange = GetVisibleRange();
+    if (currentRange > 10.0) {
         return; // Don't draw legline labels when zoomed out
     }
 
@@ -21309,7 +21321,7 @@ void EcWidget::drawRouteDeviationIndicator(QPainter& painter)
     }
 
     // ========== DRAW DEVIATION LABEL ==========
-    if (routeDeviationDetector->isLabelVisible()) {
+    if (routeDeviationDetector->isLabelVisible() && GetVisibleRange() <= 50.0) {
         // Compose label text
         QString labelText = QString("Off Track: %1 NM\nAngle: %2°")
                            .arg(QString::number(std::abs(deviation.crossTrackDistance), 'f', 2))
@@ -21432,24 +21444,26 @@ void EcWidget::drawCPATCPAIndicators(QPainter& painter)
         }
 
         // Draw target information with calculated CPA/TCPA
-        painter.setPen(QPen(QColor(255, 255, 255, 200), 1));
-        QFont font = painter.font();
-        font.setPixelSize(9);
-        painter.setFont(font);
+        if (GetVisibleRange() <= 50.0) {
+            painter.setPen(QPen(QColor(255, 255, 255, 200), 1));
+            QFont font = painter.font();
+            font.setPixelSize(9);
+            painter.setFont(font);
 
-        QString info = QString("%1\nCPA: %2 NM\nTCPA: %3 min")
-                       .arg(target.mmsi)
-                       .arg(result.cpa, 0, 'f', 2)
-                       .arg(result.tcpa, 0, 'f', 1);
+            QString info = QString("%1\nCPA: %2 NM\nTCPA: %3 min")
+                           .arg(target.mmsi)
+                           .arg(result.cpa, 0, 'f', 2)
+                           .arg(result.tcpa, 0, 'f', 1);
 
-        // Draw text background
-        QFontMetrics fm(font);
-        QRect textRect = fm.boundingRect(QRect(x + symbolSize + 5, y - 15, 120, 50),
-                                       Qt::AlignLeft | Qt::TextWordWrap, info);
-        textRect.adjust(-3, -3, 3, 3);
+            // Draw text background
+            QFontMetrics fm(font);
+            QRect textRect = fm.boundingRect(QRect(x + symbolSize + 5, y - 15, 120, 50),
+                                           Qt::AlignLeft | Qt::TextWordWrap, info);
+            textRect.adjust(-3, -3, 3, 3);
 
-        painter.fillRect(textRect, QColor(0, 0, 0, 150));
-        painter.drawText(textRect, Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap, info);
+            painter.fillRect(textRect, QColor(0, 0, 0, 150));
+            painter.drawText(textRect, Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap, info);
+        }
     }
 
     painter.restore();
