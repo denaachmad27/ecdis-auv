@@ -2736,7 +2736,15 @@ void EcWidget::waypointDraw(){
 
     // Get current range for adaptive rendering
     int currentScale = GetScale();
-    double currentRange = GetVisibleRange();
+    double currentRange = GetRange(currentScale);
+
+    // Adaptive zoom levels based on range:
+    // Range < 50: Full detail (waypoint labels shown)
+    // 50 <= Range < 123: Route name only (waypoint labels hidden)
+    // Range >= 123: All route labels hidden
+    bool showLabelsAtThisZoom = (currentRange < 50.0);
+    bool showRouteNamesOnly = (currentRange >= 50.0 && currentRange < 123.0);
+    bool hideAllRouteLabels = (currentRange >= 123.0);
 
     // NOTE: Satellite tiles are now handled in draw() via background bitmap parameter
     // They are drawn BEFORE chart info, so chart info appears ON TOP without transparency
@@ -2744,10 +2752,20 @@ void EcWidget::waypointDraw(){
     // IMPORTANT: Draw route lines
     drawRouteLines();
 
-    // Show Route names only if 10.0 < range <= 50.0
-    if (currentRange > 10.0 && currentRange <= 25.0) {
+    // Then draw labels AFTER (top layer) - proper z-index layering
+    if (hideAllRouteLabels) {
+        // Range >= 123: All route labels hidden
+    } else if (showRouteNamesOnly) {
+        // 50 <= Range < 123: Show route names only at center of routes
         drawRouteNamesOnly();
-    }
+    } else {
+        // Range < 50: Full details with waypoint labels
+        for (const Waypoint &wp : waypointList)
+        {
+            // Check visibility - skip hidden routes
+            if (wp.routeId > 0 && !isRouteVisible(wp.routeId)) {
+                continue; // Skip waypoints from hidden routes
+            }
 
     // Always draw waypoints (with/without labels managed inside drawWaypointWithLabel)
     for (const Waypoint &wp : waypointList)
@@ -2757,11 +2775,8 @@ void EcWidget::waypointDraw(){
             continue; // Skip waypoints from hidden routes
         }
 
-        QColor waypointColor;
-        if (wp.active) {
-            waypointColor = getRouteColor(wp.routeId);
-        } else {
-            waypointColor = QColor(128, 128, 128); // Grey for inactive waypoints
+            // Show full details with labels only when zoomed in enough
+            drawWaypointWithLabel(wp.lat, wp.lon, wp.label, waypointColor);
         }
 
         drawWaypointWithLabel(wp.lat, wp.lon, wp.label, waypointColor);
@@ -4041,10 +4056,10 @@ void EcWidget::drawWaypointsOverlay(QPainter& painter)
 
     // Decide label density based on range (mirror logic from waypointDraw)
     int currentScale = GetScale();
-    double currentRange = GetVisibleRange();
-
-    // Hide labels when zoomed out beyond 10 NM
-    bool showLabelsAtThisZoom = (currentRange <= 10.0);
+    double currentRange = GetRange(currentScale);
+    bool showLabelsAtThisZoom = (currentRange < 50.0);
+    bool showRouteNamesOnly = (currentRange >= 50.0 && currentRange < 123.0);
+    bool hideAllRouteLabels = (currentRange >= 123.0);
 
     QFont labelFont("Arial", 9, QFont::Bold);
     painter.setFont(labelFont);
@@ -4059,7 +4074,7 @@ void EcWidget::drawWaypointsOverlay(QPainter& painter)
         painter.drawEllipse(QPoint(x,y), 8, 8);
 
         // Draw label with POI-style positioning during drag
-        if (showLabelsAtThisZoom && !wp.label.isEmpty()) {
+        if (!hideAllRouteLabels && !showRouteNamesOnly && showLabelsAtThisZoom && !wp.label.isEmpty()) {
             // Use POI-style label positioning (always to the right)
             QFontMetrics fm(labelFont);
             const int radius = 8; // Waypoint radius
@@ -11603,10 +11618,10 @@ void EcWidget::drawLeglineLabels()
     if (waypointList.size() < 2)
         return;
 
-    // Hide distance and bearing labels when range > 10.0
+    // Hide distance and bearing labels when range >= 50 (zone 2 and 3)
     int currentScale = GetScale();
-    double currentRange = GetVisibleRange();
-    if (currentRange > 10.0) {
+    double currentRange = GetRange(currentScale);
+    if (currentRange >= 50.0) {
         return; // Don't draw legline labels when zoomed out
     }
 
