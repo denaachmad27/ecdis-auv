@@ -663,6 +663,7 @@ public:
 
   // Transforms a scale to the corresponding range.
   double GetRange (int scale) const;
+  double GetVisibleRange() const;
 
   // Returns the human readable projection name
   QString GetProjectionName () const;

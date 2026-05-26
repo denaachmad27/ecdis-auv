@@ -227,6 +227,9 @@ void AITargetTracker::draw(EcWidget* w, QPainter& p)
     p.save();
     p.setRenderHint(QPainter::Antialiasing, true);
 
+    double currentRange = w->GetVisibleRange();
+    bool showLabelsAtThisZoom = (currentRange <= 25.0);
+
     // Draw target line (main line from ownship to target)
     if (showTargetLine) {
         QPen targetPen(QColor(255, 0, 0)); // Red line for targeting
@@ -293,28 +296,30 @@ void AITargetTracker::draw(EcWidget* w, QPainter& p)
             p.drawEllipse(interceptX, interceptY, 3, 3);
 
             // Add "INTERCEPT" label
-            QFont labelFont("Arial", 9, QFont::Bold);
-            p.setFont(labelFont);
-            QFontMetrics labelFm(labelFont);
-            QString interceptLabel = QString("INTERCEPT");
-            int labelWidth = labelFm.horizontalAdvance(interceptLabel);
-            int labelHeight = labelFm.height();
+            if (showLabelsAtThisZoom) {
+                QFont labelFont("Arial", 9, QFont::Bold);
+                p.setFont(labelFont);
+                QFontMetrics labelFm(labelFont);
+                QString interceptLabel = QString("INTERCEPT");
+                int labelWidth = labelFm.horizontalAdvance(interceptLabel);
+                int labelHeight = labelFm.height();
 
-            // Background untuk label
-            QRect labelRect(interceptX - labelWidth/2 - 4, interceptY + 12, labelWidth + 8, labelHeight + 4);
-            QColor labelBg = QColor(255, 0, 0, 180); // Semi-transparent red
-            p.setPen(Qt::NoPen);
-            p.setBrush(labelBg);
-            p.drawRoundedRect(labelRect, 3, 3);
+                // Background untuk label
+                QRect labelRect(interceptX - labelWidth/2 - 4, interceptY + 12, labelWidth + 8, labelHeight + 4);
+                QColor labelBg = QColor(255, 0, 0, 180); // Semi-transparent red
+                p.setPen(Qt::NoPen);
+                p.setBrush(labelBg);
+                p.drawRoundedRect(labelRect, 3, 3);
 
-            // Text label
-            p.setPen(Qt::white);
-            p.drawText(labelRect, Qt::AlignCenter, interceptLabel);
+                // Text label
+                p.setPen(Qt::white);
+                p.drawText(labelRect, Qt::AlignCenter, interceptLabel);
+            }
         }
     }
 
     // Draw distance and tracking information
-    if (showDistanceInfo) {
+    if (showDistanceInfo && showLabelsAtThisZoom) {
         QFont font("Arial", 10, QFont::Bold);
         p.setFont(font);
         QFontMetrics fm(font);
