@@ -130,6 +130,7 @@ private slots:
     void onRenameRoute();
     void onToggleRouteVisibility();
     void onDeleteRoute();
+    void onExportRoute();
     void onRouteProperties();
     void onReverseRoute();
     void onEditWaypointFromContext();

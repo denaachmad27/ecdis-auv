@@ -753,10 +753,7 @@ void RoutePanel::setupConnections()
         // TODO: Implement duplicate route functionality
         emit statusMessage("Duplicate route functionality not yet implemented");
     });
-    connect(exportRouteAction, &QAction::triggered, [this]() {
-        // TODO: Implement export single route functionality  
-        emit statusMessage("Export single route functionality not yet implemented");
-    });
+    connect(exportRouteAction, &QAction::triggered, this, &RoutePanel::onExportRoute);
     connect(toggleVisibilityAction, &QAction::triggered, this, &RoutePanel::onToggleRouteVisibility);
     // Match delete confirmation with waypoint delete (Yes/No)
     connect(deleteRouteAction, &QAction::triggered, this, [this]() {
@@ -1968,10 +1965,11 @@ void RoutePanel::onDeleteRoute()
         bool success = ecWidget->deleteRoute(selectedRouteId);
         
         if (success) {
+            int deletedRouteId = selectedRouteId;
             refreshRouteList();
             clearRouteInfoDisplay();
             selectedRouteId = -1;
-            emit statusMessage(QString("✅ Route %1 deleted successfully").arg(selectedRouteId));
+            emit statusMessage(QString("✅ Route %1 deleted successfully").arg(deletedRouteId));
         } else {
             QMessageBox::critical(this, "❌ Delete Error", 
                 QString("Failed to delete Route %1").arg(selectedRouteId));
@@ -3197,6 +3195,88 @@ void RoutePanel::onExportRoutesClicked()
     emit statusMessage(QString("Exported %1 routes successfully").arg(routeList.size()));
 }
 
+void RoutePanel::onExportRoute()
+{
+    if (selectedRouteId <= 0) return;
+    if (!ecWidget) {
+        QMessageBox::warning(this, "Export Error", "No chart widget available.");
+        return;
+    }
+
+    EcWidget::Route route = ecWidget->getRouteById(selectedRouteId);
+    if (route.waypoints.isEmpty()) {
+        QMessageBox::information(this, "Export Warning", "Cannot export an empty route.");
+        return;
+    }
+
+    QString defaultName = route.name.trimmed();
+    if (defaultName.isEmpty()) {
+        defaultName = QString("route_%1").arg(selectedRouteId);
+    }
+    // Clean name for filename compatibility
+    defaultName.replace(QRegExp("[\\\\/:*?\"<>|]"), "_");
+
+    QString fileName = QFileDialog::getSaveFileName(
+        this,
+        "Export Route to JSON",
+        QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + "/" + defaultName + ".json",
+        "JSON Files (*.json);;All Files (*)"
+    );
+
+    if (fileName.isEmpty()) return;
+
+    QJsonObject routeObject;
+    routeObject["routeId"] = route.routeId;
+    routeObject["name"] = route.name;
+    routeObject["description"] = route.description;
+    routeObject["createdDate"] = route.createdDate.toString(Qt::ISODate);
+    routeObject["modifiedDate"] = route.modifiedDate.toString(Qt::ISODate);
+    routeObject["totalDistance"] = route.totalDistance;
+    routeObject["estimatedTime"] = route.estimatedTime;
+    routeObject["visible"] = ecWidget->isRouteVisible(route.routeId);
+    routeObject["attachedToShip"] = route.attachedToShip;
+
+    if (ecWidget->routeCustomColors.contains(route.routeId)) {
+        QColor c = ecWidget->routeCustomColors.value(route.routeId);
+        routeObject["color"] = c.name(QColor::HexRgb);
+    }
+
+    QJsonArray waypointsArray;
+    for (const EcWidget::RouteWaypoint& wp : route.waypoints) {
+        QJsonObject waypointObject;
+        waypointObject["lat"] = wp.lat;
+        waypointObject["lon"] = wp.lon;
+        waypointObject["label"] = wp.label;
+        waypointObject["remark"] = wp.remark;
+        waypointObject["turningRadius"] = wp.turningRadius;
+        waypointObject["active"] = wp.active;
+        waypointsArray.append(waypointObject);
+    }
+    routeObject["waypoints"] = waypointsArray;
+
+    QJsonArray routeArray;
+    routeArray.append(routeObject);
+
+    QJsonObject rootObject;
+    rootObject["routes"] = routeArray;
+
+    QJsonDocument jsonDoc(rootObject);
+
+    QFile file(fileName);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QMessageBox::warning(this, "Export Error", "Could not open file for writing.");
+        return;
+    }
+
+    file.write(jsonDoc.toJson());
+    file.close();
+
+    QMessageBox::information(this, "Export Complete",
+        QString("Route '%1' exported successfully to:\n%2").arg(route.name).arg(fileName));
+
+    emit statusMessage(QString("Exported Route '%1' successfully").arg(route.name));
+}
+
 // ====== Waypoint Management Slot Implementations ======
 
 void RoutePanel::onAddWaypointClicked()
@@ -3344,7 +3424,7 @@ void RoutePanel::onDeleteWaypointClicked()
         return;
     }
     
-    const EcWidget::Waypoint& waypoint = waypointItem->getWaypoint();
+    EcWidget::Waypoint waypoint = waypointItem->getWaypoint();
     
     int ret = QMessageBox::question(this, "Delete Waypoint", 
         QString("Are you sure you want to delete waypoint '%1'?")
