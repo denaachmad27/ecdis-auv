@@ -61,6 +61,13 @@ Ais::Ais( EcWidget *parent, EcView *view, EcDictInfo *dict,
   //connect( _tcpSocket, SIGNAL( hostFound() ), this, SLOT( slotHostFound() ) );      // TEST
   //connect( _tcpSocket, SIGNAL( connected() ), this, SLOT( slotConnected() ) );      // TEST
 
+  // Route own-ship nav updates from any thread to the CPA panel on the GUI
+  // thread. Auto connection becomes queued when emitted from a worker thread.
+  connect( this, &Ais::signalOwnShipNavUpdate, this,
+           [this](double lat, double lon, double sog, double hog) {
+             if (_cpaPanel) _cpaPanel->updateOwnShipInfo(lat, lon, sog, hog);
+           } );
+
   // icon ship
   ownShipLat = 0.0;
   ownShipLon = 0.0;
@@ -846,11 +853,6 @@ void Ais::readAISLogfile( const QString &logFile )
     return;
   }
 
-  // NULL DECLARATION
-  EcDENC *denc = nullptr;
-  EcDictInfo *dictInfo = nullptr;
-  QWidget *parentWidget = nullptr;
-
   // Read AIS logfile line by line and add each line to the AIS transponder object by calling EcAISAddTransponderOutput.
   // EcAISAddTransponderOutput calls the callback AISTargetUpdateCallback for each line read from the logfile.
   int iLineNo = 1;
@@ -877,10 +879,11 @@ void Ais::readAISLogfile( const QString &logFile )
     emit nmeaTextAppend(nmea);
     extractNMEA(nmea);
 
-    // OWNSHIP NMEA
-    PickWindow *pickWindow = new PickWindow(parentWidget, dictInfo, denc);
+    // OWNSHIP NMEA — the pickWindowOwnship signal is handled on the GUI
+    // side (EcWidget) which owns a single reusable PickWindow. The old code
+    // leaked one heap-allocated PickWindow per NMEA line here.
     if (navShip.lat != 0 && ownShipText){
-        ownShipText->setHtml(pickWindow->ownShipAutoFill());
+        emit pickWindowOwnship();
     }
 
     // RECORD NMEA
@@ -902,9 +905,6 @@ void Ais::readAISLogfile( const QString &logFile )
       addLogFileEntry( QString( "Error in readAISLogfile(): EcAISAddTransponderOutput() failed in input line %1" ).arg( iLineNo ) );
       break;
     }
-
-    // hapus pickwindow
-    delete pickWindow;
 
     iLineNo++;
   }
@@ -971,9 +971,6 @@ void Ais::readAISLogfileWDelay(const QString &logFile, int delayMs, std::atomic<
     }
 
     QTextStream in(_fAisFile);
-    QWidget *parentWidget = nullptr;
-    EcDictInfo *dictInfo = nullptr;
-    EcDENC *denc = nullptr;
 
     int iLineNo = 1;
     while (!in.atEnd())
@@ -987,9 +984,11 @@ void Ais::readAISLogfileWDelay(const QString &logFile, int delayMs, std::atomic<
         emit nmeaTextAppend(sLine);
         extractNMEA(sLine);
 
-        PickWindow *pickWindow = new PickWindow(parentWidget, dictInfo, denc);
+        // Emit signals instead of touching widgets directly: this function may
+        // run on a worker thread (see stopFlag), and Qt widgets must only be
+        // accessed from the GUI thread. Queued connections deliver these safely.
         if (navShip.lat != 0 && ownShipText) {
-            ownShipText->setHtml(pickWindow->ownShipAutoFill());
+            emit pickWindowOwnship();
         }
 
         IAisDvrPlugin* dvr = PluginManager::instance().getPlugin<IAisDvrPlugin>("IAisDvrPlugin");
@@ -998,16 +997,14 @@ void Ais::readAISLogfileWDelay(const QString &logFile, int delayMs, std::atomic<
         }
 
         if (navShip.lat != 0 && _cpaPanel) {
-            _cpaPanel->updateOwnShipInfo(navShip.lat, navShip.lon, navShip.sog, navShip.heading_og);
+            emit signalOwnShipNavUpdate(navShip.lat, navShip.lon, navShip.sog, navShip.heading_og);
         }
 
         if (!EcAISAddTransponderOutput(_transponder, (unsigned char*)sLine.toStdString().c_str(), sLine.count())) {
             addLogFileEntry(QString("Error in readAISLogfile(): EcAISAddTransponderOutput() failed at line %1").arg(iLineNo));
-            delete pickWindow;
             break;
         }
 
-        delete pickWindow;
         iLineNo++;
 
         if (delayMs > 0)
@@ -1101,11 +1098,6 @@ void Ais::readAISVariable( const QStringList &dataLines )
         return;
     }
 
-    // NULL DECLARATION
-    EcDENC *denc = nullptr;
-    EcDictInfo *dictInfo = nullptr;
-    QWidget *parentWidget = nullptr;
-
     // Read AIS logfile line by line and add each line to the AIS transponder object by calling EcAISAddTransponderOutput.
     // EcAISAddTransponderOutput calls the callback AISTargetUpdateCallback for each line read from the logfile.
     int iLineNo = 1;
@@ -1128,11 +1120,10 @@ void Ais::readAISVariable( const QStringList &dataLines )
 
         // qDebug() << sLine;
 
-        // OWNSHIP PANEL
-        PickWindow *pickWindow = new PickWindow(parentWidget, dictInfo, denc);
-
+        // OWNSHIP PANEL — emit instead of touching widgets directly; also
+        // fixes the per-line PickWindow heap leak that used to live here.
         if (navShip.lat != 0 && ownShipText){
-            ownShipText->setHtml(pickWindow->ownShipAutoFill());
+            emit pickWindowOwnship();
             if (_cpaPanel){
                 _cpaPanel->updateOwnShipInfo(navShip.lat, navShip.lon, navShip.sog, navShip.heading_og);
             }
@@ -1278,15 +1269,9 @@ void Ais::connectToAISServer( const QString& strHost, int iPort )
   connect( _tcpSocket, SIGNAL( readyRead() ), this, SLOT( slotReadAISServerData() ) );
   connect( _tcpSocket, SIGNAL( error( QAbstractSocket::SocketError ) ), this, SLOT( slotShowTCPError( QAbstractSocket::SocketError ) ) );
 
-  // Try to connect to AIS server. Wait up to 5 sec. for server connection.
+  // Connect asynchronously; failures are reported via the error() signal
+  // (slotShowTCPError) so the GUI thread is never blocked waiting.
   _tcpSocket->connectToHost( strHost, iPort );
-  if( !_tcpSocket->waitForConnected( 2000 ) )
-  {
-    QString strErr = QString( "Error in connectToAISServer(): Could not connect to host %1 and port %2." ).arg( strHost ).arg( iPort );
-    QAbstractSocket::SocketError sError = _tcpSocket->error();
-    slotShowTCPError( sError );
-    addLogFileEntry( strErr );
-  }
 }
 
 // Read AIS data from AIS server via TCP.

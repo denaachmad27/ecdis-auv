@@ -146,6 +146,7 @@ signals:
     void signalRefreshCenter( double, double );
     void nmeaTextAppend(const QString&);
     void pickWindowOwnship();
+    void signalOwnShipNavUpdate(double lat, double lon, double sog, double hog);
 
     void targetUpdateReceived(AISTargetData info);
 

@@ -367,7 +367,9 @@ void CPATCPAPanel::updateTargetsDisplay()
     // Simpan MMSI dari baris yang sedang terseleksi (gunakan var lokal berbeda agar tidak shadow member)
     QString currentSelectedMmsi;
     QItemSelectionModel *selectionModel = targetsTable->selectionModel();
-    if (selectionModel->hasSelection()) {
+    // hasSelection() can be true while selectedRows() is empty (partial
+    // selection), so check the row list itself before calling first().
+    if (selectionModel && !selectionModel->selectedRows().isEmpty()) {
         int selectedRow = selectionModel->selectedRows().first().row();
         QTableWidgetItem *mmsiItem = targetsTable->item(selectedRow, 0);
         if (mmsiItem)

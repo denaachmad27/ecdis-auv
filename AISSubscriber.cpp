@@ -245,8 +245,10 @@ void AISSubscriber::onReadyRead() {
 
         // Try to find a complete JSON object
         int jsonEnd = findCompleteJSON(buffer);
-        if (jsonEnd <= 0) {
-            // No complete JSON found, wait for more data
+        if (jsonEnd <= 0 || jsonEnd > buffer.size()) {
+            // No complete JSON found (or bogus offset) — wait for more data.
+            // The upper bound also guarantees this loop always consumes the
+            // buffer and can never spin forever on a bad return value.
             break;
         }
 

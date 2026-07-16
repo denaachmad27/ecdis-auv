@@ -924,6 +924,7 @@ public:
   void processAis(QString);
   void publishToMOOSDB(QString, QString);
   void publishToMOOS(QString, QString);
+  void sendToMOOSAsync(const QByteArray &sendData);
 
   QString latLonToDegMin(double value, bool isLatitude);
 

@@ -1,6 +1,7 @@
 // #include <QtGui>
 #include <QtWidgets>
 #include <QApplication>
+#include <QtConcurrent>
 #include <QtWin>
 #include <QTimer>
 #include <QToolTip>
@@ -681,21 +682,10 @@ EcWidget::~EcWidget ()
     // Stop animation to prevent callbacks
     _aisObj->stopAnimation();
 
-    // Force disconnection of ALL signals immediately to prevent callbacks
+    // Force disconnection of ALL signals immediately to prevent callbacks.
+    // NOTE: do NOT pump the event loop (processEvents) here — dispatching
+    // events mid-destruction can invoke slots on half-destroyed objects.
     QObject::disconnect(_aisObj, 0, 0, 0);
-
-    // Wait a bit for any ongoing operations to complete safely
-    int iCnt = 0;
-    while( QCoreApplication::hasPendingEvents() == True && iCnt < 10 )
-    {
-#ifdef _WINNT_SOURCE
-      Sleep( 50 ); // Reduced wait time
-#else
-      QThread::msleep(50);
-#endif
-      QCoreApplication::processEvents(); // Process remaining events
-      iCnt++;
-    }
 
     // Clean up AIS resources
     deleteAISCell();
@@ -751,11 +741,9 @@ EcWidget::~EcWidget ()
       // CRITICAL: Disconnect ALL signals immediately to prevent any callbacks during shutdown
       QObject::disconnect(subscriber, 0, 0, 0);
 
-      // Force disconnect from host if still connected
+      // Force disconnect from host if still connected. Don't pump the event
+      // loop here — the thread shutdown below already waits for completion.
       subscriber->disconnectFromHost();
-
-      // Give socket time to disconnect gracefully
-      QCoreApplication::processEvents();
 
       qDebug() << "[ECWIDGET] AISSubscriber signals disconnected";
   }
@@ -6756,7 +6744,13 @@ void EcWidget::ReadAISLogfileWDelay( const QString &aisLogFile)
     stopFlag = false;
 
     _aisObj->setAISCell( aisCellId );
-    _aisObj->readAISLogfileWDelay(aisLogFile, 300, &stopFlag);
+
+    // Run the playback loop off the GUI thread: it sleeps 300 ms per NMEA
+    // line, which would otherwise freeze the UI for the whole logfile.
+    // All UI updates inside it are delivered via queued signals.
+    QtConcurrent::run([this, aisLogFile]() {
+        _aisObj->readAISLogfileWDelay(aisLogFile, 300, &stopFlag);
+    });
 }
 
 // Read an AIS from MOOSDB -- NAV INFO
@@ -7276,18 +7270,7 @@ void EcWidget::publishNavInfo(double lat, double lon){
     //qDebug().noquote() << "[INFO] Sending Data: \n" << jsonDocOut.toJson(QJsonDocument::Indented);
 
     // Kirim data ke server Ubuntu (port 5001)
-    QTcpSocket* sendSocket = new QTcpSocket();
-    sendSocket->connectToHost(SettingsManager::instance().data().moosIp, 5001);
-    if (sendSocket->waitForConnected(1000)) {
-        sendSocket->write(sendData);
-        sendSocket->waitForBytesWritten(1000);
-        sendSocket->disconnectFromHost();
-    }
-    else {
-        qCritical() << "Could not connect to data server.";
-    }
-
-    sendSocket->deleteLater();
+    sendToMOOSAsync(sendData);
     delete pickWindow;
 }
 
@@ -7638,18 +7621,7 @@ void EcWidget::processMapInfoReq(QString req){
         QByteArray sendData = strJson.toUtf8();
 
         // Kirim data ke server Ubuntu (port 5003)
-        QTcpSocket* sendSocket = new QTcpSocket();
-        sendSocket->connectToHost(SettingsManager::instance().data().moosIp, 5001);
-        if (sendSocket->waitForConnected(3000)) {
-            sendSocket->write(sendData);
-            sendSocket->waitForBytesWritten(3000);
-            sendSocket->disconnectFromHost();
-        }
-        else {
-            qCritical() << "Could not connect to data server.";
-        }
-
-        sendSocket->deleteLater();
+        sendToMOOSAsync(sendData);
     }
 }
 
@@ -7670,31 +7642,32 @@ void EcWidget::processAISJson(const QByteArray& rawData){
 
 // (Removed duplicate latLonToDegMin definition; consolidated above)
 
+// Fire-and-forget async TCP send to MOOS — never blocks the GUI thread.
+void EcWidget::sendToMOOSAsync(const QByteArray &sendData)
+{
+    QTcpSocket* sendSocket = new QTcpSocket(this);
+    connect(sendSocket, &QTcpSocket::connected, sendSocket, [sendSocket, sendData]() {
+        sendSocket->write(sendData);
+        sendSocket->disconnectFromHost();
+    });
+    connect(sendSocket, &QTcpSocket::disconnected, sendSocket, &QObject::deleteLater);
+    connect(sendSocket, &QAbstractSocket::errorOccurred, sendSocket,
+            [sendSocket](QAbstractSocket::SocketError) {
+        qCritical() << "Could not connect to data server:" << sendSocket->errorString();
+        sendSocket->deleteLater();
+    });
+    sendSocket->connectToHost(SettingsManager::instance().data().moosIp, 5001);
+}
+
 // REAL FUNCTION
 void EcWidget::publishToMOOSDB(QString varName, QString data){
-    bool success = false;
-
     QJsonObject jsonDataOut {{varName, data}};
     QJsonDocument jsonDocOut(jsonDataOut);
 
     QString strJson(jsonDocOut.toJson(QJsonDocument::Compact));
     QByteArray sendData = strJson.toUtf8();
 
-    QTcpSocket* sendSocket = new QTcpSocket();
-    sendSocket->connectToHost(SettingsManager::instance().data().moosIp, 5001);
-    if (sendSocket->waitForConnected(3000)) {
-        sendSocket->write(sendData);
-        sendSocket->waitForBytesWritten(3000);
-        sendSocket->disconnectFromHost();
-
-        success = true;
-    }
-    else {
-        qCritical() << "Could not connect to data server.";
-    }
-
-    sendSocket->deleteLater();
-
+    sendToMOOSAsync(sendData);
 
     QString message;
     if (varName == "WAYPT_NEXT"){message = "Waypoint";}
@@ -7717,6 +7690,10 @@ void EcWidget::publishToMOOSDB(QString varName, QString data){
 void EcWidget::publishToMOOS(QString varName, QString data){
     if (subscriber && subscriber->hasData()){
         emit subscriber->publishToMOOSDB(varName, data);
+    }
+    else {
+        qWarning() << "[PUBLISH] Dropped" << varName
+                   << "- MOOS subscriber not connected / no data received yet";
     }
 }
 

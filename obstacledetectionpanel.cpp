@@ -9,6 +9,7 @@
 #include <QMediaPlayer>
 #include <QUrl>
 #include <QThread>
+#include <QtConcurrent>
 #ifdef Q_OS_WIN
 #include <Windows.h>
 #endif
@@ -662,8 +663,9 @@ void ObstacleDetectionPanel::playAlarmFallback()
     if (!fallbackSuccess) {
         #ifdef Q_OS_WIN
         qDebug() << "[ALARM] Method 3: Using Windows system beep (async)";
-        // Use QTimer to avoid blocking UI thread
-        QTimer::singleShot(0, []() {
+        // Beep()/Sleep() block the calling thread, so run them on QtConcurrent's
+        // thread pool instead of the GUI thread.
+        QtConcurrent::run([]() {
             for (int i = 0; i < 3; i++) {
                 Beep(1000, 200); // 1000Hz for 200ms
                 Sleep(100);       // 100ms pause

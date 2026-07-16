@@ -61,6 +61,8 @@ QColor GribVisualisation::getColorForWaveHeight(double waveHeight) const
     }
 
     // Above maximum - return the highest color
+    if (m_colorScale.isEmpty())
+        return QColor(0, 0, 0, m_heatmapOpacity);
     QColor maxColor = m_colorScale.last();
     maxColor.setAlpha(m_heatmapOpacity);
     return maxColor;
@@ -252,6 +254,11 @@ QPointF GribVisualisation::latLonToScreen(double lat, double lon,
 
 void GribVisualisation::drawLegend(QPainter& painter, const QRect& rect)
 {
+    // Guard: last() below crashes and the scale math divides by last()
+    // if the breakpoint list is empty or its max is zero.
+    if (m_colorBreakpoints.isEmpty() || m_colorBreakpoints.last() == 0.0)
+        return;
+
     painter.save();
 
     // Draw legend background
