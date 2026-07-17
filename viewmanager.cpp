@@ -37,7 +37,7 @@ QMdiSubWindow* ViewManager::wrapInSubWindow(ChartViewContainer* container)
     subWindow->setWindowTitle(container->getTitle());
 
     // Allow subwindow to be maximized, minimized, closed
-    subWindow->setWindowIcon(QIcon(":/icon/chart.png"));
+    subWindow->setWindowIcon(QIcon(":/icon/samudra_resize.png"));
 
     return subWindow;
 }

@@ -1,10 +1,10 @@
 #include <windows.h>
 
-IDI_ICON1	ICON	DISCARDABLE	"C:\\Users\\Ali\\Documents\\GitHub\\ecdis-auv\\icon.ico"
+IDI_ICON1	ICON	DISCARDABLE	"icon.ico"
 
 VS_VERSION_INFO VERSIONINFO
-	FILEVERSION 0,0,0,0
-	PRODUCTVERSION 0,0,0,0
+	FILEVERSION 1,5,0,0
+	PRODUCTVERSION 1,5,0,0
 	FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
 	FILEFLAGS VS_FF_DEBUG
@@ -19,13 +19,13 @@ VS_VERSION_INFO VERSIONINFO
 		BEGIN
 			BLOCK "040904b0"
 			BEGIN
-				VALUE "CompanyName", "\0"
-				VALUE "FileDescription", "\0"
-				VALUE "FileVersion", "0.0.0.0\0"
-				VALUE "LegalCopyright", "\0"
-				VALUE "OriginalFilename", "ecdis.exe\0"
-				VALUE "ProductName", "ecdis\0"
-				VALUE "ProductVersion", "0.0.0.0\0"
+				VALUE "CompanyName", "Solusi247\0"
+				VALUE "FileDescription", "SAMUDRA 247\0"
+				VALUE "FileVersion", "1.5.0.0\0"
+				VALUE "LegalCopyright", "Copyright (C) 2026\0"
+				VALUE "OriginalFilename", "samudra.exe\0"
+				VALUE "ProductName", "SAMUDRA\0"
+				VALUE "ProductVersion", "1.5.0.0\0"
 			END
 		END
 		BLOCK "VarFileInfo"

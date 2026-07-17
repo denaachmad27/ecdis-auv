@@ -18555,13 +18555,13 @@ void EcWidget::triggerShipGuardianAlert(const QList<DetectedObstacle>& obstacles
 
     if (dangerCount > 0) {
         msgBox.setIcon(QMessageBox::Critical);
-        msgBox.setWindowIcon(QIcon(":/icons/danger.png"));
+        msgBox.setWindowIcon(QIcon(":/icon/samudra_resize.png"));
     } else if (warningCount > 0) {
         msgBox.setIcon(QMessageBox::Warning);
-        msgBox.setWindowIcon(QIcon(":/icons/warning.png"));
+        msgBox.setWindowIcon(QIcon(":/icon/samudra_resize.png"));
     } else {
         msgBox.setIcon(QMessageBox::Information);
-        msgBox.setWindowIcon(QIcon(":/icons/info.png"));
+        msgBox.setWindowIcon(QIcon(":/icon/samudra_resize.png"));
     }
 
     msgBox.exec();

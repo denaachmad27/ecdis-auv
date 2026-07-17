@@ -1,5 +1,5 @@
 @echo off
-echo Building ECDIS AUV with Visualization Components...
+echo Building SAMUDRA AUV with Visualization Components...
 echo.
 
 REM Check if qmake exists
@@ -44,7 +44,7 @@ if %ERRORLEVEL% NEQ 0 (
 echo.
 echo Build completed successfully!
 echo.
-echo Run debug\ecdis.exe to test the visualization features.
+echo Run debug\samudra.exe to test the visualization features.
 echo.
 echo New Features Added:
 echo - Ocean Current Arrows (View menu)

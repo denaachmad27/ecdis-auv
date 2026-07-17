@@ -12,7 +12,7 @@ QT += concurrent
 # win32:KERNELPATH = ../../
 win32:KERNELPATH = C:/EC2007/5.22.69.3
 
-TARGET +=
+TARGET = samudra
 DEPENDPATH += .
 DEPENDPATH += ..
 INCLUDEPATH += .
@@ -163,4 +163,4 @@ CONFIG += plugin
 
 LIBS += -ldwmapi
 
-win32:RC_ICONS += icon.ico
+win32:RC_FILE = ecdis_resource.rc

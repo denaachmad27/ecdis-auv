@@ -3079,7 +3079,7 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL), m_i
   }
   catch (EcWidget::Exception & e)
   {
-    throw Exception(e.GetMessages(), "Cannot create ECDIS Widget");
+    throw Exception(e.GetMessages(), "Cannot create SAMUDRA Widget");
   }
 
   // Create default view by wrapping ecchart directly into QMdiArea
@@ -3092,7 +3092,7 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ecchart(NULL), m_i
       QMdiSubWindow* subWindow = new QMdiSubWindow();
       subWindow->setWidget(ecchart);
       subWindow->setWindowTitle("S-63 Chart");
-      subWindow->setWindowIcon(QIcon(":/icon/chart.png"));
+      subWindow->setWindowIcon(QIcon(":/icon/samudra_resize.png"));
       mdiArea->addSubWindow(subWindow);
       subWindow->showMaximized();  // Full screen initially
 
@@ -4933,6 +4933,9 @@ void MainWindow::onClearRoutes()
 
     if (reply == QMessageBox::Yes && ecchart) {
         ecchart->clearWaypoints(); // This will clear all routes
+        if (routePanel) {
+            routePanel->refreshRouteList();
+        }
         statusBar()->showMessage("All routes cleared", 3000);
     }
 }
@@ -4947,8 +4950,12 @@ void MainWindow::onWaypointCreated()
 
 void MainWindow::onClearWaypoints()
 {
-    if (ecchart)
+    if (ecchart) {
         ecchart->clearWaypoints();
+        if (routePanel) {
+            routePanel->refreshRouteList();
+        }
+    }
 }
 
 void MainWindow::onExportWaypoints()
