@@ -50,7 +50,7 @@ class QFile;
 // data server id
 
 #define DSID "0"
-#define APP_TITLE "ECDIS v2.0"
+#define APP_TITLE "SAMUDRA v1.5"
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
