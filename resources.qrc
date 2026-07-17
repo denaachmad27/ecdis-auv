@@ -79,5 +79,6 @@
         <file>icon/add_area.svg</file>
         <file>icon/dummy_icon.png</file>
         <file>icon/icon.ico</file>
+        <file>icon/samudra_resize.png</file>
     </qresource>
 </RCC>
