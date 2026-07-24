@@ -21141,9 +21141,11 @@ void EcWidget::updateAttachedGuardZoneFromNavShip()
     }
 }
 
-void EcWidget::defaultSettingsStartUp(){
-    orientation = SettingsManager::instance().data().orientationMode;
-    centering = SettingsManager::instance().data().centeringMode;
+void EcWidget::defaultSettingsStartUp(bool isStartup){
+    if (isStartup) {
+        orientation = SettingsManager::instance().data().orientationMode;
+        centering = SettingsManager::instance().data().centeringMode;
+    }
     trackLine = SettingsManager::instance().data().trailMode;
 
     trackDistance = SettingsManager::instance().data().trailDistance;

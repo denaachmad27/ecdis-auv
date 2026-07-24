@@ -2738,67 +2738,13 @@ void MainWindow::openSettingsDialog() {
     if (dlg.exec() == QDialog::Accepted) {
         dlg.saveSettings();
         
-        // Apply settings immediately
+        // Apply settings immediately (except for default centering and orientation)
         if (ecchart) {
-            ecchart->defaultSettingsStartUp();
+            ecchart->defaultSettingsStartUp(false);
             ecchart->applyShipDimensions();
         }
 
         const SettingsData& settings = SettingsManager::instance().data();
-
-        // Apply Default Centering
-        if (ecchart) {
-            switch (settings.centeringMode) {
-                case EcWidget::AutoRecenter:
-                    if (autoRecenterAction) {
-                        autoRecenterAction->setChecked(true);
-                        onAutoRecenter(true);
-                    }
-                    break;
-                case EcWidget::Centered:
-                    if (centeringAction) {
-                        centeringAction->setChecked(true);
-                        onCentered(true);
-                    }
-                    break;
-                case EcWidget::LookAhead:
-                    if (lookAheadAction) {
-                        lookAheadAction->setChecked(true);
-                        onLookAhead(true);
-                    }
-                    break;
-                case EcWidget::Manual:
-                    if (manualAction) {
-                        manualAction->setChecked(true);
-                        onManual(true);
-                    }
-                    break;
-            }
-        }
-
-        // Apply Default Orientation
-        if (ecchart) {
-            switch (settings.orientationMode) {
-                case EcWidget::NorthUp:
-                    if (northUpAction) {
-                        northUpAction->setChecked(true);
-                        onNorthUp(true);
-                    }
-                    break;
-                case EcWidget::HeadUp:
-                    if (headUpAction) {
-                        headUpAction->setChecked(true);
-                        onHeadUp(true);
-                    }
-                    break;
-                case EcWidget::CourseUp:
-                    if (courseUpAction) {
-                        courseUpAction->setChecked(true);
-                        onCourseUp(true);
-                    }
-                    break;
-            }
-        }
 
         // Apply Default Chart Theme
         QString chartTheme = settings.displayMode;

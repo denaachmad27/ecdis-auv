@@ -1009,7 +1009,7 @@ public:
   int rangeNM = 0;
   QDateTime lastRedrawTime; // throttle external redraws
 
-  void defaultSettingsStartUp();
+  void defaultSettingsStartUp(bool isStartup = true);
 
 public slots:
   void updateAISTargetsList();
