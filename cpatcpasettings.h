@@ -20,6 +20,9 @@ public:
     bool isVisualAlarmEnabled() const { return m_visualAlarmEnabled; }
     bool isAudioAlarmEnabled() const { return m_audioAlarmEnabled; }
     int getAlarmUpdateInterval() const { return m_updateInterval; }
+    // Satu-satunya sumber timeout "AIS Lost" (menit) - dipakai kernel
+    // (EcAISCalcTargetTrackingStatus) dan panel CPA/TCPA sekaligus.
+    int getAISLostTimeoutMinutes() const { return m_aisLostTimeoutMinutes; }
 
     // Setter methods
     void setCPAThreshold(double threshold);
@@ -29,6 +32,7 @@ public:
     void setVisualAlarmEnabled(bool enabled);
     void setAudioAlarmEnabled(bool enabled);
     void setAlarmUpdateInterval(int interval);
+    void setAISLostTimeoutMinutes(int minutes);
 
     // Load/Save methods
     void loadSettings();
@@ -52,6 +56,7 @@ private:
     static const bool DEFAULT_VISUAL_ALARM_ENABLED;
     static const bool DEFAULT_AUDIO_ALARM_ENABLED;
     static const int DEFAULT_UPDATE_INTERVAL;
+    static const int DEFAULT_AIS_LOST_TIMEOUT_MINUTES;
 
     // Settings values
     double m_cpaThreshold;
@@ -61,6 +66,7 @@ private:
     bool m_visualAlarmEnabled;
     bool m_audioAlarmEnabled;
     int m_updateInterval;
+    int m_aisLostTimeoutMinutes;
 
     QSettings *m_settings;
 };

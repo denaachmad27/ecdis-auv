@@ -2737,8 +2737,17 @@ void EcWidget::waypointDraw(){
     // NOTE: Satellite tiles are now handled in draw() via background bitmap parameter
     // They are drawn BEFORE chart info, so chart info appears ON TOP without transparency
 
+    // Kelompokkan waypoint per routeId SEKALI di sini, dipakai bareng oleh
+    // drawRouteLines() dan drawLeglineLabels() di bawah (dulu masing-masing
+    // scan waypointList sendiri-sendiri setiap repaint).
+    QMap<int, QList<int>> routeWaypointsForPaint;
+    for (int i = 0; i < waypointList.size(); ++i) {
+        int rid = waypointList[i].routeId;
+        if (rid > 0) routeWaypointsForPaint[rid].append(i);
+    }
+
     // IMPORTANT: Draw route lines
-    drawRouteLines();
+    drawRouteLines(routeWaypointsForPaint);
 
     // Then draw labels AFTER (top layer) - proper z-index layering
     if (hideAllRouteLabels) {
@@ -2767,7 +2776,7 @@ void EcWidget::waypointDraw(){
         }
     }
 
-    drawLeglineLabels();
+    drawLeglineLabels(routeWaypointsForPaint);
 }
 /*---------------------------------------------------------------------------*/
 
@@ -7326,11 +7335,18 @@ void EcWidget::allFunctionPerTime(PickWindow *pickWindow){
                 // Update dangerous AIS list in the same tick before drawing
                 clearDangerousAISList();
                 {
-                    QMap<unsigned int, AISTargetData> targets = Ais::instance()->getTargetMap();
+                    QMap<unsigned int, AISTargetData>& targets = Ais::instance()->getTargetMap();
                     AISTargetData own = Ais::instance()->getOwnShipVar();
                     CPATCPASettings& settings = CPATCPASettings::instance();
 
-                    for (const auto &entry : targets) {
+                    for (auto &entry : targets) {
+                        entry.isLost = (!entry.lastUpdate.isValid() || entry.lastUpdate.secsTo(QDateTime::currentDateTime()) > 60);
+                        if (entry.isLost) {
+                            entry.isDangerous = false;
+                            entry.statusText = "Lost";
+                            continue; // Skip AIS Lost targets
+                        }
+
                         VesselState ownShip; ownShip.lat = own.lat; ownShip.lon = own.lon; ownShip.sog = own.sog; ownShip.cog = own.cog;
                         VesselState targetVessel; targetVessel.lat = entry.lat; targetVessel.lon = entry.lon; targetVessel.sog = entry.sog; targetVessel.cog = entry.cog;
                         CPATCPACalculator calc; CPATCPAResult res = calc.calculateCPATCPA(ownShip, targetVessel);
@@ -7339,7 +7355,20 @@ void EcWidget::allFunctionPerTime(PickWindow *pickWindow){
                             if (settings.isCPAAlarmEnabled() && res.cpa < SettingsManager::instance().data().cpaThreshold) isDanger = true;
                             if (settings.isTCPAAlarmEnabled() && res.tcpa > 0 && res.tcpa < SettingsManager::instance().data().tcpaThreshold) isDanger = true;
                         }
-                        if (isDanger) addDangerousAISTarget(entry);
+                        entry.isDangerous = isDanger;
+                        if (isDanger) {
+                            entry.statusText = "DANGEROUS";
+                            addDangerousAISTarget(entry);
+                        } else {
+                            switch (res.status) {
+                                case CPATCPAResult::Valid: entry.statusText = "Tracking"; break;
+                                case CPATCPAResult::StationaryRelative: entry.statusText = "Stationary"; break;
+                                case CPATCPAResult::Diverging: entry.statusText = "Diverging"; break;
+                                case CPATCPAResult::OutOfRange: entry.statusText = "Out of Range"; break;
+                                case CPATCPAResult::InvalidMotionData:
+                                default: entry.statusText = "No Data"; break;
+                            }
+                        }
                     }
                 }
                 draw(true);
@@ -7416,11 +7445,18 @@ void EcWidget::allFunctionPerTimeNMEA(PickWindow *pickWindow){
         // Update dangerous AIS list in the same tick before drawing
         clearDangerousAISList();
         {
-            QMap<unsigned int, AISTargetData> targets = Ais::instance()->getTargetMap();
+            QMap<unsigned int, AISTargetData>& targets = Ais::instance()->getTargetMap();
             AISTargetData own = Ais::instance()->getOwnShipVar();
             CPATCPASettings& settings = CPATCPASettings::instance();
 
-            for (const auto &entry : targets) {
+            for (auto &entry : targets) {
+                entry.isLost = (!entry.lastUpdate.isValid() || entry.lastUpdate.secsTo(QDateTime::currentDateTime()) > 60);
+                if (entry.isLost) {
+                    entry.isDangerous = false;
+                    entry.statusText = "Lost";
+                    continue; // Skip AIS Lost targets
+                }
+
                 VesselState ownShip; ownShip.lat = own.lat; ownShip.lon = own.lon; ownShip.sog = own.sog; ownShip.cog = own.cog;
                 VesselState targetVessel; targetVessel.lat = entry.lat; targetVessel.lon = entry.lon; targetVessel.sog = entry.sog; targetVessel.cog = entry.cog;
                 CPATCPACalculator calc; CPATCPAResult res = calc.calculateCPATCPA(ownShip, targetVessel);
@@ -7429,7 +7465,20 @@ void EcWidget::allFunctionPerTimeNMEA(PickWindow *pickWindow){
                     if (settings.isCPAAlarmEnabled() && res.cpa < SettingsManager::instance().data().cpaThreshold) isDanger = true;
                     if (settings.isTCPAAlarmEnabled() && res.tcpa > 0 && res.tcpa < SettingsManager::instance().data().tcpaThreshold) isDanger = true;
                 }
-                if (isDanger) addDangerousAISTarget(entry);
+                entry.isDangerous = isDanger;
+                if (isDanger) {
+                    entry.statusText = "DANGEROUS";
+                    addDangerousAISTarget(entry);
+                } else {
+                    switch (res.status) {
+                        case CPATCPAResult::Valid: entry.statusText = "Tracking"; break;
+                        case CPATCPAResult::StationaryRelative: entry.statusText = "Stationary"; break;
+                        case CPATCPAResult::Diverging: entry.statusText = "Diverging"; break;
+                        case CPATCPAResult::OutOfRange: entry.statusText = "Out of Range"; break;
+                        case CPATCPAResult::InvalidMotionData:
+                        default: entry.statusText = "No Data"; break;
+                    }
+                }
             }
         }
         draw(true);
@@ -10096,8 +10145,11 @@ void EcWidget::drawGhostRouteLines(QPainter& painter, double ghostLat, double gh
             painter.drawLine(ghostX, ghostY, arrowX2, arrowY2);
 
             // Draw distance and bearing label on leg line (incoming)
+            // NB: haversine() mengembalikan meter - wajib dibagi 1852 supaya
+            // label betulan NM (sebelumnya tampil ribuan NM untuk leg ~1 NM).
+            double distance_nm_prev = distance / 1852.0;
             QString legInfo = QString("%1 NM / %2°")
-                             .arg(distance, 0, 'f', 2)
+                             .arg(distance_nm_prev, 0, 'f', 2)
                              .arg(bearing, 0, 'f', 1);
 
             painter.setFont(QFont("Arial", 7, QFont::Bold));
@@ -11587,7 +11639,7 @@ bool EcWidget::resetWaypointCell()
     return createWaypointCell();
 }
 
-void EcWidget::drawLeglineLabels()
+void EcWidget::drawLeglineLabels(const QMap<int, QList<int>>& routeWaypoints)
 {
     if (waypointList.size() < 2)
         return;
@@ -11603,15 +11655,8 @@ void EcWidget::drawLeglineLabels()
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setFont(QFont("Arial", 8, QFont::Bold));
 
-    // Group waypoints by route ID first - same logic as drawRouteLines
-    QMap<int, QList<int>> routeWaypoints; // routeId -> list of waypoint indices
-
-    for (int i = 0; i < waypointList.size(); ++i) {
-        int routeId = waypointList[i].routeId;
-        if (routeId > 0) { // Only route waypoints, skip single waypoints
-            routeWaypoints[routeId].append(i);
-        }
-    }
+    // routeWaypoints (routeId -> index waypoint) sudah dikelompokkan sekali
+    // oleh caller (lihat Draw()) - tidak scan waypointList lagi di sini.
 
     // Draw labels within each route separately
     for (auto it = routeWaypoints.begin(); it != routeWaypoints.end(); ++it) {
@@ -11901,7 +11946,7 @@ void EcWidget::drawRouteLinesOverlay(QPainter& painter)
 }
 
 // ====== OLD ROUTE LINE DRAWING (DEPRECATED) ======
-void EcWidget::drawRouteLines()
+void EcWidget::drawRouteLines(const QMap<int, QList<int>>& routeWaypoints)
 {
     if (waypointList.size() < 2) return;
 
@@ -11920,17 +11965,8 @@ void EcWidget::drawRouteLines()
             return;
         }
 
-    // Warna untuk route yang berbeda (harus sama dengan warna waypoint)
-    // APPROACH BARU: Group waypoints by route ID first, then draw lines within each route
-    QMap<int, QList<int>> routeWaypoints; // routeId -> list of waypoint indices
-
-    // Group waypoints by routeId first
-    for (int i = 0; i < waypointList.size(); ++i) {
-        int routeId = waypointList[i].routeId;
-        if (routeId > 0) { // Only route waypoints, skip single waypoints
-            routeWaypoints[routeId].append(i);
-        }
-    }
+    // routeWaypoints (routeId -> index waypoint) sudah dikelompokkan sekali
+    // oleh caller (lihat Draw()) - tidak scan waypointList lagi di sini.
 
     // Draw routes with visibility check
 
@@ -12999,59 +13035,63 @@ void EcWidget::drawGuardZone(QPainter& painter)
 
         // Draw label jika ada posisi valid
         if (labelX != 0 && labelY != 0) {
-            qDebug() << "[DRAW-GUARDZONE-DEBUG] Drawing label at position" << labelX << "," << labelY;
+            if (AppConfig::isDevelopment()) qDebug() << "[DRAW-GUARDZONE-DEBUG] Drawing label at position" << labelX << "," << labelY;
             try {
                 drawGuardZoneLabel(painter, gz, QPoint(labelX, labelY));
-                qDebug() << "[DRAW-GUARDZONE-DEBUG] Label drawn successfully for guardzone" << gz.id;
+                if (AppConfig::isDevelopment()) qDebug() << "[DRAW-GUARDZONE-DEBUG] Label drawn successfully for guardzone" << gz.id;
             } catch (...) {
                 qDebug() << "[DRAW-GUARDZONE-ERROR] Exception drawing label for guardzone" << gz.id;
             }
-        } else {
+        } else if (AppConfig::isDevelopment()) {
             qDebug() << "[DRAW-GUARDZONE-DEBUG] No valid label position for guardzone" << gz.id;
         }
 
-        qDebug() << "[DRAW-GUARDZONE-DEBUG] ===== FINISHED PROCESSING GUARDZONE" << gz.id << "=====";
+        if (AppConfig::isDevelopment()) qDebug() << "[DRAW-GUARDZONE-DEBUG] ===== FINISHED PROCESSING GUARDZONE" << gz.id << "=====";
     }
 
-    qDebug() << "[DRAW-GUARDZONE-DEBUG] ========== GUARDZONE ITERATION COMPLETE ==========";
-    qDebug() << "[DRAW-GUARDZONE-DEBUG] Total processed:" << (drawnCount + skippedCount) << "drawn:" << drawnCount << "skipped:" << skippedCount;
+    if (AppConfig::isDevelopment()) {
+        qDebug() << "[DRAW-GUARDZONE-DEBUG] ========== GUARDZONE ITERATION COMPLETE ==========";
+        qDebug() << "[DRAW-GUARDZONE-DEBUG] Total processed:" << (drawnCount + skippedCount) << "drawn:" << drawnCount << "skipped:" << skippedCount;
+    }
 
     // Draw creation preview
-    qDebug() << "[DRAW-GUARDZONE-DEBUG] Checking creation preview...";
+    if (AppConfig::isDevelopment()) qDebug() << "[DRAW-GUARDZONE-DEBUG] Checking creation preview...";
     if (creatingGuardZone) {
-        qDebug() << "[DRAW-GUARDZONE-DEBUG] Drawing creation preview...";
+        if (AppConfig::isDevelopment()) qDebug() << "[DRAW-GUARDZONE-DEBUG] Drawing creation preview...";
         drawGuardZoneCreationPreview(painter);
-        qDebug() << "[DRAW-GUARDZONE-DEBUG] Creation preview drawn";
+        if (AppConfig::isDevelopment()) qDebug() << "[DRAW-GUARDZONE-DEBUG] Creation preview drawn";
     }
 
     // Draw edit overlay
-    qDebug() << "[DRAW-GUARDZONE-DEBUG] Checking edit overlay...";
+    if (AppConfig::isDevelopment()) qDebug() << "[DRAW-GUARDZONE-DEBUG] Checking edit overlay...";
     if (guardZoneManager && guardZoneManager->isEditingGuardZone()) {
-        qDebug() << "[DRAW-GUARDZONE-DEBUG] Drawing edit overlay...";
+        if (AppConfig::isDevelopment()) qDebug() << "[DRAW-GUARDZONE-DEBUG] Drawing edit overlay...";
         guardZoneManager->drawEditOverlay(painter);
-        qDebug() << "[DRAW-GUARDZONE-DEBUG] Edit overlay drawn";
+        if (AppConfig::isDevelopment()) qDebug() << "[DRAW-GUARDZONE-DEBUG] Edit overlay drawn";
     }
 
-    qDebug() << "[DRAW-GUARDZONE-DEBUG] Checking feedback overlay...";
+    if (AppConfig::isDevelopment()) qDebug() << "[DRAW-GUARDZONE-DEBUG] Checking feedback overlay...";
     // Draw feedback overlay
     if (feedbackTimer.isActive()) {
         drawFeedbackOverlay(painter);
     }
 
-    qDebug() << "[DRAW-GUARDZONE-DEBUG] Ending QPainter...";
+    if (AppConfig::isDevelopment()) qDebug() << "[DRAW-GUARDZONE-DEBUG] Ending QPainter...";
     painter.end();
-    qDebug() << "[DRAW-GUARDZONE-DEBUG] QPainter ended successfully";
+    if (AppConfig::isDevelopment()) qDebug() << "[DRAW-GUARDZONE-DEBUG] QPainter ended successfully";
 
-    // TAMBAHAN: Performance logging
+    // TAMBAHAN: Performance logging (hanya di development; alarm lambat tetap selalu aktif)
     qint64 elapsed = timer.elapsed();
-    qDebug() << "[DRAW-GUARDZONE-DEBUG] Performance: drawGuardZone took" << elapsed << "ms"
-             << "- Drawn:" << drawnCount << "Skipped:" << skippedCount;
-    if (elapsed > 50) {  // Log jika lebih dari 50ms
+    if (AppConfig::isDevelopment()) {
+        qDebug() << "[DRAW-GUARDZONE-DEBUG] Performance: drawGuardZone took" << elapsed << "ms"
+                 << "- Drawn:" << drawnCount << "Skipped:" << skippedCount;
+    }
+    if (elapsed > 50) {  // Log jika lebih dari 50ms - tetap aktif di production, sinyal masalah nyata
         qDebug() << "[PERF] drawGuardZone took" << elapsed << "ms"
                  << "- Drawn:" << drawnCount << "Skipped:" << skippedCount;
     }
 
-    qDebug() << "[DRAW-GUARDZONE-DEBUG] ========== DRAW GUARDZONE COMPLETE ==========";
+    if (AppConfig::isDevelopment()) qDebug() << "[DRAW-GUARDZONE-DEBUG] ========== DRAW GUARDZONE COMPLETE ==========";
 }
 
 void EcWidget::createCircularGuardZone(double centerLat, double centerLon, double radiusNM)
@@ -16181,8 +16221,8 @@ void EcWidget::createAISTooltip()
     tooltipSOG = new QLabel("SOG: ", aisTooltip);
     tooltipAntennaLocation = new QLabel("POS: ", aisTooltip);
     tooltipRangeBearing = new QLabel("RNG/BRG: ", aisTooltip);
+    tooltipTrackStatus = new QLabel("STAT: ", aisTooltip);
     //tooltipTypeOfShip = new QLabel("SHIP TYPE: ", aisTooltip);
-    //tooltipTrackStatus = new QLabel("STATUS: ", aisTooltip);
     //tooltipShipBreadth = new QLabel("Ship breadth (beam): ", aisTooltip);
     //tooltipShipLength = new QLabel("Ship length over all: ", aisTooltip);
     //tooltipShipDraft = new QLabel("Ship Draft: ", aisTooltip);
@@ -16197,9 +16237,9 @@ void EcWidget::createAISTooltip()
         tooltipCOG,
         tooltipSOG,
         tooltipAntennaLocation,
-        tooltipRangeBearing
+        tooltipRangeBearing,
+        tooltipTrackStatus
         //tooltipTypeOfShip,
-        //tooltipTrackStatus,
         //tooltipShipBreadth,
         //tooltipShipLength,
         //tooltipShipDraft,
@@ -16259,7 +16299,6 @@ void EcWidget::updateAISTooltipContent(EcAISTargetInfo* ti)
     callSign.replace("@", " ");
     QString destination = QString(ti->destination).trimmed();
     destination.replace("@", " ");
-    //QString trackStatus = QString(ti->trackingStatus == 2 ? "Dangerous" : "Tracking");
 
     double lat = ((double)ti->latitude / 10000.0) / 60.0;
     double lon = ((double)ti->longitude / 10000.0) / 60.0;
@@ -16296,15 +16335,67 @@ void EcWidget::updateAISTooltipContent(EcAISTargetInfo* ti)
         tooltipRangeBearing->setText("RNG/BRG: --");
         tooltipRangeBearing->show();
     }
-    //tooltipTypeOfShip->setText(QString("SHIP TYPE: %1").arg(typeOfShip));
-    //tooltipTrackStatus->setText(QString("STATUS: %1").arg(trackStatus));
-    //tooltipShipBreadth->setText(QString("Ship breadth (beam): %1").arg(shipBreadth));
-    //tooltipShipLength->setText(QString("Ship length over all: %1").arg(shipLength));
-    //tooltipShipDraft->setText(QString("Ship Draft: %1").arg(shipDraft));
-    //tooltipNavStatus->setText(QString("Nav Status: %1").arg(navStatus));
-    //tooltipCallSign->setText(QString("Ship Call Sign: %1").arg(callSign));
-    //tooltipPositionSensor->setText(QString("Position Sensor Indication: GPS"));
-    //tooltipListOfPorts->setText(QString("List of Ports: %1").arg(destination));
+
+    // Hitung status STAT sama persis dengan AIS Target Manager Panel (CPATCPAPanel)
+    QString statString = "Tracking";
+    if (Ais::instance()) {
+        QMap<unsigned int, AISTargetData>& targets = Ais::instance()->getTargetMap();
+        if (targets.contains(ti->mmsi)) {
+            AISTargetData& td = targets[ti->mmsi];
+            td.isLost = (!td.lastUpdate.isValid() || td.lastUpdate.secsTo(QDateTime::currentDateTime()) > 60);
+
+            if (td.isLost) {
+                td.isDangerous = false;
+                td.statusText = "Lost";
+            } else {
+                VesselState ownShip;
+                if (osLat != 0 && osLon != 0) {
+                    ownShip.lat = osLat;
+                    ownShip.lon = osLon;
+                    ownShip.sog = Ais::instance()->getOwnShipVar().sog;
+                    ownShip.cog = Ais::instance()->getOwnShipVar().cog;
+                } else {
+                    ownShip.lat = navShip.lat;
+                    ownShip.lon = navShip.lon;
+                    ownShip.sog = navShip.speed_og;
+                    ownShip.cog = navShip.heading_og;
+                }
+
+                VesselState targetVessel;
+                targetVessel.lat = td.lat;
+                targetVessel.lon = td.lon;
+                targetVessel.sog = td.sog;
+                targetVessel.cog = td.cog;
+
+                CPATCPACalculator calculator;
+                CPATCPAResult result = calculator.calculateCPATCPA(ownShip, targetVessel);
+
+                CPATCPASettings& settings = CPATCPASettings::instance();
+                bool isDangerous = false;
+                if (!td.isLost && result.isValid && result.currentRange < 0.5) {
+                    if (settings.isCPAAlarmEnabled() && result.cpa < SettingsManager::instance().data().cpaThreshold) isDangerous = true;
+                    if (settings.isTCPAAlarmEnabled() && result.tcpa > 0 && result.tcpa < SettingsManager::instance().data().tcpaThreshold) isDangerous = true;
+                }
+                td.isDangerous = isDangerous;
+
+                if (isDangerous) {
+                    td.statusText = "DANGEROUS";
+                } else {
+                    switch (result.status) {
+                        case CPATCPAResult::Valid: td.statusText = "Tracking"; break;
+                        case CPATCPAResult::StationaryRelative: td.statusText = "Stationary"; break;
+                        case CPATCPAResult::Diverging: td.statusText = "Diverging"; break;
+                        case CPATCPAResult::OutOfRange: td.statusText = "Out of Range"; break;
+                        case CPATCPAResult::InvalidMotionData:
+                        default: td.statusText = "No Data"; break;
+                    }
+                }
+            }
+            statString = td.statusText;
+        }
+    }
+    tooltipTrackStatus->setText(QString("STAT: %1").arg(statString));
+    tooltipTrackStatus->show();
 
     aisTooltip->adjustSize();
 }
@@ -17031,6 +17122,13 @@ void EcWidget::drawTestGuardSquare(QPainter& painter)
 
     if (showDangerTarget == true){
         for (const AISTargetData& target : dangerousAISList) {
+            bool ok = false;
+            unsigned int m = target.mmsi.toUInt(&ok);
+            if (ok && Ais::instance() && Ais::instance()->getTargetMap().contains(m)) {
+                if (Ais::instance()->getTargetMap()[m].isLost) continue;
+            }
+            if (target.isLost) continue;
+
             double centerLat = target.lat;
             double centerLon = target.lon;
 
@@ -17531,7 +17629,7 @@ bool EcWidget::checkShipGuardianZone()
         return false;
     }
 
-    qDebug() << "=== CHECKING SHIP GUARDIAN ZONE (Attached GuardZone) ===";
+    if (AppConfig::isDevelopment()) qDebug() << "=== CHECKING SHIP GUARDIAN ZONE (Attached GuardZone) ===";
 
     // Clear previous detections
     lastDetectedObstacles.clear();
@@ -17552,9 +17650,9 @@ bool EcWidget::checkShipGuardianZone()
     checkPickReportObstaclesInShipGuardian();
 
     // Clean up outdated obstacle markers
-    qDebug() << "[CLEANUP-TIMER] Running obstacle cleanup, current markers:" << obstacleMarkers.size();
+    if (AppConfig::isDevelopment()) qDebug() << "[CLEANUP-TIMER] Running obstacle cleanup, current markers:" << obstacleMarkers.size();
     removeOutdatedObstacleMarkers();
-    qDebug() << "[CLEANUP-TIMER] After cleanup, remaining markers:" << obstacleMarkers.size();
+    if (AppConfig::isDevelopment()) qDebug() << "[CLEANUP-TIMER] After cleanup, remaining markers:" << obstacleMarkers.size();
 
     // FORCE TEST: Also run cleanup from update paint event as fallback
     static int cleanupCounter = 0;
@@ -17617,8 +17715,10 @@ bool EcWidget::checkAISTargetsInShipGuardian(QList<DetectedObstacle>& obstacles)
             obstacles.append(obstacle);
             foundDanger = true;
 
-            qDebug() << "🚨 AIS TARGET DETECTED in Ship Guardian:" << target.mmsi
-                     << "Distance:" << distance << "NM, Level:" << obstacle.level;
+            if (AppConfig::isDevelopment()) {
+                qDebug() << "🚨 AIS TARGET DETECTED in Ship Guardian:" << target.mmsi
+                         << "Distance:" << distance << "NM, Level:" << obstacle.level;
+            }
         }
     }
 
@@ -17659,8 +17759,10 @@ bool EcWidget::checkStaticObstaclesInShipGuardian(QList<DetectedObstacle>& obsta
             obstacles.append(obstacle);
             foundDanger = true;
 
-            qDebug() << "🚨 WRECK DETECTED in Ship Guardian:" << obstacle.name
-                     << "Distance:" << distance << "NM";
+            if (AppConfig::isDevelopment()) {
+                qDebug() << "🚨 WRECK DETECTED in Ship Guardian:" << obstacle.name
+                         << "Distance:" << distance << "NM";
+            }
         }
     }
 
@@ -17689,8 +17791,10 @@ bool EcWidget::checkStaticObstaclesInShipGuardian(QList<DetectedObstacle>& obsta
             obstacles.append(obstacle);
             foundDanger = true;
 
-            qDebug() << "⚠️ BUOY DETECTED in Ship Guardian:" << obstacle.name
-                     << "Distance:" << distance << "NM";
+            if (AppConfig::isDevelopment()) {
+                qDebug() << "⚠️ BUOY DETECTED in Ship Guardian:" << obstacle.name
+                         << "Distance:" << distance << "NM";
+            }
         }
     }
 
@@ -17712,13 +17816,15 @@ void EcWidget::checkPickReportObstaclesInShipGuardian()
             attachedGuardZones++;
             if (gz.active) {
                 hasAttachedGuardZone = true;
-                qDebug() << "[OBSTACLE-DEBUG] Found active attached guardzone:" << gz.id << gz.name;
+                if (AppConfig::isDevelopment()) qDebug() << "[OBSTACLE-DEBUG] Found active attached guardzone:" << gz.id << gz.name;
             }
         }
     }
 
-    qDebug() << "[OBSTACLE-DEBUG] GuardZone status: total=" << totalGuardZones
-             << "active=" << activeGuardZones << "attached=" << attachedGuardZones;
+    if (AppConfig::isDevelopment()) {
+        qDebug() << "[OBSTACLE-DEBUG] GuardZone status: total=" << totalGuardZones
+                 << "active=" << activeGuardZones << "attached=" << attachedGuardZones;
+    }
 
     if (!hasAttachedGuardZone) {
         return; // Only check when guardzone is attached to ship
@@ -17740,10 +17846,12 @@ void EcWidget::checkPickReportObstaclesInShipGuardian()
     // Check multiple points within guardzone area USING SAME LOGIC as guardzone
     QList<QPair<EcFeature, QPair<double, double>>> allPickedFeaturesWithCoords;
 
-    qDebug() << "[OBSTACLE-DEBUG] Guardzone shape:" << attachedGuardZone->shape
-             << "radius inner:" << attachedGuardZone->innerRadius
-             << "outer:" << attachedGuardZone->outerRadius << "NM"
-             << "angles:" << attachedGuardZone->startAngle << "to" << attachedGuardZone->endAngle;
+    if (AppConfig::isDevelopment()) {
+        qDebug() << "[OBSTACLE-DEBUG] Guardzone shape:" << attachedGuardZone->shape
+                 << "radius inner:" << attachedGuardZone->innerRadius
+                 << "outer:" << attachedGuardZone->outerRadius << "NM"
+                 << "angles:" << attachedGuardZone->startAngle << "to" << attachedGuardZone->endAngle;
+    }
 
     // Use guardzone center position (should be ship position for attached guardzone)
     double centerLat = attachedGuardZone->centerLat;
@@ -17766,7 +17874,7 @@ void EcWidget::checkPickReportObstaclesInShipGuardian()
     for (const EcFeature& feature : centerFeatures) {
         allPickedFeaturesWithCoords.append(qMakePair(feature, qMakePair(centerLat, centerLon)));
     }
-    qDebug() << "[OBSTACLE-DEBUG] Center features found:" << centerFeatures.size();
+    if (AppConfig::isDevelopment()) qDebug() << "[OBSTACLE-DEBUG] Center features found:" << centerFeatures.size();
 
     // For circular guardzone, check additional points using SEMICIRCLE logic
     if (attachedGuardZone->shape == GUARD_ZONE_CIRCLE) {
@@ -17805,7 +17913,7 @@ void EcWidget::checkPickReportObstaclesInShipGuardian()
                         allPickedFeaturesWithCoords.append(qMakePair(feature, qMakePair(checkLat, checkLon)));
                     }
 
-                    if (pointFeatures.size() > 0) {
+                    if (pointFeatures.size() > 0 && AppConfig::isDevelopment()) {
                         qDebug() << "[OBSTACLE-DEBUG] Found" << pointFeatures.size() << "features at angle" << angle
                                  << "radius" << checkRadius << "position" << checkLat << checkLon;
                     }
@@ -17814,7 +17922,7 @@ void EcWidget::checkPickReportObstaclesInShipGuardian()
         }
     }
 
-    qDebug() << "[OBSTACLE-DEBUG] Total features with coordinates collected:" << allPickedFeaturesWithCoords.size();
+    if (AppConfig::isDevelopment()) qDebug() << "[OBSTACLE-DEBUG] Total features with coordinates collected:" << allPickedFeaturesWithCoords.size();
 
     // Track current obstacles with counters for optimization monitoring
     QSet<QString> currentDetectedObstacles;
@@ -17903,8 +18011,10 @@ void EcWidget::checkPickReportObstaclesInShipGuardian()
                 // If obstacles are very close (< 50 meters), consider as duplicate
                 if (distance < 0.027) { // 0.027 NM ≈ 50 meters
                     isDuplicate = true;
-                    qDebug() << "[OBSTACLE-DEBUG] Duplicate obstacle detected - too close to existing:"
-                             << finalObjectName << "distance:" << distance << "NM";
+                    if (AppConfig::isDevelopment()) {
+                        qDebug() << "[OBSTACLE-DEBUG] Duplicate obstacle detected - too close to existing:"
+                                 << finalObjectName << "distance:" << distance << "NM";
+                    }
                     break;
                 }
             }
@@ -17933,7 +18043,7 @@ void EcWidget::checkPickReportObstaclesInShipGuardian()
                 information = "Chart feature detected";
             }
 
-            qDebug() << "[OBSTACLE-DEBUG] Feature position: " << obstacleLat << "," << obstacleLon;
+            if (AppConfig::isDevelopment()) qDebug() << "[OBSTACLE-DEBUG] Feature position: " << obstacleLat << "," << obstacleLon;
 
             // Create pick report obstacle data with actual obstacle coordinates
             QString details = QString("PICK_REPORT|%1|%2|%3|%4|%5|%6|%7")
@@ -17957,13 +18067,15 @@ void EcWidget::checkPickReportObstaclesInShipGuardian()
     // Update previous obstacles for next check
     previousDetectedObstacles = currentDetectedObstacles;
 
-    // OPTIMIZATION REPORT: Log performance metrics
-    qDebug() << "[OBSTACLE-OPTIMIZATION] Scan completed:"
-             << "Total scanned:" << totalScanned
-             << "Valid obstacles:" << currentDetectedObstacles.size()
-             << "Duplicates skipped:" << duplicatesSkipped
-             << "Irrelevant skipped:" << irrelevantSkipped
-             << "Outside guardzone:" << outsideGuardzone;
+    // OPTIMIZATION REPORT: Log performance metrics (dev only - jalan tiap timer tick)
+    if (AppConfig::isDevelopment()) {
+        qDebug() << "[OBSTACLE-OPTIMIZATION] Scan completed:"
+                 << "Total scanned:" << totalScanned
+                 << "Valid obstacles:" << currentDetectedObstacles.size()
+                 << "Duplicates skipped:" << duplicatesSkipped
+                 << "Irrelevant skipped:" << irrelevantSkipped
+                 << "Outside guardzone:" << outsideGuardzone;
+    }
 }
 
 QString EcWidget::extractInformationFromFeature(const EcFeature& feature)
@@ -18622,10 +18734,12 @@ void EcWidget::performAutoGuardZoneCheck()
     }
     lastGuardZoneCheck = now;
 
-    qDebug() << "[AUTO-CHECK] === PERFORMING AUTOMATIC GUARDZONE CHECK ==="
-             << "redDotTrackerEnabled:" << redDotTrackerEnabled
-             << "redDotAttachedToShip:" << redDotAttachedToShip
-             << "redDotLat:" << redDotLat;
+    if (AppConfig::isDevelopment()) {
+        qDebug() << "[AUTO-CHECK] === PERFORMING AUTOMATIC GUARDZONE CHECK ==="
+                 << "redDotTrackerEnabled:" << redDotTrackerEnabled
+                 << "redDotAttachedToShip:" << redDotAttachedToShip
+                 << "redDotLat:" << redDotLat;
+    }
 
     // ========== GUNAKAN AIS CLASS YANG SUDAH ADA ==========
     QMap<unsigned int, AISTargetData>& aisTargetMap = Ais::instance()->getTargetMap();
@@ -18650,8 +18764,10 @@ void EcWidget::performAutoGuardZoneCheck()
         return;
     }
 
-    qDebug() << "[AUTO-CHECK] Processing" << activeGuardZones.size() << "active guardzones," << attachedCount << "attached to ship";
-    qDebug() << "[AUTO-CHECK] Auto-check enabled:" << guardZoneAutoCheckEnabled << "Timer running:" << guardZoneAutoCheckTimer->isActive();
+    if (AppConfig::isDevelopment()) {
+        qDebug() << "[AUTO-CHECK] Processing" << activeGuardZones.size() << "active guardzones," << attachedCount << "attached to ship";
+        qDebug() << "[AUTO-CHECK] Auto-check enabled:" << guardZoneAutoCheckEnabled << "Timer running:" << guardZoneAutoCheckTimer->isActive();
+    }
 
     // Track targets per guardzone
     QMap<int, QSet<unsigned int>> currentTargetsPerZone;
@@ -18692,27 +18808,29 @@ void EcWidget::performAutoGuardZoneCheck()
                     if (navShip.lat != 0.0 && navShip.lon != 0.0) {
                         centerLat = navShip.lat;
                         centerLon = navShip.lon;
-                        qDebug() << "[AUTO-CHECK] Using navShip position for attached guardzone" << activeGuardZone->id;
+                        if (AppConfig::isDevelopment()) qDebug() << "[AUTO-CHECK] Using navShip position for attached guardzone" << activeGuardZone->id;
                     } else if (redDotTrackerEnabled && redDotLat != 0.0 && redDotLon != 0.0) {
                         centerLat = redDotLat;
                         centerLon = redDotLon;
-                        qDebug() << "[AUTO-CHECK] Using current redDot position for attached guardzone" << activeGuardZone->id;
+                        if (AppConfig::isDevelopment()) qDebug() << "[AUTO-CHECK] Using current redDot position for attached guardzone" << activeGuardZone->id;
                     } else {
                         centerLat = ownShip.lat;
                         centerLon = ownShip.lon;
-                        qDebug() << "[AUTO-CHECK] Using ownShip position for attached guardzone" << activeGuardZone->id;
+                        if (AppConfig::isDevelopment()) qDebug() << "[AUTO-CHECK] Using ownShip position for attached guardzone" << activeGuardZone->id;
                     }
 
                     // Fallback ke stored position jika semua invalid
                     if (qIsNaN(centerLat) || qIsNaN(centerLon) || (centerLat == 0.0 && centerLon == 0.0)) {
                         centerLat = activeGuardZone->centerLat;
                         centerLon = activeGuardZone->centerLon;
-                        qDebug() << "[AUTO-CHECK] Using stored position for attached guardzone" << activeGuardZone->id;
+                        if (AppConfig::isDevelopment()) qDebug() << "[AUTO-CHECK] Using stored position for attached guardzone" << activeGuardZone->id;
                     }
 
-                    qDebug() << "[AUTO-CHECK] Processing attached guardzone" << activeGuardZone->id
-                             << "at position:" << centerLat << "," << centerLon
-                             << "inner:" << activeGuardZone->innerRadius << "outer:" << activeGuardZone->outerRadius << "NM";
+                    if (AppConfig::isDevelopment()) {
+                        qDebug() << "[AUTO-CHECK] Processing attached guardzone" << activeGuardZone->id
+                                 << "at position:" << centerLat << "," << centerLon
+                                 << "inner:" << activeGuardZone->innerRadius << "outer:" << activeGuardZone->outerRadius << "NM";
+                    }
                 } else {
                     centerLat = activeGuardZone->centerLat;
                     centerLon = activeGuardZone->centerLon;
@@ -18743,13 +18861,13 @@ void EcWidget::performAutoGuardZoneCheck()
 
                     inGuardZone = isPointInSemicircle(aisTarget.lat, aisTarget.lon, &tempGZ);
 
-                    qDebug() << "[AUTO-CHECK] Semicircle shield - Using geometric detection";
+                    if (AppConfig::isDevelopment()) qDebug() << "[AUTO-CHECK] Semicircle shield - Using geometric detection";
                 } else {
                     inGuardZone = withinRadiusRange;
                 }
 
-                // DEBUG: Log untuk attached guardzone
-                if (activeGuardZone->attachedToShip) {
+                // DEBUG: Log untuk attached guardzone (per target x per zone tiap check - mahal, dev only)
+                if (activeGuardZone->attachedToShip && AppConfig::isDevelopment()) {
                     qDebug() << "[AIS-DETECT] Target" << mmsi << "distance:" << distance << "NM from attached guardzone"
                              << activeGuardZone->id << "(inner:" << activeGuardZone->innerRadius << "outer:" << activeGuardZone->outerRadius << "NM) - inZone:" << inGuardZone;
                 }

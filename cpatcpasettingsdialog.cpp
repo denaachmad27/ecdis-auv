@@ -33,6 +33,15 @@ void CPATCPASettingsDialog::setupUI()
     tcpaThresholdSpinBox->setDecimals(0);
     thresholdLayout->addRow("TCPA Threshold:", tcpaThresholdSpinBox);
 
+    aisLostTimeoutSpinBox = new QSpinBox();
+    aisLostTimeoutSpinBox->setSuffix(" minutes");
+    aisLostTimeoutSpinBox->setRange(1, 60);
+    aisLostTimeoutSpinBox->setSingleStep(1);
+    aisLostTimeoutSpinBox->setToolTip(
+        "Target AIS ditandai \"Lost\" (kernel & panel CPA/TCPA) jika tidak ada "
+        "update selama durasi ini.");
+    thresholdLayout->addRow("AIS Lost Timeout:", aisLostTimeoutSpinBox);
+
     // Alarm Settings Group
     QGroupBox *alarmGroup = new QGroupBox("Alarm Settings");
     QVBoxLayout *alarmLayout = new QVBoxLayout(alarmGroup);
@@ -89,6 +98,7 @@ void CPATCPASettingsDialog::setDefaultValues()
     setVisualAlarmEnabled(true);
     setAudioAlarmEnabled(false);
     setAlarmUpdateInterval(5); // 5 seconds default
+    setAISLostTimeoutMinutes(1); // 1 minute default
 }
 
 // Getter methods
@@ -127,6 +137,11 @@ int CPATCPASettingsDialog::getAlarmUpdateInterval() const
     return updateIntervalSpinBox->value();
 }
 
+int CPATCPASettingsDialog::getAISLostTimeoutMinutes() const
+{
+    return aisLostTimeoutSpinBox->value();
+}
+
 // Setter methods
 void CPATCPASettingsDialog::setCPAThreshold(double threshold)
 {
@@ -161,6 +176,11 @@ void CPATCPASettingsDialog::setAudioAlarmEnabled(bool enabled)
 void CPATCPASettingsDialog::setAlarmUpdateInterval(int interval)
 {
     updateIntervalSpinBox->setValue(interval);
+}
+
+void CPATCPASettingsDialog::setAISLostTimeoutMinutes(int minutes)
+{
+    aisLostTimeoutSpinBox->setValue(minutes);
 }
 
 // Slots

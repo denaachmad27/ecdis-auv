@@ -180,6 +180,7 @@ private:
     // CPA/TCPA (merged into Collision Risk Indication)
     QDoubleSpinBox *cpaSpin;
     QDoubleSpinBox *tcpaSpin;
+    QSpinBox *aisLostTimeoutSpin;
 
     // CHART
     QComboBox *chartCombo;

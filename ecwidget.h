@@ -67,7 +67,9 @@ struct AISTargetData {
     double heading;
     double cpa;         // Closest Point of Approach (nautical miles)
     double tcpa;        // Time to CPA (minutes)
-    bool isDangerous;   // Apakah target berbahaya
+    bool isDangerous = false;   // Apakah target berbahaya
+    bool isLost = false;        // Apakah target berstatus Lost (> 60 detik)
+    QString statusText;         // Status target ("Tracking", "Lost", "DANGEROUS", etc.)
     QDateTime lastUpdate;
 
     double currentRange;    // Current distance in NM
@@ -362,9 +364,12 @@ public:
   void showLeglineContextMenu(const QPoint& pos, int routeId, int segmentIndex);
   void showMapContextMenu(const QPoint& pos);
   bool resetWaypointCell();
-  void drawLeglineLabels();
+  // routeWaypoints: routeId -> daftar index di waypointList, dikelompokkan
+  // SEKALI oleh Draw() dan dipakai bareng oleh drawRouteLines() dan
+  // drawLeglineLabels() supaya tidak scan waypointList dua kali per repaint.
+  void drawLeglineLabels(const QMap<int, QList<int>>& routeWaypoints);
   void drawRouteNamesOnly(); // Draw route names at center for zoomed out view
-  void drawRouteLines(); // Gambar garis route dengan warna berbeda per route (DEPRECATED)
+  void drawRouteLines(const QMap<int, QList<int>>& routeWaypoints); // Gambar garis route dengan warna berbeda per route (DEPRECATED)
   void drawRouteLinesOverlay(QPainter& painter); // Draw route lines directly to widget like GuardZone
   void drawAutoRoutePreview(QPainter& painter);
   void clearAutoRoutePreview(bool updateDisplay = true);

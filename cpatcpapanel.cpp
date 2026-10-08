@@ -386,7 +386,7 @@ void CPATCPAPanel::updateTargetsDisplay()
 
     // Ambil data AIS target dari sistem
     //ecWidget->updateAISTargetsList();
-    QMap<unsigned int, AISTargetData> targets = Ais::instance()->getTargetMap();
+    QMap<unsigned int, AISTargetData>& targets = Ais::instance()->getTargetMap();
 
     // Variabel status
     dangerousCount = 0;
@@ -409,9 +409,15 @@ void CPATCPAPanel::updateTargetsDisplay()
     QSet<QString> dangerousSet;
     for (const auto &d : ecWidget->getDangerousAISList()) dangerousSet.insert(d.mmsi);
 
+    // Timeout "AIS Lost" dari satu sumber (CPATCPASettings, satuan menit) -
+    // dipakai juga oleh kernel (lihat Ais::handleAISTargetUpdate) supaya
+    // status "Lost" di panel ini konsisten dengan simbol yang digambar kernel.
+    const int aisLostTimeoutSecs = CPATCPASettings::instance().getAISLostTimeoutMinutes() * 60;
+
     QList<TargetWithResult> sortedList;
-    for (const auto &target : targets) {
-        //if (target.mmsi != "367159080" && target.mmsi != "366973590" && target.mmsi != "366996240") continue;
+    for (auto &target : targets) {
+        // Update status isLost berdasarkan lastUpdate
+        target.isLost = (!target.lastUpdate.isValid() || target.lastUpdate.secsTo(QDateTime::currentDateTime()) > aisLostTimeoutSecs);
 
         VesselState ownShip;
 
@@ -445,19 +451,41 @@ void CPATCPAPanel::updateTargetsDisplay()
         CPATCPACalculator calculator;
         CPATCPAResult result = calculator.calculateCPATCPA(ownShip, targetVessel);
 
-        bool isDangerous = dangerousSet.contains(target.mmsi);
-        EcAISTrackingStatus aisTrkStatusManual = isDangerous ? aisIntruder : aisInformationAvailable;
-        if (isDangerous) dangerousCount++;
+        CPATCPASettings& settings = CPATCPASettings::instance();
+        bool isDangerous = false;
+        if (!target.isLost && result.isValid && result.currentRange < 0.5) {
+            if (settings.isCPAAlarmEnabled() && result.cpa < SettingsManager::instance().data().cpaThreshold) isDangerous = true;
+            if (settings.isTCPAAlarmEnabled() && result.tcpa > 0 && result.tcpa < SettingsManager::instance().data().tcpaThreshold) isDangerous = true;
+        }
+        target.isDangerous = isDangerous;
 
-        if (isDangerous){
-            dangerousAIS.mmsi = target.mmsi;
-            dangerousAIS.lat = target.lat;
-            dangerousAIS.lon = target.lon;
-
-            ecWidget->addDangerousAISTarget(dangerousAIS);
+        if (target.isLost) {
+            target.statusText = "Lost";
+        } else if (target.isDangerous) {
+            target.statusText = "DANGEROUS";
+        } else {
+            switch (result.status) {
+                case CPATCPAResult::Valid: target.statusText = "Tracking"; break;
+                case CPATCPAResult::StationaryRelative: target.statusText = "Stationary"; break;
+                case CPATCPAResult::Diverging: target.statusText = "Diverging"; break;
+                case CPATCPAResult::OutOfRange: target.statusText = "Out of Range"; break;
+                case CPATCPAResult::InvalidMotionData:
+                default: target.statusText = "No Data"; break;
+            }
         }
 
-        if (result.isValid) {
+        EcAISTrackingStatus aisTrkStatusManual;
+        if (target.isLost) {
+            aisTrkStatusManual = aisLost;
+        } else if (target.isDangerous) {
+            aisTrkStatusManual = aisIntruder;
+        } else {
+            aisTrkStatusManual = aisInformationAvailable;
+        }
+
+        if (target.isDangerous) dangerousCount++;
+
+        if (result.isValid && !target.isLost) {
             trackingCount++;
             if (result.cpa < closestCPA) {
                 closestCPA = result.cpa;
@@ -465,7 +493,7 @@ void CPATCPAPanel::updateTargetsDisplay()
             if (result.tcpa > 0 && result.tcpa < shortestTCPA) shortestTCPA = result.tcpa;
         }
 
-        sortedList.append({target, result, isDangerous});
+        sortedList.append({target, result, target.isDangerous});
 
         if (ECOK(target.feat) && target._dictInfo) {
             EcAISSetTargetTrackingStatus(target.feat, target._dictInfo, aisTrkStatusManual, NULL );
@@ -532,17 +560,7 @@ void CPATCPAPanel::updateTargetsDisplay()
 void CPATCPAPanel::updateTargetRow(int row, const AISTargetData& target, const CPATCPAResult& result)
 {
     CPATCPASettings& settings = CPATCPASettings::instance();
-    bool isDangerous = false;
-
-    // if (result.isValid) {
-    //     if (settings.isCPAAlarmEnabled() && result.cpa < SettingsManager::instance().data().cpaThreshold) isDangerous = true;
-    //     if (settings.isTCPAAlarmEnabled() && result.tcpa > 0 && result.tcpa < SettingsManager::instance().data().tcpaThreshold) isDangerous = true;
-    // }
-
-    if (result.isValid && result.currentRange < 0.5) {
-        if (settings.isCPAAlarmEnabled() && result.cpa < SettingsManager::instance().data().cpaThreshold) isDangerous = true;
-        if (settings.isTCPAAlarmEnabled() && result.tcpa > 0 && result.tcpa < SettingsManager::instance().data().tcpaThreshold) isDangerous = true;
-    }
+    bool isDangerous = target.isDangerous;
 
     auto formatBearing = [](double deg){ return QString("%1°").arg(deg, 0, 'f', 1); };
     auto formatAge = [](const QDateTime& last){
@@ -560,19 +578,7 @@ void CPATCPAPanel::updateTargetRow(int row, const AISTargetData& target, const C
     QString shipName = QString(target.rawInfo.shipName).trimmed();
     shipName.replace("@", " "); // Fix @ symbols in vessel names
     if (shipName.isEmpty()) shipName = target.mmsi;
-    QString statusText;
-    if (isDangerous) {
-        statusText = "⚠ DANGEROUS";
-    } else {
-        switch (result.status) {
-            case CPATCPAResult::Valid: statusText = "Tracking"; break;
-            case CPATCPAResult::StationaryRelative: statusText = "Stationary"; break;
-            case CPATCPAResult::Diverging: statusText = "Diverging"; break;
-            case CPATCPAResult::OutOfRange: statusText = "Out of Range"; break;
-            case CPATCPAResult::InvalidMotionData:
-            default: statusText = "No Data"; break;
-        }
-    }
+    QString statusText = target.statusText.isEmpty() ? (target.isLost ? "Lost" : "Tracking") : target.statusText;
 
     values << target.mmsi
            << formatDistance(result.cpa)

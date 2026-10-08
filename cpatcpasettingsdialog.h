@@ -28,6 +28,7 @@ public:
     bool isVisualAlarmEnabled() const;
     bool isAudioAlarmEnabled() const;
     int getAlarmUpdateInterval() const;
+    int getAISLostTimeoutMinutes() const;
 
     // Setter methods untuk nilai settings
     void setCPAThreshold(double threshold);
@@ -37,6 +38,7 @@ public:
     void setVisualAlarmEnabled(bool enabled);
     void setAudioAlarmEnabled(bool enabled);
     void setAlarmUpdateInterval(int interval);
+    void setAISLostTimeoutMinutes(int minutes);
 
 private slots:
     void onOKClicked();
@@ -55,6 +57,7 @@ private:
     QCheckBox *visualAlarmCheckBox;
     QCheckBox *audioAlarmCheckBox;
     QSpinBox *updateIntervalSpinBox;
+    QSpinBox *aisLostTimeoutSpinBox;
 
     QPushButton *okButton;
     QPushButton *cancelButton;

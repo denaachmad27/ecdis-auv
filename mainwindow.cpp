@@ -6678,6 +6678,7 @@ void MainWindow::onCPASettings()
     dialog.setVisualAlarmEnabled(settings.isVisualAlarmEnabled());
     dialog.setAudioAlarmEnabled(settings.isAudioAlarmEnabled());
     dialog.setAlarmUpdateInterval(settings.getAlarmUpdateInterval());
+    dialog.setAISLostTimeoutMinutes(settings.getAISLostTimeoutMinutes());
 
     if (dialog.exec() == QDialog::Accepted) {
         // Save new settings
@@ -6688,6 +6689,7 @@ void MainWindow::onCPASettings()
         settings.setVisualAlarmEnabled(dialog.isVisualAlarmEnabled());
         settings.setAudioAlarmEnabled(dialog.isAudioAlarmEnabled());
         settings.setAlarmUpdateInterval(dialog.getAlarmUpdateInterval());
+        settings.setAISLostTimeoutMinutes(dialog.getAISLostTimeoutMinutes());
         settings.saveSettings();
 
         qDebug() << "CPA/TCPA settings updated and saved";
@@ -7652,8 +7654,8 @@ void MainWindow::onNodeShipsUpdateTimer()
     ownshipNavigateBtn->setObjectName("NavigateBtn_OWNSHIP");  // Set object name for debugging
     nodeShipsTable->setCellWidget(ownshipRow, 3, ownshipNavigateBtn);
 
-    // Debug: Log button creation
-    qDebug() << "[Navigate] Created OWNSHIP button enabled:" << ownshipActive;
+    // Debug: Log button creation (hanya di development - ini jalan tiap full rebuild panel)
+    if (AppConfig::isDevelopment()) qDebug() << "[Navigate] Created OWNSHIP button enabled:" << ownshipActive;
 
     // Connect navigate button (ownship doesn't need nodeName parameter)
     connect(ownshipNavigateBtn, &QPushButton::clicked, this, [this]() {
@@ -7784,8 +7786,8 @@ void MainWindow::onNodeShipsUpdateTimer()
         navigateBtn->setObjectName("NavigateBtn_" + nodeName);  // Set object name for debugging
         nodeShipsTable->setCellWidget(row, 3, navigateBtn);
 
-        // Debug: Log button creation
-        qDebug() << "[Navigate] Created button for" << nodeName << "enabled:" << isActive;
+        // Debug: Log button creation (hanya di development - ini jalan tiap full rebuild panel)
+        if (AppConfig::isDevelopment()) qDebug() << "[Navigate] Created button for" << nodeName << "enabled:" << isActive;
 
         // Connect navigate button WITHOUT UniqueConnection (problematic with lambdas)
         // The old button is already deleted, so no duplicate connection should occur

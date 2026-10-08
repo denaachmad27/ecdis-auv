@@ -1,4 +1,5 @@
 #include "SettingsDialog.h"
+#include "cpatcpasettings.h"
 #include "SettingsManager.h"
 #include "appconfig.h"
 #include "mainwindow.h"
@@ -490,6 +491,20 @@ void SettingsDialog::setupUI() {
     tcpaSpin->setSuffix(" min");
     collisionRiskForm->addRow(tr("TCPA Threshold:"), tcpaSpin);
 
+    // --- AIS Lost group (satu sumber: CPATCPASettings, dipakai kernel AIS
+    // dan panel CPA/TCPA supaya status "Lost" konsisten di mana-mana) ---
+    QGroupBox *aisLostGroup = new QGroupBox(tr("AIS Lost"));
+    QFormLayout *aisLostForm = new QFormLayout(aisLostGroup);
+
+    aisLostTimeoutSpin = new QSpinBox;
+    aisLostTimeoutSpin->setRange(1, 60);
+    aisLostTimeoutSpin->setSingleStep(1);
+    aisLostTimeoutSpin->setSuffix(" min");
+    aisLostTimeoutSpin->setToolTip(tr(
+        "Target AIS ditandai \"Lost\" (simbol di peta & panel CPA/TCPA) jika "
+        "tidak ada update selama durasi ini."));
+    aisLostForm->addRow(tr("Lost Timeout:"), aisLostTimeoutSpin);
+
     // Connect collision risk signals
     connect(enableCollisionRiskCheckBox, &QCheckBox::toggled, this, [=](bool enabled) {
         showRiskSymbolsCheckBox->setEnabled(enabled);
@@ -835,6 +850,7 @@ void SettingsDialog::setupUI() {
     collisionContainerLayout->setSpacing(0);
     collisionContainerLayout->addWidget(collisionHeaderWidget);
     collisionContainerLayout->addWidget(collisionRiskGroup);
+    collisionContainerLayout->addWidget(aisLostGroup);
     cpatcpaLayout->addRow(collisionContainer);
 
     // Align AIS Target tab fields so inputs start at the same x
@@ -860,6 +876,13 @@ void SettingsDialog::setupUI() {
         // Apply label width to all labels in collisionRiskForm for alignment
         for (int i = 0; i < collisionRiskForm->rowCount(); ++i) {
             if (QLayoutItem* li = collisionRiskForm->itemAt(i, QFormLayout::LabelRole)) {
+                if (QWidget* w = li->widget()) w->setMinimumWidth(refWidth);
+            }
+        }
+        // Samakan juga label di aisLostForm supaya input "Lost Timeout"
+        // sejajar dengan input CPA/TCPA Threshold di atasnya.
+        for (int i = 0; i < aisLostForm->rowCount(); ++i) {
+            if (QLayoutItem* li = aisLostForm->itemAt(i, QFormLayout::LabelRole)) {
                 if (QWidget* w = li->widget()) w->setMinimumWidth(refWidth);
             }
         }
@@ -1069,6 +1092,10 @@ void SettingsDialog::loadSettings() {
     // CPA/TCPA
     cpaSpin->setValue(settings.value("CPA-TCPA/cpa_threshold", 0.2).toDouble());
     tcpaSpin->setValue(settings.value("CPA-TCPA/tcpa_threshold", 1).toDouble());
+
+    // AIS Lost timeout - dibaca dari CPATCPASettings (sumber tunggal yang
+    // sama dipakai kernel AIS & panel CPA/TCPA), bukan dari file ini.
+    aisLostTimeoutSpin->setValue(CPATCPASettings::instance().getAISLostTimeoutMinutes());
 
     // Collision Risk (load settings)
     enableCollisionRiskCheckBox->setChecked(settings.value("CollisionRisk/enabled", false).toBool());
@@ -1367,6 +1394,11 @@ void SettingsDialog::accept() {
     // CPA/TCPA
     data.cpaThreshold = cpaSpin->value();
     data.tcpaThreshold = tcpaSpin->value();
+
+    // AIS Lost timeout - tulis langsung ke CPATCPASettings (sumber tunggal),
+    // dibaca live oleh kernel AIS & panel CPA/TCPA.
+    CPATCPASettings::instance().setAISLostTimeoutMinutes(aisLostTimeoutSpin->value());
+    CPATCPASettings::instance().saveSettings();
 
     // Ship Dimensions
     data.shipLength = shipLengthSpin->value();

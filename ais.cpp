@@ -6,6 +6,7 @@
 #include "aisdatabasemanager.h"
 #include "aivdoencoder.h"
 #include "SettingsManager.h"
+#include "cpatcpasettings.h"
 #include "mainwindow.h"
 #include <QElapsedTimer>
 
@@ -114,6 +115,7 @@ Ais::~Ais(){
     _latestNmeaTime = QDateTime();
 
     _latestTi = nullptr;
+
 
     if (_myAis == this){
         _myAis = nullptr;
@@ -239,7 +241,9 @@ void Ais::AISTargetUpdateCallbackOld( EcAISTargetInfo *ti )
       //EcAISTrackingStatus aisTrkStatus = EcAISCalcTargetTrackingStatus( ti, ownShipLat, ownShipLon, _dSpeed, _dCourse, _dWarnDist, _dWarnCPA, _iWarnTCPA, _iTimeOut );
 
         // COG dan SOG diubah ke data real
-        EcAISTrackingStatus aisTrkStatus = EcAISCalcTargetTrackingStatus( ti, ownShipLat, ownShipLon, ownShipSog, ownShipCog, _dWarnDist, _dWarnCPA, _iWarnTCPA, _iTimeOut );
+        // Timeout "AIS Lost" dari satu sumber (CPATCPASettings), satuan menit,
+        // supaya konsisten dengan yang dipakai panel CPA/TCPA.
+        EcAISTrackingStatus aisTrkStatus = EcAISCalcTargetTrackingStatus( ti, ownShipLat, ownShipLon, ownShipSog, ownShipCog, _dWarnDist, _dWarnCPA, _iWarnTCPA, CPATCPASettings::instance().getAISLostTimeoutMinutes() );
         EcFeature feat = EcAISFindTargetObject( _cid, _dictInfo, ti );
 
       // if there is no feature yet create one
@@ -644,7 +648,9 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
             abs(ti->longitude) < 180 * 60 * 10000 &&
             ti->navStatus != eNavS_baseStation)
         {
-            EcAISTrackingStatus aisTrkStatus = EcAISCalcTargetTrackingStatus(ti, ownShipLat, ownShipLon, ownShipSog, ownShipCog, _dWarnDist, _dWarnCPA, _iWarnTCPA, _iTimeOut);
+            // Timeout "AIS Lost" dari satu sumber (CPATCPASettings), satuan
+            // menit, supaya konsisten dengan panel CPA/TCPA.
+            EcAISTrackingStatus aisTrkStatus = EcAISCalcTargetTrackingStatus(ti, ownShipLat, ownShipLon, ownShipSog, ownShipCog, _dWarnDist, _dWarnCPA, _iWarnTCPA, CPATCPASettings::instance().getAISLostTimeoutMinutes());
             EcFeature feat = EcAISFindTargetObject(_cid, _dictInfo, ti);
 
             // if there is no feature yet create one
@@ -666,7 +672,7 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
                 EcAISSetTargetActivationStatus(feat, _dictInfo, aisActivated, NULL);
 
             // Set the tracking status of the ais target feature
-            // EcAISSetTargetTrackingStatus(feat, _dictInfo, aisTrkStatus, NULL);
+            EcAISSetTargetTrackingStatus(feat, _dictInfo, aisTrkStatus, NULL); // Fix #1: un-commented
 
             // Create a copy of ti to modify vessel names for SevenCs display
             EcAISTargetInfo tiModified = *ti;
@@ -724,6 +730,7 @@ void Ais::handleAISTargetUpdate(EcAISTargetInfo *ti)
 
                 data.rawInfo = *ti;
                 _myAis->postTargetUpdate(data);
+
             }
         }
     }

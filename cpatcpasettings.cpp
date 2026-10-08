@@ -9,6 +9,7 @@ const bool CPATCPASettings::DEFAULT_TCPA_ALARM_ENABLED = true;
 const bool CPATCPASettings::DEFAULT_VISUAL_ALARM_ENABLED = true;
 const bool CPATCPASettings::DEFAULT_AUDIO_ALARM_ENABLED = false;
 const int CPATCPASettings::DEFAULT_UPDATE_INTERVAL = 500;
+const int CPATCPASettings::DEFAULT_AIS_LOST_TIMEOUT_MINUTES = 1;
 
 CPATCPASettings::CPATCPASettings(QObject *parent)
     : QObject(parent)
@@ -80,6 +81,15 @@ void CPATCPASettings::setAlarmUpdateInterval(int interval)
     }
 }
 
+void CPATCPASettings::setAISLostTimeoutMinutes(int minutes)
+{
+    if (minutes < 1) minutes = 1;
+    if (m_aisLostTimeoutMinutes != minutes) {
+        m_aisLostTimeoutMinutes = minutes;
+        emit settingsChanged();
+    }
+}
+
 void CPATCPASettings::loadSettings()
 {
     qDebug() << "Loading CPA/TCPA settings...";
@@ -93,6 +103,8 @@ void CPATCPASettings::loadSettings()
     m_visualAlarmEnabled = m_settings->value("VisualAlarmEnabled", DEFAULT_VISUAL_ALARM_ENABLED).toBool();
     m_audioAlarmEnabled = m_settings->value("AudioAlarmEnabled", DEFAULT_AUDIO_ALARM_ENABLED).toBool();
     m_updateInterval = m_settings->value("UpdateInterval", DEFAULT_UPDATE_INTERVAL).toInt();
+    m_aisLostTimeoutMinutes = m_settings->value("AISLostTimeoutMinutes", DEFAULT_AIS_LOST_TIMEOUT_MINUTES).toInt();
+    if (m_aisLostTimeoutMinutes < 1) m_aisLostTimeoutMinutes = 1;
 
     m_settings->endGroup();
 
@@ -112,6 +124,7 @@ void CPATCPASettings::saveSettings()
     m_settings->setValue("VisualAlarmEnabled", m_visualAlarmEnabled);
     m_settings->setValue("AudioAlarmEnabled", m_audioAlarmEnabled);
     m_settings->setValue("UpdateInterval", m_updateInterval);
+    m_settings->setValue("AISLostTimeoutMinutes", m_aisLostTimeoutMinutes);
 
     m_settings->endGroup();
     m_settings->sync();
@@ -128,6 +141,7 @@ void CPATCPASettings::resetToDefaults()
     m_visualAlarmEnabled = DEFAULT_VISUAL_ALARM_ENABLED;
     m_audioAlarmEnabled = DEFAULT_AUDIO_ALARM_ENABLED;
     m_updateInterval = DEFAULT_UPDATE_INTERVAL;
+    m_aisLostTimeoutMinutes = DEFAULT_AIS_LOST_TIMEOUT_MINUTES;
 
     emit settingsChanged();
 }
